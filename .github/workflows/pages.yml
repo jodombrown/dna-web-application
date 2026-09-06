@@ -18,6 +18,9 @@ jobs:
     permissions:
       contents: read
       deployments: write
+    outputs:
+      url: ${{ steps.deploy.outputs.pages-deployment-alias-url || steps.deploy.outputs.deployment-url }}
+      deployed: ${{ steps.deploy.outcome == 'success' }}
     env:
       CF_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CF_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -42,9 +45,55 @@ jobs:
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           command: pages project create dna-web-application --production-branch=main
       - name: Deploy to Cloudflare Pages
+        id: deploy
         if: ${{ env.CF_API_TOKEN != '' && env.CF_ACCOUNT_ID != '' }}
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           command: pages deploy dist --project-name=dna-web-application --branch=${{ github.ref_name }} --commit-hash=${{ github.sha }} --commit-dirty=true
+
+  # Exit check (ruling 61): the responsive matrix against the deployed preview, Chromium and WebKit.
+  matrix:
+    needs: deploy
+    if: ${{ needs.deploy.outputs.deployed == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      BASE: ${{ needs.deploy.outputs.url || format('https://{0}.dna-web-application.pages.dev', github.ref_name) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+      - name: Live check (deployed HTML serves the app)
+        run: |
+          set -e
+          echo "Testing $BASE"
+          for i in $(seq 1 12); do
+            code=$(curl -sS -o /tmp/sign-in.html -w '%{http_code}' "$BASE/sign-in" || true)
+            [ "$code" = "200" ] && break
+            sleep 10
+          done
+          echo "GET /sign-in -> $code"
+          test "$code" = "200"
+          grep -q '<title>DNA</title>' /tmp/sign-in.html
+          grep -q 'manifest.webmanifest' /tmp/sign-in.html
+          code=$(curl -sS -o /dev/null -w '%{http_code}' "$BASE/strand/adinkra/mate-masie.svg")
+          echo "GET /strand/adinkra/mate-masie.svg -> $code"
+          test "$code" = "200"
+      - name: Install browsers
+        run: bunx playwright install --with-deps chromium webkit
+      - name: Run matrix (Chromium and WebKit)
+        env:
+          WEBKIT: "1"
+          OUT: ${{ github.workspace }}/matrix-out
+        run: node tests/matrix.cjs
+      - name: Upload screenshots and results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: matrix-${{ github.ref_name }}-${{ github.run_number }}
+          path: matrix-out
+          if-no-files-found: warn
