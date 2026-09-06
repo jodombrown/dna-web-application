@@ -1,13 +1,14 @@
 // dia-compose-read: DIA reads free text and proposes a verb and fields (Brief 1, rulings 39, 52, 54).
 // Input  { text, anchor?, spaces? }   Output  Inference | null
-// Anthropic API, Sonnet-class, low effort, 2.5 s hard timeout, structured JSON validated against
-// VERB_SCHEMA, confidence floor 0.6 (constant), per-session rate limit on a hashed key.
+// Anthropic API, Sonnet-class, low effort, 3.5 s hard timeout (ruling 54 set 2.5 s; amended to
+// 3.5 s by ruling 74, D176), structured JSON validated against VERB_SCHEMA, confidence floor 0.6
+// (constant), per-session rate limit on a hashed key.
 // Logs latency and verb only. Never logs text. Never returns an error body: silence is null.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import Anthropic from "npm:@anthropic-ai/sdk";
 
 const MODEL = "claude-sonnet-5";
-const THINK_BUDGET_MS = 2400; // inside the client's 2.5 s budget
+const THINK_BUDGET_MS = 3400; // inside the client's 3.5 s budget (ruling 74, D176)
 const CONFIDENCE_FLOOR = 0.6;
 const MIN_CHARS = 8;
 const MAX_CHARS = 4000;
@@ -168,9 +169,7 @@ Deno.serve(async (req: Request) => {
     return json(null);
   }
 
-  // Canonical name first; the project currently stores the key under "dna-dia-anthropic-api-supabase".
-  const apiKey =
-    Deno.env.get("ANTHROPIC_API_KEY") ?? Deno.env.get("dna-dia-anthropic-api-supabase");
+  const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
   if (!apiKey) {
     // Names only, never values: tells an operator which secret is missing or misnamed.
     const names = Object.keys(Deno.env.toObject()).filter((k) =>

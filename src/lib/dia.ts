@@ -1,6 +1,11 @@
 // Client side of the three Edge Functions. Every call carries the member's JWT; the functions
 // verify it. Inference never includes images or identity beyond the token the function hashes.
-import type { Inference, UnfurlMeta, UploadedImage } from "@/components/strand/Composer";
+import {
+  THINK_BUDGET,
+  type Inference,
+  type UnfurlMeta,
+  type UploadedImage,
+} from "@/components/strand/Composer";
 import type { C } from "@/components/strand/cmeta";
 import type { FieldKey } from "@/components/strand/verb-schema";
 import { functionsUrl, getSupabase, SUPABASE_PUBLISHABLE_KEY } from "./supabase";
@@ -21,7 +26,7 @@ type Wire = {
   latency_ms: number;
 } | null;
 
-/** dia-compose-read. Resolves an Inference or null; timeouts and errors are null (silence, ruling 54). */
+/** dia-compose-read. Resolves an Inference or null; timeouts and errors are null (silence, ruling 54; budget amended to 3.5 s by ruling 74, D176). */
 export function makeInfer(
   anchorName?: string | undefined,
 ): (text: string) => Promise<Inference | null> {
@@ -29,7 +34,7 @@ export function makeInfer(
     const headers = await authHeaders();
     if (!headers) return null;
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 2500);
+    const timer = setTimeout(() => controller.abort(), THINK_BUDGET);
     try {
       const res = await fetch(functionsUrl("dia-compose-read"), {
         method: "POST",

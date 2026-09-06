@@ -18,7 +18,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
 };
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
@@ -91,13 +91,14 @@ async function tinify(
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+  // GET: operator health check behind the JWT. Reports whether the processor key resolves; never its value.
+  if (req.method === "GET") return json({ ok: true, processor: !!Deno.env.get("TINIFY_API_KEY") });
   if (req.method !== "POST") return json({ error: "method" }, 405);
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-  // Canonical name first; the project currently stores the key under "Tinify".
-  const tinifyKey = Deno.env.get("TINIFY_API_KEY") ?? Deno.env.get("Tinify");
+  const tinifyKey = Deno.env.get("TINIFY_API_KEY");
   const authHeader = req.headers.get("authorization") ?? "";
 
   const userClient = createClient(supabaseUrl, anonKey, {

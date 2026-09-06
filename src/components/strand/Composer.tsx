@@ -37,7 +37,9 @@ import {
 
 export { VERB_SCHEMA } from "./verb-schema";
 
-export const THINK_BUDGET = 2500;
+// DIA inference budget. Ruling 54 set 2.5 s; ruling 74 (D176) raises it to 3.5 s after Sonnet-class
+// latency measured at 2.2 to 2.9 s per call. The server mirrors this in dia-compose-read.
+export const THINK_BUDGET = 3500;
 const INFER_DEBOUNCE = 700;
 const DRAFT_DEBOUNCE = 800;
 const MIN_INFER_CHARS = 8;
