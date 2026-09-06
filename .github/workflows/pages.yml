@@ -18,6 +18,9 @@ jobs:
     permissions:
       contents: read
       deployments: write
+    env:
+      CF_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CF_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
@@ -27,7 +30,11 @@ jobs:
       - run: bun run lint
       - run: bunx tsc --noEmit -p tsconfig.json
       - run: bun run build
+      - name: Cloudflare secrets missing
+        if: ${{ env.CF_API_TOKEN == '' || env.CF_ACCOUNT_ID == '' }}
+        run: echo "::notice::Deploy skipped. Add CLOUDFLARE_API_TOKEN (Pages:Edit) and CLOUDFLARE_ACCOUNT_ID as repository secrets to enable per-branch Pages previews."
       - name: Deploy to Cloudflare Pages
+        if: ${{ env.CF_API_TOKEN != '' && env.CF_ACCOUNT_ID != '' }}
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
