@@ -35,6 +35,7 @@ Before you start, say in one line what you are about to do. Brief updates while 
 [absolute] No second framework, second auth path, or second payment rail without a brief that names it.
 [absolute] Every new table ships with RLS enabled and explicit policies for every persona (member, Space lead, event host, admin, service role). A table without RLS is a failed task.
 [absolute] No secrets in code, logs, or commit messages.
+[absolute] Lovable never creates or alters schema.
 
 ## Doctrine that affects code
 Every post, thread, and notification carries a C tag or the system category; the column is NOT NULL.
@@ -42,3 +43,6 @@ Polymorphic references (author, anchor, notification object) use the shared anch
 Counts shown to a viewer are computed within that viewer's RLS scope and render nothing below five.
 Confirmed flags on contributions are set only by the counterparty or a payment rail record, never by inference or by DIA.
 DIA reads message metadata only; no query it runs may select message body content unless the member invoked a "help me reply" action in that thread.
+Build order for any surface: schema and RLS, then Edge Functions, then UI. No surface is built without an approved Claude Design prototype (ruling 62); the extraction and SPEC.md are the visual contract, the brief is the behavior contract.
+Design tokens and components come from Strand via the extraction; never from shadcn, never from the old repo (rulings 70, 72).
+Exit check for every surface is the responsive test matrix on the deployed URL: 360, 390, 430, 744, 820, 1024 both orientations, 1280, 1536, both themes, Safari and Chrome (ruling 61).

@@ -1,0 +1,9 @@
+{
+  "name": "DNA",
+  "short_name": "DNA",
+  "start_url": "/convene",
+  "display": "standalone",
+  "background_color": "#faf7f2",
+  "theme_color": "#faf7f2",
+  "icons": [{ "src": "/strand/adinkra/mate-masie.svg", "sizes": "any", "type": "image/svg+xml" }]
+}

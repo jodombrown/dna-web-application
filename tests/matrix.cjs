@@ -1,0 +1,1027 @@
+// Responsive test matrix (ruling 61) for the composer surface. Points at BASE (a deployed Pages URL
+// or a local server) with every Supabase endpoint mocked at the network layer, so the real client
+// code paths run against a deterministic backend. Backend behaviour is verified separately in SQL.
+// Usage: BASE=https://b1-composer.dna-web-application.pages.dev WEBKIT=1 node tests/matrix.cjs
+// Env: ONLY='[390,844]' runs one viewport; SPECIAL=publish,keyboard,silence runs the flows only.
+const { chromium, webkit } = require("playwright");
+const fs = require("fs");
+const path = require("path");
+
+const BASE = process.env.BASE || "http://127.0.0.1:4173";
+const OUT = process.env.OUT || path.join(__dirname, "matrix-out");
+fs.mkdirSync(OUT, { recursive: true });
+const SB = "dgspjevjoblujcoljvkn.supabase.co";
+const VIEWPORTS = [
+  [360, 800],
+  [390, 844],
+  [430, 932],
+  [744, 1133],
+  [820, 1180],
+  [1024, 1366],
+  [1366, 1024],
+  [1280, 800],
+  [1536, 960],
+];
+const FULL_PREVIEW_AT = new Set([390, 820, 1280]);
+const THEMES = ["light", "dark"];
+const UID = "00000000-0000-4000-8000-0000000000e1";
+const KENTE = fs.readFileSync(path.join(__dirname, "../public/strand/patterns/kente-pattern.svg"));
+
+function b64url(o) {
+  return Buffer.from(JSON.stringify(o))
+    .toString("base64")
+    .replace(/=/g, "")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_");
+}
+const JWT =
+  b64url({ alg: "HS256", typ: "JWT" }) +
+  "." +
+  b64url({
+    sub: UID,
+    role: "authenticated",
+    aud: "authenticated",
+    exp: Math.floor(Date.now() / 1000) + 3600 * 24,
+    email: "member@test.invalid",
+  }) +
+  ".sig";
+const USER = {
+  id: UID,
+  aud: "authenticated",
+  role: "authenticated",
+  email: "member@test.invalid",
+  user_metadata: { full_name: "Amara Osei" },
+  app_metadata: { provider: "email" },
+  created_at: new Date().toISOString(),
+};
+const SESSION = {
+  access_token: JWT,
+  token_type: "bearer",
+  expires_in: 86400,
+  expires_at: Math.floor(Date.now() / 1000) + 86400,
+  refresh_token: "r",
+  user: USER,
+};
+
+const SAMPLES = {
+  convene:
+    "We are hosting a Diaspora Builders Dinner in Nairobi on Thu 16 Oct at 19:00. Doors at 18:30. Free for members, bring one person who should be in the room.",
+  connect:
+    "Can someone introduce me to Kwame Mensah at the Accra fintech hub? I am building a savings product for market traders and he has done this before.",
+  collaborate:
+    "Starting a Space for diaspora health workers who want to run short clinics back home. Looking for two coordinators and one person who knows Kenyan licensing.",
+  contribute:
+    "We need a volunteer accountant to review the cooperative books before the audit by 30 Nov. Two evenings, remote is fine.",
+  convey:
+    "Three intros that changed a harvest. I wrote down how a cassava cooperative in Oyo found its first buyer through two members in Houston.",
+  untyped:
+    "Back in Nairobi after three weeks in Houston. The jet lag is winning and the mangoes are not.",
+};
+const INFER = {
+  convene: {
+    verb: "convene",
+    confidence: 0.95,
+    fields: {
+      title: "Diaspora Builders Dinner",
+      date: "Thu 16 Oct",
+      time: "19:00",
+      place: "Nairobi",
+      ticket: "Free",
+    },
+    latency_ms: 900,
+  },
+  connect: {
+    verb: "connect",
+    confidence: 0.94,
+    fields: {
+      who: "Kwame Mensah at the Accra fintech hub",
+      why: "I am building a savings product for market traders and he has done this before",
+    },
+    latency_ms: 900,
+  },
+  collaborate: {
+    verb: "collaborate",
+    confidence: 0.92,
+    fields: {
+      title: "Space for diaspora health workers",
+      category: "Health",
+      roles: "two coordinators and one person who knows Kenyan licensing",
+    },
+    latency_ms: 900,
+  },
+  contribute: {
+    verb: "contribute",
+    confidence: 0.93,
+    fields: {
+      title: "Volunteer accountant",
+      instrument: "Skills",
+      need: "review the cooperative books before the audit",
+      by: "30 Nov",
+    },
+    latency_ms: 900,
+  },
+  convey: {
+    verb: "convey",
+    confidence: 0.78,
+    fields: { title: "Three intros that changed a harvest" },
+    latency_ms: 900,
+  },
+};
+
+function makeMockDb() {
+  const db = {
+    posts: [],
+    events: [],
+    spaces: [
+      {
+        id: "s1",
+        title: "Nairobi chapter",
+        owner_member_id: UID,
+        category: null,
+        description: null,
+        roles_sought: [],
+        status: "active",
+        created_at: new Date().toISOString(),
+      },
+    ],
+    opportunities: [],
+    connection_requests: [],
+    stories: [],
+    post_media: [],
+    post_links: [],
+    drafts: new Map(),
+    rpcPayloads: [],
+    inferCalls: 0,
+  };
+  return db;
+}
+
+async function mockSupabase(page, db, opts = {}) {
+  // Google Fonts are not reachable from this sandbox; abort so the check for page errors stays meaningful.
+  await page.route(/fonts\.(googleapis|gstatic)\.com/, (r) => r.abort());
+  await page.route(`**/${SB}/**`, async (route) => {
+    const req = route.request();
+    const url = new URL(req.url());
+    const p = url.pathname;
+    const method = req.method();
+    const json = (body, status = 200) =>
+      route.fulfill({
+        status,
+        contentType: "application/json",
+        headers: { "access-control-allow-origin": "*" },
+        body: JSON.stringify(body),
+      });
+    if (method === "OPTIONS")
+      return route.fulfill({
+        status: 200,
+        headers: {
+          "access-control-allow-origin": "*",
+          "access-control-allow-headers": "*",
+          "access-control-allow-methods": "*",
+        },
+      });
+    if (p.startsWith("/auth/v1/token")) return json(SESSION);
+    if (p === "/auth/v1/user") return json(USER);
+    if (p === "/auth/v1/logout") return json({}, 204);
+    if (p === "/functions/v1/dia-compose-read") {
+      db.inferCalls++;
+      const body = req.postDataJSON();
+      await new Promise((r) => setTimeout(r, opts.inferDelay ?? 900));
+      if (opts.silent) return json(null);
+      const key = Object.keys(SAMPLES).find(
+        (k) => k !== "untyped" && body.text.startsWith(SAMPLES[k].slice(0, 30)),
+      );
+      return json(key ? INFER[key] : null);
+    }
+    if (p === "/functions/v1/link-unfurl") {
+      await new Promise((r) => setTimeout(r, 400));
+      return json({
+        url: req.postDataJSON().url,
+        title: "Nairobi to host continental builders summit",
+        description: null,
+        image_url: null,
+      });
+    }
+    if (p === "/functions/v1/media-upload") {
+      await new Promise((r) => setTimeout(r, 300));
+      return json({
+        storage_path: `${UID}/p1/${db.post_media.length + 1}.png`,
+        width: 1200,
+        height: 800,
+      });
+    }
+    if (p.startsWith("/storage/v1/object/sign/"))
+      return json({ signedURL: "/object/sign/post-media/x.svg?token=t" });
+    if (p.startsWith("/storage/v1/object/sign") || p.includes("/object/sign/"))
+      return route.fulfill({ status: 200, contentType: "image/svg+xml", body: KENTE });
+    if (p === "/rest/v1/rpc/publish_post") {
+      const payload = req.postDataJSON().payload;
+      db.rpcPayloads.push(payload);
+      const id = payload.id;
+      let kind = null,
+        oid = null;
+      const f = payload.fields || {};
+      const title = f.title || payload.body.split("\n")[0].slice(0, 80) || "Untitled";
+      if (payload.verb === "convene") {
+        oid = "e" + id;
+        kind = "event";
+        db.events.push({
+          id: oid,
+          host_member_id: UID,
+          title,
+          starts_at: payload.starts_at,
+          ends_at: null,
+          when_text: [f.date, f.time].filter(Boolean).join("\n"),
+          mode: f.hybrid ? "hybrid" : "in_person",
+          location: f.place ? { text: f.place } : null,
+          virtual_url: null,
+          ticket_kind: (f.ticket || "Free").toLowerCase(),
+          space_id: payload.anchor?.kind === "space" ? payload.anchor.id : null,
+          created_at: new Date().toISOString(),
+        });
+      }
+      if (payload.verb === "collaborate") {
+        oid = "sp" + id;
+        kind = "space";
+        db.spaces.push({
+          id: oid,
+          title,
+          owner_member_id: UID,
+          category: f.category || null,
+          description: payload.body,
+          roles_sought: (f.roles || "")
+            .split(",")
+            .map((s) => s.trim())
+            .filter(Boolean),
+          status: "active",
+          created_at: new Date().toISOString(),
+        });
+      }
+      if (payload.verb === "contribute") {
+        oid = "o" + id;
+        kind = "opportunity";
+        db.opportunities.push({
+          id: oid,
+          receiver_member_id: UID,
+          title,
+          instrument: { Skills: "skills", "In-kind": "in_kind" }[f.instrument] || "time",
+          need: f.need || payload.body,
+          by_date: payload.by_date,
+          by_text: f.by || "",
+          space_id: null,
+          event_id: null,
+          created_at: new Date().toISOString(),
+        });
+      }
+      if (payload.verb === "connect") {
+        oid = "c" + id;
+        kind = "connection_request";
+        db.connection_requests.push({
+          id: oid,
+          from_member_id: UID,
+          to_member_id: null,
+          to_name: f.who || "",
+          why: f.why || payload.body,
+          status: "pending",
+          created_at: new Date().toISOString(),
+        });
+      }
+      if (payload.verb === "convey") {
+        oid = "st" + id;
+        kind = "story";
+        db.stories.push({
+          id: oid,
+          author_member_id: UID,
+          title,
+          body: payload.body,
+          origin_kind: null,
+          origin_id: null,
+          created_at: new Date().toISOString(),
+        });
+      }
+      db.posts.unshift({
+        id,
+        author_kind: payload.author_kind,
+        author_id: payload.author_id,
+        created_by: UID,
+        c_category: payload.verb || "convey",
+        body: payload.body,
+        anchor_kind: payload.anchor?.kind ?? null,
+        anchor_id: payload.anchor?.id ?? null,
+        created_object_kind: kind,
+        created_object_id: oid,
+        audience: payload.audience,
+        status: "published",
+        published_at: new Date().toISOString(),
+        created_at: new Date().toISOString(),
+      });
+      (payload.media || []).forEach((m, i) =>
+        db.post_media.push({
+          id: "m" + i + id,
+          post_id: id,
+          storage_path: m.storage_path,
+          width: m.width,
+          height: m.height,
+          position: m.position,
+          created_at: new Date().toISOString(),
+        }),
+      );
+      if (payload.link)
+        db.post_links.push({
+          id: "l" + id,
+          post_id: id,
+          url: payload.link.url,
+          title: payload.link.title,
+          description: payload.link.description,
+          image_url: payload.link.image_url,
+          fetched_at: null,
+          created_at: new Date().toISOString(),
+        });
+      db.drafts.clear();
+      return json(id);
+    }
+    if (p.startsWith("/rest/v1/")) {
+      const table = p.slice("/rest/v1/".length);
+      const inIds = (param) => {
+        const v = url.searchParams.get(param);
+        if (!v) return null;
+        const m = v.match(/^in\.\((.*)\)$/);
+        return m ? m[1].split(",").map((s) => s.replace(/^"|"$/g, "")) : null;
+      };
+      if (table === "post_drafts") {
+        (db.log = db.log || []).push(
+          method + " " + p + url.search + " accept=" + (req.headers()["accept"] || ""),
+        );
+        if (method === "GET") {
+          const d = db.drafts.get(url.searchParams.get("host_context")?.replace("eq.", ""));
+          const single = (req.headers()["accept"] || "").includes("object");
+          if (single)
+            return d
+              ? json({ payload: d })
+              : json({ code: "PGRST116", details: "0 rows", hint: null, message: "no rows" }, 406);
+          return json(d ? [{ payload: d }] : []);
+        }
+        if (method === "POST") {
+          const b = req.postDataJSON();
+          const row = Array.isArray(b) ? b[0] : b;
+          db.drafts.set(row.host_context, row.payload);
+          return json([row], 201);
+        }
+        if (method === "DELETE") {
+          db.drafts.delete(url.searchParams.get("host_context")?.replace("eq.", ""));
+          return json([], 200);
+        }
+      }
+      if (table === "space_roles") return json([{ space_id: "s1" }]);
+      if (table === "spaces") {
+        const ids = inIds("id");
+        return json(ids ? db.spaces.filter((s) => ids.includes(s.id)) : db.spaces);
+      }
+      if (table === "posts") return json(db.posts);
+      if (table === "post_media") {
+        const ids = inIds("post_id");
+        return json(db.post_media.filter((m) => !ids || ids.includes(m.post_id)));
+      }
+      if (table === "post_links") {
+        const ids = inIds("post_id");
+        return json(db.post_links.filter((m) => !ids || ids.includes(m.post_id)));
+      }
+      for (const t of ["events", "opportunities", "connection_requests", "stories"])
+        if (table === t) {
+          const ids = inIds("id");
+          return json(db[t].filter((r) => !ids || ids.includes(r.id)));
+        }
+      return json([]);
+    }
+    return json(null, 404);
+  });
+}
+
+const results = [];
+function record(name, ok, detail = "") {
+  results.push({ name, ok, detail });
+  if (!ok) console.log("FAIL", name, detail);
+}
+
+async function noOverflow(page, label) {
+  const { sw, iw } = await page.evaluate(() => ({
+    sw: document.documentElement.scrollWidth,
+    iw: window.innerWidth,
+  }));
+  record(label + " no horizontal overflow", sw <= iw, `scrollWidth ${sw} > innerWidth ${iw}`);
+}
+
+async function shot(page, name) {
+  await page.screenshot({ path: path.join(OUT, name + ".png"), fullPage: false });
+}
+
+async function signIn(page) {
+  await page.goto(BASE + "/sign-in", { waitUntil: "networkidle" });
+  await page.fill('input[type="email"]', "member@test.invalid");
+  await page.fill('input[type="password"]', "x");
+  await page.click('button[type="submit"]');
+  await page.waitForURL("**/convene", { timeout: 15000 });
+  await page.waitForSelector('[data-testid="launcher"]');
+}
+
+async function runViewport(browserType, bname, [w, h], theme) {
+  const tag = `${bname}-${w}x${h}-${theme}`;
+  const isTouch = w < 1024 || w === 1024;
+  const browser = await browserType.launch();
+  const ctx = await browser.newContext({
+    viewport: { width: w, height: h },
+    hasTouch: isTouch,
+    isMobile: w < 1024,
+    deviceScaleFactor: 1,
+    colorScheme: theme,
+  });
+  const page = await ctx.newPage();
+  const db = makeMockDb();
+  await page.addInitScript(
+    ({ theme }) => {
+      try {
+        localStorage.setItem("dna.theme", theme);
+      } catch {}
+    },
+    { theme },
+  );
+  if (process.env.HIDE)
+    await page.addInitScript((css) => {
+      const st = document.createElement("style");
+      st.textContent = css;
+      document.addEventListener("DOMContentLoaded", () => document.head.appendChild(st));
+    }, process.env.HIDE);
+  await mockSupabase(page, db);
+  const errors = [];
+  page.on("pageerror", (e) => errors.push(String(e)));
+  page.on("console", (m) => {
+    if (
+      m.type() === "error" &&
+      !/fonts\.g|ERR_CONNECTION_RESET|ERR_NAME_NOT_RESOLVED|ERR_FAILED/.test(m.text())
+    )
+      errors.push(m.text());
+  });
+  try {
+    await signIn(page);
+    record(tag + " theme attribute", (await page.getAttribute("html", "data-theme")) === theme);
+    await shot(page, `${tag}-00-feed`);
+    await noOverflow(page, tag + " feed");
+    if (process.env.DEBUG)
+      console.log(
+        "DEBUG nav:",
+        JSON.stringify(
+          await page.evaluate(() =>
+            [...document.querySelectorAll('nav[aria-label="Pulse"]')].map((n) => ({
+              h: n.style.height,
+              w: n.getBoundingClientRect().width,
+              sw: n.scrollWidth,
+              items: [...n.children].map((c) => Math.round(c.getBoundingClientRect().width)),
+              parentW: n.parentElement.getBoundingClientRect().width,
+              parentSW: n.parentElement.scrollWidth,
+            })),
+          ),
+        ),
+      );
+    if (process.env.DEBUG)
+      console.log(
+        "DEBUG wide:",
+        JSON.stringify(
+          await page.evaluate(() => {
+            const out = { innerWidth: window.innerWidth, wide: [] };
+            for (const el of document.querySelectorAll("body *")) {
+              const r = el.getBoundingClientRect();
+              if (r.right > 821)
+                out.wide.push([
+                  el.tagName,
+                  Math.round(r.width),
+                  Math.round(r.right),
+                  (el.getAttribute("aria-label") || el.textContent || "").slice(0, 25),
+                ]);
+            }
+            return out;
+          }),
+        ),
+      );
+
+    // Open from launcher: empty state.
+    await page.click('[data-testid="launcher"]');
+    const dialog = page.locator('section[role="dialog"][aria-label="Compose"]');
+    await dialog.waitFor({ timeout: 10000 });
+    await page.waitForTimeout(300); // let the rise or slide animation settle before measuring
+    record(tag + " composer opens from launcher", true);
+    if (process.env.DEBUG)
+      console.log(
+        "DEBUG wide2:",
+        JSON.stringify(
+          await page.evaluate(() => {
+            const out = { innerWidth: window.innerWidth, wide: [] };
+            for (const el of document.querySelectorAll("body *")) {
+              const r = el.getBoundingClientRect();
+              if (r.right > window.innerWidth + 1)
+                out.wide.push([
+                  el.tagName,
+                  Math.round(r.width),
+                  Math.round(r.right),
+                  (el.getAttribute("aria-label") || el.textContent || "").slice(0, 25),
+                ]);
+            }
+            return out;
+          }),
+        ),
+      );
+    record(
+      tag + " five verb chips visible",
+      (await dialog
+        .locator('[role="radiogroup"][aria-label="What kind of post"] [role="radio"]')
+        .count()) === 5,
+    );
+    record(
+      tag + " empty: no DiaLine, no preview, publish disabled",
+      (await dialog.locator("[data-dia]").count()) === 0 &&
+        (await dialog.locator("article[aria-label='Preview of your post']").count()) === 0 &&
+        (await dialog.getByRole("button", { name: "Publish" }).isDisabled()),
+    );
+    const expectDrawer = w > 1024;
+    const box = await dialog.boundingBox();
+    record(
+      tag + (expectDrawer ? " drawer at min(1000, 100%)" : " full-width sheet"),
+      expectDrawer ? Math.abs(box.width - Math.min(1000, w)) < 2 : Math.abs(box.width - w) < 2,
+      `width ${box.width}`,
+    );
+    const pub = dialog.getByRole("button", { name: "Publish" });
+    const pb = await pub.boundingBox();
+    const geo = await page.evaluate(() => {
+      const s = document.querySelector('section[role="dialog"][aria-label="Compose"]');
+      const r = s.getBoundingClientRect();
+      const scrim = s.parentElement.getBoundingClientRect();
+      return {
+        innerHeight: window.innerHeight,
+        innerWidth: window.innerWidth,
+        sectionBottom: r.bottom,
+        sectionTop: r.top,
+        scrimBottom: scrim.bottom,
+        vv: window.visualViewport && window.visualViewport.height,
+      };
+    });
+    record(
+      tag + " publish within viewport",
+      pb && pb.y + pb.height <= geo.innerHeight + 1,
+      JSON.stringify({ pb, geo }),
+    );
+    await shot(page, `${tag}-01-empty`);
+    await noOverflow(page, tag + " empty");
+
+    // Thinking then populated (Convene sample).
+    const ta = dialog.locator('textarea[aria-label="What is going on with you"]');
+    await ta.fill(SAMPLES.convene);
+    await dialog.locator('[data-dia="thinking"]').waitFor({ timeout: 3000 });
+    record(tag + " thinking state after 700ms debounce", true);
+    await shot(page, `${tag}-02-thinking`);
+    await dialog.locator('[data-dia="done"]').waitFor({ timeout: 5000 });
+    record(
+      tag + " populated: chip selected + DIA line",
+      (await dialog
+        .locator('[role="radio"][aria-label^="Host an Event"][aria-checked="true"]')
+        .count()) === 1 &&
+        (await dialog.locator('[data-dia="done"]').textContent()).includes(
+          "DIA read this as an Event.",
+        ),
+    );
+    record(
+      tag + " populated: DIA tags on filled fields",
+      (await dialog.locator("label", { hasText: "DIA" }).count()) >= 3,
+    );
+    const preview = dialog.locator("article[aria-label='Preview of your post']");
+    record(
+      tag + " populated: preview card assembled as convene",
+      (await preview.getAttribute("data-c")) === "convene" &&
+        (await preview.textContent()).includes("Diaspora Builders Dinner"),
+    );
+    record(tag + " publish enabled with content", !(await pub.isDisabled()));
+    await shot(page, `${tag}-03-populated`);
+    await noOverflow(page, tag + " populated");
+
+    // Member edits a DIA field: tag disappears; re-inference must not overwrite it.
+    const titleInput = dialog.locator("label", { hasText: "Title" }).locator("..").locator("input");
+    await titleInput.fill("Builders Dinner, Nairobi");
+    record(
+      tag + " member edit removes DIA tag on that field",
+      (await dialog
+        .locator("label", { hasText: "Title" })
+        .locator("span", { hasText: "DIA" })
+        .count()) === 0,
+    );
+    record(
+      tag + " member-written field shows pen glyph in preview",
+      (await preview.locator("h3").textContent()).includes("Builders Dinner, Nairobi"),
+    );
+
+    // Not this? clears DIA fields, keeps member ones, returns to untyped Convey.
+    await dialog.getByRole("button", { name: "Not this?" }).click();
+    record(
+      tag + " Not this? -> untyped convey, no DiaLine",
+      (await dialog.locator("[data-dia]").count()) === 0 &&
+        (await preview.getAttribute("data-c")) === "convey" &&
+        (await preview.locator("h3").count()) === 0,
+    );
+    // Six previews via chips.
+    for (const v of ["connect", "convene", "collaborate", "contribute", "convey"]) {
+      if (!FULL_PREVIEW_AT.has(w) && v !== "contribute") continue;
+      await ta.fill(SAMPLES[v]);
+      const act = {
+        connect: "Make an Intro",
+        convene: "Host an Event",
+        collaborate: "Start a Space",
+        contribute: "Post a Need",
+        convey: "Share a Story",
+      }[v];
+      await dialog.locator(`[role="radio"][aria-label^="${act}"]`).click();
+      record(
+        tag + ` chip override -> ${v} preview, no DiaLine`,
+        (await preview.getAttribute("data-c")) === v &&
+          (await dialog.locator("[data-dia]").count()) === 0,
+      );
+      await page.waitForTimeout(150);
+      await shot(page, `${tag}-04-preview-${v}`);
+      await noOverflow(page, tag + " preview " + v);
+    }
+    await dialog.locator('[role="radio"][aria-label^="Post a Need"]').click();
+    // Audience pills.
+    await dialog
+      .locator('[role="radiogroup"][aria-label="Who sees this"] [role="radio"]', {
+        hasText: "My connections",
+      })
+      .click();
+    record(
+      tag + " audience pill -> preview meta",
+      (await preview.textContent()).includes("My connections"),
+    );
+    // Close keeps draft (Esc), reopen restores.
+    await page.keyboard.press("Escape");
+    await page.waitForSelector('section[role="dialog"][aria-label="Compose"]', {
+      state: "detached",
+    });
+    record(tag + " Esc closes; draft persisted server-side", db.drafts.size === 1);
+    await page.keyboard.press("c");
+    await dialog.waitFor({ timeout: 10000 });
+    if (process.env.DEBUG)
+      console.log(
+        "DEBUG restore:",
+        JSON.stringify({
+          value: (await ta.inputValue()).slice(0, 40),
+          drafted: await dialog.getByText("Draft saved").count(),
+          drafts: [...db.drafts.entries()].map(([k, v]) => [
+            k,
+            typeof v,
+            v && v.text && v.text.slice(0, 30),
+          ]),
+          log: db.log,
+        }),
+      );
+    record(
+      tag + " c keypress opens composer with restored draft",
+      /^(Three intros|We need a volunteer)/.test(await ta.inputValue()) &&
+        (await dialog.getByText("Draft saved").count()) === 1,
+    );
+    await page.keyboard.press("Escape");
+    await page.waitForSelector('section[role="dialog"][aria-label="Compose"]', {
+      state: "detached",
+    });
+    // Verb entry opens fresh (no draft restore).
+    await page
+      .locator('[role="group"][aria-label="Start with a verb"] [role="radio"]')
+      .first()
+      .click();
+    await dialog.waitFor({ timeout: 10000 });
+    record(
+      tag + " verb entry opens with verb preselected and no draft",
+      (await ta.inputValue()) === "" &&
+        (await dialog
+          .locator('[role="radio"][aria-label^="Make an Intro"][aria-checked="true"]')
+          .count()) === 1,
+    );
+    await page.keyboard.press("Escape");
+    await page.waitForSelector('section[role="dialog"][aria-label="Compose"]', {
+      state: "detached",
+    });
+    db.drafts.clear();
+  } catch (e) {
+    record(tag + " flow", false, String(e).slice(0, 300));
+    await shot(page, `${tag}-ERROR`).catch(() => {});
+  }
+  record(
+    tag + " no page errors",
+    errors.length === 0,
+    errors.slice(0, 3).join(" | ").slice(0, 300),
+  );
+  await browser.close();
+}
+
+// End-to-end publish (once per tier) including link unfurl, image attach, and the feed card via the router.
+async function runPublish(browserType, bname, [w, h], theme) {
+  const tag = `${bname}-${w}x${h}-${theme}-publish`;
+  const browser = await browserType.launch();
+  const ctx = await browser.newContext({
+    viewport: { width: w, height: h },
+    hasTouch: w < 1024,
+    isMobile: w < 1024,
+    colorScheme: theme,
+  });
+  const page = await ctx.newPage();
+  const db = makeMockDb();
+  await page.addInitScript(
+    ({ theme }) => {
+      try {
+        localStorage.setItem("dna.theme", theme);
+      } catch {}
+    },
+    { theme },
+  );
+  await mockSupabase(page, db);
+  const errors = [];
+  page.on("pageerror", (e) => errors.push(String(e)));
+  try {
+    await signIn(page);
+    await page.click('[data-testid="launcher"]');
+    const dialog = page.locator('section[role="dialog"][aria-label="Compose"]');
+    await dialog.waitFor();
+    await dialog.locator('textarea[aria-label="What is going on with you"]').fill(SAMPLES.convene);
+    await dialog.locator('[data-dia="done"]').waitFor({ timeout: 5000 });
+    // Link.
+    await dialog.getByRole("button", { name: "Add a link" }).click();
+    await dialog.locator('input[placeholder="https://"]').fill("https://nation.africa/summit");
+    await page.keyboard.press("Enter");
+    record(
+      tag + " link shows domain immediately",
+      (await dialog.textContent()).includes("nation.africa"),
+    );
+    await dialog
+      .getByText("Nairobi to host continental builders summit")
+      .first()
+      .waitFor({ timeout: 3000 });
+    record(
+      tag + " link unfurls into card",
+      (await dialog.locator("article[aria-label='Preview of your post']").textContent()).includes(
+        "Nairobi to host continental builders summit",
+      ),
+    );
+    // Images (picker path on touch, direct input on pointer): set files on the hidden input.
+    const png = Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",
+      "base64",
+    );
+    const fileInput = dialog.locator('input[type="file"]:not([capture])');
+    await fileInput.setInputFiles([
+      { name: "a.png", mimeType: "image/png", buffer: png },
+      { name: "b.png", mimeType: "image/png", buffer: png },
+    ]);
+    await page.waitForTimeout(600);
+    record(
+      tag + " two thumbnails after attach",
+      (await dialog.getByRole("button", { name: "Remove image" }).count()) === 2,
+    );
+    record(
+      tag + " gallery in preview",
+      (await dialog.locator("article[aria-label='Preview of your post'] img").count()) >= 2,
+    );
+    await fileInput.setInputFiles([
+      { name: "c.png", mimeType: "image/png", buffer: png },
+      { name: "d.png", mimeType: "image/png", buffer: png },
+      { name: "e.png", mimeType: "image/png", buffer: png },
+    ]);
+    await page.waitForTimeout(600);
+    record(
+      tag + " fifth image truncated to cap of four",
+      (await dialog.getByRole("button", { name: "Remove image" }).count()) === 4 &&
+        (await dialog.getByRole("button", { name: "Add an image" }).isDisabled()),
+    );
+    await page.screenshot({ path: path.join(OUT, `${tag}-05-attached.png`) });
+    // Publish.
+    await dialog.getByRole("button", { name: "Publish" }).click();
+    await page.waitForSelector('section[role="dialog"][aria-label="Compose"]', {
+      state: "detached",
+      timeout: 10000,
+    });
+    record(tag + " composer closes on publish, no navigation", page.url().endsWith("/convene"));
+    const payload = db.rpcPayloads[0];
+    record(
+      tag + " RPC payload: one c_category via verb, media x4, link, dia record",
+      payload &&
+        payload.verb === "convene" &&
+        payload.media.length === 4 &&
+        payload.link.url.includes("nation.africa") &&
+        payload.dia &&
+        payload.dia.verb === "convene" &&
+        payload.dia.accepted === true &&
+        typeof payload.starts_at === "string" &&
+        payload.starts_at.length > 0,
+      JSON.stringify(payload).slice(0, 300),
+    );
+    await page.getByText("Published. It is in the Feed.").waitFor({ timeout: 3000 });
+    const card = page.locator("main article[data-c='convene']").first();
+    await card.waitFor({ timeout: 10000 });
+    record(
+      tag + " feed card rendered by the router with kicker Event and title",
+      (await card.textContent()).includes("Event") &&
+        (await card.textContent()).includes("Diaspora Builders Dinner") &&
+        (await card.textContent()).includes("Get a ticket"),
+    );
+    record(
+      tag + " feed card carries media and link",
+      (await card.locator("img").count()) >= 4 &&
+        (await card.textContent()).includes("nation.africa"),
+    );
+    await page.screenshot({ path: path.join(OUT, `${tag}-06-published.png`) });
+    // Untyped publish.
+    await page.keyboard.press("c");
+    await dialog.waitFor();
+    await dialog.locator('textarea[aria-label="What is going on with you"]').fill(SAMPLES.untyped);
+    await page.waitForTimeout(1900);
+    if (process.env.DEBUG) {
+      await page.screenshot({ path: path.join(OUT, `${tag}-DEBUG-untyped.png`) });
+      console.log(
+        "DEBUG untyped:",
+        JSON.stringify({
+          dia: await dialog.locator("[data-dia]").count(),
+          preview: await dialog.locator("article[aria-label='Preview of your post']").count(),
+          c: await dialog
+            .locator("article[aria-label='Preview of your post']")
+            .getAttribute("data-c")
+            .catch(() => "none"),
+          disabled: await dialog.getByRole("button", { name: "Publish" }).isDisabled(),
+          text: (
+            await dialog.locator('textarea[aria-label="What is going on with you"]').inputValue()
+          ).slice(0, 30),
+          drafts: db.drafts.size,
+          infer: db.inferCalls,
+        }),
+      );
+    }
+    record(
+      tag + " silence: untyped text -> no DiaLine, convey preview, no kicker",
+      (await dialog.locator("[data-dia]").count()) === 0 &&
+        (await dialog
+          .locator("article[aria-label='Preview of your post']")
+          .getAttribute("data-c")) === "convey",
+    );
+    await dialog.getByRole("button", { name: "Publish" }).click();
+    await page.waitForSelector('section[role="dialog"][aria-label="Compose"]', {
+      state: "detached",
+      timeout: 10000,
+    });
+    const p2 = db.rpcPayloads[1];
+    record(
+      tag + " untyped publish: verb null (convey, no object)",
+      p2 &&
+        p2.verb === null &&
+        db.posts[0].c_category === "convey" &&
+        db.posts[0].created_object_kind === null,
+    );
+    await page.locator("main article[data-c='convey']").first().waitFor({ timeout: 10000 });
+  } catch (e) {
+    record(tag + " flow", false, String(e).slice(0, 300));
+    await page.screenshot({ path: path.join(OUT, `${tag}-ERROR.png`) }).catch(() => {});
+  }
+  record(tag + " no page errors", errors.length === 0, errors.slice(0, 3).join(" | "));
+  await browser.close();
+}
+
+// Silence when DIA times out or errors: identical to no DIA.
+async function runSilence(browserType, bname) {
+  const tag = `${bname}-390x844-light-silence`;
+  const browser = await browserType.launch();
+  const ctx = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    hasTouch: true,
+    isMobile: true,
+  });
+  const page = await ctx.newPage();
+  const db = makeMockDb();
+  await mockSupabase(page, db, { inferDelay: 5000 });
+  try {
+    await signIn(page);
+    await page.click('[data-testid="launcher"]');
+    const dialog = page.locator('section[role="dialog"][aria-label="Compose"]');
+    await dialog.waitFor();
+    await dialog.locator('textarea[aria-label="What is going on with you"]').fill(SAMPLES.convene);
+    await dialog.locator('[data-dia="thinking"]').waitFor({ timeout: 3000 });
+    await page.waitForTimeout(3800); // budget is 3.5 s (ruling 74)
+    record(
+      tag + " timeout past 3.5s -> silence, untyped convey, no chip",
+      (await dialog.locator("[data-dia]").count()) === 0 &&
+        (await dialog.locator('[role="radio"][aria-checked="true"]').count()) ===
+          1 /* audience pill only */ &&
+        (await dialog
+          .locator("article[aria-label='Preview of your post']")
+          .getAttribute("data-c")) === "convey",
+    );
+    await page.screenshot({ path: path.join(OUT, `${tag}.png`) });
+    // Short text: no inference at all.
+    db.inferCalls = 0;
+    await dialog.locator('textarea[aria-label="What is going on with you"]').fill("Hi all");
+    await page.waitForTimeout(1200);
+    record(tag + " under 8 characters: no inference call", db.inferCalls === 0);
+  } catch (e) {
+    record(tag + " flow", false, String(e).slice(0, 300));
+  }
+  await browser.close();
+}
+
+// iOS keyboard surrogate: shrink visualViewport and check data-kb and Publish placement.
+async function runKeyboard(browserType, bname) {
+  const tag = `${bname}-390x844-keyboard`;
+  const browser = await browserType.launch();
+  const ctx = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    hasTouch: true,
+    isMobile: true,
+  });
+  const page = await ctx.newPage();
+  await page.addInitScript(() => {
+    const target = new EventTarget();
+    const fake = {
+      height: window.innerHeight,
+      width: window.innerWidth,
+      offsetTop: 0,
+      offsetLeft: 0,
+      pageTop: 0,
+      pageLeft: 0,
+      scale: 1,
+      addEventListener: (...a) => target.addEventListener(...a),
+      removeEventListener: (...a) => target.removeEventListener(...a),
+      dispatchEvent: (e) => target.dispatchEvent(e),
+    };
+    Object.defineProperty(window, "visualViewport", { value: fake, configurable: true });
+    window.__setKeyboard = (kb) => {
+      fake.height = window.innerHeight - kb;
+      target.dispatchEvent(new Event("resize"));
+    };
+  });
+  const db = makeMockDb();
+  await mockSupabase(page, db);
+  try {
+    await signIn(page);
+    await page.click('[data-testid="launcher"]');
+    const dialog = page.locator('section[role="dialog"][aria-label="Compose"]');
+    await dialog.waitFor();
+    record(tag + " no data-kb before keyboard", (await dialog.getAttribute("data-kb")) === null);
+    await dialog.locator('textarea[aria-label="What is going on with you"]').focus();
+    await page.evaluate(() => window.__setKeyboard(336));
+    await page.waitForTimeout(100);
+    record(
+      tag + " data-kb=1 while keyboard tracking active",
+      (await dialog.getAttribute("data-kb")) === "1",
+    );
+    const pb = await dialog.getByRole("button", { name: "Publish" }).boundingBox();
+    record(
+      tag + " Publish stays above the keyboard",
+      pb && pb.y + pb.height <= 844 - 336 + 1,
+      JSON.stringify(pb),
+    );
+    await page.screenshot({ path: path.join(OUT, `${tag}.png`) });
+    await page.evaluate(() => window.__setKeyboard(0));
+    await page.waitForTimeout(100);
+    record(tag + " restores on keyboard dismiss", (await dialog.getAttribute("data-kb")) === null);
+  } catch (e) {
+    record(tag + " flow", false, String(e).slice(0, 300));
+  }
+  await browser.close();
+}
+
+if (require.main === module)
+  (async () => {
+    const only = process.env.ONLY ? JSON.parse(process.env.ONLY) : null;
+    if (process.env.SPECIAL) {
+      for (const [bname, bt] of [["chromium", chromium]]) {
+        if (process.env.SPECIAL.includes("publish"))
+          await runPublish(bt, bname, [390, 844], "light");
+        if (process.env.SPECIAL.includes("keyboard")) await runKeyboard(bt, bname);
+        if (process.env.SPECIAL.includes("silence")) await runSilence(bt, bname);
+      }
+      const fails = results.filter((r) => !r.ok);
+      console.log(`${results.length - fails.length}/${results.length} checks passed`);
+      fails.forEach((f) => console.log("FAIL:", f.name, f.detail));
+      process.exit(fails.length ? 1 : 0);
+    }
+    const engines = [["chromium", chromium]];
+    if (process.env.WEBKIT === "1") engines.push(["webkit", webkit]);
+    for (const [bname, bt] of engines) {
+      for (const vp of only ? [only] : VIEWPORTS)
+        for (const theme of only ? ["light"] : THEMES) await runViewport(bt, bname, vp, theme);
+      if (only) {
+        const fails = results.filter((r) => !r.ok);
+        console.log(`${results.length - fails.length}/${results.length} checks passed`);
+        fails.forEach((f) => console.log("FAIL:", f.name, f.detail));
+        process.exit(fails.length ? 1 : 0);
+      }
+      await runPublish(bt, bname, [390, 844], "light");
+      await runPublish(bt, bname, [1280, 800], "dark");
+      await runSilence(bt, bname);
+      await runKeyboard(bt, bname);
+    }
+    const fails = results.filter((r) => !r.ok);
+    fs.writeFileSync(path.join(OUT, "results.json"), JSON.stringify(results, null, 2));
+    console.log(`\n${results.length - fails.length}/${results.length} checks passed`);
+    fails.forEach((f) => console.log("FAIL:", f.name, f.detail));
+    process.exit(fails.length ? 1 : 0);
+  })();

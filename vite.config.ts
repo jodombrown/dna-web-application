@@ -7,6 +7,9 @@
 import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 
 export default defineConfig({
+  // Cloudflare Pages is the deploy target (per-branch preview deployments). Nitro emits dist/ with
+  // _worker.js for Pages; wrangler.jsonc points Pages at it.
+  nitro: { preset: "cloudflare-pages" },
   tanstackStart: {
     // Redirect TanStack Start's bundled server entry to src/server.ts (our SSR error wrapper).
     // nitro/vite builds from this

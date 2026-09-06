@@ -1,0 +1,10 @@
+{
+  // Cloudflare Pages project for app.diasporanetwork.africa. Nitro (preset cloudflare-pages) emits
+  // dist/ with _worker.js, _routes.json and the static assets. Every branch gets its own preview
+  // deployment (<branch>.<project>.pages.dev); production follows the production branch.
+  "$schema": "https://raw.githubusercontent.com/cloudflare/workers-sdk/main/packages/wrangler/config-schema.json",
+  "name": "dna-web-application",
+  "compatibility_date": "2026-09-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "pages_build_output_dir": "dist"
+}
