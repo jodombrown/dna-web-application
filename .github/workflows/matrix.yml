@@ -1,0 +1,56 @@
+# Responsive test matrix (ruling 61) against a deployed Pages URL, in Chromium and WebKit.
+# Dispatch it for a branch; base_url defaults to that branch's Pages preview alias.
+name: Responsive matrix
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: Deployed URL to test (defaults to the branch's Pages preview)
+        required: false
+        default: ""
+
+jobs:
+  matrix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+      - name: Resolve target URL
+        id: target
+        run: |
+          URL="${{ inputs.base_url }}"
+          if [ -z "$URL" ]; then URL="https://${{ github.ref_name }}.dna-web-application.pages.dev"; fi
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+          echo "Testing $URL"
+      - name: Live check (deployed HTML serves the app)
+        run: |
+          set -e
+          URL="${{ steps.target.outputs.url }}"
+          code=$(curl -sS -o /tmp/sign-in.html -w '%{http_code}' "$URL/sign-in")
+          echo "GET /sign-in -> $code"
+          test "$code" = "200"
+          grep -q '<title>DNA</title>' /tmp/sign-in.html
+          grep -q 'manifest.webmanifest' /tmp/sign-in.html
+          code=$(curl -sS -o /dev/null -w '%{http_code}' "$URL/strand/adinkra/mate-masie.svg")
+          echo "GET /strand/adinkra/mate-masie.svg -> $code"
+          test "$code" = "200"
+      - name: Install browsers
+        run: bunx playwright install --with-deps chromium webkit
+      - name: Run matrix (Chromium and WebKit)
+        env:
+          BASE: ${{ steps.target.outputs.url }}
+          WEBKIT: "1"
+          OUT: ${{ github.workspace }}/matrix-out
+        run: node tests/matrix.cjs
+      - name: Upload screenshots and results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: matrix-${{ github.ref_name }}-${{ github.run_number }}
+          path: matrix-out
+          if-no-files-found: warn
