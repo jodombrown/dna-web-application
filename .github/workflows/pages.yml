@@ -33,10 +33,18 @@ jobs:
       - name: Cloudflare secrets missing
         if: ${{ env.CF_API_TOKEN == '' || env.CF_ACCOUNT_ID == '' }}
         run: echo "::notice::Deploy skipped. Add CLOUDFLARE_API_TOKEN (Pages:Edit) and CLOUDFLARE_ACCOUNT_ID as repository secrets to enable per-branch Pages previews."
+      - name: Ensure the Pages project exists (no-op once created)
+        if: ${{ env.CF_API_TOKEN != '' && env.CF_ACCOUNT_ID != '' }}
+        uses: cloudflare/wrangler-action@v3
+        continue-on-error: true
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages project create dna-web-application --production-branch=main
       - name: Deploy to Cloudflare Pages
         if: ${{ env.CF_API_TOKEN != '' && env.CF_ACCOUNT_ID != '' }}
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy dist --project-name=dna-web-application --branch=${{ github.ref_name }} --commit-hash=${{ github.sha }}
+          command: pages deploy dist --project-name=dna-web-application --branch=${{ github.ref_name }} --commit-hash=${{ github.sha }} --commit-dirty=true
