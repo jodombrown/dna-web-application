@@ -1,12 +1,19 @@
-// Loads the member's visible posts (RLS decides) and the objects they created, and maps every row to
-// the PostView the card router renders. Ranking is not in this brief: newest first.
+// The feed read. Rows come from the `feed` view (security_invoker over posts, so the audience
+// predicate is RLS on posts, never a client filter) in strict reverse-chronological order (ruling
+// 80). Lens filters are PostgREST predicates on that view. Every row is mapped to the PostView the
+// card router renders; the composer preview and the Feed share that one shape.
 import type { C } from "@/components/strand/cmeta";
 import type { FieldValues } from "@/components/strand/verb-schema";
 import type { Member } from "./auth";
-import type { Tables } from "./database.types";
+import type { Tables, Views } from "./database.types";
 import { signedMediaUrl } from "./dia";
+import type { LensId } from "./lens";
 import { domainOf, type PostView } from "./post-view";
-import { getSupabase } from "./supabase";
+import { getSupabase, type Supabase } from "./supabase";
+import { whenLabel } from "./when";
+
+type FeedRow = Views<"feed">;
+type PostRow = Tables<"posts">;
 
 const INSTRUMENT_LABEL: Record<Tables<"opportunities">["instrument"], string> = {
   time: "Time",
@@ -14,7 +21,7 @@ const INSTRUMENT_LABEL: Record<Tables<"opportunities">["instrument"], string> = 
   in_kind: "In-kind",
 };
 
-function verbOf(kind: Tables<"posts">["created_object_kind"]): C | null {
+function verbOf(kind: PostRow["created_object_kind"]): C | null {
   switch (kind) {
     case "connection_request":
       return "connect";
@@ -38,28 +45,34 @@ function mine(
   return { value, mine: true };
 }
 
-function timeAgo(iso: string | null): string {
-  if (!iso) return "";
-  const diff = Date.now() - new Date(iso).getTime();
-  const m = Math.round(diff / 60000);
-  if (m < 1) return "Just now";
-  if (m < 60) return m + " min ago";
-  const h = Math.round(m / 60);
-  if (h < 24) return h + " h ago";
-  const d = Math.round(h / 24);
-  return d + " d ago";
+/** The view's columns are nullable in the generated types; a published row always has these. */
+function asPost(r: FeedRow): PostRow | null {
+  if (!r.id || !r.author_kind || !r.author_id || !r.created_by || !r.c_category) return null;
+  return {
+    id: r.id,
+    author_kind: r.author_kind,
+    author_id: r.author_id,
+    created_by: r.created_by,
+    c_category: r.c_category,
+    body: r.body ?? "",
+    anchor_kind: r.anchor_kind,
+    anchor_id: r.anchor_id,
+    created_object_kind: r.created_object_kind,
+    created_object_id: r.created_object_id,
+    audience: r.audience ?? "everyone",
+    status: r.status ?? "published",
+    published_at: r.published_at,
+    created_at: r.created_at ?? r.published_at ?? new Date().toISOString(),
+  };
 }
 
-export async function loadFeed(member: Member, limit = 50): Promise<PostView[]> {
-  const sb = getSupabase();
-  if (!sb) return [];
-  const { data: posts } = await sb
-    .from("posts")
-    .select("*")
-    .eq("status", "published")
-    .order("published_at", { ascending: false })
-    .limit(limit);
-  if (!posts || posts.length === 0) return [];
+/** Resolve the created objects, media and links for a page of posts and map them to PostViews. */
+export async function hydratePosts(
+  sb: Supabase,
+  member: Member,
+  posts: PostRow[],
+): Promise<PostView[]> {
+  if (posts.length === 0) return [];
   const ids = posts.map((p) => p.id);
   const by = <T extends string>(kind: T) =>
     posts.filter((p) => p.created_object_kind === kind).map((p) => p.created_object_id as string);
@@ -200,9 +213,130 @@ export async function loadFeed(member: Member, limit = 50): Promise<PostView[]> 
             image: link.image_url ?? undefined,
           }
         : null,
-      meta: timeAgo(p.published_at),
+      // The meta line is the absolute time; city and zone arrive with member profiles.
+      meta: whenLabel(p.published_at),
     };
   });
+}
+
+/** Ids of members with an accepted connection to this member, and Spaces where they hold an active role. */
+async function networkIds(sb: Supabase, memberId: string) {
+  const [{ data: conns }, { data: roles }] = await Promise.all([
+    sb
+      .from("connection_requests")
+      .select("from_member_id,to_member_id")
+      .eq("status", "accepted")
+      .or(`from_member_id.eq.${memberId},to_member_id.eq.${memberId}`),
+    sb.from("space_roles").select("space_id").eq("member_id", memberId).eq("status", "active"),
+  ]);
+  const members = new Set<string>();
+  for (const c of conns ?? []) {
+    const other = c.from_member_id === memberId ? c.to_member_id : c.from_member_id;
+    if (other) members.add(other);
+  }
+  return { members: [...members], spaces: (roles ?? []).map((r) => r.space_id) };
+}
+
+const inList = (ids: string[]) => "(" + ids.map((i) => '"' + i + '"').join(",") + ")";
+
+/** The Feed for one lens: the `feed` view (RLS-visible, newest first) with the lens as a server-side predicate. */
+export async function loadFeed(
+  member: Member,
+  lens: LensId = "all",
+  limit = 50,
+): Promise<PostView[]> {
+  const sb = getSupabase();
+  if (!sb) return [];
+  let q = sb.from("feed").select("*");
+  if (lens === "mine") {
+    q = q.or(`author_id.eq.${member.id},created_by.eq.${member.id}`);
+  } else if (lens === "network") {
+    const { members, spaces } = await networkIds(sb, member.id);
+    if (members.length === 0 && spaces.length === 0) return [];
+    const parts: string[] = [];
+    if (members.length) parts.push(`and(author_kind.eq.member,author_id.in.${inList(members)})`);
+    if (spaces.length) parts.push(`and(author_kind.eq.space,author_id.in.${inList(spaces)})`);
+    q = q.or(parts.join(","));
+  } else if (lens === "saved") {
+    const { data: saves } = await sb
+      .from("post_saves")
+      .select("post_id")
+      .eq("member_id", member.id)
+      .order("created_at", { ascending: false })
+      .limit(limit);
+    const ids = (saves ?? []).map((s) => s.post_id);
+    if (ids.length === 0) return [];
+    q = q.in("id", ids);
+  }
+  const { data } = await q
+    .order("published_at", { ascending: false })
+    .order("id", { ascending: false })
+    .limit(limit);
+  const posts = (data ?? []).map(asPost).filter((p): p is PostRow => p !== null);
+  return hydratePosts(sb, member, posts);
+}
+
+/** One post by id, under the caller's posts RLS. Null when it does not exist or is not visible. */
+export async function loadPost(member: Member, id: string): Promise<PostView | null> {
+  const sb = getSupabase();
+  if (!sb) return null;
+  const { data } = await sb.from("feed").select("*").eq("id", id).maybeSingle();
+  const post = data ? asPost(data) : null;
+  if (!post) return null;
+  const [view] = await hydratePosts(sb, member, [post]);
+  return view ?? null;
+}
+
+/** The member's own save and react state for a set of posts: existence only, never a count. */
+export async function loadMarks(
+  memberId: string,
+  postIds: string[],
+): Promise<{ saved: Set<string>; reacted: Set<string> }> {
+  const sb = getSupabase();
+  const saved = new Set<string>();
+  const reacted = new Set<string>();
+  if (!sb || postIds.length === 0) return { saved, reacted };
+  const [s, r] = await Promise.all([
+    sb.from("post_saves").select("post_id").eq("member_id", memberId).in("post_id", postIds),
+    sb.from("post_reactions").select("post_id").eq("member_id", memberId).in("post_id", postIds),
+  ]);
+  for (const row of s.data ?? []) saved.add(row.post_id);
+  for (const row of r.data ?? []) reacted.add(row.post_id);
+  return { saved, reacted };
+}
+
+export async function setSaved(memberId: string, postId: string, on: boolean): Promise<void> {
+  const sb = getSupabase();
+  if (!sb) return;
+  if (on) {
+    const { error } = await sb.from("post_saves").insert({ member_id: memberId, post_id: postId });
+    if (error && error.code !== "23505") throw error;
+  } else {
+    const { error } = await sb
+      .from("post_saves")
+      .delete()
+      .eq("member_id", memberId)
+      .eq("post_id", postId);
+    if (error) throw error;
+  }
+}
+
+export async function setReacted(memberId: string, postId: string, on: boolean): Promise<void> {
+  const sb = getSupabase();
+  if (!sb) return;
+  if (on) {
+    const { error } = await sb
+      .from("post_reactions")
+      .insert({ member_id: memberId, post_id: postId });
+    if (error && error.code !== "23505") throw error;
+  } else {
+    const { error } = await sb
+      .from("post_reactions")
+      .delete()
+      .eq("member_id", memberId)
+      .eq("post_id", postId);
+    if (error) throw error;
+  }
 }
 
 /** Spaces where the member holds an active role: the "Post as" dropdown (RPC re-checks server-side). */

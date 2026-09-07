@@ -12,7 +12,6 @@ import { useEffect, type ReactNode } from "react";
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { AuthProvider } from "../lib/auth";
-import { ComposerShell } from "../components/dna/ComposerShell";
 
 function NotFoundComponent() {
   return (
@@ -25,7 +24,8 @@ function NotFoundComponent() {
         </p>
         <div className="mt-6">
           <Link
-            to="/"
+            to="/feed"
+            search={{}}
             className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
           >
             Go home
@@ -129,9 +129,8 @@ function RootComponent() {
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
+        {/* The composer mounts once inside the shell layout (src/routes/_shell.tsx), not here. */}
         <Outlet />
-        {/* The one composer shell (ruling 56). Opened from any surface via openComposer(). */}
-        <ComposerShell />
       </AuthProvider>
     </QueryClientProvider>
   );

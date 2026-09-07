@@ -23,7 +23,7 @@ function SignIn() {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    if (ready && member) void navigate({ to: "/$c", params: { c: "convene" } });
+    if (ready && member) void navigate({ to: "/feed", search: {} });
   }, [ready, member, navigate]);
 
   const submit = async (e: FormEvent) => {

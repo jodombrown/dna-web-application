@@ -81,3 +81,19 @@ export function useTheme(): [Theme, (t: Theme) => void] {
     },
   ];
 }
+
+/** Expanded canvas breakpoint (ruling 79, corrected by 86): both rails render at 1440 and above. */
+export const WIDE_MIN = 1440;
+
+export function useWide(): boolean {
+  const [wide, setWide] = useState(false);
+  useEffect(() => {
+    const el = document.documentElement;
+    const apply = () => setWide(el.clientWidth >= WIDE_MIN);
+    apply();
+    const ro = new ResizeObserver(apply);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  return wide;
+}
