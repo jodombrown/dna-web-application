@@ -1,4 +1,4 @@
-// Generated from the canonical Supabase project (dgspjevjoblujcoljvkn) after the B1 migrations.
+// Generated from the canonical Supabase project (dgspjevjoblujcoljvkn) after the B2 migrations.
 // Regenerate with the Supabase MCP generate_typescript_types tool or `supabase gen types`.
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
 
@@ -90,6 +90,35 @@ export type Database = {
             referencedColumns: ["id"];
           },
         ];
+      };
+      notifications: {
+        Row: {
+          actor_id: string | null;
+          actor_kind: Database["public"]["Enums"]["anchor_kind"] | null;
+          c_category: Database["public"]["Enums"]["c_category"];
+          created_at: string;
+          id: string;
+          kind: Database["public"]["Enums"]["notification_kind"];
+          object_id: string | null;
+          object_kind: Database["public"]["Enums"]["anchor_kind"] | null;
+          read_at: string | null;
+          recipient_member_id: string;
+        };
+        Insert: {
+          actor_id?: string | null;
+          actor_kind?: Database["public"]["Enums"]["anchor_kind"] | null;
+          created_at?: string;
+          id?: string;
+          kind: Database["public"]["Enums"]["notification_kind"];
+          object_id?: string | null;
+          object_kind?: Database["public"]["Enums"]["anchor_kind"] | null;
+          read_at?: string | null;
+          recipient_member_id: string;
+        };
+        Update: {
+          read_at?: string | null;
+        };
+        Relationships: [];
       };
       opportunities: {
         Row: {
@@ -295,6 +324,58 @@ export type Database = {
           },
         ];
       };
+      post_reactions: {
+        Row: {
+          created_at: string;
+          member_id: string;
+          post_id: string;
+        };
+        Insert: {
+          created_at?: string;
+          member_id: string;
+          post_id: string;
+        };
+        Update: {
+          created_at?: string;
+          member_id?: string;
+          post_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "post_reactions_post_id_fkey";
+            columns: ["post_id"];
+            isOneToOne: false;
+            referencedRelation: "posts";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      post_saves: {
+        Row: {
+          created_at: string;
+          member_id: string;
+          post_id: string;
+        };
+        Insert: {
+          created_at?: string;
+          member_id: string;
+          post_id: string;
+        };
+        Update: {
+          created_at?: string;
+          member_id?: string;
+          post_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "post_saves_post_id_fkey";
+            columns: ["post_id"];
+            isOneToOne: false;
+            referencedRelation: "posts";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       posts: {
         Row: {
           anchor_id: string | null;
@@ -445,7 +526,27 @@ export type Database = {
         Relationships: [];
       };
     };
-    Views: { [_ in never]: never };
+    Views: {
+      feed: {
+        Row: {
+          anchor_id: string | null;
+          anchor_kind: Database["public"]["Enums"]["anchor_kind"] | null;
+          audience: Database["public"]["Enums"]["audience"] | null;
+          author_id: string | null;
+          author_kind: Database["public"]["Enums"]["anchor_kind"] | null;
+          body: string | null;
+          c_category: Database["public"]["Enums"]["c_category"] | null;
+          created_at: string | null;
+          created_by: string | null;
+          created_object_id: string | null;
+          created_object_kind: Database["public"]["Enums"]["anchor_kind"] | null;
+          id: string | null;
+          published_at: string | null;
+          status: Database["public"]["Enums"]["post_status"] | null;
+        };
+        Relationships: [];
+      };
+    };
     Functions: {
       publish_post: { Args: { payload: Json }; Returns: string };
     };
@@ -455,6 +556,8 @@ export type Database = {
       c_category: "connect" | "convene" | "collaborate" | "contribute" | "convey" | "system";
       contribute_instrument: "time" | "skills" | "in_kind";
       event_mode: "in_person" | "virtual" | "hybrid";
+      notification_kind:
+        "connection_accepted" | "attestation_received" | "space_role_approved" | "event_reminder";
       post_status: "draft" | "published";
       request_status: "pending" | "accepted" | "declined" | "withdrawn";
       space_role: "lead" | "member";
@@ -470,4 +573,5 @@ type DefaultSchema = Database["public"];
 export type Tables<T extends keyof DefaultSchema["Tables"]> = DefaultSchema["Tables"][T]["Row"];
 export type TablesInsert<T extends keyof DefaultSchema["Tables"]> =
   DefaultSchema["Tables"][T]["Insert"];
+export type Views<T extends keyof DefaultSchema["Views"]> = DefaultSchema["Views"][T]["Row"];
 export type Enums<T extends keyof DefaultSchema["Enums"]> = DefaultSchema["Enums"][T];
