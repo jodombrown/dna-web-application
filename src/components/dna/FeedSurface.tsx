@@ -1,13 +1,16 @@
-// Feed (Home). LensBar wired to ?lens=, strict reverse-chronological posts through the card router
-// in feed mode, honest empty states per lens, Save and React as existence toggles, Read more into
-// the quick-look route with Feed's scroll position untouched (rulings 80 to 86).
+// Feed (Home), SPEC section 3. LensBar wired to ?lens=, strict reverse-chronological posts through
+// the card router with the Feed anatomy, three ghost cards while loading, EmptyState per lens, Save
+// and React as existence toggles, Read more / title / body into the quick-look route with Feed's
+// scroll position untouched (rulings 80 to 86).
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation, useNavigate, useRouter, useSearch } from "@tanstack/react-router";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { PostCardRouter } from "@/components/dna/PostCardRouter";
 import { Button } from "@/components/strand/Button";
+import { EmptyState } from "@/components/strand/EmptyState";
 import { LensBar } from "@/components/strand/LensBar";
 import { Toast } from "@/components/strand/Toast";
+import type { C } from "@/components/strand/cmeta";
 import type { Member } from "@/lib/auth";
 import { openComposer } from "@/lib/composer-store";
 import { loadFeed, loadMarks, loadPost, setReacted, setSaved } from "@/lib/feed";
@@ -16,17 +19,6 @@ import { markOpenedFromFeed } from "@/lib/overlay";
 import type { PostView } from "@/lib/post-view";
 import { useTier } from "@/lib/tier";
 import { COMPOSER_HOST } from "./AppShell";
-
-const EMPTY: Record<LensId, { text: string; compose: boolean }> = {
-  all: { text: "Nothing in the Feed yet. Be the first to post.", compose: true },
-  "for-you": { text: "Nothing in the Feed yet. Be the first to post.", compose: true },
-  "my-network": {
-    text: "Nothing from your network yet. Posts from members you are connected to and Spaces you are in appear here.",
-    compose: true,
-  },
-  mine: { text: "You have not posted yet.", compose: true },
-  saved: { text: "Nothing saved yet. Save a post and it appears here.", compose: false },
-};
 
 export function useShare() {
   const [toast, setToast] = useState<string | null>(null);
@@ -45,6 +37,66 @@ export function useShare() {
     window.setTimeout(() => setToast(null), 2600);
   };
   return { share, toast };
+}
+
+export function toastStyle(tier: "compact" | "medium" | "expanded") {
+  return {
+    position: "fixed" as const,
+    left: 0,
+    right: 0,
+    bottom:
+      tier === "compact"
+        ? "calc(76px + env(safe-area-inset-bottom))"
+        : tier === "medium"
+          ? "calc(80px + env(safe-area-inset-bottom))"
+          : 24,
+    display: "flex",
+    justifyContent: "center",
+    zIndex: 70,
+    pointerEvents: "none" as const,
+  };
+}
+
+function Ghosts() {
+  const block = (h: number, w: string) => (
+    <span style={{ height: h, width: w, borderRadius: 6, background: "var(--bg-sunken)" }} />
+  );
+  return (
+    <div
+      role="status"
+      aria-label="Loading Feed"
+      style={{ display: "flex", flexDirection: "column", gap: 12 }}
+    >
+      {[1, 2, 3].map((g) => (
+        <div
+          key={g}
+          aria-hidden="true"
+          style={{
+            background: "var(--surface)",
+            border: "1px solid var(--line)",
+            borderRadius: 14,
+            padding: 16,
+            display: "flex",
+            flexDirection: "column",
+            gap: 12,
+          }}
+        >
+          <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+            <span
+              style={{ width: 40, height: 40, borderRadius: 10, background: "var(--bg-sunken)" }}
+            />
+            <span style={{ flex: 1, display: "flex", flexDirection: "column", gap: 6 }}>
+              {block(12, "40%")}
+              {block(10, "60%")}
+            </span>
+          </div>
+          {block(18, "80%")}
+          {block(12, "100%")}
+          {block(12, "70%")}
+        </div>
+      ))}
+    </div>
+  );
 }
 
 export function FeedSurface({ member }: { member: Member }) {
@@ -140,52 +192,51 @@ export function FeedSurface({ member }: { member: Member }) {
       staleTime: 30_000,
     });
   };
-  const compose = () => openComposer({ host: COMPOSER_HOST });
+  const compose = (verb: C) => openComposer({ host: COMPOSER_HOST, initialVerb: verb });
+  const act = (c: C) => (
+    <Button c={c} onClick={() => compose(c)}>
+      {c === "connect" ? "Make an Intro" : "Share a Story"}
+    </Button>
+  );
+  const firstName = member.name.split(/\s+/)[0] || member.name;
+  const empty =
+    lens === "network"
+      ? {
+          c: "connect" as const,
+          title: "Nobody in your network yet.",
+          body: "Make an intro. Posts from your connections appear here.",
+          action: act("connect"),
+        }
+      : lens === "mine"
+        ? {
+            c: "convey" as const,
+            title: "You have not posted yet.",
+            body: "Start with what is going on with you.",
+            action: act("convey"),
+          }
+        : lens === "saved"
+          ? {
+              c: "brand" as const,
+              title: "Nothing saved yet.",
+              body: "Use the bookmark on any post and find it here.",
+              action: undefined,
+            }
+          : {
+              c: "brand" as const,
+              title: "Welcome to DNA, " + firstName + ".",
+              body: "Feed fills as members post and as you connect. Start with what is going on with you.",
+              action: act("convey"),
+            };
 
   const posts = feed.data;
-  const empty = EMPTY[lens];
+  const scope = LENSES.find((l) => l.id === lens)?.scope;
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }} data-feed>
-      <h1
-        style={{
-          margin: "4px 0 0",
-          fontFamily: "var(--font-display)",
-          fontWeight: 400,
-          fontSize: 26,
-          lineHeight: 1.2,
-        }}
-      >
-        Feed
-      </h1>
-      <LensBar lenses={LENSES} value={lens} onChange={setLens} compact={tier === "compact"} />
-      {posts === undefined && (
-        <p role="status" style={{ margin: "8px 4px", color: "var(--ink-3)", fontSize: 15 }}>
-          Loading the Feed
-        </p>
-      )}
+      <LensBar lenses={LENSES} value={lens} onChange={setLens} scope={scope} />
+      {posts === undefined && <Ghosts />}
       {posts && posts.length === 0 && (
-        <div
-          data-testid="feed-empty"
-          data-lens={lens}
-          style={{
-            background: "var(--surface)",
-            border: "1px solid var(--line)",
-            borderRadius: 14,
-            padding: "28px 20px",
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "flex-start",
-            gap: 14,
-          }}
-        >
-          <p style={{ margin: 0, fontSize: 17, lineHeight: 1.5, color: "var(--ink-2)" }}>
-            {empty.text}
-          </p>
-          {empty.compose && (
-            <Button onClick={compose} size="sm">
-              Compose
-            </Button>
-          )}
+        <div data-testid="feed-empty" data-lens={lens}>
+          <EmptyState c={empty.c} title={empty.title} body={empty.body} action={empty.action} />
         </div>
       )}
       {posts &&
@@ -200,16 +251,26 @@ export function FeedSurface({ member }: { member: Member }) {
             <PostCardRouter
               key={id}
               view={p}
-              mode="feed"
+              feed
               saved={savedOf(id)}
               reacted={reactedOf(id)}
               onSave={() => toggle("saved", id)}
               onReact={() => toggle("reacted", id)}
               onShare={() => void share(id)}
               onRespond={() => openPost(id)}
+              onClick={() => openPost(id)}
+              onAct={() => {
+                if (p.c_category !== "system")
+                  void navigate({ to: "/$c", params: { c: p.c_category } });
+              }}
               readMoreHref={href}
               onReadMore={(e) => {
-                if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+                const me = e as unknown as {
+                  metaKey?: boolean;
+                  ctrlKey?: boolean;
+                  shiftKey?: boolean;
+                };
+                if (me.metaKey || me.ctrlKey || me.shiftKey) return;
                 e.preventDefault();
                 openPost(id);
               }}
@@ -218,18 +279,7 @@ export function FeedSurface({ member }: { member: Member }) {
           );
         })}
       {shareToast && (
-        <div
-          style={{
-            position: "fixed",
-            left: 0,
-            right: 0,
-            bottom: "calc(88px + env(safe-area-inset-bottom))",
-            display: "flex",
-            justifyContent: "center",
-            zIndex: 70,
-            pointerEvents: "none",
-          }}
-        >
+        <div style={toastStyle(tier)}>
           <Toast>{shareToast}</Toast>
         </div>
       )}

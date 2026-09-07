@@ -10,6 +10,7 @@ import { signedMediaUrl } from "./dia";
 import type { LensId } from "./lens";
 import { domainOf, type PostView } from "./post-view";
 import { getSupabase, type Supabase } from "./supabase";
+import { whenLabel } from "./when";
 
 type FeedRow = Views<"feed">;
 type PostRow = Tables<"posts">;
@@ -42,18 +43,6 @@ function mine(
 ): FieldValues[keyof FieldValues] | undefined {
   if (value == null || value === "" || value === false) return undefined;
   return { value, mine: true };
-}
-
-export function timeAgo(iso: string | null, now = Date.now()): string {
-  if (!iso) return "";
-  const diff = now - new Date(iso).getTime();
-  const m = Math.round(diff / 60000);
-  if (m < 1) return "Just now";
-  if (m < 60) return m + " min ago";
-  const h = Math.round(m / 60);
-  if (h < 24) return h + " h ago";
-  const d = Math.round(h / 24);
-  return d + " d ago";
 }
 
 /** The view's columns are nullable in the generated types; a published row always has these. */
@@ -224,7 +213,8 @@ export async function hydratePosts(
             image: link.image_url ?? undefined,
           }
         : null,
-      meta: timeAgo(p.published_at),
+      // The meta line is the absolute time; city and zone arrive with member profiles.
+      meta: whenLabel(p.published_at),
     };
   });
 }
@@ -260,7 +250,7 @@ export async function loadFeed(
   let q = sb.from("feed").select("*");
   if (lens === "mine") {
     q = q.or(`author_id.eq.${member.id},created_by.eq.${member.id}`);
-  } else if (lens === "my-network") {
+  } else if (lens === "network") {
     const { members, spaces } = await networkIds(sb, member.id);
     if (members.length === 0 && spaces.length === 0) return [];
     const parts: string[] = [];

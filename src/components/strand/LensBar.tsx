@@ -1,129 +1,109 @@
-// Strand components/dna/LensBar.jsx (B2-Shell-Feed-v2): segmented All plus icon lenses with an
-// italic scope line beneath (ruling 81). One filter component for every surface (ruling 83); the
-// selected lens lives in the host's URL, never here.
-import { useState, type CSSProperties } from "react";
+// Ported from Strand components/dna/LensBar.jsx (B2-Shell-Feed-v2). Behavior unchanged.
+import type { CSSProperties } from "react";
 import { Icon } from "./Icon";
 
 export type Lens<Id extends string = string> = {
   id: Id;
   label: string;
-  /** Icon name from assets/icons. The first lens (All) is text-only and needs none. */
+  /** Icon lenses render icon-only; the label stays the accessible name and title. */
   icon?: string | undefined;
-  /** Italic scope line shown beneath the row while this lens is selected. */
-  scope: string;
 };
 
 export type LensBarProps<Id extends string = string> = {
   lenses: Lens<Id>[];
   value: Id;
   onChange?: ((id: Id) => void) | undefined;
-  /** Compact tier: icon lenses drop their label (the label stays as the accessible name). */
-  compact?: boolean | undefined;
-  label?: string;
+  /** The italic line beneath: what the selected lens shows. */
+  scope?: string | undefined;
   style?: CSSProperties | undefined;
 };
 
-function LensButton<Id extends string>({
-  lens,
-  on,
-  compact,
-  onClick,
-}: {
-  lens: Lens<Id>;
-  on: boolean;
-  compact: boolean | undefined;
-  onClick: () => void;
-}) {
-  const [hover, setHover] = useState(false);
-  const iconOnly = !!lens.icon && !!compact;
-  return (
-    <button
-      type="button"
-      role="radio"
-      aria-checked={on}
-      aria-label={lens.label}
-      title={iconOnly ? lens.label : undefined}
-      data-lens={lens.id}
-      onClick={onClick}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
-      style={{
-        all: "unset",
-        boxSizing: "border-box",
-        cursor: "pointer",
-        display: "inline-flex",
-        alignItems: "center",
-        justifyContent: "center",
-        gap: 6,
-        height: 40,
-        minWidth: 44,
-        padding: iconOnly ? "0 12px" : lens.icon ? "0 14px 0 12px" : "0 16px",
-        borderRadius: 999,
-        whiteSpace: "nowrap",
-        fontFamily: "var(--font-sans)",
-        fontSize: 15,
-        fontWeight: 500,
-        lineHeight: 1,
-        color: on ? "var(--on-fill)" : "var(--ink)",
-        background: on ? "var(--ink)" : hover ? "var(--bg-sunken)" : "transparent",
-        border: on ? "1px solid var(--ink)" : "1px solid var(--line)",
-        transition:
-          "background var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease)",
-      }}
-    >
-      {lens.icon && <Icon name={lens.icon} size={18} />}
-      {!iconOnly && <span>{lens.label}</span>}
-    </button>
-  );
-}
-
-/** Lens row: `role="radiogroup"`, ink fill for the selected lens (a lens is never a C color). */
+/** Lens Bar: switches corpus on any list surface (rule 5). Segmented pill. Brief 2 adds icon lenses (icon-only, labelled for assistive tech)
+ *  and `scope`, the italic line beneath that says what the selected lens shows (rulings 81, 83). Filters remain a separate control (Chip). */
 export function LensBar<Id extends string = string>({
   lenses,
   value,
   onChange,
-  compact,
-  label = "Lens",
+  scope,
   style,
 }: LensBarProps<Id>) {
-  const current = lenses.find((l) => l.id === value) ?? lenses[0];
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 6, ...style }}>
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        gap: 6,
+        fontFamily: "var(--font-sans)",
+        maxWidth: "100%",
+        ...style,
+      }}
+    >
       <div
-        role="radiogroup"
-        aria-label={label}
+        role="tablist"
+        aria-label="Lens"
         style={{
-          display: "flex",
-          gap: 8,
+          display: "inline-flex",
+          alignSelf: "flex-start",
+          gap: 2,
+          padding: 3,
+          background: "var(--bg-sunken)",
+          borderRadius: 999,
+          border: "1px solid var(--line)",
+          maxWidth: "100%",
           overflowX: "auto",
-          scrollbarWidth: "none",
-          padding: "2px 0",
-          margin: "-2px 0",
+          boxSizing: "border-box",
         }}
       >
-        {lenses.map((l) => (
-          <LensButton
-            key={l.id}
-            lens={l}
-            on={l.id === value}
-            compact={compact}
-            onClick={() => onChange && onChange(l.id)}
-          />
-        ))}
+        {lenses.map((l) => {
+          const on = l.id === value;
+          return (
+            <button
+              key={l.id}
+              role="tab"
+              aria-selected={on}
+              aria-label={l.icon ? l.label : undefined}
+              title={l.icon ? l.label : undefined}
+              type="button"
+              data-lens={l.id}
+              onClick={() => onChange && onChange(l.id)}
+              style={{
+                all: "unset",
+                cursor: "pointer",
+                minHeight: 38,
+                minWidth: l.icon ? 44 : undefined,
+                padding: l.icon ? 0 : "0 16px",
+                borderRadius: 999,
+                fontFamily: "var(--font-sans)",
+                fontSize: 15,
+                fontWeight: 500,
+                whiteSpace: "nowrap",
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                background: on ? "var(--surface)" : "transparent",
+                color: on ? "var(--ink)" : "var(--ink-3)",
+                boxShadow: on ? "0 1px 2px rgba(26,26,24,0.08)" : "none",
+                transition: "background var(--dur-fast) var(--ease)",
+              }}
+            >
+              {l.icon ? <Icon name={l.icon} size={20} /> : l.label}
+            </button>
+          );
+        })}
       </div>
-      {current && (
+      {scope && (
         <div
+          aria-live="polite"
           data-lens-scope
           style={{
-            fontFamily: "var(--font-sans)",
             fontSize: 13,
-            lineHeight: 1.4,
             fontStyle: "italic",
+            lineHeight: 1.4,
             color: "var(--ink-3)",
-            paddingLeft: 4,
+            padding: "0 4px",
           }}
         >
-          {current.scope}
+          {scope}
         </div>
       )}
     </div>

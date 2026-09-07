@@ -7,11 +7,12 @@ import { createFileRoute, Outlet, useLocation, useNavigate } from "@tanstack/rea
 import { useEffect, useState } from "react";
 import { AppShell, COMPOSER_HOST } from "@/components/dna/AppShell";
 import { ComposerShell, PUBLISHED_EVENT } from "@/components/dna/ComposerShell";
-import { FeedSurface } from "@/components/dna/FeedSurface";
+import { FeedSurface, toastStyle } from "@/components/dna/FeedSurface";
 import { Toast } from "@/components/strand/Toast";
-import { C_LABEL, C_ORDER, type C } from "@/components/strand/cmeta";
+import { C_ORDER, type C } from "@/components/strand/cmeta";
 import { useAuth } from "@/lib/auth";
-import { openComposer } from "@/lib/composer-store";
+import { openComposer, useComposerState } from "@/lib/composer-store";
+import { useTier } from "@/lib/tier";
 
 export const Route = createFileRoute("/_shell")({ component: ShellLayout });
 
@@ -32,24 +33,28 @@ function ShellLayout() {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const pathname = useLocation({ select: (l) => l.pathname });
+  const tier = useTier();
+  const { seed } = useComposerState();
   const [toast, setToast] = useState<string | null>(null);
 
   useEffect(() => {
     if (ready && !member) void navigate({ to: "/sign-in" });
   }, [ready, member, navigate]);
 
-  // Publish never navigates (ruling 52): a toast, and the Feed refetches wherever it is mounted.
+  // Publishing returns to Feed on All and toasts for 2.6s (SPEC section 3); the composer itself
+  // never navigates (ruling 52), the shell does.
   useEffect(() => {
     if (!member) return;
     const onPublished = () => {
       setToast("Published. It is in the Feed.");
       void qc.invalidateQueries({ queryKey: ["feed", member.id] });
       void qc.invalidateQueries({ queryKey: ["rails", member.id] });
+      void navigate({ to: "/feed", search: {} });
       window.setTimeout(() => setToast(null), 2600);
     };
     window.addEventListener(PUBLISHED_EVENT, onPublished);
     return () => window.removeEventListener(PUBLISHED_EVENT, onPublished);
-  }, [member, qc]);
+  }, [member, qc, navigate]);
 
   // Shortcut, additive only (ruling 59): c opens the composer when focus is not in a field.
   useEffect(() => {
@@ -67,29 +72,22 @@ function ShellLayout() {
 
   const active = activeC(pathname);
   const feedFamily = pathname === "/feed" || pathname.startsWith("/posts/");
-  const surface = active ? C_LABEL[active] : "Feed";
 
   return (
     <>
-      <AppShell member={member} active={active} surface={surface}>
+      <AppShell
+        member={member}
+        active={active}
+        homeActive={feedFamily}
+        closeKey={pathname + ":" + seed}
+      >
         {feedFamily && <FeedSurface member={member} />}
         <Outlet />
       </AppShell>
       {/* The one composer mount, owned by the shell (rulings 56, 69). */}
       <ComposerShell />
       {toast && (
-        <div
-          style={{
-            position: "fixed",
-            left: 0,
-            right: 0,
-            bottom: "calc(88px + env(safe-area-inset-bottom))",
-            display: "flex",
-            justifyContent: "center",
-            zIndex: 70,
-            pointerEvents: "none",
-          }}
-        >
+        <div style={toastStyle(tier)}>
           <Toast>{toast}</Toast>
         </div>
       )}

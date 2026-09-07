@@ -1,26 +1,26 @@
-// Feed lenses (ruling 81, 83). Selection lives in ?lens= (omitted for all), survives refresh and
+// Feed lenses (rulings 81, 83). Selection lives in ?lens= (omitted for all), survives refresh and
 // the back button. for-you renders identically to all until a real personalization signal exists.
 import type { Lens } from "@/components/strand/LensBar";
 
-export type LensId = "all" | "for-you" | "my-network" | "mine" | "saved";
+export type LensId = "all" | "for-you" | "network" | "mine" | "saved";
 
-export const LENS_IDS: LensId[] = ["all", "for-you", "my-network", "mine", "saved"];
+export const LENS_IDS: LensId[] = ["all", "for-you", "network", "mine", "saved"];
 
-export const LENSES: Lens<LensId>[] = [
+export const LENSES: (Lens<LensId> & { scope: string })[] = [
   { id: "all", label: "All", scope: "Everything you can see, newest first." },
   {
     id: "for-you",
     label: "For You",
-    icon: "sparkles",
-    scope: "Same as All until DIA has a real signal to go on.",
+    icon: "circle-dot",
+    scope: "Same as All until DIA has a real signal to work from.",
   },
   {
-    id: "my-network",
+    id: "network",
     label: "My Network",
     icon: "users",
-    scope: "Members you are connected to and Spaces you are in.",
+    scope: "Posts from your connections, newest first.",
   },
-  { id: "mine", label: "Mine", icon: "user", scope: "Posts you published." },
+  { id: "mine", label: "Mine", icon: "pen-line", scope: "Your own posts." },
   { id: "saved", label: "Saved", icon: "bookmark", scope: "Posts you saved." },
 ];
 

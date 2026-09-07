@@ -605,21 +605,34 @@ async function runViewport(browserType, bname, [w, h], theme) {
         (await page.locator('nav[aria-label="Pulse"]').count()) === 1 &&
         (await page.locator('nav[aria-label="Pulse"] button').count()) === 5,
     );
+    const navPos = await page.evaluate(
+      () => getComputedStyle(document.querySelector('nav[aria-label="Pulse"]')).position,
+    );
+    const navBox = await page.locator('nav[aria-label="Pulse"]').boundingBox();
+    const headBox = await page.locator("[data-app-header]").boundingBox();
     record(
-      tag + (w > 1024 ? " expanded: bar nav under header" : " compact/medium: bottom dock"),
+      tag +
+        (w > 1024 ? " expanded: bar nav directly under header" : " compact/medium: bottom dock"),
       w > 1024
-        ? (await page.locator('[data-app-header] nav[aria-label="Pulse"]').count()) === 1
-        : (await page.evaluate(
-            () =>
-              getComputedStyle(document.querySelector('nav[aria-label="Pulse"]')).position ===
-              "fixed",
-          )) === true,
+        ? navPos !== "fixed" && Math.abs(navBox.y - (headBox.y + headBox.height)) <= 1
+        : navPos === "fixed",
+      `nav ${navPos} y ${navBox && navBox.y} header bottom ${headBox && headBox.y + headBox.height}`,
+    );
+    record(
+      tag + " header: logo Home, placeholder pill, bell, avatar; no theme or sign-out controls",
+      (await page.locator('[data-app-header] img[alt="DNA"]').count()) === 1 &&
+        (await page.locator('[data-testid="compose"]').textContent()).includes(
+          "What is going on with you?",
+        ) &&
+        (await page.locator('[data-app-header] [data-testid="bell"]').count()) === 1 &&
+        (await page.locator('[data-app-header] [aria-label="Your profile"]').count()) === 1 &&
+        (await page.locator('[data-app-header] [aria-label="Sign out"]').count()) === 0,
     );
     record(
       tag + " lens bar with five lenses, All selected",
-      (await page.locator('[role="radiogroup"][aria-label="Lens"] [role="radio"]').count()) === 5 &&
+      (await page.locator('[role="tablist"][aria-label="Lens"] [role="tab"]').count()) === 5 &&
         (await page
-          .locator('[role="radiogroup"][aria-label="Lens"] [role="radio"][aria-checked="true"]')
+          .locator('[role="tablist"][aria-label="Lens"] [role="tab"][aria-selected="true"]')
           .getAttribute("data-lens")) === "all",
     );
     record(
@@ -830,11 +843,11 @@ async function runViewport(browserType, bname, [w, h], theme) {
     });
     // Empty-state action opens the same composer (Mine lens has no posts by this member? it has; use a member-less lens).
     db.posts.length = 0;
-    await page.click('[role="radiogroup"][aria-label="Lens"] [data-lens="mine"]');
+    await page.click('[role="tablist"][aria-label="Lens"] [data-lens="mine"]');
     await page.waitForURL("**/feed?lens=mine");
     await page.locator('[data-testid="feed-empty"][data-lens="mine"]').waitFor({ timeout: 10000 });
     await shot(page, `${tag}-05-empty-mine`);
-    await page.locator('[data-testid="feed-empty"] button', { hasText: "Compose" }).click();
+    await page.locator('[data-testid="feed-empty"] button', { hasText: "Share a Story" }).click();
     await dialog.waitFor({ timeout: 10000 });
     record(tag + " empty-state action opens the composer", true);
     await page.keyboard.press("Escape");
@@ -958,11 +971,12 @@ async function runPublish(browserType, bname, [w, h], theme) {
     const card = page.locator("main article[data-c='convene']").first();
     await card.waitFor({ timeout: 10000 });
     record(
-      tag + " feed card rendered by the router with kicker Event and title, no per-C action",
+      tag + " feed card rendered by the router with kicker Event, title, its own act, icon actions",
       (await card.textContent()).includes("Event") &&
         (await card.textContent()).includes("Diaspora Builders Dinner") &&
-        !(await card.textContent()).includes("Get a ticket") &&
-        (await card.locator('[data-testid="react"]').count()) === 1,
+        (await card.textContent()).includes("Get a ticket") &&
+        (await card.locator('[data-testid="react"]').count()) === 1 &&
+        (await card.locator('[data-testid="respond"]').count()) === 1,
     );
     record(
       tag + " feed card carries media and link",
@@ -1045,7 +1059,7 @@ async function runShell(browserType, bname, [w, h]) {
     const stamp = await page.getAttribute("html", "data-shell");
     record(tag + " shell mount stamp set", !!stamp);
     // Lens in the URL, back-button safe.
-    await page.click('[role="radiogroup"][aria-label="Lens"] [data-lens="saved"]');
+    await page.click('[role="tablist"][aria-label="Lens"] [data-lens="saved"]');
     await page.waitForURL("**/feed?lens=saved");
     await page.locator('[data-testid="feed-empty"][data-lens="saved"]').waitFor({ timeout: 10000 });
     record(
@@ -1056,7 +1070,7 @@ async function runShell(browserType, bname, [w, h]) {
     await page.locator('[data-testid="feed-empty"][data-lens="saved"]').waitFor({ timeout: 15000 });
     record(tag + " lens survives refresh", page.url().includes("lens=saved"));
     const stamp2 = await page.getAttribute("html", "data-shell");
-    await page.click('[role="radiogroup"][aria-label="Lens"] [data-lens="mine"]');
+    await page.click('[role="tablist"][aria-label="Lens"] [data-lens="mine"]');
     await page.waitForURL("**/feed?lens=mine");
     await page.locator("[data-feed] article[data-c]").first().waitFor({ timeout: 10000 });
     record(
@@ -1072,7 +1086,7 @@ async function runShell(browserType, bname, [w, h]) {
       tag + " back button restores All (no ?lens) with all posts",
       (await page.locator("[data-feed] article[data-c]").count()) === 8 &&
         (await page
-          .locator('[role="radiogroup"][aria-label="Lens"] [role="radio"][aria-checked="true"]')
+          .locator('[role="tablist"][aria-label="Lens"] [role="tab"][aria-selected="true"]')
           .getAttribute("data-lens")) === "all",
     );
     record(
@@ -1080,14 +1094,14 @@ async function runShell(browserType, bname, [w, h]) {
       (await page.getAttribute("html", "data-shell")) === stamp2,
     );
     // For You renders identically to All.
-    await page.click('[role="radiogroup"][aria-label="Lens"] [data-lens="for-you"]');
+    await page.click('[role="tablist"][aria-label="Lens"] [data-lens="for-you"]');
     await page.waitForURL("**/feed?lens=for-you");
     await page.waitForTimeout(300);
     record(
       tag + " For You identical to All",
       (await page.locator("[data-feed] article[data-c]").count()) === 8,
     );
-    await page.click('[role="radiogroup"][aria-label="Lens"] [data-lens="all"]');
+    await page.click('[role="tablist"][aria-label="Lens"] [data-lens="all"]');
     await page.waitForURL((u) => u.pathname === "/feed" && !u.search);
     await page.waitForTimeout(300);
     // Save and React: existence toggles, no counts.
@@ -1113,7 +1127,7 @@ async function runShell(browserType, bname, [w, h]) {
     record(tag + " long body clamped with Read more", (await readMore.count()) === 1);
     await readMore.click();
     await page.waitForURL("**/posts/seed-5");
-    const overlay = page.locator('section[role="dialog"][aria-label="Post"]');
+    const overlay = page.locator('[role="dialog"][aria-label="Post"]');
     await overlay.waitFor({ timeout: 10000 });
     await page.waitForTimeout(300);
     const during = await page.evaluate(() => window.scrollY);
@@ -1133,7 +1147,7 @@ async function runShell(browserType, bname, [w, h]) {
     await noOverflow(page, tag + " overlay");
     await page.goBack();
     await page.waitForURL((u) => u.pathname === "/feed");
-    await page.waitForSelector('section[role="dialog"][aria-label="Post"]', { state: "detached" });
+    await page.waitForSelector('[role="dialog"][aria-label="Post"]', { state: "detached" });
     await page.waitForTimeout(300);
     const after = await page.evaluate(() => window.scrollY);
     record(
@@ -1198,14 +1212,14 @@ async function runShell(browserType, bname, [w, h]) {
       (await page.locator('[data-testid="bell-dot"]').count()) === 0,
     );
     await page.click('[data-testid="bell"]');
-    const list = page.locator('section[role="dialog"][aria-label="Notifications"]');
+    const list = page.locator('[role="dialog"][aria-label="Notifications"]');
     await list.waitFor({ timeout: 10000 });
     await list.locator('[data-testid="notifications-empty"]').waitFor({ timeout: 10000 });
     record(tag + " bell opens the list with an honest empty state", true);
     await page.waitForTimeout(300);
     await shot(page, `${tag}-notifications-empty`);
     await page.keyboard.press("Escape");
-    await page.waitForSelector('section[role="dialog"][aria-label="Notifications"]', {
+    await page.waitForSelector('[role="dialog"][aria-label="Notifications"]', {
       state: "detached",
     });
     db.notifications.push({
@@ -1229,12 +1243,13 @@ async function runShell(browserType, bname, [w, h]) {
     );
     await page.click('[data-testid="bell"]');
     await list.waitFor({ timeout: 10000 });
-    const row = list.locator('li button[data-kind="connection_accepted"]');
+    const row = list.locator('button[data-kind="connection_accepted"]');
     await row.waitFor({ timeout: 10000 });
     record(
-      tag + " list shows the real row with the Connect glyph and unread state",
+      tag + " list shows the real row with the Connect glyph, spec copy, and unread state",
       (await row.getAttribute("data-unread")) === "1" &&
-        (await row.locator('[role="img"][aria-label="Connect"]').count()) === 1,
+        (await row.locator('[role="img"][aria-label="Connect"]').count()) === 1 &&
+        (await row.textContent()).includes("accepted your intro."),
     );
     await page.waitForTimeout(300);
     await shot(page, `${tag}-notifications`);
@@ -1249,7 +1264,7 @@ async function runShell(browserType, bname, [w, h]) {
     );
     await page.keyboard.press("Escape");
     // c keypress opens the composer from the shell.
-    await page.waitForSelector('section[role="dialog"][aria-label="Notifications"]', {
+    await page.waitForSelector('[role="dialog"][aria-label="Notifications"]', {
       state: "detached",
     });
     await page.keyboard.press("c");

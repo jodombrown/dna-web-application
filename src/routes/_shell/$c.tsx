@@ -1,7 +1,9 @@
 // One stub per C (/connect, /convene, /collaborate, /contribute, /convey) until its engine brief
-// ships. Renders inside the shell, never its own chrome (ruling 69).
-import { createFileRoute, Link, notFound } from "@tanstack/react-router";
-import { CBadge } from "@/components/strand/CBadge";
+// ships: EmptyState in the C with "Back to Feed" (SPEC section 1). Renders inside the shell, never
+// its own chrome (ruling 69).
+import { createFileRoute, notFound, useNavigate } from "@tanstack/react-router";
+import { Button } from "@/components/strand/Button";
+import { EmptyState } from "@/components/strand/EmptyState";
 import { C_LABEL, C_ORDER, type C } from "@/components/strand/cmeta";
 
 export const Route = createFileRoute("/_shell/$c")({
@@ -13,40 +15,24 @@ export const Route = createFileRoute("/_shell/$c")({
 
 function CStub() {
   const { c } = Route.useParams();
+  const navigate = useNavigate();
   const active = c as C;
   return (
-    <section
-      data-testid="c-stub"
-      data-c={active}
-      style={{
-        background: "var(--surface)",
-        border: "1px solid var(--line)",
-        borderRadius: 14,
-        padding: "28px 20px",
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "flex-start",
-        gap: 14,
-      }}
-    >
-      <CBadge c={active} size={48} label />
-      <h1
-        style={{
-          margin: 0,
-          fontFamily: "var(--font-display)",
-          fontWeight: 400,
-          fontSize: 26,
-          lineHeight: 1.2,
-        }}
-      >
-        {C_LABEL[active]} is next
-      </h1>
-      <p style={{ margin: 0, fontSize: 17, lineHeight: 1.5, color: "var(--ink-2)" }}>
-        This engine has its own brief. Until it ships, everything you can see is in the Feed.
-      </p>
-      <Link to="/feed" search={{}} preload="intent" preloadDelay={80} data-testid="to-feed">
-        Back to the Feed
-      </Link>
-    </section>
+    <div data-testid="c-stub" data-c={active}>
+      <EmptyState
+        c={active}
+        title={C_LABEL[active] + " is next."}
+        body="This surface arrives with its own brief. Until then Feed is Home and the shell is the same everywhere."
+        action={
+          <Button
+            variant="secondary"
+            onClick={() => void navigate({ to: "/feed", search: {} })}
+            data-testid="to-feed"
+          >
+            Back to Feed
+          </Button>
+        }
+      />
+    </div>
   );
 }

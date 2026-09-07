@@ -1,24 +1,23 @@
-// Strand components/dna/NotificationBell.jsx (B2-Shell-Feed-v2). The bell with a plain unread dot,
-// never a numeral (ruling 82). The dot renders only when the host says a real unread row exists.
+// Ported from Strand components/dna/NotificationBell.jsx (B2-Shell-Feed-v2). Behavior unchanged.
 import type { CSSProperties } from "react";
 import { IconButton } from "./IconButton";
 
 export type NotificationBellProps = {
   unread: boolean;
-  open?: boolean | undefined;
+  active?: boolean | undefined;
   onClick?: (() => void) | undefined;
   style?: CSSProperties | undefined;
 };
 
-export function NotificationBell({ unread, open, onClick, style }: NotificationBellProps) {
+/** Bell with a dot, never a numeral (ruling 82). unread=false renders no dot: no row, no dot. */
+export function NotificationBell({ unread, active, onClick, style }: NotificationBellProps) {
   return (
-    <span style={{ position: "relative", display: "inline-flex", ...style }}>
+    <span style={{ position: "relative", display: "inline-flex", flex: "none", ...style }}>
       <IconButton
         name="bell"
         label={unread ? "Notifications, unread" : "Notifications"}
-        aria-haspopup="dialog"
-        aria-expanded={!!open}
-        active={open}
+        active={active}
+        aria-expanded={!!active}
         onClick={onClick}
         data-testid="bell"
         data-unread={unread ? "1" : undefined}
@@ -38,6 +37,7 @@ export function NotificationBell({ unread, open, onClick, style }: NotificationB
             border: "2px solid var(--bg)",
             boxSizing: "content-box",
             pointerEvents: "none",
+            transition: "background var(--dur-base) var(--ease)",
           }}
         />
       )}

@@ -1,117 +1,130 @@
-// Strand components/dna/PostOverlay.jsx (B2-Shell-Feed-v2). The quick-look layer for a post: a real
-// route rendered on top of Feed, never a route swap (ruling 85). Scrim closes, Esc closes, the
-// close button closes. Compact: full height panel; wider tiers: a centered panel capped at 760.
-// The host owns history (pushState on open, popState dismisses) and Feed's scroll position.
-import { useEffect, useRef, type CSSProperties, type ReactNode } from "react";
+// Ported from Strand components/dna/PostOverlay.jsx (B2-Shell-Feed-v2). Behavior unchanged
+// (keyframes live in styles.css). The host owns history and the Feed's scroll position.
+import { useEffect, type CSSProperties, type ReactNode } from "react";
 import { IconButton } from "./IconButton";
 
 export type PostOverlayProps = {
   open: boolean;
   onClose?: (() => void) | undefined;
-  label?: string;
-  compact?: boolean | undefined;
+  tier?: "compact" | "expanded";
+  contained?: boolean | undefined;
+  title?: string;
   children?: ReactNode;
   style?: CSSProperties | undefined;
 };
 
+/** Quick-look shell (ruling 85). Opens over the host surface at /posts/:id; the host keeps its scroll position because this is a sibling layer, not a route swap.
+ *  tier "expanded": scrim plus a centred 680 column (pointer). Otherwise a full panel with a back row (touch). contained=true positions inside a relative parent (prototype frames). */
 export function PostOverlay({
   open,
   onClose,
-  label = "Post",
-  compact,
+  tier = "compact",
+  contained,
+  title = "Post",
   children,
   style,
 }: PostOverlayProps) {
-  const panel = useRef<HTMLElement>(null);
   useEffect(() => {
     if (!open) return;
     const k = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose?.();
     };
     window.addEventListener("keydown", k);
-    // Body scroll stays where it was; the panel scrolls on its own. Feed keeps its position.
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    panel.current?.focus({ preventScroll: true });
-    return () => {
-      window.removeEventListener("keydown", k);
-      document.body.style.overflow = prev;
-    };
+    return () => window.removeEventListener("keydown", k);
   }, [open, onClose]);
   if (!open) return null;
-  return (
-    <div
-      role="presentation"
-      data-post-overlay
-      onClick={onClose}
-      style={{
-        position: "fixed",
-        inset: 0,
-        background: "var(--scrim)",
-        display: "flex",
-        alignItems: compact ? "stretch" : "flex-start",
-        justifyContent: "center",
-        padding: compact ? 0 : "24px 16px",
-        boxSizing: "border-box",
-        zIndex: 40,
-        animation: "strand-fade var(--dur-base) var(--ease)",
-      }}
-    >
-      <section
-        ref={panel}
-        role="dialog"
-        aria-modal="true"
-        aria-label={label}
-        tabIndex={-1}
-        onClick={(e) => e.stopPropagation()}
+  const pos = contained ? "absolute" : "fixed";
+  if (tier === "expanded")
+    return (
+      <div
+        role="presentation"
+        data-post-overlay
+        onClick={onClose}
         style={{
-          background: "var(--bg)",
-          boxShadow: "var(--shadow-stack)",
+          position: pos,
+          inset: 0,
+          background: "var(--scrim)",
+          zIndex: 50,
           display: "flex",
-          flexDirection: "column",
-          boxSizing: "border-box",
-          width: compact ? "100%" : "min(760px, 100%)",
-          maxHeight: compact ? "100%" : "calc(100dvh - 48px)",
-          height: compact ? "100%" : undefined,
-          borderRadius: compact ? 0 : 14,
-          border: compact ? "none" : "1px solid var(--line)",
-          paddingTop: compact ? "env(safe-area-inset-top)" : 0,
-          outline: "none",
-          animation: (compact ? "strand-rise" : "strand-fade") + " var(--dur-base) var(--ease)",
+          justifyContent: "center",
+          alignItems: "flex-start",
+          padding: "40px 16px",
+          overflowY: "auto",
+          animation: "strand-fade var(--dur-base) var(--ease)",
           ...style,
         }}
       >
-        <header
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-            padding: "8px 8px 8px 16px",
-            minHeight: 56,
-            borderBottom: "1px solid var(--line)",
-            flex: "none",
-          }}
-        >
-          <span style={{ fontFamily: "var(--font-display)", fontSize: 20, lineHeight: 1 }}>
-            {label}
-          </span>
-          <span style={{ flex: 1 }} />
-          <IconButton name="x" label="Close" onClick={onClose} data-testid="overlay-close" />
-        </header>
         <div
+          role="dialog"
+          aria-modal="true"
+          aria-label={title}
+          onClick={(e) => e.stopPropagation()}
           style={{
-            flex: 1,
-            minHeight: 0,
-            overflowY: "auto",
-            padding: compact
-              ? "12px 16px calc(24px + env(safe-area-inset-bottom))"
-              : "16px 20px 24px",
-            boxSizing: "border-box",
+            width: "100%",
+            maxWidth: 680,
+            display: "flex",
+            flexDirection: "column",
+            gap: 8,
+            fontFamily: "var(--font-sans)",
+            color: "var(--ink)",
           }}
         >
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              padding: "4px 4px 4px 16px",
+              background: "var(--surface)",
+              border: "1px solid var(--line)",
+              borderRadius: 14,
+              boxShadow: "var(--shadow-stack)",
+            }}
+          >
+            <span style={{ fontSize: 15, fontWeight: 500 }}>{title}</span>
+            <IconButton name="x" label="Close" onClick={onClose} data-testid="overlay-close" />
+          </div>
           {children}
         </div>
-      </section>
+      </div>
+    );
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={title}
+      data-post-overlay
+      style={{
+        position: pos,
+        inset: 0,
+        background: "var(--bg)",
+        zIndex: 50,
+        display: "flex",
+        flexDirection: "column",
+        fontFamily: "var(--font-sans)",
+        color: "var(--ink)",
+        animation: "strand-slide var(--dur-base) var(--ease)",
+        ...style,
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 4,
+          height: 56,
+          padding: "0 8px",
+          marginTop: "env(safe-area-inset-top, var(--safe-top, 0px))",
+          borderBottom: "1px solid var(--line)",
+          flex: "none",
+        }}
+      >
+        <IconButton name="arrow-left" label="Back" onClick={onClose} data-testid="overlay-close" />
+        <span style={{ fontSize: 15, fontWeight: 500 }}>{title}</span>
+      </div>
+      <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "12px 16px 48px" }}>
+        <div style={{ maxWidth: 680, margin: "0 auto" }}>{children}</div>
+      </div>
     </div>
   );
 }

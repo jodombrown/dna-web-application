@@ -18,6 +18,7 @@ export * from "./PulseDock";
 export * from "./verb-schema";
 export * from "./Composer";
 export * from "./AppHeader";
+export * from "./EmptyState";
 export * from "./LensBar";
 export * from "./NotificationBell";
 export * from "./NotificationListItem";

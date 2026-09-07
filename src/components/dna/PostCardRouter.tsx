@@ -9,8 +9,11 @@ import type { PostView } from "@/lib/post-view";
 
 export type RouterOptions = {
   preview?: boolean | undefined;
-  /** "feed" and "full" are PostCard's engagement modes (React, Respond, Save, Share). Default: the composer card. */
-  mode?: "feed" | "full" | undefined;
+  /** PostCard's Feed anatomy (ruling 69). Default: the composer card. */
+  feed?: boolean | undefined;
+  onMenu?: (() => void) | undefined;
+  onClick?: (() => void) | undefined;
+  onAct?: (() => void) | undefined;
   saved?: boolean | undefined;
   reacted?: boolean | undefined;
   onReact?: (() => void) | undefined;
@@ -18,7 +21,7 @@ export type RouterOptions = {
   onSave?: (() => void) | undefined;
   onShare?: (() => void) | undefined;
   readMoreHref?: string | undefined;
-  onReadMore?: ((e: MouseEvent<HTMLAnchorElement>) => void) | undefined;
+  onReadMore?: ((e: MouseEvent<HTMLElement>) => void) | undefined;
   onReadMoreIntent?: (() => void) | undefined;
   actions?: ReactNode;
 };
@@ -34,15 +37,15 @@ export function postCardProps(view: PostView, opts: RouterOptions = {}): PostCar
       : view.media.length === 1
         ? { kind: "image", src: view.media[0], alt: "" }
         : undefined;
-  // The per-C action button belongs to the composer preview only; feed mode has no fifth action.
-  const actions = opts.mode
-    ? undefined
-    : (opts.actions ??
-      (schema.action && c !== "system" ? (
-        <Button c={c} size="sm" onClick={opts.onRespond}>
-          {schema.action}
-        </Button>
-      ) : undefined));
+  // The post's own act in its C (rule 3). In the Feed it goes to that C's route; in the composer
+  // preview it is inert.
+  const actions =
+    opts.actions ??
+    (schema.action && c !== "system" ? (
+      <Button c={c} size="sm" onClick={opts.feed ? opts.onAct : opts.onRespond}>
+        {schema.action}
+      </Button>
+    ) : undefined);
   return {
     c,
     author: view.author_name,
@@ -59,7 +62,9 @@ export function postCardProps(view: PostView, opts: RouterOptions = {}): PostCar
     actions,
     respondLabel: c === "convene" ? "Ask the host" : "Respond",
     preview: opts.preview,
-    mode: opts.mode,
+    feed: opts.feed,
+    onMenu: opts.onMenu,
+    onClick: opts.onClick,
     saved: opts.saved,
     reacted: opts.reacted,
     onReact: opts.onReact,

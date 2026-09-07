@@ -1,9 +1,11 @@
-// The quick-look route body (ruling 85): the same card router at full size inside PostOverlay,
-// layered over Feed. Seeded from the Feed cache when the post is already there; otherwise read by
-// id under RLS. Dismiss is history.back() when opened from Feed, else a navigation to Feed.
+// The quick-look route body (ruling 85, SPEC section 4): the same PostCard with the Feed anatomy
+// and no onReadMore inside PostOverlay, layered over Feed. Seeded from the Feed cache when the post
+// is already there; otherwise read by id under RLS. Dismiss is history.back() when opened from
+// Feed, else a navigation to Feed. Production addition: while open, the page's own scroll is locked
+// so Feed beneath keeps its position (the prototype's frame scroller does this by construction).
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useRouter, useSearch } from "@tanstack/react-router";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { PostCardRouter } from "@/components/dna/PostCardRouter";
 import { PostOverlay } from "@/components/strand/PostOverlay";
 import { Toast } from "@/components/strand/Toast";
@@ -13,7 +15,7 @@ import { lensSearch, parseLens } from "@/lib/lens";
 import { consumeOpenedFromFeed } from "@/lib/overlay";
 import type { PostView } from "@/lib/post-view";
 import { useTier } from "@/lib/tier";
-import { useShare } from "./FeedSurface";
+import { toastStyle, useShare } from "./FeedSurface";
 
 export function PostQuickLook({ member, id }: { member: Member; id: string }) {
   const qc = useQueryClient();
@@ -23,6 +25,14 @@ export function PostQuickLook({ member, id }: { member: Member; id: string }) {
   const search = useSearch({ strict: false }) as { lens?: string };
   const lens = parseLens(search.lens);
   const { share, toast } = useShare();
+
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, []);
 
   const cached = qc
     .getQueriesData<PostView[]>({ queryKey: ["feed", member.id] })
@@ -62,16 +72,20 @@ export function PostQuickLook({ member, id }: { member: Member; id: string }) {
   }, [router, navigate, lens]);
 
   return (
-    <PostOverlay open onClose={dismiss} label="Post" compact={tier === "compact"}>
+    <PostOverlay open onClose={dismiss} tier={tier === "expanded" ? "expanded" : "compact"}>
       {post.data ? (
         <PostCardRouter
           view={post.data}
-          mode="full"
+          feed
           saved={saved}
           reacted={reacted}
           onSave={onSave}
           onReact={onReact}
           onShare={() => void share(id)}
+          onAct={() => {
+            const c = post.data?.c_category;
+            if (c && c !== "system") void navigate({ to: "/$c", params: { c } });
+          }}
         />
       ) : post.isPending ? (
         <p role="status" style={{ margin: "8px 4px", color: "var(--ink-3)", fontSize: 15 }}>
@@ -83,18 +97,7 @@ export function PostQuickLook({ member, id }: { member: Member; id: string }) {
         </p>
       )}
       {toast && (
-        <div
-          style={{
-            position: "fixed",
-            left: 0,
-            right: 0,
-            bottom: "calc(24px + env(safe-area-inset-bottom))",
-            display: "flex",
-            justifyContent: "center",
-            zIndex: 70,
-            pointerEvents: "none",
-          }}
-        >
+        <div style={toastStyle(tier)}>
           <Toast>{toast}</Toast>
         </div>
       )}

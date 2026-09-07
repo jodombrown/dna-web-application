@@ -1,11 +1,12 @@
-// Ported from Strand components/dna/PostCard.jsx. Behavior unchanged.
-// B2-Shell-Feed-v2 (backwards compatible): mode "feed" clamps the body to six lines with a
-// "Read more" link and replaces the engagement row with React (heart, one act, no count), Respond,
-// Save, Share (ruling 86's card-action correction: no per-C action, no counts, no cross-C logic
-// in the card). mode "full" is the same card unclamped inside the quick-look overlay.
+// Ported from Strand components/dna/PostCard.jsx (B2-Shell-Feed-v2). Behavior unchanged.
+// Brief 2 adds the Feed anatomy (ruling 69) behind `feed`: C-coloured meta line, overflow menu
+// (onMenu), clamped body with an explicit "Read more" (onReadMore), divider, four icon-only actions
+// (React, Respond, Save, Share; ruling 72: a single act, no counts). No cross-C logic in the card.
+// Without `feed` the card renders exactly as Brief 1 shipped it (composer preview).
+// Production addition: readMoreHref renders "Read more" as a real link (prefetch, new tab) and
+// onReadMoreIntent fires after an 80ms hover hold (ruling 84); both default to the bundle's button.
 import {
   Fragment,
-  useEffect,
   useRef,
   useState,
   type CSSProperties,
@@ -54,18 +55,17 @@ export type PostCardProps = {
   respondLabel?: string;
   onClick?: (() => void) | undefined;
   preview?: boolean | undefined;
-  /** "feed": clamped body, React/Respond/Save/Share. "full": unclamped, React/Save/Share. Default: the composer preview card. */
-  mode?: "preview" | "feed" | "full" | undefined;
+  /** Feed anatomy (ruling 69). Without it the card is the Brief 1 composer card. */
+  feed?: boolean | undefined;
+  onMenu?: (() => void) | undefined;
+  /** When set, the body clamps to four lines and an explicit "Read more" follows it. */
+  onReadMore?: ((e: MouseEvent<HTMLElement>) => void) | undefined;
+  readMoreHref?: string | undefined;
+  onReadMoreIntent?: (() => void) | undefined;
   reacted?: boolean | undefined;
   onReact?: (() => void) | undefined;
-  /** Feed mode: the quick-look route for this post. Rendered as a real link so it prefetches and opens in a new tab. */
-  readMoreHref?: string | undefined;
-  onReadMore?: ((e: MouseEvent<HTMLAnchorElement>) => void) | undefined;
-  onReadMoreIntent?: (() => void) | undefined;
   style?: CSSProperties | undefined;
 };
-
-const CLAMP_LINES = 6;
 
 /** The one card chassis (rule 1). Identity marker is a 1.5px full-frame border in the C color (rule 2).
  *  c="system" is the fallback category: framed in --line-strong, no glyph badge.
@@ -92,39 +92,42 @@ export function PostCard({
   respondLabel = "Respond",
   onClick,
   preview,
-  mode,
+  feed,
+  onMenu,
+  onReadMore,
+  readMoreHref,
+  onReadMoreIntent,
   reacted,
   onReact,
-  readMoreHref,
-  onReadMore,
-  onReadMoreIntent,
   style,
 }: PostCardProps) {
   const [, setHover] = useState(false);
   const sys = c === "system";
   const frame = sys ? "var(--line-strong)" : "var(--c-" + c + ")";
+  const cColor = sys ? "var(--ink-3)" : "var(--c-" + c + ")";
   const rows = (fields || []).filter((f) => f && f.value);
-  const feed = mode === "feed";
-  const full = mode === "full";
-  const engagement = feed || full;
-  const bodyRef = useRef<HTMLDivElement>(null);
-  const [clamped, setClamped] = useState(false);
   // Hover intent (ruling 84): the host's prefetch fires after an 80ms mouseenter hold, never on touch.
   const hold = useRef<number | null>(null);
   const clearHold = () => {
     if (hold.current != null) window.clearTimeout(hold.current);
     hold.current = null;
   };
-  useEffect(() => {
-    if (!feed) return;
-    const el = bodyRef.current;
-    if (!el) return;
-    const measure = () => setClamped(el.scrollHeight > el.clientHeight + 1);
-    measure();
-    const ro = new ResizeObserver(measure);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [feed, children]);
+  const linkStyle: CSSProperties = {
+    all: "unset",
+    cursor: "pointer",
+    alignSelf: "flex-start",
+    minHeight: 44,
+    display: "inline-flex",
+    alignItems: "center",
+    fontSize: 15,
+    fontWeight: 500,
+    color: "var(--ink)",
+    textDecoration: "underline",
+    textDecorationColor: "var(--line-strong)",
+    textUnderlineOffset: 2,
+    margin: "-10px 0",
+  };
+  const ReadMoreTag = readMoreHref ? "a" : "button";
   return (
     <article
       aria-label={preview ? "Preview of your post" : undefined}
@@ -176,7 +179,7 @@ export function PostCard({
             <div
               style={{
                 fontSize: 13,
-                color: "var(--ink-3)",
+                color: feed ? cColor : "var(--ink-3)",
                 lineHeight: 1.4,
                 display: "flex",
                 gap: 6,
@@ -209,6 +212,15 @@ export function PostCard({
           )}
         </div>
         {!sys && <CBadge c={c} size={32} />}
+        {onMenu && (
+          <IconButton
+            name="ellipsis"
+            label="More"
+            size={36}
+            onClick={onMenu}
+            style={{ marginRight: -8 }}
+          />
+        )}
       </header>
       <div
         onClick={onClick}
@@ -226,7 +238,7 @@ export function PostCard({
               letterSpacing: "0.06em",
               textTransform: "uppercase",
               fontWeight: 500,
-              color: sys ? "var(--ink-3)" : "var(--c-" + c + ")",
+              color: cColor,
             }}
           >
             {kicker}
@@ -248,18 +260,16 @@ export function PostCard({
         )}
         {children && (
           <div
-            ref={bodyRef}
-            data-clamped={feed && clamped ? "1" : undefined}
             style={{
               fontSize: 17,
               lineHeight: 1.5,
               whiteSpace: "pre-wrap",
               overflowWrap: "anywhere",
-              ...(feed
+              ...(onReadMore
                 ? {
                     display: "-webkit-box",
+                    WebkitLineClamp: 4,
                     WebkitBoxOrient: "vertical",
-                    WebkitLineClamp: CLAMP_LINES,
                     overflow: "hidden",
                   }
                 : {}),
@@ -268,10 +278,13 @@ export function PostCard({
             {children}
           </div>
         )}
-        {feed && clamped && readMoreHref && (
-          <a
-            href={readMoreHref}
-            onClick={onReadMore}
+        {onReadMore && (
+          <ReadMoreTag
+            {...(readMoreHref ? { href: readMoreHref } : { type: "button" as const })}
+            onClick={(e: MouseEvent<HTMLElement>) => {
+              e.stopPropagation();
+              onReadMore(e);
+            }}
             onMouseEnter={
               onReadMoreIntent
                 ? () => {
@@ -282,19 +295,10 @@ export function PostCard({
             }
             onMouseLeave={onReadMoreIntent ? clearHold : undefined}
             data-read-more
-            style={{
-              alignSelf: "flex-start",
-              fontSize: 15,
-              fontWeight: 500,
-              color: "var(--ink-2)",
-              textDecoration: "none",
-              minHeight: 44,
-              display: "inline-flex",
-              alignItems: "center",
-            }}
+            style={linkStyle}
           >
             Read more
-          </a>
+          </ReadMoreTag>
         )}
         {rows.length > 0 && (
           <dl
@@ -352,21 +356,21 @@ export function PostCard({
           items={link.image ? [link.image] : []}
         />
       )}
-      {!engagement && actions && (
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>{actions}</div>
-      )}
-      <footer
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 4,
-          marginTop: -4,
-          marginLeft: -10,
-          marginRight: -10,
-          pointerEvents: preview ? "none" : "auto",
-        }}
-      >
-        {engagement && (
+      {actions && <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>{actions}</div>}
+      {feed ? (
+        <footer
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 4,
+            marginLeft: -10,
+            marginRight: -10,
+            marginBottom: -8,
+            paddingTop: 8,
+            borderTop: "1px solid var(--line)",
+            pointerEvents: preview ? "none" : "auto",
+          }}
+        >
           <IconButton
             name="heart"
             label={reacted ? "Reacted" : "React"}
@@ -375,12 +379,38 @@ export function PostCard({
             onClick={onReact}
             data-testid="react"
           />
-        )}
-        {!full && (
+          <IconButton
+            name="message-circle"
+            label={respondLabel}
+            onClick={onRespond}
+            data-testid="respond"
+          />
+          <span style={{ flex: 1 }} />
+          <IconButton
+            name="bookmark"
+            label={saved ? "Saved" : "Save"}
+            active={saved}
+            aria-pressed={!!saved}
+            onClick={onSave}
+            data-testid="save"
+          />
+          <IconButton name="share" label="Share" onClick={onShare} data-testid="share" />
+        </footer>
+      ) : (
+        <footer
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 4,
+            marginTop: -4,
+            marginLeft: -10,
+            marginRight: -10,
+            pointerEvents: preview ? "none" : "auto",
+          }}
+        >
           <button
             type="button"
             onClick={onRespond}
-            data-testid="respond"
             style={{
               all: "unset",
               cursor: "pointer",
@@ -393,20 +423,18 @@ export function PostCard({
               alignItems: "center",
             }}
           >
-            {engagement ? "Respond" : respondLabel}
+            {respondLabel}
           </button>
-        )}
-        <span style={{ flex: 1 }} />
-        <IconButton
-          name="bookmark"
-          label={saved ? "Saved" : "Save"}
-          active={saved}
-          aria-pressed={engagement ? !!saved : undefined}
-          onClick={onSave}
-          data-testid="save"
-        />
-        <IconButton name="share" label="Share" onClick={onShare} data-testid="share" />
-      </footer>
+          <span style={{ flex: 1 }} />
+          <IconButton
+            name="bookmark"
+            label={saved ? "Saved" : "Save"}
+            active={saved}
+            onClick={onSave}
+          />
+          <IconButton name="share" label="Share" onClick={onShare} />
+        </footer>
+      )}
     </article>
   );
 }
