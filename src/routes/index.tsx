@@ -1,8 +1,8 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
 
-// The app opens on Convene (ruling 67 default route). Sheets and drawers have no route.
+// Feed is Home (ruling 69). Sheets, drawers and the composer have no route.
 export const Route = createFileRoute("/")({
   beforeLoad: () => {
-    throw redirect({ to: "/$c", params: { c: "convene" } });
+    throw redirect({ to: "/feed", search: {} });
   },
 });

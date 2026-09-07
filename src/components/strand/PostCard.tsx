@@ -1,5 +1,17 @@
 // Ported from Strand components/dna/PostCard.jsx. Behavior unchanged.
-import { Fragment, useState, type CSSProperties, type ReactNode } from "react";
+// B2-Shell-Feed-v2 (backwards compatible): mode "feed" clamps the body to six lines with a
+// "Read more" link and replaces the engagement row with React (heart, one act, no count), Respond,
+// Save, Share (ruling 86's card-action correction: no per-C action, no counts, no cross-C logic
+// in the card). mode "full" is the same card unclamped inside the quick-look overlay.
+import {
+  Fragment,
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type MouseEvent,
+  type ReactNode,
+} from "react";
 import { Avatar } from "./Avatar";
 import { CBadge } from "./CBadge";
 import { Icon } from "./Icon";
@@ -42,8 +54,18 @@ export type PostCardProps = {
   respondLabel?: string;
   onClick?: (() => void) | undefined;
   preview?: boolean | undefined;
+  /** "feed": clamped body, React/Respond/Save/Share. "full": unclamped, React/Save/Share. Default: the composer preview card. */
+  mode?: "preview" | "feed" | "full" | undefined;
+  reacted?: boolean | undefined;
+  onReact?: (() => void) | undefined;
+  /** Feed mode: the quick-look route for this post. Rendered as a real link so it prefetches and opens in a new tab. */
+  readMoreHref?: string | undefined;
+  onReadMore?: ((e: MouseEvent<HTMLAnchorElement>) => void) | undefined;
+  onReadMoreIntent?: (() => void) | undefined;
   style?: CSSProperties | undefined;
 };
+
+const CLAMP_LINES = 6;
 
 /** The one card chassis (rule 1). Identity marker is a 1.5px full-frame border in the C color (rule 2).
  *  c="system" is the fallback category: framed in --line-strong, no glyph badge.
@@ -70,12 +92,39 @@ export function PostCard({
   respondLabel = "Respond",
   onClick,
   preview,
+  mode,
+  reacted,
+  onReact,
+  readMoreHref,
+  onReadMore,
+  onReadMoreIntent,
   style,
 }: PostCardProps) {
   const [, setHover] = useState(false);
   const sys = c === "system";
   const frame = sys ? "var(--line-strong)" : "var(--c-" + c + ")";
   const rows = (fields || []).filter((f) => f && f.value);
+  const feed = mode === "feed";
+  const full = mode === "full";
+  const engagement = feed || full;
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const [clamped, setClamped] = useState(false);
+  // Hover intent (ruling 84): the host's prefetch fires after an 80ms mouseenter hold, never on touch.
+  const hold = useRef<number | null>(null);
+  const clearHold = () => {
+    if (hold.current != null) window.clearTimeout(hold.current);
+    hold.current = null;
+  };
+  useEffect(() => {
+    if (!feed) return;
+    const el = bodyRef.current;
+    if (!el) return;
+    const measure = () => setClamped(el.scrollHeight > el.clientHeight + 1);
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [feed, children]);
   return (
     <article
       aria-label={preview ? "Preview of your post" : undefined}
@@ -199,15 +248,53 @@ export function PostCard({
         )}
         {children && (
           <div
+            ref={bodyRef}
+            data-clamped={feed && clamped ? "1" : undefined}
             style={{
               fontSize: 17,
               lineHeight: 1.5,
               whiteSpace: "pre-wrap",
               overflowWrap: "anywhere",
+              ...(feed
+                ? {
+                    display: "-webkit-box",
+                    WebkitBoxOrient: "vertical",
+                    WebkitLineClamp: CLAMP_LINES,
+                    overflow: "hidden",
+                  }
+                : {}),
             }}
           >
             {children}
           </div>
+        )}
+        {feed && clamped && readMoreHref && (
+          <a
+            href={readMoreHref}
+            onClick={onReadMore}
+            onMouseEnter={
+              onReadMoreIntent
+                ? () => {
+                    clearHold();
+                    hold.current = window.setTimeout(onReadMoreIntent, 80);
+                  }
+                : undefined
+            }
+            onMouseLeave={onReadMoreIntent ? clearHold : undefined}
+            data-read-more
+            style={{
+              alignSelf: "flex-start",
+              fontSize: 15,
+              fontWeight: 500,
+              color: "var(--ink-2)",
+              textDecoration: "none",
+              minHeight: 44,
+              display: "inline-flex",
+              alignItems: "center",
+            }}
+          >
+            Read more
+          </a>
         )}
         {rows.length > 0 && (
           <dl
@@ -265,7 +352,9 @@ export function PostCard({
           items={link.image ? [link.image] : []}
         />
       )}
-      {actions && <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>{actions}</div>}
+      {!engagement && actions && (
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>{actions}</div>
+      )}
       <footer
         style={{
           display: "flex",
@@ -277,31 +366,46 @@ export function PostCard({
           pointerEvents: preview ? "none" : "auto",
         }}
       >
-        <button
-          type="button"
-          onClick={onRespond}
-          style={{
-            all: "unset",
-            cursor: "pointer",
-            minHeight: 44,
-            padding: "0 10px",
-            fontSize: 15,
-            fontWeight: 500,
-            color: "var(--ink-2)",
-            display: "inline-flex",
-            alignItems: "center",
-          }}
-        >
-          {respondLabel}
-        </button>
+        {engagement && (
+          <IconButton
+            name="heart"
+            label={reacted ? "Reacted" : "React"}
+            active={reacted}
+            aria-pressed={!!reacted}
+            onClick={onReact}
+            data-testid="react"
+          />
+        )}
+        {!full && (
+          <button
+            type="button"
+            onClick={onRespond}
+            data-testid="respond"
+            style={{
+              all: "unset",
+              cursor: "pointer",
+              minHeight: 44,
+              padding: "0 10px",
+              fontSize: 15,
+              fontWeight: 500,
+              color: "var(--ink-2)",
+              display: "inline-flex",
+              alignItems: "center",
+            }}
+          >
+            {engagement ? "Respond" : respondLabel}
+          </button>
+        )}
         <span style={{ flex: 1 }} />
         <IconButton
           name="bookmark"
           label={saved ? "Saved" : "Save"}
           active={saved}
+          aria-pressed={engagement ? !!saved : undefined}
           onClick={onSave}
+          data-testid="save"
         />
-        <IconButton name="share" label="Share" onClick={onShare} />
+        <IconButton name="share" label="Share" onClick={onShare} data-testid="share" />
       </footer>
     </article>
   );

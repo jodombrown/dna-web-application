@@ -1,5 +1,7 @@
 // Ported from Strand components/dna/PulseDock.jsx. Behavior unchanged.
-import type { CSSProperties } from "react";
+// Production addition (B2, ruling 84): onIntent fires after an 80ms mouseenter hold on a slot so the
+// host can prefetch that C's route at the pointer tier. Touch never fires it.
+import { useRef, type CSSProperties } from "react";
 import { CBadge } from "./CBadge";
 import { C_LABEL, C_ORDER, type C } from "./cmeta";
 
@@ -15,13 +17,29 @@ export type PulseDockProps = {
   active?: C | undefined;
   states?: Partial<Record<C, PulseState>>;
   onSelect?: ((c: C) => void) | undefined;
+  onIntent?: ((c: C) => void) | undefined;
   bar?: boolean | undefined;
   fixed?: boolean | undefined;
   style?: CSSProperties | undefined;
 };
 
 /** Pulse family. Mobile bottom dock (default) or desktop horizontal bar (bar). states: {connect:'none'|'activity'|'for-you'|'urgent', ...}. State is the signal, not C color (rule 4). */
-export function PulseDock({ active, states = {}, onSelect, bar, fixed, style }: PulseDockProps) {
+export const INTENT_HOLD_MS = 80;
+
+export function PulseDock({
+  active,
+  states = {},
+  onSelect,
+  onIntent,
+  bar,
+  fixed,
+  style,
+}: PulseDockProps) {
+  const hold = useRef<number | null>(null);
+  const clearHold = () => {
+    if (hold.current != null) window.clearTimeout(hold.current);
+    hold.current = null;
+  };
   const items = C_ORDER.map((c) => {
     const on = c === active;
     const st: PulseState = states[c] || "none";
@@ -32,6 +50,15 @@ export function PulseDock({ active, states = {}, onSelect, bar, fixed, style }: 
         aria-current={on ? "page" : undefined}
         aria-label={C_LABEL[c] + (st !== "none" ? ", " + st.replace("-", " ") : "")}
         onClick={() => onSelect && onSelect(c)}
+        onMouseEnter={
+          onIntent
+            ? () => {
+                clearHold();
+                hold.current = window.setTimeout(() => onIntent(c), INTENT_HOLD_MS);
+              }
+            : undefined
+        }
+        onMouseLeave={onIntent ? clearHold : undefined}
         style={{
           all: "unset",
           cursor: "pointer",

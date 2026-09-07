@@ -1,6 +1,6 @@
-// The one card renderer keyed on c_category (brief: card router). The composer preview and the
-// Feed both render through here; there is no second renderer.
-import type { ReactNode } from "react";
+// The one card renderer keyed on c_category (brief: card router). The composer preview, the Feed and
+// the quick-look overlay all render through here; there is no second renderer (rulings 52, 85).
+import type { MouseEvent, ReactNode } from "react";
 import { AUDIENCE_LABEL } from "@/components/strand/AudienceSelect";
 import { Button } from "@/components/strand/Button";
 import { PostCard, type PostCardProps } from "@/components/strand/PostCard";
@@ -9,9 +9,17 @@ import type { PostView } from "@/lib/post-view";
 
 export type RouterOptions = {
   preview?: boolean | undefined;
+  /** "feed" and "full" are PostCard's engagement modes (React, Respond, Save, Share). Default: the composer card. */
+  mode?: "feed" | "full" | undefined;
+  saved?: boolean | undefined;
+  reacted?: boolean | undefined;
+  onReact?: (() => void) | undefined;
   onRespond?: (() => void) | undefined;
   onSave?: (() => void) | undefined;
   onShare?: (() => void) | undefined;
+  readMoreHref?: string | undefined;
+  onReadMore?: ((e: MouseEvent<HTMLAnchorElement>) => void) | undefined;
+  onReadMoreIntent?: (() => void) | undefined;
   actions?: ReactNode;
 };
 
@@ -26,13 +34,15 @@ export function postCardProps(view: PostView, opts: RouterOptions = {}): PostCar
       : view.media.length === 1
         ? { kind: "image", src: view.media[0], alt: "" }
         : undefined;
-  const actions =
-    opts.actions ??
-    (schema.action && c !== "system" ? (
-      <Button c={c} size="sm" onClick={opts.onRespond}>
-        {schema.action}
-      </Button>
-    ) : undefined);
+  // The per-C action button belongs to the composer preview only; feed mode has no fifth action.
+  const actions = opts.mode
+    ? undefined
+    : (opts.actions ??
+      (schema.action && c !== "system" ? (
+        <Button c={c} size="sm" onClick={opts.onRespond}>
+          {schema.action}
+        </Button>
+      ) : undefined));
   return {
     c,
     author: view.author_name,
@@ -49,9 +59,16 @@ export function postCardProps(view: PostView, opts: RouterOptions = {}): PostCar
     actions,
     respondLabel: c === "convene" ? "Ask the host" : "Respond",
     preview: opts.preview,
+    mode: opts.mode,
+    saved: opts.saved,
+    reacted: opts.reacted,
+    onReact: opts.onReact,
     onRespond: opts.onRespond,
     onSave: opts.onSave,
     onShare: opts.onShare,
+    readMoreHref: opts.readMoreHref,
+    onReadMore: opts.onReadMore,
+    onReadMoreIntent: opts.onReadMoreIntent,
   };
 }
 

@@ -1,8 +1,9 @@
-// Responsive test matrix (ruling 61) for the composer surface. Points at BASE (a deployed Pages URL
-// or a local server) with every Supabase endpoint mocked at the network layer, so the real client
-// code paths run against a deterministic backend. Backend behaviour is verified separately in SQL.
-// Usage: BASE=https://b1-composer.dna-web-application.pages.dev WEBKIT=1 node tests/matrix.cjs
-// Env: ONLY='[390,844]' runs one viewport; SPECIAL=publish,keyboard,silence runs the flows only.
+// Responsive test matrix (ruling 61) for the shell, Feed, notifications and composer. Points at
+// BASE (a deployed Pages URL or a local server) with every Supabase endpoint mocked at the network
+// layer, so the real client code paths run against a deterministic backend. Backend behaviour
+// (RLS, the feed view) is verified separately in SQL against the live project.
+// Usage: BASE=https://b2-shell-feed.dna-web-application.pages.dev WEBKIT=1 node tests/matrix.cjs
+// Env: ONLY='[390,844]' runs one viewport; SPECIAL=publish,keyboard,silence,shell runs flows only.
 const { chromium, webkit } = require("playwright");
 const fs = require("fs");
 const path = require("path");
@@ -149,11 +150,45 @@ function makeMockDb() {
     stories: [],
     post_media: [],
     post_links: [],
+    notifications: [],
+    saves: [],
+    reactions: [],
     drafts: new Map(),
     rpcPayloads: [],
     inferCalls: 0,
+    reads: [],
   };
   return db;
+}
+
+const LONG =
+  "Back in Nairobi after three weeks in Houston. The jet lag is winning and the mangoes are not. " +
+  "Three intros changed the trip: a cooperative in Oyo found its first buyer through two members, " +
+  "a clinic coordinator agreed to run a weekend session in Kisumu, and a fintech founder in Accra " +
+  "opened his books to a savings product for market traders. Writing the long version tonight, " +
+  "because the short version does not do the people justice.\n\nMore soon, with names once they agree.";
+
+/** Seed n published untyped posts, newest first, alternating authors so Mine and My Network differ. */
+function seedPosts(db, n) {
+  for (let i = 0; i < n; i++) {
+    const mineRow = i % 2 === 0;
+    db.posts.push({
+      id: "seed-" + i,
+      author_kind: "member",
+      author_id: mineRow ? UID : "00000000-0000-4000-8000-0000000000f2",
+      created_by: mineRow ? UID : "00000000-0000-4000-8000-0000000000f2",
+      c_category: "convey",
+      body: i + 1 + ". " + LONG,
+      anchor_kind: null,
+      anchor_id: null,
+      created_object_kind: null,
+      created_object_id: null,
+      audience: "everyone",
+      status: "published",
+      published_at: new Date(Date.now() - i * 3600e3).toISOString(),
+      created_at: new Date(Date.now() - i * 3600e3).toISOString(),
+    });
+  }
 }
 
 async function mockSupabase(page, db, opts = {}) {
@@ -372,6 +407,55 @@ async function mockSupabase(page, db, opts = {}) {
           return json([], 200);
         }
       }
+      const eqOf = (param) => url.searchParams.get(param)?.replace(/^eq\./, "") ?? null;
+      const single = (req.headers()["accept"] || "").includes("object");
+      const one = (rows) =>
+        rows[0]
+          ? json(rows[0])
+          : json({ code: "PGRST116", details: "0 rows", hint: null, message: "no rows" }, 406);
+      if (table === "feed") {
+        let rows = db.posts.filter((p) => p.status === "published");
+        const ids = inIds("id");
+        if (ids) rows = rows.filter((p) => ids.includes(p.id));
+        const id = eqOf("id");
+        if (id) rows = rows.filter((p) => p.id === id);
+        const or = url.searchParams.get("or") || "";
+        if (or.includes("created_by")) rows = rows.filter((p) => p.author_id === UID);
+        else if (or.includes("author_kind"))
+          rows = rows.filter((p) => or.includes('"' + p.author_id + '"'));
+        return single ? one(rows) : json(rows);
+      }
+      if (table === "post_saves" || table === "post_reactions") {
+        const list = table === "post_saves" ? db.saves : db.reactions;
+        if (method === "POST") {
+          const b = req.postDataJSON();
+          const row = Array.isArray(b) ? b[0] : b;
+          list.push({ ...row, created_at: new Date().toISOString() });
+          return json([row], 201);
+        }
+        if (method === "DELETE") {
+          const pid = eqOf("post_id");
+          const keep = list.filter((r) => r.post_id !== pid);
+          list.length = 0;
+          list.push(...keep);
+          return json([], 200);
+        }
+        const ids = inIds("post_id");
+        return json(list.filter((r) => !ids || ids.includes(r.post_id)));
+      }
+      if (table === "notifications") {
+        if (method === "PATCH") {
+          const id = eqOf("id");
+          db.reads.push(id);
+          db.notifications.forEach((n) => {
+            if (n.id === id) n.read_at = new Date().toISOString();
+          });
+          return json([], 204);
+        }
+        let rows = db.notifications.slice();
+        if (url.searchParams.get("read_at") === "is.null") rows = rows.filter((n) => !n.read_at);
+        return json(rows);
+      }
       if (table === "space_roles") return json([{ space_id: "s1" }]);
       if (table === "spaces") {
         const ids = inIds("id");
@@ -389,12 +473,23 @@ async function mockSupabase(page, db, opts = {}) {
       for (const t of ["events", "opportunities", "connection_requests", "stories"])
         if (table === t) {
           const ids = inIds("id");
+          if (!ids && url.searchParams.has("starts_at")) return json([]);
+          if (!ids && t === "connection_requests") return json([]);
           return json(db[t].filter((r) => !ids || ids.includes(r.id)));
         }
       return json([]);
     }
     return json(null, 404);
   });
+}
+
+// CHROME_PATH points Chromium at a preinstalled binary (sandboxes without a Playwright download).
+function launch(browserType) {
+  const opts =
+    browserType === chromium && process.env.CHROME_PATH
+      ? { executablePath: process.env.CHROME_PATH }
+      : {};
+  return browserType.launch(opts);
 }
 
 const results = [];
@@ -420,14 +515,14 @@ async function signIn(page) {
   await page.fill('input[type="email"]', "member@test.invalid");
   await page.fill('input[type="password"]', "x");
   await page.click('button[type="submit"]');
-  await page.waitForURL("**/convene", { timeout: 15000 });
-  await page.waitForSelector('[data-testid="launcher"]');
+  await page.waitForURL("**/feed", { timeout: 15000 });
+  await page.waitForSelector('[data-testid="compose"]');
 }
 
 async function runViewport(browserType, bname, [w, h], theme) {
   const tag = `${bname}-${w}x${h}-${theme}`;
   const isTouch = w < 1024 || w === 1024;
-  const browser = await browserType.launch();
+  const browser = await launch(browserType);
   const ctx = await browser.newContext({
     viewport: { width: w, height: h },
     hasTouch: isTouch,
@@ -437,6 +532,7 @@ async function runViewport(browserType, bname, [w, h], theme) {
   });
   const page = await ctx.newPage();
   const db = makeMockDb();
+  seedPosts(db, 3);
   await page.addInitScript(
     ({ theme }) => {
       try {
@@ -503,12 +599,57 @@ async function runViewport(browserType, bname, [w, h], theme) {
         ),
       );
 
-    // Open from launcher: empty state.
-    await page.click('[data-testid="launcher"]');
+    record(
+      tag + " shell: one header, one Pulse nav, five slots",
+      (await page.locator("[data-app-header]").count()) === 1 &&
+        (await page.locator('nav[aria-label="Pulse"]').count()) === 1 &&
+        (await page.locator('nav[aria-label="Pulse"] button').count()) === 5,
+    );
+    record(
+      tag + (w > 1024 ? " expanded: bar nav under header" : " compact/medium: bottom dock"),
+      w > 1024
+        ? (await page.locator('[data-app-header] nav[aria-label="Pulse"]').count()) === 1
+        : (await page.evaluate(
+            () =>
+              getComputedStyle(document.querySelector('nav[aria-label="Pulse"]')).position ===
+              "fixed",
+          )) === true,
+    );
+    record(
+      tag + " lens bar with five lenses, All selected",
+      (await page.locator('[role="radiogroup"][aria-label="Lens"] [role="radio"]').count()) === 5 &&
+        (await page
+          .locator('[role="radiogroup"][aria-label="Lens"] [role="radio"][aria-checked="true"]')
+          .getAttribute("data-lens")) === "all",
+    );
+    record(
+      tag + " feed cards in feed mode: react, respond, save, share, no counts",
+      (await page.locator("main article[data-c]").count()) === 3 &&
+        (await page.locator('main article [data-testid="react"]').count()) === 3 &&
+        (await page.locator('main article [data-testid="respond"]').count()) === 3 &&
+        (await page.locator('main article [data-testid="save"]').count()) === 3 &&
+        (await page.locator('main article [data-testid="share"]').count()) === 3 &&
+        !/\b\d+ (likes|reactions|saves)\b/i.test(await page.locator("main").textContent()),
+    );
+    if (w > 1024) {
+      const rails = await page.locator("[data-rail-widget]").count();
+      record(
+        tag + (w >= 1440 ? " three regions, both rails grounded-or-empty" : " left rail only"),
+        w >= 1440 ? rails === 4 : rails === 3,
+        "rail widgets " + rails,
+      );
+    } else {
+      record(
+        tag + " no rails below 1024",
+        (await page.locator("[data-rail-widget]").count()) === 0,
+      );
+    }
+    // Open from the header pill: empty state.
+    await page.click('[data-testid="compose"]');
     const dialog = page.locator('section[role="dialog"][aria-label="Compose"]');
     await dialog.waitFor({ timeout: 10000 });
     await page.waitForTimeout(300); // let the rise or slide animation settle before measuring
-    record(tag + " composer opens from launcher", true);
+    record(tag + " composer opens from the header pill", true);
     if (process.env.DEBUG)
       console.log(
         "DEBUG wide2:",
@@ -687,19 +828,15 @@ async function runViewport(browserType, bname, [w, h], theme) {
     await page.waitForSelector('section[role="dialog"][aria-label="Compose"]', {
       state: "detached",
     });
-    // Verb entry opens fresh (no draft restore).
-    await page
-      .locator('[role="group"][aria-label="Start with a verb"] [role="radio"]')
-      .first()
-      .click();
+    // Empty-state action opens the same composer (Mine lens has no posts by this member? it has; use a member-less lens).
+    db.posts.length = 0;
+    await page.click('[role="radiogroup"][aria-label="Lens"] [data-lens="mine"]');
+    await page.waitForURL("**/feed?lens=mine");
+    await page.locator('[data-testid="feed-empty"][data-lens="mine"]').waitFor({ timeout: 10000 });
+    await shot(page, `${tag}-05-empty-mine`);
+    await page.locator('[data-testid="feed-empty"] button', { hasText: "Compose" }).click();
     await dialog.waitFor({ timeout: 10000 });
-    record(
-      tag + " verb entry opens with verb preselected and no draft",
-      (await ta.inputValue()) === "" &&
-        (await dialog
-          .locator('[role="radio"][aria-label^="Make an Intro"][aria-checked="true"]')
-          .count()) === 1,
-    );
+    record(tag + " empty-state action opens the composer", true);
     await page.keyboard.press("Escape");
     await page.waitForSelector('section[role="dialog"][aria-label="Compose"]', {
       state: "detached",
@@ -720,7 +857,7 @@ async function runViewport(browserType, bname, [w, h], theme) {
 // End-to-end publish (once per tier) including link unfurl, image attach, and the feed card via the router.
 async function runPublish(browserType, bname, [w, h], theme) {
   const tag = `${bname}-${w}x${h}-${theme}-publish`;
-  const browser = await browserType.launch();
+  const browser = await launch(browserType);
   const ctx = await browser.newContext({
     viewport: { width: w, height: h },
     hasTouch: w < 1024,
@@ -742,7 +879,7 @@ async function runPublish(browserType, bname, [w, h], theme) {
   page.on("pageerror", (e) => errors.push(String(e)));
   try {
     await signIn(page);
-    await page.click('[data-testid="launcher"]');
+    await page.click('[data-testid="compose"]');
     const dialog = page.locator('section[role="dialog"][aria-label="Compose"]');
     await dialog.waitFor();
     await dialog.locator('textarea[aria-label="What is going on with you"]').fill(SAMPLES.convene);
@@ -802,7 +939,7 @@ async function runPublish(browserType, bname, [w, h], theme) {
       state: "detached",
       timeout: 10000,
     });
-    record(tag + " composer closes on publish, no navigation", page.url().endsWith("/convene"));
+    record(tag + " composer closes on publish, no navigation", page.url().endsWith("/feed"));
     const payload = db.rpcPayloads[0];
     record(
       tag + " RPC payload: one c_category via verb, media x4, link, dia record",
@@ -821,10 +958,11 @@ async function runPublish(browserType, bname, [w, h], theme) {
     const card = page.locator("main article[data-c='convene']").first();
     await card.waitFor({ timeout: 10000 });
     record(
-      tag + " feed card rendered by the router with kicker Event and title",
+      tag + " feed card rendered by the router with kicker Event and title, no per-C action",
       (await card.textContent()).includes("Event") &&
         (await card.textContent()).includes("Diaspora Builders Dinner") &&
-        (await card.textContent()).includes("Get a ticket"),
+        !(await card.textContent()).includes("Get a ticket") &&
+        (await card.locator('[data-testid="react"]').count()) === 1,
     );
     record(
       tag + " feed card carries media and link",
@@ -886,10 +1024,254 @@ async function runPublish(browserType, bname, [w, h], theme) {
   await browser.close();
 }
 
+// Shell, Feed lenses, quick-look overlay, notifications: one run per viewport, light theme.
+async function runShell(browserType, bname, [w, h]) {
+  const tag = `${bname}-${w}x${h}-shell`;
+  const browser = await launch(browserType);
+  const ctx = await browser.newContext({
+    viewport: { width: w, height: h },
+    hasTouch: w < 1024,
+    isMobile: w < 1024,
+    deviceScaleFactor: 1,
+  });
+  const page = await ctx.newPage();
+  const db = makeMockDb();
+  seedPosts(db, 8);
+  await mockSupabase(page, db);
+  const errors = [];
+  page.on("pageerror", (e) => errors.push(String(e)));
+  try {
+    await signIn(page);
+    const stamp = await page.getAttribute("html", "data-shell");
+    record(tag + " shell mount stamp set", !!stamp);
+    // Lens in the URL, back-button safe.
+    await page.click('[role="radiogroup"][aria-label="Lens"] [data-lens="saved"]');
+    await page.waitForURL("**/feed?lens=saved");
+    await page.locator('[data-testid="feed-empty"][data-lens="saved"]').waitFor({ timeout: 10000 });
+    record(
+      tag + " Saved lens: ?lens=saved, honest empty state, scope line",
+      (await page.locator("[data-lens-scope]").textContent()).includes("saved"),
+    );
+    await page.reload({ waitUntil: "networkidle" });
+    await page.locator('[data-testid="feed-empty"][data-lens="saved"]').waitFor({ timeout: 15000 });
+    record(tag + " lens survives refresh", page.url().includes("lens=saved"));
+    const stamp2 = await page.getAttribute("html", "data-shell");
+    await page.click('[role="radiogroup"][aria-label="Lens"] [data-lens="mine"]');
+    await page.waitForURL("**/feed?lens=mine");
+    await page.locator("[data-feed] article[data-c]").first().waitFor({ timeout: 10000 });
+    record(
+      tag + " Mine lens: only this member's posts",
+      (await page.locator("[data-feed] article[data-c]").count()) === 4,
+    );
+    await page.goBack();
+    await page.waitForURL("**/feed?lens=saved");
+    await page.goBack();
+    await page.waitForURL((u) => u.pathname === "/feed" && !u.search);
+    await page.locator("[data-feed] article[data-c]").first().waitFor({ timeout: 10000 });
+    record(
+      tag + " back button restores All (no ?lens) with all posts",
+      (await page.locator("[data-feed] article[data-c]").count()) === 8 &&
+        (await page
+          .locator('[role="radiogroup"][aria-label="Lens"] [role="radio"][aria-checked="true"]')
+          .getAttribute("data-lens")) === "all",
+    );
+    record(
+      tag + " shell did not remount across lens changes",
+      (await page.getAttribute("html", "data-shell")) === stamp2,
+    );
+    // For You renders identically to All.
+    await page.click('[role="radiogroup"][aria-label="Lens"] [data-lens="for-you"]');
+    await page.waitForURL("**/feed?lens=for-you");
+    await page.waitForTimeout(300);
+    record(
+      tag + " For You identical to All",
+      (await page.locator("[data-feed] article[data-c]").count()) === 8,
+    );
+    await page.click('[role="radiogroup"][aria-label="Lens"] [data-lens="all"]');
+    await page.waitForURL((u) => u.pathname === "/feed" && !u.search);
+    await page.waitForTimeout(300);
+    // Save and React: existence toggles, no counts.
+    const first = page.locator("[data-feed] article[data-c]").nth(0);
+    await first.locator('[data-testid="save"]').click();
+    await page.waitForTimeout(400);
+    await first.locator('[data-testid="react"]').click();
+    await page.waitForTimeout(400);
+    record(
+      tag + " Save and React toggle own rows (aria-pressed), no count rendered",
+      db.saves.length === 1 &&
+        db.reactions.length === 1 &&
+        (await first.locator('[data-testid="save"]').getAttribute("aria-pressed")) === "true" &&
+        (await first.locator('[data-testid="react"]').getAttribute("aria-pressed")) === "true",
+    );
+    // Quick-look overlay preserves the Feed's scroll position.
+    const third = page.locator("[data-feed] article[data-c]").nth(5);
+    await third.scrollIntoViewIfNeeded();
+    await page.waitForTimeout(200);
+    const before = await page.evaluate(() => window.scrollY);
+    record(tag + " scrolled before opening", before > 0, "scrollY " + before);
+    const readMore = third.locator("[data-read-more]");
+    record(tag + " long body clamped with Read more", (await readMore.count()) === 1);
+    await readMore.click();
+    await page.waitForURL("**/posts/seed-5");
+    const overlay = page.locator('section[role="dialog"][aria-label="Post"]');
+    await overlay.waitFor({ timeout: 10000 });
+    await page.waitForTimeout(300);
+    const during = await page.evaluate(() => window.scrollY);
+    record(
+      tag + " overlay open: real route, Feed still mounted beneath, scroll unchanged",
+      (await page.locator("[data-feed] article[data-c]").count()) === 8 &&
+        (await overlay.locator("article[data-c='convey']").count()) === 1 &&
+        (await overlay.locator("[data-read-more]").count()) === 0 &&
+        Math.abs(during - before) <= 1,
+      `before ${before} during ${during}`,
+    );
+    record(
+      tag + " overlay: shell not remounted",
+      (await page.getAttribute("html", "data-shell")) === stamp2,
+    );
+    await shot(page, `${tag}-overlay`);
+    await noOverflow(page, tag + " overlay");
+    await page.goBack();
+    await page.waitForURL((u) => u.pathname === "/feed");
+    await page.waitForSelector('section[role="dialog"][aria-label="Post"]', { state: "detached" });
+    await page.waitForTimeout(300);
+    const after = await page.evaluate(() => window.scrollY);
+    record(
+      tag + " back button dismisses; scroll identical",
+      Math.abs(after - before) <= 1,
+      `before ${before} after ${after}`,
+    );
+    // Esc dismisses too, from the Respond entry. Re-measure after the button is in view (the click
+    // itself must not scroll).
+    const respond = third.locator('[data-testid="respond"]');
+    await respond.scrollIntoViewIfNeeded();
+    await page.waitForTimeout(200);
+    const before2 = await page.evaluate(() => window.scrollY);
+    await respond.click();
+    await page.waitForURL("**/posts/seed-5");
+    await overlay.waitFor({ timeout: 10000 });
+    await page.keyboard.press("Escape");
+    await page.waitForURL((u) => u.pathname === "/feed");
+    await page.waitForTimeout(300);
+    const after2 = await page.evaluate(() => window.scrollY);
+    record(
+      tag + " Respond opens the quick-look; Esc dismisses; scroll identical",
+      Math.abs(after2 - before2) <= 1,
+      `before ${before2} after ${after2}`,
+    );
+    // Direct load of /posts/:id renders inside the shell over Feed; dismiss goes to Feed.
+    await page.goto(BASE + "/posts/seed-1", { waitUntil: "networkidle" });
+    await overlay.waitFor({ timeout: 15000 });
+    record(
+      tag + " direct /posts/:id: shell + Feed beneath + overlay",
+      (await page.locator("[data-app-header]").count()) === 1 &&
+        (await page.locator("[data-feed] article[data-c]").count()) >= 1,
+    );
+    await page.click('[data-testid="overlay-close"]');
+    await page.waitForURL((u) => u.pathname === "/feed");
+    record(tag + " close from direct load lands on Feed", true);
+    // Five C stubs render inside the same shell; Home returns to Feed; no remount.
+    const stampBefore = await page.getAttribute("html", "data-shell");
+    await page.locator('nav[aria-label="Pulse"] button', { hasText: "Connect" }).click();
+    await page.waitForURL("**/connect");
+    await page.locator('[data-testid="c-stub"][data-c="connect"]').waitFor({ timeout: 10000 });
+    record(
+      tag + " /connect: stub inside the shell, Connect active, no remount",
+      (await page.locator('[data-testid="c-stub"]').textContent()).includes("Connect is next") &&
+        (
+          await page.locator('nav[aria-label="Pulse"] [aria-current="page"]').textContent()
+        ).includes("Connect") &&
+        (await page.getAttribute("html", "data-shell")) === stampBefore &&
+        (await page.locator("[data-app-header]").count()) === 1,
+    );
+    await shot(page, `${tag}-stub`);
+    await noOverflow(page, tag + " stub");
+    await page.click('[data-testid="to-feed"]');
+    await page.waitForURL((u) => u.pathname === "/feed");
+    record(
+      tag + " stub's Feed link returns Home without remount",
+      (await page.getAttribute("html", "data-shell")) === stampBefore,
+    );
+    // Notifications: no dot without rows, empty list; dot with a real unread row; opening marks read.
+    record(
+      tag + " bell: no dot without a real unread row",
+      (await page.locator('[data-testid="bell-dot"]').count()) === 0,
+    );
+    await page.click('[data-testid="bell"]');
+    const list = page.locator('section[role="dialog"][aria-label="Notifications"]');
+    await list.waitFor({ timeout: 10000 });
+    await list.locator('[data-testid="notifications-empty"]').waitFor({ timeout: 10000 });
+    record(tag + " bell opens the list with an honest empty state", true);
+    await page.waitForTimeout(300);
+    await shot(page, `${tag}-notifications-empty`);
+    await page.keyboard.press("Escape");
+    await page.waitForSelector('section[role="dialog"][aria-label="Notifications"]', {
+      state: "detached",
+    });
+    db.notifications.push({
+      id: "n1",
+      recipient_member_id: UID,
+      kind: "connection_accepted",
+      c_category: "connect",
+      actor_kind: null,
+      actor_id: null,
+      object_kind: null,
+      object_id: null,
+      read_at: null,
+      created_at: new Date(Date.now() - 5 * 60e3).toISOString(),
+    });
+    await page.reload({ waitUntil: "networkidle" });
+    await page.locator('[data-testid="bell-dot"]').waitFor({ timeout: 15000 });
+    record(
+      tag + " bell: a dot, never a numeral, once an unread row exists",
+      (await page.locator('[data-testid="bell"]').textContent()).trim() === "" &&
+        (await page.locator('[data-testid="bell-dot"]').count()) === 1,
+    );
+    await page.click('[data-testid="bell"]');
+    await list.waitFor({ timeout: 10000 });
+    const row = list.locator('li button[data-kind="connection_accepted"]');
+    await row.waitFor({ timeout: 10000 });
+    record(
+      tag + " list shows the real row with the Connect glyph and unread state",
+      (await row.getAttribute("data-unread")) === "1" &&
+        (await row.locator('[role="img"][aria-label="Connect"]').count()) === 1,
+    );
+    await page.waitForTimeout(300);
+    await shot(page, `${tag}-notifications`);
+    await row.click();
+    await page.waitForTimeout(600);
+    record(
+      tag + " opening a row marks it read (read_at only) and the dot goes",
+      db.reads.length === 1 &&
+        db.reads[0] === "n1" &&
+        (await page.locator('[data-testid="bell-dot"]').count()) === 0 &&
+        (await row.getAttribute("data-unread")) === null,
+    );
+    await page.keyboard.press("Escape");
+    // c keypress opens the composer from the shell.
+    await page.waitForSelector('section[role="dialog"][aria-label="Notifications"]', {
+      state: "detached",
+    });
+    await page.keyboard.press("c");
+    await page.locator('section[role="dialog"][aria-label="Compose"]').waitFor({ timeout: 10000 });
+    record(tag + " c keypress opens the one composer from the shell", true);
+    await page.keyboard.press("Escape");
+  } catch (e) {
+    record(tag + " flow", false, String(e).slice(0, 300));
+    await shot(page, `${tag}-ERROR`).catch(() => {});
+  }
+  record(
+    tag + " no page errors",
+    errors.length === 0,
+    errors.slice(0, 3).join(" | ").slice(0, 300),
+  );
+  await browser.close();
+}
+
 // Silence when DIA times out or errors: identical to no DIA.
 async function runSilence(browserType, bname) {
   const tag = `${bname}-390x844-light-silence`;
-  const browser = await browserType.launch();
+  const browser = await launch(browserType);
   const ctx = await browser.newContext({
     viewport: { width: 390, height: 844 },
     hasTouch: true,
@@ -900,7 +1282,7 @@ async function runSilence(browserType, bname) {
   await mockSupabase(page, db, { inferDelay: 5000 });
   try {
     await signIn(page);
-    await page.click('[data-testid="launcher"]');
+    await page.click('[data-testid="compose"]');
     const dialog = page.locator('section[role="dialog"][aria-label="Compose"]');
     await dialog.waitFor();
     await dialog.locator('textarea[aria-label="What is going on with you"]').fill(SAMPLES.convene);
@@ -930,7 +1312,7 @@ async function runSilence(browserType, bname) {
 // iOS keyboard surrogate: shrink visualViewport and check data-kb and Publish placement.
 async function runKeyboard(browserType, bname) {
   const tag = `${bname}-390x844-keyboard`;
-  const browser = await browserType.launch();
+  const browser = await launch(browserType);
   const ctx = await browser.newContext({
     viewport: { width: 390, height: 844 },
     hasTouch: true,
@@ -961,7 +1343,7 @@ async function runKeyboard(browserType, bname) {
   await mockSupabase(page, db);
   try {
     await signIn(page);
-    await page.click('[data-testid="launcher"]');
+    await page.click('[data-testid="compose"]');
     const dialog = page.locator('section[role="dialog"][aria-label="Compose"]');
     await dialog.waitFor();
     record(tag + " no data-kb before keyboard", (await dialog.getAttribute("data-kb")) === null);
@@ -997,6 +1379,9 @@ if (require.main === module)
           await runPublish(bt, bname, [390, 844], "light");
         if (process.env.SPECIAL.includes("keyboard")) await runKeyboard(bt, bname);
         if (process.env.SPECIAL.includes("silence")) await runSilence(bt, bname);
+        if (process.env.SPECIAL.includes("shell"))
+          for (const vp of process.env.ONLY ? [JSON.parse(process.env.ONLY)] : VIEWPORTS)
+            await runShell(bt, bname, vp);
       }
       const fails = results.filter((r) => !r.ok);
       console.log(`${results.length - fails.length}/${results.length} checks passed`);
@@ -1006,8 +1391,10 @@ if (require.main === module)
     const engines = [["chromium", chromium]];
     if (process.env.WEBKIT === "1") engines.push(["webkit", webkit]);
     for (const [bname, bt] of engines) {
-      for (const vp of only ? [only] : VIEWPORTS)
+      for (const vp of only ? [only] : VIEWPORTS) {
         for (const theme of only ? ["light"] : THEMES) await runViewport(bt, bname, vp, theme);
+        await runShell(bt, bname, vp);
+      }
       if (only) {
         const fails = results.filter((r) => !r.ok);
         console.log(`${results.length - fails.length}/${results.length} checks passed`);

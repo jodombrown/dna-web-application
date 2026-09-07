@@ -1,5 +1,5 @@
-// The one composer shell, mounted once in the app root (ruling 56). Opened from any surface via
-// openComposer(). Wires the Strand Composer to auth, tiers, DIA, unfurl, media upload, server
+// The one composer shell, mounted once by the shell layout (ruling 56; moved from the root in
+// Brief 2 so the shell owns the mount). Opened from any surface via openComposer(). Wires the Strand Composer to auth, tiers, DIA, unfurl, media upload, server
 // drafts and publish_post. Never navigates on publish (ruling 52).
 import { useEffect, useMemo, useState } from "react";
 import { Composer, type ComposerSeed, type ComposerState } from "@/components/strand/Composer";
