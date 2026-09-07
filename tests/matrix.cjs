@@ -1765,6 +1765,64 @@ async function runTargeted(browserType, bname, [w, h]) {
       JSON.stringify({ scope0, scope1, scope2, y0, y1, y2, pinnedLens }),
     );
 
+    // 11. Ruling 109: a lens change while pinned lands the first item of the new list exactly
+    // beneath the pinned block; the block does not move and stays pinned.
+    if (tier === "expanded") {
+      await bar.locator('[data-lens="all"]').click();
+      await page.waitForURL((u) => u.pathname === "/feed" && !u.search);
+      await page.locator("[data-feed] article[data-c]").nth(9).waitFor({ timeout: 10000 });
+      await setFeedTop(700);
+      await page.waitForTimeout(300);
+      const seam = () =>
+        page.evaluate(() => {
+          const sc = document.querySelector('[data-scroller="feed"]').getBoundingClientRect();
+          const wrap = document.querySelector("[data-compose-wrap]");
+          const lens = document.querySelector("[data-feed] [data-lens-anchor]");
+          const lb = lens.getBoundingClientRect();
+          const first = document.querySelector(
+            "[data-feed] article[data-c], [data-feed] [data-testid='feed-empty']",
+          );
+          const fb = first ? first.getBoundingClientRect() : null;
+          const probe = fb ? document.elementFromPoint(sc.left + sc.width / 2, fb.top + 2) : null;
+          return {
+            stuck: wrap.getAttribute("data-stuck"),
+            wrapTop: Math.round(wrap.getBoundingClientRect().top - sc.top),
+            blockBottom: Math.round(lb.bottom - sc.top),
+            firstTop: fb ? Math.round(fb.top - sc.top) : null,
+            firstTopVisible: !!probe && !!first && first.contains(probe),
+            barY: Math.round(lb.top),
+          };
+        });
+      const s0 = await seam();
+      await bar.locator('[data-lens="mine"]').click();
+      await page.waitForURL("**/feed?lens=mine");
+      await page.locator("[data-feed] article[data-c]").first().waitFor({ timeout: 10000 });
+      await page.waitForTimeout(400);
+      const s1 = await seam();
+      await bar.locator('[data-lens="saved"]').click();
+      await page.waitForURL("**/feed?lens=saved");
+      await page
+        .locator('[data-testid="feed-empty"][data-lens="saved"]')
+        .waitFor({ timeout: 10000 });
+      await page.waitForTimeout(400);
+      const s2 = await seam();
+      const landed = (s) =>
+        s.stuck === "1" &&
+        s.wrapTop === 0 &&
+        s.firstTop != null &&
+        s.firstTop - s.blockBottom >= 0 &&
+        s.firstTop - s.blockBottom <= 1 &&
+        s.firstTopVisible &&
+        s.barY === s0.barY;
+      record(
+        tag +
+          " 11. lens change while pinned: first item of the new list sits exactly beneath the pinned block, none of its top hidden, block unmoved and still pinned",
+        s0.stuck === "1" && landed(s1) && landed(s2),
+        JSON.stringify({ s0, s1, s2 }),
+      );
+      await shot(page, `${tag}-11-pinned-lens`);
+    }
+
     // 10. Header row per tier.
     const head = await page.evaluate(() => {
       const h = document.querySelector("[data-app-header]");

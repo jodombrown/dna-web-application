@@ -130,9 +130,13 @@ export function FeedSurface({ member, view }: { member: Member; view: FeedView }
   const { scrollerRef, scrolled } = useShellScroll();
 
   // Expanded: the composer control pins once the greeting has fully left the column's own viewport
-  // (IntersectionObserver, root = the column, threshold 0). Toggling only position, ground and
-  // z-index (never the wrapper's size) keeps the boundary free of layout feedback.
+  // (IntersectionObserver, root = the column, threshold 0). It releases only once the greeting
+  // re-emerges beneath the pinned control (a second observer whose root is inset by the control's
+  // measured height), so a lens change that lands the new list exactly beneath the pinned block
+  // (ruling 109) leaves the greeting under the control without unpinning. Toggling only position,
+  // ground and z-index (never the wrapper's size) keeps the boundary free of layout feedback.
   const greetRef = useRef<HTMLDivElement>(null);
+  const pillRef = useRef<HTMLDivElement>(null);
   const [stuck, setStuck] = useState(false);
   useEffect(() => {
     const g = greetRef.current;
@@ -141,12 +145,25 @@ export function FeedSurface({ member, view }: { member: Member; view: FeedView }
       setStuck(false);
       return;
     }
-    const io = new IntersectionObserver(([e]) => setStuck(!e!.isIntersecting), {
-      root,
-      threshold: 0,
-    });
-    io.observe(g);
-    return () => io.disconnect();
+    const pillH = pillRef.current?.offsetHeight ?? 80;
+    const leave = new IntersectionObserver(
+      ([e]) => {
+        if (e && !e.isIntersecting) setStuck(true);
+      },
+      { root, threshold: 0 },
+    );
+    const back = new IntersectionObserver(
+      ([e]) => {
+        if (e && e.isIntersecting) setStuck(false);
+      },
+      { root, threshold: 0, rootMargin: `-${pillH + 2}px 0px 0px 0px` },
+    );
+    leave.observe(g);
+    back.observe(g);
+    return () => {
+      leave.disconnect();
+      back.disconnect();
+    };
   }, [expandedTier, scrollerRef, view.kind]);
 
   const listMode = view.kind !== "direct";
@@ -224,9 +241,11 @@ export function FeedSurface({ member, view }: { member: Member; view: FeedView }
   };
 
   // Lens selection is a history entry (?lens=). Selecting from the pinned bar or the header slot
-  // never moves the bar: the scroller is set to the bar's anchor so the new list starts beneath it
-  // and the header stays in lens mode (SPEC 1, 3).
+  // never moves the bar: on expanded the column scrolls so the first item of the new list sits
+  // exactly beneath the pinned block, offset by the block's measured height (ruling 109); on compact
+  // and medium the scroller is set just below the hidden in-flow bar so the header stays in lens mode.
   const anchorRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
   const setLens = (id: LensId) => {
     void navigate({ to: "/feed", search: lensSearch(id), resetScroll: false });
   };
@@ -244,7 +263,12 @@ export function FeedSurface({ member, view }: { member: Member; view: FeedView }
     const sc = scrollerRef.current;
     if (!a || !sc) return;
     if (expandedTier) {
-      if (placeRef.current.stuck) sc.scrollTop = Math.max(0, a.offsetTop + 1);
+      const list = listRef.current;
+      if (placeRef.current.stuck && list) {
+        // The block's extent is measured live: control wrapper plus the LensBar wrapper as pinned.
+        const blockBottom = a.getBoundingClientRect().bottom - sc.getBoundingClientRect().top;
+        sc.scrollTop = Math.max(0, Math.round(list.offsetTop - blockBottom));
+      }
     } else if (placeRef.current.scrolled) {
       sc.scrollTop = a.offsetTop + a.offsetHeight;
     }
@@ -270,7 +294,6 @@ export function FeedSurface({ member, view }: { member: Member; view: FeedView }
     if (sc) sc.scrollTop = 0;
     void navigate({ to: "/feed", search: lensSearch(lens) });
   };
-  const listRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!expandedId || !(view.kind === "expanded" && view.reveal)) return;
     const card = listRef.current?.querySelector<HTMLElement>(
@@ -428,6 +451,7 @@ export function FeedSurface({ member, view }: { member: Member; view: FeedView }
           {expandedTier && (
             <>
               <div
+                ref={pillRef}
                 data-compose-wrap
                 data-stuck={stuck ? "1" : "0"}
                 style={{

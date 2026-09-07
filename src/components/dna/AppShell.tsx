@@ -5,7 +5,7 @@
 // SPEC.md sections 1 and 2. The document never scrolls inside the shell: every tier scrolls its own
 // Feed column, and the 72px header swap plus the 2.5s floating composer entry read that scroller.
 import { useNavigate, useRouter } from "@tanstack/react-router";
-import { useEffect, useRef, useState, type PointerEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type PointerEvent, type ReactNode } from "react";
 import { AppHeader } from "@/components/strand/AppHeader";
 import { Button } from "@/components/strand/Button";
 import { Icon } from "@/components/strand/Icon";
@@ -77,6 +77,12 @@ export function AppShell({
   const expanded = tier === "expanded";
   const compact = tier === "compact";
   const scrollerRef = useRef<HTMLElement | null>(null);
+  // A stable ref callback: an inline one is detached (null) during every commit and re-attached
+  // after the children's layout effects, which would leave the Feed's placement effect without
+  // its scroller on a lens change.
+  const attachScroller = useCallback((el: HTMLElement | null) => {
+    scrollerRef.current = el;
+  }, []);
   const { scrolled, moving, onScroll, scrollToTop } = useScrollState(scrollerRef);
   // Proof the shell mounted once: the stamp is set on mount and never changes across routes.
   const mounted = useRef<string>("");
@@ -244,9 +250,7 @@ export function AppShell({
               <LeftRail member={member} />
             </aside>
             <main
-              ref={(el) => {
-                scrollerRef.current = el;
-              }}
+              ref={attachScroller}
               data-scroller="feed"
               onScroll={onScroll}
               style={{
@@ -279,9 +283,7 @@ export function AppShell({
           </div>
         ) : (
           <div
-            ref={(el) => {
-              scrollerRef.current = el;
-            }}
+            ref={attachScroller}
             data-scroller="feed"
             onScroll={onScroll}
             style={{ ...column, flex: 1, WebkitOverflowScrolling: "touch" }}
