@@ -1,10 +1,12 @@
-// The shell layout route (ruling 69, 84): mounts the chrome once for Feed, the quick-look and the
-// five C routes, owns the one composer mount (ruling 56, moved here from the root in Brief 2), the
-// c keypress, and the published toast. Feed stays mounted beneath /posts/:id so the overlay layers
-// over it with Feed's scroll position untouched (ruling 85).
+// The shell layout route (ruling 69, 84): mounts the chrome once for Feed, /posts/:id and the five
+// C routes, owns the one composer mount (ruling 56, moved here from the root in Brief 2), the c
+// keypress, and the published toast. The Feed column stays mounted across /feed and /posts/:id so a
+// card expands and collapses in place with the column's scroll position untouched (ruling 105).
 import { useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Outlet, useLocation, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
+import { feedViewOf } from "@/lib/feed-view";
+import { lensSearch, parseLens, type LensId } from "@/lib/lens";
 import { AppShell, COMPOSER_HOST } from "@/components/dna/AppShell";
 import { ComposerShell, PUBLISHED_EVENT } from "@/components/dna/ComposerShell";
 import { FeedSurface, toastStyle } from "@/components/dna/FeedSurface";
@@ -13,6 +15,7 @@ import { C_ORDER, type C } from "@/components/strand/cmeta";
 import { useAuth } from "@/lib/auth";
 import { openComposer, useComposerState } from "@/lib/composer-store";
 import { useTier } from "@/lib/tier";
+import { useSearch } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/_shell")({ component: ShellLayout });
 
@@ -33,6 +36,10 @@ function ShellLayout() {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const pathname = useLocation({ select: (l) => l.pathname });
+  const fromFeed = useLocation({ select: (l) => !!l.state.fromFeed });
+  const reveal = useLocation({ select: (l) => !!l.state.reveal });
+  const search = useSearch({ strict: false }) as { lens?: string };
+  const lens = parseLens(search.lens);
   const tier = useTier();
   const { seed } = useComposerState();
   const [toast, setToast] = useState<string | null>(null);
@@ -60,7 +67,9 @@ function ShellLayout() {
   useEffect(() => {
     const k = (e: KeyboardEvent) => {
       if (e.key !== "c" || e.metaKey || e.ctrlKey || e.altKey || isTypingTarget(e.target)) return;
-      if (document.querySelector('[role="dialog"]')) return;
+      // A composer sheet that is still sliding out keeps role="dialog" for 300ms; it does not block
+      // reopening. Any other open dialog (notifications, account) does.
+      if (document.querySelector('[role="dialog"]:not([aria-label="Compose"])')) return;
       e.preventDefault();
       openComposer({ host: COMPOSER_HOST });
     };
@@ -71,17 +80,22 @@ function ShellLayout() {
   if (!ready || !member) return null;
 
   const active = activeC(pathname);
-  const feedFamily = pathname === "/feed" || pathname.startsWith("/posts/");
+  const feedView = feedViewOf(pathname, { fromFeed, reveal, __TSR_index: 0 });
+  const setLens = (id: LensId) =>
+    void navigate({ to: "/feed", search: lensSearch(id), resetScroll: false });
 
   return (
     <>
       <AppShell
         member={member}
         active={active}
-        homeActive={feedFamily}
+        homeActive={feedView?.kind === "feed" || feedView?.kind === "expanded"}
+        feedView={feedView}
+        lens={lens}
+        onLens={setLens}
         closeKey={pathname + ":" + seed}
       >
-        {feedFamily && <FeedSurface member={member} />}
+        {feedView && <FeedSurface member={member} view={feedView} />}
         <Outlet />
       </AppShell>
       {/* The one composer mount, owned by the shell (rulings 56, 69). */}

@@ -1,9 +1,10 @@
-// Responsive test matrix (ruling 61) for the shell, Feed, notifications and composer. Points at
+// Responsive test matrix (ruling 61) for the shell, Feed, notifications and composer (B2.1: one-row
+// header, three scroll containers, in-place expansion, the ten targeted checks). Points at
 // BASE (a deployed Pages URL or a local server) with every Supabase endpoint mocked at the network
 // layer, so the real client code paths run against a deterministic backend. Backend behaviour
 // (RLS, the feed view) is verified separately in SQL against the live project.
 // Usage: BASE=https://b2-shell-feed.dna-web-application.pages.dev WEBKIT=1 node tests/matrix.cjs
-// Env: ONLY='[390,844]' runs one viewport; SPECIAL=publish,keyboard,silence,shell runs flows only.
+// Env: ONLY='[390,844]' runs one viewport; SPECIAL=publish,keyboard,silence,shell,targeted runs flows only.
 const { chromium, webkit } = require("playwright");
 const fs = require("fs");
 const path = require("path");
@@ -608,22 +609,34 @@ async function runViewport(browserType, bname, [w, h], theme) {
     const navPos = await page.evaluate(
       () => getComputedStyle(document.querySelector('nav[aria-label="Pulse"]')).position,
     );
-    const navBox = await page.locator('nav[aria-label="Pulse"]').boundingBox();
     const headBox = await page.locator("[data-app-header]").boundingBox();
     record(
       tag +
-        (w > 1024 ? " expanded: bar nav directly under header" : " compact/medium: bottom dock"),
+        (w > 1024
+          ? " expanded: one-row header with the five Cs inline and the Home icon (rulings 99, 106)"
+          : " compact/medium: bottom dock, no Home icon, logo is Home"),
       w > 1024
-        ? navPos !== "fixed" && Math.abs(navBox.y - (headBox.y + headBox.height)) <= 1
-        : navPos === "fixed",
-      `nav ${navPos} y ${navBox && navBox.y} header bottom ${headBox && headBox.y + headBox.height}`,
+        ? (await page.locator('[data-app-header] nav[data-pulse="inline"]').count()) === 1 &&
+            (await page.locator('[data-app-header] [data-testid="home-item"]').count()) === 1 &&
+            headBox.height <= 66
+        : navPos === "fixed" &&
+            (await page.locator('[data-testid="home-item"]').count()) === 0 &&
+            (await page.locator('[data-testid="home"]').getAttribute("href")) === "/feed",
+      `nav ${navPos} header height ${headBox && headBox.height}`,
     );
     record(
-      tag + " header: logo Home, placeholder pill, bell, avatar; no theme or sign-out controls",
+      tag +
+        (w > 1024
+          ? " header: logo, bell, avatar; composer entry in the Feed column"
+          : " header: logo Home, composer entry, bell, avatar; no theme or sign-out controls"),
       (await page.locator('[data-app-header] img[alt="DNA"]').count()) === 1 &&
+        (await page.locator('[data-testid="compose"]').count()) === 1 &&
         (await page.locator('[data-testid="compose"]').textContent()).includes(
           "What is going on with you?",
         ) &&
+        (await page
+          .locator((w > 1024 ? "[data-feed] " : "[data-app-header] ") + '[data-testid="compose"]')
+          .count()) === 1 &&
         (await page.locator('[data-app-header] [data-testid="bell"]').count()) === 1 &&
         (await page.locator('[data-app-header] [aria-label="Your profile"]').count()) === 1 &&
         (await page.locator('[data-app-header] [aria-label="Sign out"]').count()) === 0,
@@ -661,7 +674,7 @@ async function runViewport(browserType, bname, [w, h], theme) {
     await page.click('[data-testid="compose"]');
     const dialog = page.locator('section[role="dialog"][aria-label="Compose"]');
     await dialog.waitFor({ timeout: 10000 });
-    await page.waitForTimeout(300); // let the rise or slide animation settle before measuring
+    await page.waitForTimeout(500); // let the 300ms slide (after two frames) settle before measuring
     record(tag + " composer opens from the header pill", true);
     if (process.env.DEBUG)
       console.log(
@@ -695,12 +708,22 @@ async function runViewport(browserType, bname, [w, h], theme) {
         (await dialog.locator("article[aria-label='Preview of your post']").count()) === 0 &&
         (await dialog.getByRole("button", { name: "Publish" }).isDisabled()),
     );
-    const expectDrawer = w > 1024;
+    // Drawer geometry (ruling 106): 80% bottom sheet under 640, 65% right drawer 640 to 1024,
+    // min(1000, 100%) drawer above.
     const box = await dialog.boundingBox();
     record(
-      tag + (expectDrawer ? " drawer at min(1000, 100%)" : " full-width sheet"),
-      expectDrawer ? Math.abs(box.width - Math.min(1000, w)) < 2 : Math.abs(box.width - w) < 2,
-      `width ${box.width}`,
+      tag +
+        (w > 1024
+          ? " drawer at min(1000, 100%)"
+          : w >= 640
+            ? " medium: 65% right drawer"
+            : " compact: 80% bottom sheet"),
+      w > 1024
+        ? Math.abs(box.width - Math.min(1000, w)) < 2
+        : w >= 640
+          ? Math.abs(box.width - 0.65 * w) < 2 && Math.abs(box.x + box.width - w) < 2
+          : Math.abs(box.width - w) < 2 && Math.abs(box.height - 0.8 * h) < 2,
+      `box ${JSON.stringify(box)}`,
     );
     const pub = dialog.getByRole("button", { name: "Publish" });
     const pb = await pub.boundingBox();
@@ -984,7 +1007,12 @@ async function runPublish(browserType, bname, [w, h], theme) {
         (await card.textContent()).includes("nation.africa"),
     );
     await page.screenshot({ path: path.join(OUT, `${tag}-06-published.png`) });
-    // Untyped publish.
+    // Untyped publish. The published sheet slides out over 300ms; wait for it to leave so the
+    // locator below binds to the new composer.
+    await page.waitForSelector('section[role="dialog"][aria-label="Compose"]', {
+      state: "detached",
+      timeout: 10000,
+    });
     await page.keyboard.press("c");
     await dialog.waitFor();
     await dialog.locator('textarea[aria-label="What is going on with you"]').fill(SAMPLES.untyped);
@@ -1117,73 +1145,83 @@ async function runShell(browserType, bname, [w, h]) {
         (await first.locator('[data-testid="save"]').getAttribute("aria-pressed")) === "true" &&
         (await first.locator('[data-testid="react"]').getAttribute("aria-pressed")) === "true",
     );
-    // Quick-look overlay preserves the Feed's scroll position.
+    // Read more expands the same card in place at /posts/:id; the Feed column's scroll is untouched.
+    const scrollTop = () =>
+      page.evaluate(() => document.querySelector('[data-scroller="feed"]').scrollTop);
     const third = page.locator("[data-feed] article[data-c]").nth(5);
     await third.scrollIntoViewIfNeeded();
     await page.waitForTimeout(200);
-    const before = await page.evaluate(() => window.scrollY);
-    record(tag + " scrolled before opening", before > 0, "scrollY " + before);
+    const before = await scrollTop();
+    record(tag + " scrolled before opening", before > 0, "scrollTop " + before);
     const readMore = third.locator("[data-read-more]");
     record(tag + " long body clamped with Read more", (await readMore.count()) === 1);
     await readMore.click();
     await page.waitForURL("**/posts/seed-5");
-    const overlay = page.locator('[role="dialog"][aria-label="Post"]');
-    await overlay.waitFor({ timeout: 10000 });
+    await third.locator("[data-show-less]").waitFor({ timeout: 10000 });
     await page.waitForTimeout(300);
-    const during = await page.evaluate(() => window.scrollY);
+    const during = await scrollTop();
     record(
-      tag + " overlay open: real route, Feed still mounted beneath, scroll unchanged",
+      tag + " expanded in place: same card, real route, no dialog, scroll unchanged",
       (await page.locator("[data-feed] article[data-c]").count()) === 8 &&
-        (await overlay.locator("article[data-c='convey']").count()) === 1 &&
-        (await overlay.locator("[data-read-more]").count()) === 0 &&
+        (await third.getAttribute("data-expanded")) === "1" &&
+        (await third.locator("[data-read-more]").count()) === 0 &&
+        (await page.locator('[role="dialog"]').count()) === 0 &&
+        (await page.locator("[data-feed] article[data-expanded='1']").count()) === 1 &&
         Math.abs(during - before) <= 1,
       `before ${before} during ${during}`,
     );
     record(
-      tag + " overlay: shell not remounted",
+      tag + " expansion: shell not remounted",
       (await page.getAttribute("html", "data-shell")) === stamp2,
     );
-    await shot(page, `${tag}-overlay`);
-    await noOverflow(page, tag + " overlay");
+    await shot(page, `${tag}-expanded`);
+    await noOverflow(page, tag + " expanded");
     await page.goBack();
     await page.waitForURL((u) => u.pathname === "/feed");
-    await page.waitForSelector('[role="dialog"][aria-label="Post"]', { state: "detached" });
+    await third.locator("[data-read-more]").waitFor({ timeout: 10000 });
     await page.waitForTimeout(300);
-    const after = await page.evaluate(() => window.scrollY);
+    const after = await scrollTop();
     record(
-      tag + " back button dismisses; scroll identical",
-      Math.abs(after - before) <= 1,
+      tag + " back button collapses; scroll identical",
+      (await third.getAttribute("data-expanded")) === "0" && Math.abs(after - before) <= 1,
       `before ${before} after ${after}`,
     );
-    // Esc dismisses too, from the Respond entry. Re-measure after the button is in view (the click
-    // itself must not scroll).
+    // Respond expands too; Show less collapses and pops the URL.
     const respond = third.locator('[data-testid="respond"]');
     await respond.scrollIntoViewIfNeeded();
     await page.waitForTimeout(200);
-    const before2 = await page.evaluate(() => window.scrollY);
+    const before2 = await scrollTop();
     await respond.click();
     await page.waitForURL("**/posts/seed-5");
-    await overlay.waitFor({ timeout: 10000 });
-    await page.keyboard.press("Escape");
+    await third.locator("[data-show-less]").waitFor({ timeout: 10000 });
+    await third.locator("[data-show-less]").click();
     await page.waitForURL((u) => u.pathname === "/feed");
     await page.waitForTimeout(300);
-    const after2 = await page.evaluate(() => window.scrollY);
+    const after2 = await scrollTop();
     record(
-      tag + " Respond opens the quick-look; Esc dismisses; scroll identical",
-      Math.abs(after2 - before2) <= 1,
+      tag + " Respond expands; Show less collapses and returns the URL; scroll identical",
+      (await third.getAttribute("data-expanded")) === "0" && Math.abs(after2 - before2) <= 1,
       `before ${before2} after ${after2}`,
     );
-    // Direct load of /posts/:id renders inside the shell over Feed; dismiss goes to Feed.
+    // Direct load of /posts/:id renders the expanded card as page content with Back to Feed.
     await page.goto(BASE + "/posts/seed-1", { waitUntil: "networkidle" });
-    await overlay.waitFor({ timeout: 15000 });
+    const direct = page.locator('[data-direct-post="seed-1"]');
+    await direct.locator("article[data-c]").waitFor({ timeout: 15000 });
     record(
-      tag + " direct /posts/:id: shell + Feed beneath + overlay",
+      tag + " direct /posts/:id: shell, expanded card as page content, Back to Feed, no dialog",
       (await page.locator("[data-app-header]").count()) === 1 &&
-        (await page.locator("[data-feed] article[data-c]").count()) >= 1,
+        (await direct.locator("article[data-c]").count()) === 1 &&
+        (await direct.locator("[data-read-more]").count()) === 0 &&
+        (await direct.locator("[data-show-less]").count()) === 0 &&
+        (await page.locator('[data-testid="back-to-feed"]').count()) === 1 &&
+        (await page.locator('[role="dialog"]').count()) === 0 &&
+        (await page.locator("[data-sheet-scrim]").count()) === 0,
     );
-    await page.click('[data-testid="overlay-close"]');
+    await shot(page, `${tag}-direct`);
+    await page.click('[data-testid="back-to-feed"]');
     await page.waitForURL((u) => u.pathname === "/feed");
-    record(tag + " close from direct load lands on Feed", true);
+    await page.locator("[data-feed] article[data-c]").first().waitFor({ timeout: 10000 });
+    record(tag + " Back to Feed from the direct view lands on Feed", true);
     // Five C stubs render inside the same shell; Home returns to Feed; no remount.
     const stampBefore = await page.getAttribute("html", "data-shell");
     await page.locator('nav[aria-label="Pulse"] button', { hasText: "Connect" }).click();
@@ -1283,6 +1321,502 @@ async function runShell(browserType, bname, [w, h]) {
   await browser.close();
 }
 
+// The ten targeted checks of the B2.1 refinement handoff, per tier. Touch scroll capture and the
+// drag-armed state are driven with synthetic events (a real finger or file drag cannot be scripted),
+// so each asserts the event-level outcome: defaultPrevented on touchmove, the armed DOM before drop.
+async function runTargeted(browserType, bname, [w, h]) {
+  const tier = w < 640 ? "compact" : w > 1024 ? "expanded" : "medium";
+  const tag = `${bname}-${w}x${h}-targeted`;
+  const browser = await launch(browserType);
+  // Pointer context: check 2 needs a file drag, which only the pointer mode arms; every other
+  // check reads the same on either input mode.
+  const ctx = await browser.newContext({
+    viewport: { width: w, height: h },
+    hasTouch: false,
+    isMobile: false,
+    deviceScaleFactor: 1,
+  });
+  const page = await ctx.newPage();
+  const db = makeMockDb();
+  seedPosts(db, 10);
+  await mockSupabase(page, db);
+  const errors = [];
+  page.on("pageerror", (e) => errors.push(String(e)));
+  const feedTop = () =>
+    page.evaluate(() => document.querySelector('[data-scroller="feed"]').scrollTop);
+  const setFeedTop = (y) =>
+    page.evaluate((y) => {
+      document.querySelector('[data-scroller="feed"]').scrollTop = y;
+    }, y);
+  const centre = () => page.locator("[data-app-header]").getAttribute("data-centre");
+  const dialog = page.locator('section[role="dialog"][aria-label="Compose"]');
+  const closeComposer = async () => {
+    await page.keyboard.press("Escape");
+    await page.waitForSelector('section[role="dialog"][aria-label="Compose"]', {
+      state: "detached",
+    });
+  };
+  try {
+    await signIn(page);
+    await page.locator("[data-feed] article[data-c]").nth(9).waitFor({ timeout: 15000 });
+
+    // 1. Scroll capture: wheel and touchmove inside the open composer never move the Feed.
+    await setFeedTop(160);
+    await page.waitForTimeout(100);
+    const feedBefore = await feedTop();
+    if (tier === "expanded") await page.click("[data-feed] [data-testid='compose']");
+    else
+      await page.click(
+        '[data-testid="compose-floating"], [data-app-header] [data-testid="compose"]',
+      );
+    await dialog.waitFor({ timeout: 10000 });
+    await page.waitForTimeout(400);
+    const ta = dialog.locator('textarea[aria-label="What is going on with you"]');
+    await ta.fill(
+      Array.from({ length: 40 }, (_, i) => `Line ${i + 1} of a long draft.`).join("\n"),
+    );
+    await page.waitForTimeout(100);
+    const taBox = await ta.boundingBox();
+    await page.mouse.move(taBox.x + taBox.width / 2, taBox.y + taBox.height / 2);
+    for (let i = 0; i < 12; i++) await page.mouse.wheel(0, 400);
+    await page.waitForTimeout(200);
+    for (let i = 0; i < 6; i++) await page.mouse.wheel(0, -400);
+    await page.waitForTimeout(200);
+    const scrimBox = await page.locator("[data-sheet-scrim]").boundingBox();
+    await page.mouse.move(scrimBox.x + 8, scrimBox.y + 8);
+    for (let i = 0; i < 4; i++) await page.mouse.wheel(0, 300);
+    await page.waitForTimeout(200);
+    const touchPrevented = await page.evaluate(() => {
+      const ta = document.querySelector('section[role="dialog"] textarea');
+      const mk = (target) => {
+        const e = new Event("touchmove", { bubbles: true, cancelable: true });
+        target.dispatchEvent(e);
+        return e.defaultPrevented;
+      };
+      const scrim = document.querySelector("[data-sheet-scrim]");
+      const dlg = document.querySelector('section[role="dialog"]');
+      const region = dlg.querySelector(
+        "div[style*='overflow-y: auto'], div[style*='overflow-y:auto']",
+      );
+      const edge = region || dlg;
+      edge.scrollTop = edge.scrollHeight;
+      return {
+        scrim: mk(scrim),
+        textareaAtEnd: ((ta.scrollTop = ta.scrollHeight), mk(ta)),
+        header: mk(dlg.querySelector("header")),
+      };
+    });
+    const feedAfterWheel = await feedTop();
+    record(
+      tag +
+        " 1. composer open: wheel over the textarea, at its end, and over the scrim; touchmove on scrim and chrome cancelled; Feed did not move",
+      feedAfterWheel === feedBefore && touchPrevented.scrim && touchPrevented.header,
+      `feed ${feedBefore} -> ${feedAfterWheel} touch ${JSON.stringify(touchPrevented)}`,
+    );
+
+    // 2. Armed drop state before the drop lands; drop adds; leaving clears.
+    if (tier !== "medium") {
+      await ta.fill("");
+      const armedSteps = await page.evaluate(async () => {
+        const col = document.querySelector("[data-drop-target]");
+        const dt = new DataTransfer();
+        dt.items.add(new File([new Uint8Array([137, 80, 78, 71])], "a.png", { type: "image/png" }));
+        const fire = (type) =>
+          col.dispatchEvent(
+            new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer: dt }),
+          );
+        const tick = () => new Promise((r) => setTimeout(r, 60));
+        fire("dragenter");
+        fire("dragover");
+        await tick();
+        const armedText = (document.querySelector("[data-drop-armed]") || {}).textContent || "";
+        const armedAttr = col.getAttribute("data-armed");
+        fire("dragleave");
+        await tick();
+        const afterLeave = col.getAttribute("data-armed");
+        fire("dragenter");
+        fire("dragover");
+        await tick();
+        const reArmed = col.getAttribute("data-armed");
+        fire("drop");
+        await tick();
+        const afterDrop = col.getAttribute("data-armed");
+        return { armedText, armedAttr, afterLeave, reArmed, afterDrop };
+      });
+      await page.waitForTimeout(600);
+      const thumbs = await dialog.locator("img[alt='']").count();
+      record(
+        tag +
+          " 2. drag over the fields arms (dashed C frame, tint, copy) before release; leaving clears; drop adds the image",
+        armedSteps.armedAttr === "1" &&
+          /Drop to add up to 4 images/.test(armedSteps.armedText) &&
+          armedSteps.afterLeave === "0" &&
+          armedSteps.reArmed === "1" &&
+          armedSteps.afterDrop === "0" &&
+          thumbs >= 1,
+        JSON.stringify({ ...armedSteps, thumbs }),
+      );
+    }
+    await closeComposer();
+
+    if (tier !== "expanded") {
+      // 3. Header swap at 72px, both directions, and a fast double crossing.
+      await setFeedTop(0);
+      await page.waitForTimeout(150);
+      const atTop = await centre();
+      const bellTop = await page.locator('[data-app-header] [data-testid="bell"]').count();
+      await setFeedTop(120);
+      await page.waitForTimeout(150);
+      const past = await centre();
+      const bellPast = await page.locator('[data-app-header] [data-testid="bell"]').count();
+      const inFlowHidden = await page.evaluate(
+        () => getComputedStyle(document.querySelector("[data-feed] [data-lens-anchor]")).visibility,
+      );
+      await setFeedTop(0);
+      await page.waitForTimeout(150);
+      const backTop = await centre();
+      const bellBack = await page.locator('[data-app-header] [data-testid="bell"]').count();
+      // Fast flick: cross the threshold twice inside one frame, ending above it.
+      await page.evaluate(() => {
+        const sc = document.querySelector('[data-scroller="feed"]');
+        sc.scrollTop = 300;
+        sc.scrollTop = 20;
+        sc.scrollTop = 400;
+        sc.scrollTop = 0;
+      });
+      await page.waitForTimeout(250);
+      const flick1 = await centre();
+      await page.evaluate(() => {
+        const sc = document.querySelector('[data-scroller="feed"]');
+        sc.scrollTop = 10;
+        sc.scrollTop = 500;
+        sc.scrollTop = 30;
+        sc.scrollTop = 260;
+      });
+      await page.waitForTimeout(250);
+      const flick2 = await centre();
+      const headerH = (await page.locator("[data-app-header]").boundingBox()).height;
+      record(
+        tag +
+          " 3. past 72px the header pill swaps to LensBar" +
+          (tier === "compact" ? " and the bell leaves" : ", bell stays") +
+          "; back above they return; fast flick settles on the final side; header stays one row",
+        atTop === "compose" &&
+          bellTop === 1 &&
+          past === "lens" &&
+          bellPast === (tier === "compact" ? 0 : 1) &&
+          inFlowHidden === "hidden" &&
+          backTop === "compose" &&
+          bellBack === 1 &&
+          flick1 === "compose" &&
+          flick2 === "lens" &&
+          headerH <= 58,
+        JSON.stringify({ atTop, past, bellPast, inFlowHidden, backTop, flick1, flick2, headerH }),
+      );
+
+      // 4. Floating composer entry: shows while scrolling, hides 2.5s after, opens the composer.
+      await setFeedTop(0);
+      await page.waitForTimeout(150);
+      const fab = page.locator("[data-fab]");
+      const fabAtTop = await fab.getAttribute("data-shown");
+      await setFeedTop(200);
+      await page.waitForTimeout(350);
+      const fabMoving = await fab.getAttribute("data-shown");
+      const fabKind = await fab.getAttribute("data-fab");
+      await page.waitForTimeout(2900);
+      const fabIdle = await fab.getAttribute("data-shown");
+      await setFeedTop(260);
+      await page.waitForTimeout(350);
+      const fabAgain = await fab.getAttribute("data-shown");
+      await page.click('[data-testid="compose-floating"]');
+      await dialog.waitFor({ timeout: 10000 });
+      await page.waitForTimeout(350);
+      const fabWhileOpen = await fab.count();
+      await closeComposer();
+      record(
+        tag +
+          " 4. floating entry (" +
+          fabKind +
+          ") appears while scrolling, hides ~2.5s after, reappears on the next scroll, opens the composer, absent while it is open",
+        fabAtTop === "0" &&
+          fabMoving === "1" &&
+          fabKind === (tier === "compact" ? "handle" : "tab") &&
+          fabIdle === "0" &&
+          fabAgain === "1" &&
+          fabWhileOpen === 0,
+        JSON.stringify({ fabAtTop, fabMoving, fabKind, fabIdle, fabAgain, fabWhileOpen }),
+      );
+    } else {
+      // 5. Independent column scroll.
+      await setFeedTop(0);
+      await page.waitForTimeout(100);
+      const railTops = () =>
+        page.evaluate(() =>
+          [...document.querySelectorAll("[data-scroller]")].map((el) => [
+            el.getAttribute("data-scroller"),
+            el.scrollTop,
+          ]),
+        );
+      const mainBox = await page.locator('[data-scroller="feed"]').boundingBox();
+      await page.mouse.move(mainBox.x + mainBox.width / 2, mainBox.y + mainBox.height / 2);
+      await page.mouse.wheel(0, 500);
+      await page.waitForTimeout(300);
+      const afterFeedWheel = await railTops();
+      const leftBox = await page.locator('[data-scroller="left"]').boundingBox();
+      await page.mouse.move(leftBox.x + leftBox.width / 2, leftBox.y + leftBox.height / 2);
+      await page.mouse.wheel(0, 500);
+      await page.waitForTimeout(300);
+      const afterRailWheel = await railTops();
+      const feedMoved = afterFeedWheel.find((r) => r[0] === "feed")[1];
+      const feedAfterRail = afterRailWheel.find((r) => r[0] === "feed")[1];
+      const railsStill = afterFeedWheel.filter((r) => r[0] !== "feed").every((r) => r[1] === 0);
+      const scrollers = afterFeedWheel.length;
+      record(
+        tag +
+          " 5. wheel over the Feed moves only the Feed; wheel over a rail leaves the Feed put (" +
+          scrollers +
+          " scroll containers)",
+        feedMoved > 0 &&
+          railsStill &&
+          feedAfterRail === feedMoved &&
+          scrollers === (w >= 1440 ? 3 : 2),
+        JSON.stringify({ afterFeedWheel, afterRailWheel }),
+      );
+
+      // 6. Sticky block: control and LensBar pin together once the greeting has left; nothing paints over them.
+      await setFeedTop(0);
+      await page.waitForTimeout(150);
+      const geo0 = await page.evaluate(() => {
+        const g = document.querySelector("[data-greeting]").getBoundingClientRect();
+        const sc = document.querySelector('[data-scroller="feed"]').getBoundingClientRect();
+        return {
+          greetBottom: g.bottom - sc.top,
+          stuck: document.querySelector("[data-compose-wrap]").getAttribute("data-stuck"),
+        };
+      });
+      await setFeedTop(Math.ceil(geo0.greetBottom) + 8);
+      await page.waitForTimeout(250);
+      const probe = () =>
+        page.evaluate(() => {
+          const sc = document.querySelector('[data-scroller="feed"]').getBoundingClientRect();
+          const wrap = document.querySelector("[data-compose-wrap]");
+          const wb = wrap.getBoundingClientRect();
+          const lens = document.querySelector("[data-feed] [data-lens-anchor]");
+          const lb = lens.getBoundingClientRect();
+          const hits = [];
+          for (const y of [
+            wb.top + 2,
+            wb.top + 30,
+            wb.bottom - 2,
+            lb.top + 2,
+            lb.top + 20,
+            lb.bottom - 2,
+          ]) {
+            const el = document.elementFromPoint(sc.left + sc.width / 2, y);
+            hits.push(!!el && (wrap.contains(el) || lens.contains(el)));
+          }
+          return {
+            stuck: wrap.getAttribute("data-stuck"),
+            wrapTop: Math.round(wb.top - sc.top),
+            wrapH: Math.round(wb.height),
+            lensTop: Math.round(lb.top - sc.top),
+            hits,
+            articleAbove: [...document.querySelectorAll("[data-feed] article")].some(
+              (a) =>
+                a.getBoundingClientRect().top < lb.bottom - 1 &&
+                a.getBoundingClientRect().bottom > sc.top &&
+                getComputedStyle(a).zIndex !== "auto",
+            ),
+          };
+        });
+      const g1 = await probe();
+      await setFeedTop((await feedTop()) + 700);
+      await page.waitForTimeout(250);
+      const g2 = await probe();
+      await setFeedTop((await feedTop()) + 900);
+      await page.waitForTimeout(250);
+      const g3 = await probe();
+      const pinned = (g) =>
+        g.stuck === "1" &&
+        g.wrapTop === 0 &&
+        g.lensTop === g.wrapH &&
+        g.hits.every(Boolean) &&
+        !g.articleAbove;
+      record(
+        tag +
+          " 6. once the greeting leaves, control and LensBar pin as one block at the column top; no post paints above or through it while scrolling",
+        geo0.stuck === "0" && pinned(g1) && pinned(g2) && pinned(g3),
+        JSON.stringify({ geo0, g1, g2, g3 }),
+      );
+    }
+
+    // 7. Read more expands in place; Show less and browser back collapse; scroll unchanged.
+    await setFeedTop(0);
+    await page.waitForTimeout(150);
+    const card = page.locator("[data-feed] article[data-c]").nth(3);
+    await card.scrollIntoViewIfNeeded();
+    await page.waitForTimeout(200);
+    const t0 = await feedTop();
+    await card.locator("[data-read-more]").click();
+    await page.waitForURL("**/posts/seed-3");
+    await card.locator("[data-show-less]").waitFor({ timeout: 10000 });
+    await page.waitForTimeout(250);
+    const t1 = await feedTop();
+    const expandedCount = await page.locator("[data-feed] article[data-expanded='1']").count();
+    await card.locator("[data-show-less]").click();
+    await page.waitForURL((u) => u.pathname === "/feed");
+    await card.locator("[data-read-more]").waitFor({ timeout: 10000 });
+    await page.waitForTimeout(250);
+    const t2 = await feedTop();
+    await card.locator("[data-read-more]").click();
+    await page.waitForURL("**/posts/seed-3");
+    await card.locator("[data-show-less]").waitFor({ timeout: 10000 });
+    await page.goBack();
+    await page.waitForURL((u) => u.pathname === "/feed");
+    await card.locator("[data-read-more]").waitFor({ timeout: 10000 });
+    await page.waitForTimeout(250);
+    const t3 = await feedTop();
+    record(
+      tag +
+        " 7. Read more expands the same card in place at /posts/:id with scroll unchanged; Show less and browser back collapse it and return the URL",
+      expandedCount === 1 && t1 === t0 && t2 === t0 && t3 === t0 && page.url().endsWith("/feed"),
+      JSON.stringify({ t0, t1, t2, t3, expandedCount, url: page.url() }),
+    );
+
+    // 8. Fresh tab on /posts/:id: expanded card as page content, Back to Feed, no modal, no scrim.
+    const fresh = await ctx.newPage();
+    await mockSupabase(fresh, db);
+    await fresh.goto(BASE + "/posts/seed-2", { waitUntil: "networkidle" });
+    const direct = fresh.locator('[data-direct-post="seed-2"]');
+    await direct.locator("article[data-c]").waitFor({ timeout: 15000 });
+    const bodyClamped = await direct.locator("article[data-c] [data-read-more]").count();
+    record(
+      tag +
+        " 8. fresh tab on /posts/:id renders the expanded card as page content with Back to Feed; no dialog, no scrim",
+      (await direct.locator("article[data-c]").count()) === 1 &&
+        bodyClamped === 0 &&
+        (await fresh.locator('[data-testid="back-to-feed"]').count()) === 1 &&
+        (await fresh.locator('[role="dialog"]').count()) === 0 &&
+        (await fresh.locator("[data-sheet-scrim]").count()) === 0 &&
+        (await fresh.locator("[data-feed] [data-lens-anchor]").count()) === 0,
+    );
+    await shot(fresh, `${tag}-direct`);
+    await fresh.close();
+
+    // 9. Active lens tap toggles the descriptor; switching lenses never moves the bar.
+    await setFeedTop(0);
+    await page.waitForTimeout(150);
+    const bar = page.locator('[data-feed] [role="tablist"][aria-label="Lens"]');
+    const scope0 = await page.locator("[data-feed] [data-lens-scope]").getAttribute("data-open");
+    await bar.locator('[data-lens="all"]').click();
+    await page.waitForTimeout(250);
+    const scope1 = await page.locator("[data-feed] [data-lens-scope]").getAttribute("data-open");
+    await bar.locator('[data-lens="all"]').click();
+    await page.waitForTimeout(250);
+    const scope2 = await page.locator("[data-feed] [data-lens-scope]").getAttribute("data-open");
+    const y0 = (await bar.boundingBox()).y;
+    await bar.locator('[data-lens="mine"]').click();
+    await page.waitForURL("**/feed?lens=mine");
+    await page.locator("[data-feed] article[data-c]").first().waitFor({ timeout: 10000 });
+    await page.waitForTimeout(300);
+    const y1 = (await bar.boundingBox()).y;
+    await bar.locator('[data-lens="saved"]').click();
+    await page.waitForURL("**/feed?lens=saved");
+    await page.locator('[data-testid="feed-empty"][data-lens="saved"]').waitFor({ timeout: 10000 });
+    await page.waitForTimeout(300);
+    const y2 = (await bar.boundingBox()).y;
+    let pinnedLens = { ok: true };
+    if (tier === "expanded") {
+      // From the pinned bar too: the bar stays where it is and the header/column do not jump.
+      await bar.locator('[data-lens="all"]').click();
+      await page.waitForURL((u) => u.pathname === "/feed" && !u.search);
+      await page.locator("[data-feed] article[data-c]").nth(9).waitFor({ timeout: 10000 });
+      await setFeedTop(600);
+      await page.waitForTimeout(300);
+      const py0 = (await bar.boundingBox()).y;
+      await bar.locator('[data-lens="mine"]').click();
+      await page.waitForURL("**/feed?lens=mine");
+      await page.locator("[data-feed] article[data-c]").first().waitFor({ timeout: 10000 });
+      await page.waitForTimeout(400);
+      const py1 = (await bar.boundingBox()).y;
+      const stuckAfter = await page.locator("[data-compose-wrap]").getAttribute("data-stuck");
+      pinnedLens = { ok: Math.abs(py1 - py0) <= 1 && stuckAfter === "1", py0, py1, stuckAfter };
+    } else {
+      // From the header slot: the header stays in lens mode and the bar does not move.
+      await bar.locator('[data-lens="all"]').click();
+      await page.waitForURL((u) => u.pathname === "/feed" && !u.search);
+      await page.locator("[data-feed] article[data-c]").nth(9).waitFor({ timeout: 10000 });
+      await setFeedTop(400);
+      await page.waitForTimeout(300);
+      const hb = page.locator('[data-app-header] [role="tablist"][aria-label="Lens"]');
+      const py0 = (await hb.boundingBox()).y;
+      await hb.locator('[data-lens="mine"]').click();
+      await page.waitForURL("**/feed?lens=mine");
+      await page.locator("[data-feed] article[data-c]").first().waitFor({ timeout: 10000 });
+      await page.waitForTimeout(400);
+      const py1 = (await hb.boundingBox()).y;
+      const still = await centre();
+      pinnedLens = { ok: Math.abs(py1 - py0) <= 1 && still === "lens", py0, py1, still };
+    }
+    record(
+      tag +
+        " 9. tapping the active lens toggles the descriptor; switching lenses (in flow and from the pinned or header bar) never moves the bar",
+      scope1 !== scope0 && scope2 === scope0 && y0 === y1 && y1 === y2 && pinnedLens.ok,
+      JSON.stringify({ scope0, scope1, scope2, y0, y1, y2, pinnedLens }),
+    );
+
+    // 10. Header row per tier.
+    const head = await page.evaluate(() => {
+      const h = document.querySelector("[data-app-header]");
+      const slots = [...h.querySelectorAll('nav[data-pulse="inline"] button')].map((b) =>
+        b.getBoundingClientRect(),
+      );
+      const gaps = slots.slice(1).map((r, i) => Math.round(r.left - slots[i].right));
+      return {
+        height: h.getBoundingClientRect().height,
+        slots: slots.length,
+        gaps,
+        even: gaps.length === 4 && Math.max(...gaps) - Math.min(...gaps) <= 2,
+        home: !!h.querySelector('[data-testid="home-item"]'),
+        homeIsIcon: !!h.querySelector('[data-testid="home-item"] span[style*="house.svg"]'),
+        logoHref: h.querySelector('[data-testid="home"]').getAttribute("href"),
+        rows: [...h.querySelectorAll("nav")].length,
+      };
+    });
+    record(
+      tag +
+        (tier === "expanded"
+          ? " 10. expanded header is one row: logo, five Cs spread evenly, Home icon, bell, avatar"
+          : " 10. " + tier + " header has no Home icon; the logo goes Home"),
+      tier === "expanded"
+        ? head.height <= 66 &&
+            head.slots === 5 &&
+            head.even &&
+            head.home &&
+            head.homeIsIcon &&
+            head.rows === 1
+        : !head.home && head.logoHref === "/feed" && head.slots === 0,
+      JSON.stringify(head),
+    );
+  } catch (e) {
+    record(tag + " flow", false, String(e).slice(0, 400));
+    await shot(page, `${tag}-ERROR`).catch(() => {});
+  }
+  record(
+    tag + " no page errors",
+    errors.length === 0,
+    errors.slice(0, 3).join(" | ").slice(0, 300),
+  );
+  await browser.close();
+}
+
+const TARGETED_VIEWPORTS = [
+  [390, 844],
+  [820, 1180],
+  [1280, 800],
+  [1536, 960],
+];
+
 // Silence when DIA times out or errors: identical to no DIA.
 async function runSilence(browserType, bname) {
   const tag = `${bname}-390x844-light-silence`;
@@ -1361,6 +1895,7 @@ async function runKeyboard(browserType, bname) {
     await page.click('[data-testid="compose"]');
     const dialog = page.locator('section[role="dialog"][aria-label="Compose"]');
     await dialog.waitFor();
+    await page.waitForTimeout(500); // the 300ms slide must finish before geometry is measured
     record(tag + " no data-kb before keyboard", (await dialog.getAttribute("data-kb")) === null);
     await dialog.locator('textarea[aria-label="What is going on with you"]').focus();
     await page.evaluate(() => window.__setKeyboard(336));
@@ -1385,11 +1920,15 @@ async function runKeyboard(browserType, bname) {
   await browser.close();
 }
 
+module.exports = { launch, makeMockDb, seedPosts, mockSupabase, signIn, BASE };
+
 if (require.main === module)
   (async () => {
     const only = process.env.ONLY ? JSON.parse(process.env.ONLY) : null;
     if (process.env.SPECIAL) {
-      for (const [bname, bt] of [["chromium", chromium]]) {
+      const specialEngines = [["chromium", chromium]];
+      if (process.env.WEBKIT === "1") specialEngines.push(["webkit", webkit]);
+      for (const [bname, bt] of specialEngines) {
         if (process.env.SPECIAL.includes("publish"))
           await runPublish(bt, bname, [390, 844], "light");
         if (process.env.SPECIAL.includes("keyboard")) await runKeyboard(bt, bname);
@@ -1397,6 +1936,9 @@ if (require.main === module)
         if (process.env.SPECIAL.includes("shell"))
           for (const vp of process.env.ONLY ? [JSON.parse(process.env.ONLY)] : VIEWPORTS)
             await runShell(bt, bname, vp);
+        if (process.env.SPECIAL.includes("targeted"))
+          for (const vp of process.env.ONLY ? [JSON.parse(process.env.ONLY)] : TARGETED_VIEWPORTS)
+            await runTargeted(bt, bname, vp);
       }
       const fails = results.filter((r) => !r.ok);
       console.log(`${results.length - fails.length}/${results.length} checks passed`);
@@ -1407,7 +1949,8 @@ if (require.main === module)
     if (process.env.WEBKIT === "1") engines.push(["webkit", webkit]);
     for (const [bname, bt] of engines) {
       for (const vp of only ? [only] : VIEWPORTS) {
-        for (const theme of only ? ["light"] : THEMES) await runViewport(bt, bname, vp, theme);
+        for (const theme of only ? [process.env.THEME || "light"] : THEMES)
+          await runViewport(bt, bname, vp, theme);
         await runShell(bt, bname, vp);
       }
       if (only) {
@@ -1420,6 +1963,7 @@ if (require.main === module)
       await runPublish(bt, bname, [1280, 800], "dark");
       await runSilence(bt, bname);
       await runKeyboard(bt, bname);
+      for (const vp of TARGETED_VIEWPORTS) await runTargeted(bt, bname, vp);
     }
     const fails = results.filter((r) => !r.ok);
     fs.writeFileSync(path.join(OUT, "results.json"), JSON.stringify(results, null, 2));

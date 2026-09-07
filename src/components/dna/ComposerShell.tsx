@@ -3,6 +3,7 @@
 // drafts and publish_post. Never navigates on publish (ruling 52).
 import { useEffect, useMemo, useState } from "react";
 import { Composer, type ComposerSeed, type ComposerState } from "@/components/strand/Composer";
+import { SHEET_DUR } from "@/components/strand/Sheet";
 import { useAuth } from "@/lib/auth";
 import { closeComposer, hostContextOf, useComposerState } from "@/lib/composer-store";
 import { makeInfer, makeUpload, unfurl } from "@/lib/dia";
@@ -18,20 +19,31 @@ export function ComposerShell() {
   const { open, request, seed } = useComposerState();
   const tier = useTier();
   const mode = useMode();
-  const [ready, setReady] = useState(false);
+  // The seed whose draft and Spaces have loaded. The Composer mounts only for that seed, so a new
+  // open never renders an empty instance before its draft arrives (an empty instance would flush a
+  // null draft on unmount and delete the member's saved draft).
+  const [loadedSeed, setLoadedSeed] = useState(-1);
   const [draft, setDraft] = useState<ComposerSeed | null>(null);
   const [postId, setPostId] = useState<string>("");
   const [spaces, setSpaces] = useState<{ id: string; name: string }[]>([]);
 
   const hostContext = request ? hostContextOf(request) : "feed";
 
+  // The sheet slides out over 300ms (ruling 107): keep the composer mounted with open=false until
+  // the exit transition has finished, then unmount.
+  const [visible, setVisible] = useState(false);
   useEffect(() => {
-    if (!open || !member || !request) {
-      setReady(false);
+    if (open) {
+      setVisible(true);
       return;
     }
+    const t = window.setTimeout(() => setVisible(false), SHEET_DUR + 40);
+    return () => window.clearTimeout(t);
+  }, [open]);
+
+  useEffect(() => {
+    if (!open || !member || !request) return;
     let active = true;
-    setReady(false);
     void (async () => {
       const [restored, memberSpaces] = await Promise.all([
         request.initialVerb ? Promise.resolve(null) : loadDraft(member.id, hostContext),
@@ -41,17 +53,18 @@ export function ComposerShell() {
       setDraft(restored?.seed ?? null);
       setPostId(restored?.postId ?? crypto.randomUUID());
       setSpaces(memberSpaces);
-      setReady(true);
+      setLoadedSeed(seed);
     })();
     return () => {
       active = false;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, seed, member, request, hostContext]);
 
   const infer = useMemo(() => makeInfer(request?.anchor?.name), [request?.anchor?.name]);
   const upload = useMemo(() => (postId ? makeUpload(postId) : undefined), [postId]);
 
-  if (!open || !member || !request || !ready) return null;
+  if (!(open || visible) || !member || !request || loadedSeed !== seed) return null;
 
   const onDraft = (state: ComposerState | null) => {
     void saveDraft(member.id, hostContext, postId, state);
@@ -71,10 +84,10 @@ export function ComposerShell() {
   return (
     <Composer
       key={seed}
-      open
+      open={open}
       onClose={closeComposer}
       onPublish={onPublish}
-      tier={tier === "expanded" ? "expanded" : "compact"}
+      tier={tier}
       mode={mode}
       author={{ name: member.name, avatar: member.avatar }}
       spaces={spaces}

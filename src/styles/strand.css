@@ -1,0 +1,288 @@
+/* Strand tokens (DNA design system, project 3654dd17), ported verbatim from the
+ * app_diasporanetwork_africa-3 extraction: tokens/fonts.css, colors.css, typography.css,
+ * spacing.css, base.css, in the order Strand's styles.css imports them. Values are not edited
+ * here; system changes happen in Strand first (ruling 98: every C carries brand, text and tint
+ * rungs in both themes). Dark theme is [data-theme="dark"] on <html> (ruling 57).
+ * The webfont @import (tokens/fonts.css) is the first rule so browsers honour it. */
+
+/* ---- tokens/fonts.css ---- */
+/* Strand webfonts. No brand font binaries were supplied; Google Fonts stand in.
+   Bodoni Moda: high-contrast serif display. Alegreya Sans: humanist sans for body and UI. */
+@import url("https://fonts.googleapis.com/css2?family=Bodoni+Moda:ital,opsz,wght@0,6..96,400..700;1,6..96,400..700&family=Alegreya+Sans:ital,wght@0,400;0,500;0,700;1,400&display=swap");
+
+/* ---- tokens/colors.css ---- */
+:root {
+  /* Neutrals: warm off-white ground, near-black ink */
+  --bg: #faf7f2;
+  --bg-sunken: #f2ede5;
+  --surface: #ffffff;
+  --surface-raised: #fffdfa;
+  --ink: #1a1a18;
+  --ink-2: #4a4844;
+  --ink-3: #77736c;
+  --ink-4: #a9a49b;
+  --line: #e4ded3;
+  --line-strong: #cfc7b9;
+  --inverse-bg: #1a1a18;
+  --inverse-ink: #faf7f2;
+  --on-fill: #ffffff; /* ink on any C or ink fill */
+  --scrim: rgba(26, 26, 24, 0.4); /* behind sheets, drawers, dialogs */
+  --surface-glass: rgba(250, 247, 242, 0.92); /* PulseDock, sticky bars */
+
+  /* Five Cs (D092, canonical, logo-derived). Three rungs each. brand (--c-<c>): fills, glyphs, the 3px accent stroke; locked hex, never used as small text. text: contrast-safe rung, AA as text on --bg. tint: light wash behind badges and chips. */
+  --c-connect: #2d6a4f;
+  --c-connect-text: #1e5a3c;
+  --c-connect-tint: #e4efe9;
+  --c-connect-ink: var(--on-fill);
+  --c-convene: #b87333;
+  --c-convene-text: #8a4a16;
+  --c-convene-tint: #f7e9dc;
+  --c-convene-ink: var(--on-fill);
+  --c-collaborate: #30909c;
+  --c-collaborate-text: #146a6a;
+  --c-collaborate-tint: #dfeff1;
+  --c-collaborate-ink: #ffffff; /* 3.9:1, large text and icons only on teal fills */
+  --c-contribute: #d4af37;
+  --c-contribute-text: #7e6000;
+  --c-contribute-tint: #f8f0d3;
+  --c-contribute-ink: var(--ink); /* gold is too light for white ink */
+  --c-convey: #79344b;
+  --c-convey-text: #79344b;
+  --c-convey-tint: #f1e2e7;
+  --c-convey-ink: var(--on-fill);
+  --c-stroke: 3px; /* accent stroke width, brand rung */
+  /* System category (posts DIA could not type): no C, framed in the strong line */
+  --c-system: var(--line-strong);
+  --c-system-tint: var(--bg-sunken);
+  --c-system-ink: var(--ink);
+
+  /* Pulse state signals. State is never encoded as a C color. */
+  --pulse-none: transparent;
+  --pulse-activity: #a9a49b;
+  --pulse-for-you: #1a1a18;
+  --pulse-urgent: #b3261e;
+
+  /* Semantic states. Destructive is a separate, more saturated warm red than error; never swap them. */
+  --success: #4a8d77;
+  --success-tint: #e4f0eb;
+  --warning: #c4942a;
+  --warning-tint: #f7edd6;
+  --error: #cc3333;
+  --error-tint: #f9e2e2;
+  --info: #2a7a8c;
+  --info-tint: #e0eef1;
+  --destructive: hsl(0 65% 45%);
+  --destructive-tint: #f8dede;
+  --danger: var(--error);
+  --danger-tint: var(--error-tint); /* legacy alias */
+  --focus: #4a8d77; /* emerald. Never blue. */
+  --glow-dia:
+    0 0 0 2px #faf7f2, 0 0 0 4px #e8b830, 0 0 18px rgba(232, 184, 48, 0.45); /* DIA only. Never on any other component. */
+
+  /* Logo palette (reference only; not used for UI) */
+  --logo-green: #1e4d3a;
+  --logo-red: #d64541;
+  --logo-orange: #e08a3c;
+  --logo-teal: #2a8f8f;
+  --logo-leaf: #5fa67a;
+  --logo-gold: #e8b830;
+
+  /* Semantic aliases */
+  --text-body: var(--ink);
+  --text-muted: var(--ink-3);
+  --text-subtle: var(--ink-2);
+  --surface-card: var(--surface);
+  --surface-page: var(--bg);
+  --border-default: var(--line);
+}
+
+/* Dark theme (ruling 57). Same token names; warm near-black ground, lifted C colors that pass AA as text on --bg. */
+[data-theme="dark"] {
+  --bg: #141412;
+  --bg-sunken: #1e1d1a;
+  --surface: #1a1a18;
+  --surface-raised: #232220;
+  --ink: #f2ede5;
+  --ink-2: #c9c3b8;
+  --ink-3: #9b958a;
+  --ink-4: #6b665e;
+  --line: #33312c;
+  --line-strong: #4a4740;
+  --inverse-bg: #faf7f2;
+  --inverse-ink: #1a1a18;
+  --on-fill: #141412;
+  --scrim: rgba(0, 0, 0, 0.6);
+  --surface-glass: rgba(20, 20, 18, 0.92);
+  --c-connect: #5fb08a;
+  --c-connect-text: #7fc6a4;
+  --c-connect-tint: #1b2e24;
+  --c-convene: #d08a4a;
+  --c-convene-text: #e6a46e;
+  --c-convene-tint: #33241b;
+  --c-collaborate: #4fb3bf;
+  --c-collaborate-text: #72c6d0;
+  --c-collaborate-tint: #172c2c;
+  --c-contribute: #d4af37;
+  --c-contribute-text: #e2c45c;
+  --c-contribute-tint: #302a15;
+  --c-convey: #b0607c;
+  --c-convey-text: #d18ba3;
+  --c-convey-tint: #2e1f2b;
+  --c-connect-ink: #141412;
+  --c-convene-ink: #141412;
+  --c-collaborate-ink: #141412;
+  --c-contribute-ink: #141412;
+  --c-convey-ink: #141412;
+  --pulse-activity: #6b665e;
+  --pulse-for-you: #f2ede5;
+  --pulse-urgent: #e5645a;
+  --success: #7dbba3;
+  --success-tint: #1b2e26;
+  --warning: #ddb35a;
+  --warning-tint: #2f2812;
+  --error: #e06666;
+  --error-tint: #3a1d1d;
+  --info: #5fa9ba;
+  --info-tint: #162a2f;
+  --destructive: hsl(0 65% 58%);
+  --destructive-tint: #3a1a1a;
+  --focus: #7dbba3;
+  --glow-dia: 0 0 0 2px #141412, 0 0 0 4px #e8b830, 0 0 18px rgba(232, 184, 48, 0.4);
+}
+[data-theme="dark"] {
+  color-scheme: dark;
+}
+/* ---- tokens/typography.css ---- */
+:root {
+  --font-display: "Bodoni Moda", "Bodoni 72", "Didot", Georgia, serif;
+  --font-sans: "Alegreya Sans", "Gill Sans", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "SF Mono", Menlo, Consolas, monospace;
+
+  /* Display (serif) */
+  --display-xl: 44px;
+  --display-xl-lh: 1.1; /* @kind other */
+  --display-l: 32px;
+  --display-l-lh: 1.15; /* @kind other */
+  --display-m: 26px;
+  --display-m-lh: 1.2; /* @kind other */
+  --display-s: 22px;
+  --display-s-lh: 1.25; /* @kind other */
+
+  /* Body and UI (sans) */
+  --text-l: 19px;
+  --text-l-lh: 1.5;
+  --text-m: 17px;
+  --text-m-lh: 1.5;
+  --text-s: 15px;
+  --text-s-lh: 1.45;
+  --text-xs: 13px;
+  --text-xs-lh: 1.4;
+
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-bold: 700;
+  --tracking-caps: 0.06em;
+}
+/* ---- tokens/spacing.css ---- */
+:root {
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+
+  --radius-s: 6px;
+  --radius-m: 10px;
+  --radius-l: 14px;
+  --radius-badge: 8px;
+  --radius-pill: 999px;
+
+  --border-thin: 1px;
+  --border-card: 1.5px;
+
+  /* Elevation: five levels, deliberately shallow. Feed cards sit at level 0. */
+  --shadow-0: none;
+  --shadow-1: 0 1px 2px rgba(26, 26, 24, 0.06);
+  --shadow-2: 0 1px 2px rgba(26, 26, 24, 0.06), 0 4px 10px rgba(26, 26, 24, 0.07);
+  --shadow-3: 0 1px 2px rgba(26, 26, 24, 0.06), 0 6px 16px rgba(26, 26, 24, 0.08);
+  --shadow-4: 0 2px 4px rgba(26, 26, 24, 0.06), 0 12px 28px rgba(26, 26, 24, 0.1);
+  --shadow-none: var(--shadow-0);
+  --shadow-stack: var(--shadow-3); /* legacy aliases */
+
+  --touch-min: 44px;
+  --dock-height: 64px;
+  --content-max: 680px;
+  --page-max: 1120px;
+
+  --ease: cubic-bezier(0.2, 0, 0, 1); /* @kind other */
+  /* Motion: exactly three durations. */
+  --dur-micro: 100ms; /* @kind other */ /* checkbox, switch */
+  --dur-default: 150ms; /* @kind other */ /* hover, press, focus */
+  --dur-slow: 300ms; /* @kind other */ /* modals, sheets, page */
+  --dur-fast: var(--dur-default); /* @kind other */
+  --dur-base: var(--dur-default); /* @kind other */ /* legacy aliases */
+}
+/* ---- tokens/base.css ---- */
+html {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: var(--text-m);
+  line-height: var(--text-m-lh);
+  -webkit-font-smoothing: antialiased;
+}
+body {
+  margin: 0;
+}
+a {
+  color: var(--ink);
+  text-decoration: underline;
+  text-decoration-color: var(--line-strong);
+  text-underline-offset: 2px;
+}
+a:hover {
+  text-decoration-color: var(--ink);
+}
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+/* ---- App additions (not tokens) ---- */
+/* Keyframes the ported Strand components reference (DiaLine breathing dot, popover fade, panel slide). */
+@keyframes strand-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes strand-slide {
+  from {
+    transform: translateX(24px);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+@keyframes strand-breathe {
+  0%,
+  100% {
+    opacity: 0.25;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+/* Hidden native file inputs (the composer triggers them from its own buttons). */
+input[type="file"][hidden] {
+  display: none;
+}

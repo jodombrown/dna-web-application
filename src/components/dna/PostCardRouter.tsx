@@ -1,5 +1,6 @@
-// The one card renderer keyed on c_category (brief: card router). The composer preview, the Feed and
-// the quick-look overlay all render through here; there is no second renderer (rulings 52, 85).
+// The one card renderer keyed on c_category (brief: card router). The composer preview, the Feed
+// list, the in-place expansion and the direct-link view all render through here; there is no second
+// renderer (rulings 52, 105).
 import type { MouseEvent, ReactNode } from "react";
 import { AUDIENCE_LABEL } from "@/components/strand/AudienceSelect";
 import { Button } from "@/components/strand/Button";
@@ -23,6 +24,8 @@ export type RouterOptions = {
   readMoreHref?: string | undefined;
   onReadMore?: ((e: MouseEvent<HTMLElement>) => void) | undefined;
   onReadMoreIntent?: (() => void) | undefined;
+  expanded?: boolean | undefined;
+  onCollapse?: (() => void) | undefined;
   actions?: ReactNode;
 };
 
@@ -74,6 +77,8 @@ export function postCardProps(view: PostView, opts: RouterOptions = {}): PostCar
     readMoreHref: opts.readMoreHref,
     onReadMore: opts.onReadMore,
     onReadMoreIntent: opts.onReadMoreIntent,
+    expanded: opts.expanded,
+    onCollapse: opts.onCollapse,
   };
 }
 

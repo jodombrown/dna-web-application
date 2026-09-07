@@ -1,4 +1,5 @@
-// Strand (DNA design system) ported from the B1-Composer-v2 extraction. Tokens live in src/styles.css.
+// Strand (DNA design system) ported from the app.diasporanetwork.africa extractions (B1-Composer-v3,
+// B2-Shell-Feed-v3). Tokens live in src/styles/strand.css.
 export * from "./cmeta";
 export * from "./Icon";
 export * from "./Avatar";
@@ -22,5 +23,4 @@ export * from "./EmptyState";
 export * from "./LensBar";
 export * from "./NotificationBell";
 export * from "./NotificationListItem";
-export * from "./PostOverlay";
 export * from "./RailWidget";

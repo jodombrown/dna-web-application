@@ -1,5 +1,10 @@
-// Ported from Strand components/dna/Composer.jsx (extraction 3654dd17). Member-facing behavior is
-// unchanged. Production hooks replace the prototype's localStorage draft and data-URL images:
+// Ported from the B1-Composer-v3 extraction, composer/strand-patch/Composer.jsx (ruling 107):
+// mounts the patched Sheet (300ms slide, event-level scroll lock); the drop target is the whole
+// fields column with an armed state (1.5px dashed C-colour frame, tint ground, "Drop to add" copy)
+// while a file is dragged over it, before the drop lands; success is confirmed by the thumbnail row
+// and the preview card as before. Drawer geometry (ruling 106): 80% bottom sheet on compact, 65%
+// right drawer on medium with the stacked layout, min(1000, 100%) drawer on expanded.
+// Production hooks replace the prototype's localStorage draft and data-URL images:
 // `draft` + `onDraft` (server-side drafts per member and host context, ruling 56), `upload` (media
 // goes through the media-upload Edge Function and Tinify, ruling 55), and the preview renders
 // through the shared card router (brief: one PostCard renderer).
@@ -102,7 +107,7 @@ export type ComposerProps = {
   open: boolean;
   onClose?: (() => void) | undefined;
   onPublish?: ((state: ComposerState) => Promise<void> | void) | undefined;
-  tier?: "compact" | "expanded";
+  tier?: "compact" | "medium" | "expanded";
   mode?: "touch" | "pointer" | undefined;
   author?: { name: string; avatar?: string | undefined };
   spaces?: { id: string; name: string }[];
@@ -170,7 +175,9 @@ export function Composer({
   contained,
   maxImages = 4,
 }: ComposerProps) {
-  const touch = (mode || (tier === "compact" ? "touch" : "pointer")) === "touch";
+  const touch = (mode || (tier === "expanded" ? "pointer" : "touch")) === "touch";
+  /** Compact and medium share the stacked layout (ruling 58); only the container differs. */
+  const stacked = tier !== "expanded";
   const seed: ComposerSeed = useMemo(
     () => initial || (!initialVerb && draft) || {},
     [initial, initialVerb, draft],
@@ -194,11 +201,13 @@ export function Composer({
   const [drafted, setDrafted] = useState(!!draft && !initial);
   const [picker, setPicker] = useState(false);
   const [publishing, setPublishing] = useState(false);
+  const [armed, setArmed] = useState(false);
+  const dragDepth = useRef(0);
   const fileRef = useRef<HTMLInputElement>(null);
   const camRef = useRef<HTMLInputElement>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
   const run = useRef(0);
-  const kb = useKeyboardHeight(open && touch && tier === "compact");
+  const kb = useKeyboardHeight(open && touch && stacked);
   const c: C = verb || "convey";
   const schema = verb ? VERB_SCHEMA[verb] : UNTYPED;
   const uploading = images.some((i) => i.pending);
@@ -334,6 +343,51 @@ export function Composer({
     setDia({ state: null });
     setDiaRecord((r) => (r ? { ...r, accepted: r.verb === v, member_overrode: r.verb !== v } : r));
   };
+
+  // Armed drop state (ruling 107, pointer): the whole fields column is the target. dragenter and
+  // dragleave nest, so a depth counter tells a real exit from a move between children.
+  const hasFiles = (e: DragEvent<HTMLElement>) =>
+    !!e.dataTransfer && Array.from(e.dataTransfer.types || []).includes("Files");
+  const dragProps = touch
+    ? {}
+    : {
+        onDragEnter: (e: DragEvent<HTMLDivElement>) => {
+          if (!hasFiles(e)) return;
+          e.preventDefault();
+          dragDepth.current++;
+          setArmed(true);
+        },
+        onDragOver: (e: DragEvent<HTMLDivElement>) => {
+          if (!hasFiles(e)) return;
+          e.preventDefault();
+          e.dataTransfer.dropEffect = images.length >= maxImages ? "none" : "copy";
+          if (!armed) setArmed(true);
+        },
+        onDragLeave: (e: DragEvent<HTMLDivElement>) => {
+          if (!hasFiles(e)) return;
+          dragDepth.current = Math.max(0, dragDepth.current - 1);
+          if (dragDepth.current === 0) setArmed(false);
+        },
+        onDrop: (e: DragEvent<HTMLDivElement>) => {
+          e.preventDefault();
+          dragDepth.current = 0;
+          setArmed(false);
+          addFiles(e.dataTransfer.files);
+        },
+      };
+  useEffect(() => {
+    if (!open) return;
+    const end = () => {
+      dragDepth.current = 0;
+      setArmed(false);
+    };
+    window.addEventListener("dragend", end);
+    window.addEventListener("drop", end);
+    return () => {
+      window.removeEventListener("dragend", end);
+      window.removeEventListener("drop", end);
+    };
+  }, [open]);
 
   const addFiles = (files: FileList | File[] | null) => {
     const list = Array.from(files || [])
@@ -552,7 +606,7 @@ export function Composer({
         />
         <span style={{ flex: 1 }} />
         {!touch && (
-          <span style={{ fontSize: 13, color: "var(--ink-3)" }}>Drop images on the text</span>
+          <span style={{ fontSize: 13, color: "var(--ink-3)" }}>Drop images anywhere here</span>
         )}
         <input
           ref={fileRef}
@@ -677,23 +731,73 @@ export function Composer({
     </div>
   );
 
+  const free = maxImages - images.length;
   const fields = (
-    <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+    <div
+      {...dragProps}
+      data-drop-target
+      data-armed={armed ? "1" : "0"}
+      style={{
+        position: "relative",
+        display: "flex",
+        flexDirection: "column",
+        gap: 20,
+        borderRadius: 14,
+        outlineStyle: "dashed",
+        outlineWidth: 1.5,
+        outlineColor: armed ? "var(--c-" + c + ")" : "transparent",
+        outlineOffset: 12,
+        background: armed ? "var(--c-" + c + "-tint)" : "transparent",
+        transition: "background var(--dur-fast) var(--ease)",
+      }}
+    >
+      {armed && (
+        <div
+          aria-live="assertive"
+          data-drop-armed
+          style={{
+            position: "absolute",
+            inset: -12,
+            zIndex: 2,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            pointerEvents: "none",
+            borderRadius: 14,
+            background: "var(--c-" + c + "-tint)",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              padding: "12px 18px",
+              borderRadius: 10,
+              background: "var(--surface)",
+              border: "1.5px solid var(--c-" + c + ")",
+              color: "var(--ink)",
+              fontSize: 15,
+              fontWeight: 500,
+              boxShadow: "var(--shadow-stack)",
+            }}
+          >
+            <Icon name="upload" size={20} style={{ color: "var(--c-" + c + "-text)" }} />
+            {free <= 0
+              ? "Four images is the limit"
+              : free === 1
+                ? "Drop to add 1 image"
+                : "Drop to add up to " + free + " images"}
+          </div>
+        </div>
+      )}
       <textarea
         ref={taRef}
         aria-label="What is going on with you"
         placeholder="What is going on with you?"
         value={text}
         onChange={(e) => setText(e.target.value)}
-        rows={tier === "compact" ? 4 : 6}
-        onDragOver={(e: DragEvent<HTMLTextAreaElement>) => {
-          if (!touch) e.preventDefault();
-        }}
-        onDrop={(e: DragEvent<HTMLTextAreaElement>) => {
-          if (touch) return;
-          e.preventDefault();
-          addFiles(e.dataTransfer.files);
-        }}
+        rows={stacked ? 4 : 6}
         style={{
           width: "100%",
           boxSizing: "border-box",
@@ -714,7 +818,7 @@ export function Composer({
           role="radiogroup"
           aria-label="What kind of post"
           style={
-            tier === "compact"
+            stacked
               ? {
                   display: "flex",
                   gap: 8,
@@ -732,7 +836,7 @@ export function Composer({
             <VerbChip
               key={v}
               c={v}
-              compact={tier === "compact"}
+              compact={stacked}
               selected={verb === v}
               onClick={() => choose(v)}
             />
@@ -756,7 +860,7 @@ export function Composer({
               letterSpacing: "0.06em",
               textTransform: "uppercase",
               fontWeight: 500,
-              color: "var(--c-" + verb + ")",
+              color: "var(--c-" + verb + "-text)",
               paddingTop: 12,
             }}
           >
@@ -848,7 +952,7 @@ export function Composer({
       c={verb || undefined}
       disabled={!has || uploading || publishing}
       onClick={() => void publish()}
-      full={tier === "compact"}
+      full={stacked}
     >
       Publish
     </Button>
@@ -869,10 +973,19 @@ export function Composer({
       label="Compose"
       contained={contained}
       keyboardHeight={kb}
-      width={1000}
+      width={tier === "medium" ? "65%" : 1000}
+      style={
+        tier === "compact"
+          ? {
+              // 80% bottom sheet (ruling 106); with the software keyboard up the sheet takes the
+              // remaining visual viewport minus 8 (composer spec, keyboard-aware).
+              height: kb > 0 ? "calc(100% - 8px)" : "80%",
+            }
+          : undefined
+      }
     >
       {header}
-      {tier === "compact" ? (
+      {stacked ? (
         <Fragment>
           <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "16px 20px 24px" }}>
             <div style={{ ...col, display: "flex", flexDirection: "column", gap: 24 }}>
