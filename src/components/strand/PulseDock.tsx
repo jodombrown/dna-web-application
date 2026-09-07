@@ -1,9 +1,12 @@
-// Ported from Strand components/dna/PulseDock.jsx. Behavior unchanged.
+// Ported from the B2-Shell-Feed-v3 extraction, shell/strand-patch/PulseDock.jsx (ruling 100).
+// No chip behind the glyph: the Adinkra glyph floats in the bar as a currentColor mask. Active:
+// glyph in the C's brand rung, label in the C's text rung. Hover (pointer): lift to --ink-2 with a
+// 1px translate, no fill. Inactive: --ink-3. `inline` renders the five slots with no bar chrome for
+// the consolidated AppHeader row (ruling 99). Dock ground is solid --bg (ruling 107).
 // Production addition (B2, ruling 84): onIntent fires after an 80ms mouseenter hold on a slot so the
 // host can prefetch that C's route at the pointer tier. Touch never fires it.
-import { useRef, type CSSProperties } from "react";
-import { CBadge } from "./CBadge";
-import { C_LABEL, C_ORDER, type C } from "./cmeta";
+import { useRef, useState, type CSSProperties } from "react";
+import { C_GLYPH, C_LABEL, C_ORDER, assetBase, type C } from "./cmeta";
 
 export type PulseState = "none" | "activity" | "for-you" | "urgent";
 const DOT: Record<PulseState, string> = {
@@ -15,15 +18,36 @@ const DOT: Record<PulseState, string> = {
 
 export type PulseDockProps = {
   active?: C | undefined;
-  states?: Partial<Record<C, PulseState>>;
+  states?: Partial<Record<C, PulseState>> | undefined;
   onSelect?: ((c: C) => void) | undefined;
   onIntent?: ((c: C) => void) | undefined;
+  /** Standalone horizontal bar (no longer mounted by the shell; kept for parity with Strand). */
   bar?: boolean | undefined;
+  /** Five slots with no bar chrome, inside the AppHeader row at the expanded tier. */
+  inline?: boolean | undefined;
   fixed?: boolean | undefined;
   style?: CSSProperties | undefined;
 };
 
-/** Pulse family. Mobile bottom dock (default) or desktop horizontal bar (bar). states: {connect:'none'|'activity'|'for-you'|'urgent', ...}. State is the signal, not C color (rule 4). */
+function Glyph({ c, size, color }: { c: C; size: number; color: string }) {
+  const m = "url(" + assetBase() + "adinkra/" + C_GLYPH[c] + ".svg) center / contain no-repeat";
+  return (
+    <span
+      aria-hidden="true"
+      style={{
+        display: "inline-block",
+        width: size,
+        height: size,
+        background: color,
+        WebkitMask: m,
+        mask: m,
+        transition: "background var(--dur-fast) var(--ease)",
+      }}
+    />
+  );
+}
+
+/** Pulse family. Mobile bottom dock (default), inline header slots (inline), or the standalone bar. State is the signal, not C color (rule 4). */
 export const INTENT_HOLD_MS = 80;
 
 export function PulseDock({
@@ -32,67 +56,73 @@ export function PulseDock({
   onSelect,
   onIntent,
   bar,
+  inline,
   fixed,
   style,
 }: PulseDockProps) {
+  const [hov, setHov] = useState<C | null>(null);
   const hold = useRef<number | null>(null);
   const clearHold = () => {
     if (hold.current != null) window.clearTimeout(hold.current);
     hold.current = null;
   };
+  const row = !!bar || !!inline;
   const items = C_ORDER.map((c) => {
     const on = c === active;
     const st: PulseState = states[c] || "none";
+    const h = hov === c && !on;
+    const glyph = on ? "var(--c-" + c + ")" : h ? "var(--ink-2)" : "var(--ink-3)";
+    const label = on ? "var(--c-" + c + "-text)" : h ? "var(--ink-2)" : "var(--ink-3)";
     return (
       <button
         key={c}
         type="button"
         aria-current={on ? "page" : undefined}
         aria-label={C_LABEL[c] + (st !== "none" ? ", " + st.replace("-", " ") : "")}
+        data-c={c}
         onClick={() => onSelect && onSelect(c)}
-        onMouseEnter={
-          onIntent
-            ? () => {
-                clearHold();
-                hold.current = window.setTimeout(() => onIntent(c), INTENT_HOLD_MS);
-              }
-            : undefined
-        }
-        onMouseLeave={onIntent ? clearHold : undefined}
+        onMouseEnter={() => {
+          setHov(c);
+          if (onIntent) {
+            clearHold();
+            hold.current = window.setTimeout(() => onIntent(c), INTENT_HOLD_MS);
+          }
+        }}
+        onMouseLeave={() => {
+          setHov(null);
+          clearHold();
+        }}
         style={{
           all: "unset",
           cursor: "pointer",
           position: "relative",
-          flex: bar ? "none" : 1,
+          flex: row ? "none" : 1,
           minWidth: 44,
           minHeight: 44,
           display: "flex",
-          flexDirection: bar ? "row" : "column",
+          flexDirection: row ? "row" : "column",
           alignItems: "center",
           justifyContent: "center",
-          gap: bar ? 8 : 2,
-          padding: bar ? "0 14px" : "6px 0",
-          borderRadius: 10,
+          gap: row ? 8 : 3,
+          padding: row ? "0 12px" : "6px 0",
           fontFamily: "var(--font-sans)",
-          fontSize: bar ? 15 : 12,
+          fontSize: row ? 15 : 12,
           fontWeight: 500,
-          color: on ? "var(--ink)" : "var(--ink-3)",
+          color: label,
+          transform: h ? "translateY(-1px)" : "none",
+          transition: "color var(--dur-fast) var(--ease), transform var(--dur-fast) var(--ease)",
         }}
       >
         <span style={{ position: "relative", display: "inline-flex" }}>
-          <CBadge
-            c={c}
-            size={bar ? 24 : 32}
-            style={{ opacity: on ? 1 : 0.6, filter: on ? "none" : "grayscale(1)" }}
-          />
+          <Glyph c={c} size={row ? 20 : 26} color={glyph} />
           <span
             aria-hidden="true"
             style={{
               position: "absolute",
-              top: -2,
-              right: -2,
-              width: 10,
-              height: 10,
+              top: -3,
+              right: -4,
+              width: 8,
+              height: 8,
               borderRadius: 999,
               background: DOT[st],
               border: st === "none" ? "none" : "2px solid var(--bg)",
@@ -102,17 +132,31 @@ export function PulseDock({
           />
         </span>
         <span
-          style={{ lineHeight: 1.2, borderBottom: bar && on ? "2px solid var(--ink)" : "none" }}
+          style={{
+            lineHeight: 1.2,
+            borderBottom: row && on ? "2px solid var(--c-" + c + ")" : "2px solid transparent",
+          }}
         >
           {C_LABEL[c]}
         </span>
       </button>
     );
   });
+  if (inline)
+    return (
+      <nav
+        aria-label="Pulse"
+        data-pulse="inline"
+        style={{ display: "flex", alignItems: "center", gap: 8, height: 44, ...style }}
+      >
+        {items}
+      </nav>
+    );
   if (bar)
     return (
       <nav
         aria-label="Pulse"
+        data-pulse="bar"
         style={{
           display: "flex",
           alignItems: "center",
@@ -133,21 +177,21 @@ export function PulseDock({
   return (
     <nav
       aria-label="Pulse"
+      data-pulse="dock"
       style={{
         display: "flex",
         alignItems: "stretch",
         height: 64,
         padding: "0 8px",
         paddingBottom: "env(safe-area-inset-bottom)",
-        background: "var(--surface-glass)",
-        backdropFilter: "blur(12px)",
-        WebkitBackdropFilter: "blur(12px)",
+        background: "var(--bg)",
         borderTop: "1px solid var(--line)",
         position: fixed ? "fixed" : "static",
         bottom: 0,
         left: 0,
         right: 0,
         zIndex: 20,
+        boxSizing: "content-box",
         ...style,
       }}
     >

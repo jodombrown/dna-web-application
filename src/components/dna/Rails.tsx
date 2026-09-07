@@ -3,18 +3,18 @@
 // current surface. Both grounded-or-empty; no engine writes suggestions yet, so the right rail's
 // empty line is the true launch state.
 import { useQuery } from "@tanstack/react-query";
-import { useNavigate } from "@tanstack/react-router";
+import { useLocation, useNavigate } from "@tanstack/react-router";
 import { Avatar } from "@/components/strand/Avatar";
 import { RailWidget } from "@/components/strand/RailWidget";
 import { C_LABEL } from "@/components/strand/cmeta";
 import type { Member } from "@/lib/auth";
-import { markOpenedFromFeed } from "@/lib/overlay";
 import { loadRailState } from "@/lib/rails";
 
 const row = { padding: "8px 0", borderTop: "1px solid var(--line)" } as const;
 
 export function LeftRail({ member }: { member: Member }) {
   const navigate = useNavigate();
+  const onFeed = useLocation({ select: (l) => l.pathname === "/feed" });
   const { data } = useQuery({
     queryKey: ["rails", member.id],
     queryFn: () => loadRailState(member),
@@ -44,12 +44,14 @@ export function LeftRail({ member }: { member: Member }) {
             type="button"
             onClick={() => {
               if (!p.id) return;
-              markOpenedFromFeed();
+              // From Feed the card expands in place (and scrolls into view); elsewhere the
+              // direct-link view renders with "Back to Feed" (ruling 105).
               void navigate({
                 to: "/posts/$id",
                 params: { id: p.id },
                 search: {},
                 resetScroll: false,
+                ...(onFeed ? { state: { fromFeed: true, reveal: true } } : {}),
               });
             }}
             style={{
@@ -78,7 +80,7 @@ export function LeftRail({ member }: { member: Member }) {
                 "Post"}
             </span>
             {p.c_category !== "system" && (
-              <span style={{ fontSize: 13, color: "var(--c-" + p.c_category + ")" }}>
+              <span style={{ fontSize: 13, color: "var(--c-" + p.c_category + "-text)" }}>
                 {C_LABEL[p.c_category]}
               </span>
             )}

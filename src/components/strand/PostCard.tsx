@@ -1,7 +1,8 @@
-// Ported from Strand components/dna/PostCard.jsx (B2-Shell-Feed-v2). Behavior unchanged.
-// Brief 2 adds the Feed anatomy (ruling 69) behind `feed`: C-coloured meta line, overflow menu
-// (onMenu), clamped body with an explicit "Read more" (onReadMore), divider, four icon-only actions
-// (React, Respond, Save, Share; ruling 72: a single act, no counts). No cross-C logic in the card.
+// Ported from the B2-Shell-Feed-v3 extraction, shell/strand-patch/PostCard.jsx (ruling 105, amends
+// 85). Adds `expanded` and `onCollapse`: with onReadMore set, the body clamps to 4 lines until
+// expanded; expanded unclamps the same instance and swaps the link to "Show less". Brief 2's Feed
+// anatomy (ruling 69) stays behind `feed`: meta line in the C's text rung, overflow menu (onMenu),
+// divider, four icon-only actions (React, Respond, Save, Share; ruling 72: a single act, no counts).
 // Without `feed` the card renders exactly as Brief 1 shipped it (composer preview).
 // Production addition: readMoreHref renders "Read more" as a real link (prefetch, new tab) and
 // onReadMoreIntent fires after an 80ms hover hold (ruling 84); both default to the bundle's button.
@@ -62,6 +63,10 @@ export type PostCardProps = {
   onReadMore?: ((e: MouseEvent<HTMLElement>) => void) | undefined;
   readMoreHref?: string | undefined;
   onReadMoreIntent?: (() => void) | undefined;
+  /** Unclamps the body of this same instance (ruling 105). */
+  expanded?: boolean | undefined;
+  /** Renders "Show less"; absent on the direct-link view, which has "Back to Feed" instead. */
+  onCollapse?: (() => void) | undefined;
   reacted?: boolean | undefined;
   onReact?: (() => void) | undefined;
   style?: CSSProperties | undefined;
@@ -97,6 +102,8 @@ export function PostCard({
   onReadMore,
   readMoreHref,
   onReadMoreIntent,
+  expanded,
+  onCollapse,
   reacted,
   onReact,
   style,
@@ -104,8 +111,9 @@ export function PostCard({
   const [, setHover] = useState(false);
   const sys = c === "system";
   const frame = sys ? "var(--line-strong)" : "var(--c-" + c + ")";
-  const cColor = sys ? "var(--ink-3)" : "var(--c-" + c + ")";
+  const cColor = sys ? "var(--ink-3)" : "var(--c-" + c + "-text)";
   const rows = (fields || []).filter((f) => f && f.value);
+  const clamp = !!onReadMore && !expanded;
   // Hover intent (ruling 84): the host's prefetch fires after an 80ms mouseenter hold, never on touch.
   const hold = useRef<number | null>(null);
   const clearHold = () => {
@@ -132,6 +140,7 @@ export function PostCard({
     <article
       aria-label={preview ? "Preview of your post" : undefined}
       data-c={c}
+      data-expanded={onReadMore ? (expanded ? "1" : "0") : undefined}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       style={{
@@ -223,12 +232,12 @@ export function PostCard({
         )}
       </header>
       <div
-        onClick={onClick}
+        onClick={clamp ? onClick : undefined}
         style={{
           display: "flex",
           flexDirection: "column",
           gap: 8,
-          cursor: onClick ? "pointer" : "default",
+          cursor: clamp && onClick ? "pointer" : "default",
         }}
       >
         {kicker && (
@@ -265,7 +274,7 @@ export function PostCard({
               lineHeight: 1.5,
               whiteSpace: "pre-wrap",
               overflowWrap: "anywhere",
-              ...(onReadMore
+              ...(clamp
                 ? {
                     display: "-webkit-box",
                     WebkitLineClamp: 4,
@@ -278,9 +287,10 @@ export function PostCard({
             {children}
           </div>
         )}
-        {onReadMore && (
+        {clamp && onReadMore && (
           <ReadMoreTag
             {...(readMoreHref ? { href: readMoreHref } : { type: "button" as const })}
+            aria-expanded={false}
             onClick={(e: MouseEvent<HTMLElement>) => {
               e.stopPropagation();
               onReadMore(e);
@@ -299,6 +309,20 @@ export function PostCard({
           >
             Read more
           </ReadMoreTag>
+        )}
+        {onReadMore && expanded && onCollapse && (
+          <button
+            type="button"
+            aria-expanded={true}
+            onClick={(e) => {
+              e.stopPropagation();
+              onCollapse();
+            }}
+            data-show-less
+            style={linkStyle}
+          >
+            Show less
+          </button>
         )}
         {rows.length > 0 && (
           <dl

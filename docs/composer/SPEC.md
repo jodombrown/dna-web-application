@@ -1,14 +1,12 @@
-<!-- Copy of the approved B1-Composer-v2 handoff spec (Claude Design extraction). Two amendments applied in code review: the ruling 63 citation in section 1 is ruling 68, and the DIA budget in section 4 is 3.5s per ruling 74 (D176). -->
-
 # DNA Brief 1 — Universal Post Composer — Handoff spec
 
-Generated from the prototype. Live composer page: `composer/B1-Composer-v2.dc.html` in the app project (app.diasporanetwork.africa); source components and tokens live in Strand and sync here as `_ds/`. Claude Code builds from this file, the brief, and CLAUDE.md. Rulings referenced are D103 onward.
+Generated from the prototype. Live composer page: `composer/B1-Composer-v3.dc.html` in the app project (app.diasporanetwork.africa); source components and tokens live in Strand and sync here as `_ds/`. Claude Code builds from this file, the brief, and CLAUDE.md. Rulings referenced are D103 onward.
 
-Status: v2, awaiting founder approval on the prototype (gate 3). v1 review rulings 63 to 67 applied. Sections marked **assumption** are routine calls made in design; overturn by ruling.
+Status: v3, three fixes to the approved v2 (ruling 107): 300ms slide on every tier, scroll lock while open, armed drop state. Staged in `composer/strand-patch/` (Sheet, Composer) until Strand lands them. Awaiting founder approval (gate 3). Sections marked **assumption** are routine calls made in design; overturn by ruling.
 
 ## 1. Surface
 
-One composer shell, mounted once per app, opened from any surface. Component: `Composer` (`components/dna/Composer.jsx`). It never navigates the member away (ruling 52). It composes every verb inline: Make an Intro, Host an Event, Start a Space, Post a Need, Share a Story, plus the untyped post, which is general Convey (ruling 68). The system category is reserved for platform-authored items and never appears in the composer.
+One composer shell, mounted once per app, opened from any surface. Component: `Composer` (`components/dna/Composer.jsx`). It never navigates the member away (ruling 52). It composes every verb inline: Make an Intro, Host an Event, Start a Space, Post a Need, Share a Story, plus the untyped post, which is general Convey (ruling 63). The system category is reserved for platform-authored items and never appears in the composer.
 
 Container by tier:
 
@@ -60,7 +58,7 @@ Member-written fields show a 14px `pen-line` glyph in `--ink-3` after the value 
 ## 4. States
 
 - Empty: text empty, five chips unselected, no DiaLine, no preview, Publish disabled. Looks like an ordinary composer.
-- Thinking: fires 700ms after the last keystroke once trimmed text is 8+ characters and the member has not chosen a verb. `DiaLine state="thinking"`: 8px `--ink-3` dot breathing 0.25→1 opacity over 1.2s, "DIA is reading". Budget 3.5s (`THINK_BUDGET`; ruling 54 set 2.5s, amended to 3.5s by ruling 74, D176, after Sonnet-class latency measured at 2.2 to 2.9s per call); a slower resolve is dropped and the composer stays as it was. Newer keystrokes cancel older inferences (run counter).
+- Thinking: fires 700ms after the last keystroke once trimmed text is 8+ characters and the member has not chosen a verb. `DiaLine state="thinking"`: 8px `--ink-3` dot breathing 0.25→1 opacity over 1.2s, "DIA is reading". Budget 2.5s (`THINK_BUDGET`); a slower resolve is dropped and the composer stays as it was. Newer keystrokes cancel older inferences (run counter).
 - Populated: DIA resolved `{ c, fields, line }`. The chip for `c` selects; fields not already written by the member fill with the DIA tag; the card assembles; `DiaLine state="done"` reads "DIA read this as an Event." (Intro, Space, Need, Story) with "Not this?".
 - Error-as-silence: inference null, timed out, threw, or below the confidence floor. Identical to populated-without-DIA: no chip selected unless the member chose one, no DiaLine, the card renders as an untyped Convey post from the text alone (plum frame, body only). No error UI, ever (ruling 54).
 - Member override: tapping a chip selects that verb, clears the DiaLine, and stops inference for this draft. "Not this?" clears the verb and DIA's fields (member-written fields stay), returns to an untyped Convey post, and stops inference. Both paths are one tap; nothing asks to confirm.
@@ -69,7 +67,7 @@ Six previews (Connect, Convene, Collaborate, Contribute, Convey, Untyped) × lig
 
 ## 5. Tokens used
 
-Color: `--bg`, `--bg-sunken`, `--surface`, `--ink`, `--ink-2`, `--ink-3`, `--ink-4`, `--line`, `--line-strong`, `--on-fill`, `--scrim`, `--c-{connect,convene,collaborate,contribute,convey}`, `--c-*-tint`. Dark theme swaps every one of these under `[data-theme="dark"]` (added in `tokens/colors.css`); C colors in dark are lifted to pass AA as text on `--bg`; `--on-fill` becomes near-black so ink on a C fill stays ≥ 4.5:1. No raw palette values anywhere in the composer (ruling 57).
+Color: `--bg`, `--bg-sunken`, `--surface`, `--ink`, `--ink-2`, `--ink-3`, `--ink-4`, `--line`, `--line-strong`, `--on-fill`, `--scrim`, `--c-{connect,convene,collaborate,contribute,convey}` (D092 brand rung: fills, glyphs, `--c-stroke` frame), `--c-*-text` (AA rung for small text), `--c-*-tint`. Dark theme swaps every one of these under `[data-theme="dark"]` (added in `tokens/colors.css`); C colors in dark are lifted to pass AA as text on `--bg`; `--on-fill` becomes near-black so ink on a C fill stays ≥ 4.5:1. No raw palette values anywhere in the composer (ruling 57).
 Type: `--font-sans`, `--font-display` (card title only), `--text-l/m/s/xs`, `--weight-medium/bold`, `--tracking-caps`.
 Space and shape: `--space-2/3/4/5/6`, `--radius-m`, `--radius-l`, `--radius-pill`, `--border-thin`, `--border-card`, `--touch-min`, `--content-max`.
 Motion: `--dur-fast`, `--dur-base`, `--ease`, `--shadow-stack`.
@@ -86,6 +84,10 @@ Motion: `--dur-fast`, `--dur-base`, `--ease`, `--shadow-stack`.
 - Icons added to `assets/icons/`: camera, users, globe, upload, pen-line, hash.
 
 ## 7. Interaction modes
+
+Scroll lock (ruling 107): while the composer is open, no scroll or wheel input reaches the page behind it, on any device. The host's overflow is set hidden for the mount; wheel and touchmove on the scrim are cancelled; inside the dialog, wheel and touch scroll are consumed by the nearest scrollable ancestor and stopped there, and at that region's top or bottom edge the event is cancelled so nothing chains out. This holds with the cursor over the textarea and over the preview column. `overscroll-behavior: contain` on the scrim and the dialog.
+
+Armed drop state (ruling 107, pointer): the whole fields column is the drop target. While a file drag is over it, before the drop lands: a 1.5px dashed frame in the current C colour (Convey wine when no verb) 12px outside the column, the column ground turns the C tint, and a centred `--surface` card (10 radius, 1.5px C border, `--shadow-stack`) reads "Drop to add up to N images" (N = free slots; "Drop to add 1 image"; "Four images is the limit" at the cap, with `dropEffect: none`). Leaves the moment the drag exits or ends. Success is confirmed separately by the thumbnail row and the preview card. The attach-row hint reads "Drop images anywhere here".
 
 Touch (compact): drag handle to dismiss; camera and library attach; horizontal chip scroll; sticky Publish above the safe area. Keyboard-aware (`useKeyboardHeight` in `Composer`): when `window.innerHeight - visualViewport.height` exceeds 80px the sheet height becomes `visualViewport.height - 8` with no bottom safe-area padding, the scroll region nudges the focused field above the Publish row, and the preview scrolls under it. Restores on keyboard dismiss. Not active inside contained prototype frames.
 Pointer (expanded): file picker and drag-drop onto the text field; hover states from the system (outlined controls fill `--bg-sunken`); autofocus on open. Shortcuts, additive only (ruling 59): open composer `c` when focus is not in a field (host surface owns this), publish `⌘/Ctrl + Enter`, close `Esc`. The footer prints "⌘ Enter to publish · Esc to close" (render the Ctrl form on non-Mac).
@@ -117,7 +119,7 @@ Both themes, Safari and Chrome (ruling 61).
 
 ## 10. Motion
 
-Sheet: rise 24px with fade, 200ms `--ease`; drawer: slide 24px from the right with fade, 200ms. Dismiss: reverse. Drag follows the finger with no easing, snaps back at 200ms if released under 120px. DiaLine: thinking dot breathes at 1.2s; the resolved line fades in at 200ms. Chip and pill selection: background and border color at 120ms. Card fields: appear without animation (the card assembles by reflow; no per-field fades). Nothing bounces or scales.
+Enter and exit are real transitions, never a pop (ruling 107). Sheet: rises from fully below the frame (`translateY(100%)` to 0); drawer: slides from fully off its edge (`translateX(100%)`, mirrored for a left anchor). Scrim fades from 0 to 1 alongside. 300ms `--ease` both ways, on every tier; the element stays mounted until the exit finishes (host keeps it mounted 340ms after `open` flips false). Under `prefers-reduced-motion` both are instant. Drag follows the finger with no easing, snaps back at 200ms if released under 120px. DiaLine: thinking dot breathes at 1.2s; the resolved line fades in at 200ms. Chip and pill selection: background and border color at 120ms. Card fields: appear without animation (the card assembles by reflow; no per-field fades). Nothing bounces or scales.
 
 ## 11. Not in this spec
 

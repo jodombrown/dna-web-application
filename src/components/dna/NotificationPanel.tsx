@@ -18,11 +18,14 @@ export function NotificationPanel({
   member,
   tier,
   onOpen,
+  onChange,
   closeKey,
 }: {
   member: Member;
   tier: Tier;
   onOpen?: (() => void) | undefined;
+  /** Mirrors the list's open state to the shell (the floating composer entry hides while open). */
+  onChange?: ((open: boolean) => void) | undefined;
   /** Changes when the route changes or the composer opens; the list closes (prototype behaviour). */
   closeKey?: string | undefined;
 }) {
@@ -31,6 +34,9 @@ export function NotificationPanel({
   useEffect(() => {
     setOpen(false);
   }, [closeKey]);
+  useEffect(() => {
+    onChange?.(open);
+  }, [open, onChange]);
   useEffect(() => {
     if (!open) return;
     const k = (e: KeyboardEvent) => {
