@@ -96,7 +96,7 @@ async function get(url, headers = {}) {
       "member_intent?member_id=eq." + UNSHARED_ID + "&select=*",
       "member_links?member_id=eq." + UNSHARED_ID + "&select=*",
       "member_segment_details?member_id=eq." + UNSHARED_ID + "&select=*",
-      "member_focus?member_id=eq." + UNSHARED_ID + "&select=*",
+      "member_focus_areas?member_id=eq." + UNSHARED_ID + "&select=*",
       "member_skills?member_id=eq." + UNSHARED_ID + "&select=*",
       "member_follows?member_id=eq." + UNSHARED_ID + "&select=*",
       "attestations?member_id=eq." + UNSHARED_ID + "&select=*",
@@ -125,7 +125,18 @@ async function get(url, headers = {}) {
       "status " + viewRes.status + " " + viewText.slice(0, 80),
     );
     // The shared profile: core row visible, connections-only and anchored tables still zero rows.
-    const core = await rest("members?handle=eq." + SHARED + "&select=*");
+    // Anon's grant on members is column-limited: the core row only, never the switches.
+    const CORE_COLS =
+      "id,handle,name,headline,avatar_path,cover_path,cover_focus,origin_country,current_place,local_tz,segment,pattern";
+    const core = await rest("members?handle=eq." + SHARED + "&select=" + CORE_COLS);
+    const switches = await rest(
+      "members?handle=eq." + SHARED + "&select=profile_private,profile_shared",
+    );
+    record(
+      "check 1: anon cannot read the shared profile's switches (column grant)",
+      switches.status === 401 || switches.status === 403,
+      "status " + switches.status,
+    );
     record(
       "check 1: anon reads the shared profile's core row (limited columns)",
       core.status === 200 &&
