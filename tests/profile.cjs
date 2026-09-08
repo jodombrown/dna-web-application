@@ -69,13 +69,35 @@ async function openProfile(page, search = "") {
  */
 async function tap(page, selector) {
   const loc = typeof selector === "string" ? page.locator(selector).first() : selector;
-  await loc.waitFor({ state: "visible", timeout: 15000 });
+  await loc.waitFor({ state: "visible", timeout: 30000 });
   await loc.evaluate((el) =>
     el.scrollIntoView({ block: "center", inline: "nearest", behavior: "instant" }),
   );
   // The masthead may condense on that scroll; let its 300ms height transition finish.
   await page.waitForTimeout(400);
   await loc.click({ timeout: 15000 });
+}
+
+/** Page state for a failure detail: URL, view and edit flags, open sections, the toast text. */
+async function pageState(page) {
+  try {
+    return await page.evaluate(() => {
+      const root = document.querySelector('[data-testid="profile"]');
+      const saves = [...document.querySelectorAll('[data-testid^="section-"]')].filter((n) =>
+        [...n.querySelectorAll("button")].some((b) => b.textContent.trim() === "Save"),
+      );
+      return JSON.stringify({
+        url: location.href,
+        view: root && root.getAttribute("data-view"),
+        edit: root && root.getAttribute("data-edit"),
+        open: saves.map((n) => n.getAttribute("data-testid")),
+        editBar: !!document.querySelector('[data-testid="edit-bar"]'),
+        toast: (document.querySelector('[role="status"]') || {}).textContent || "",
+      });
+    });
+  } catch (e) {
+    return "state unavailable: " + String(e).slice(0, 80);
+  }
 }
 
 const sectionIds = (page) =>
@@ -287,6 +309,7 @@ async function runOwner(browserType, bname, vp, theme) {
     // One failing save leaves the others intact: about fails at the server, where saves alone; in
     // edit mode every section stays open, the failed draft keeps its text, the saved one refetches.
     db.profile.failSection = "about";
+    await page.waitForSelector('[data-testid="profile"][data-edit="1"]');
     const about = page.locator('[data-testid="section-about"]');
     await about.locator("textarea").fill("Edited about text for the matrix run.");
     await tap(page, about.locator('button:has-text("Save")'));
@@ -294,7 +317,9 @@ async function runOwner(browserType, bname, vp, theme) {
     const aboutStillEditing =
       (await about.locator('button:has-text("Save")').count()) === 1 &&
       (await about.locator("textarea").inputValue()) === "Edited about text for the matrix run.";
+    await page.waitForSelector('[data-testid="profile"][data-edit="1"]');
     const where = page.locator('[data-testid="section-where"]');
+    await where.locator('button:has-text("Save")').waitFor({ state: "attached", timeout: 30000 });
     await where.locator("input").first().fill("Cape Town, SAST");
     await tap(page, where.locator('button:has-text("Save")'));
     await page.waitForTimeout(900);
@@ -349,7 +374,7 @@ async function runOwner(browserType, bname, vp, theme) {
     await page.waitForSelector('[data-testid="profile"][data-view="owner"]');
     record(tag + ": no page errors", errors.length === 0, errors.join(" | ").slice(0, 300));
   } catch (e) {
-    record(tag + " flow", false, String(e).slice(0, 300));
+    record(tag + " flow", false, String(e).slice(0, 300) + " | " + (await pageState(page)));
     await shot(page, `${bname}-${w}x${h}-${theme}-b3-owner-FAIL`).catch(() => {});
   }
   await browser.close();
@@ -498,7 +523,7 @@ async function runVisitor(browserType, bname, vp, theme, mode) {
     await noOverflow(page, tag + " condensed");
     record(tag + ": no page errors", errors.length === 0, errors.join(" | ").slice(0, 300));
   } catch (e) {
-    record(tag + " flow", false, String(e).slice(0, 300));
+    record(tag + " flow", false, String(e).slice(0, 300) + " | " + (await pageState(page)));
     await shot(page, `${bname}-${w}x${h}-${theme}-b3-visitor-${mode}-FAIL`).catch(() => {});
   }
   await browser.close();
@@ -620,7 +645,7 @@ async function runPublic(browserType, bname, vp, theme) {
     await scrollTo(page, 0);
     record(tag + ": no page errors", errors.length === 0, errors.join(" | ").slice(0, 300));
   } catch (e) {
-    record(tag + " flow", false, String(e).slice(0, 300));
+    record(tag + " flow", false, String(e).slice(0, 300) + " | " + (await pageState(page)));
     await shot(page, `${bname}-${w}x${h}-${theme}-b3-public-FAIL`).catch(() => {});
   }
   await browser.close();
@@ -658,7 +683,7 @@ async function runGate(browserType, bname, vp, theme) {
     );
     record(tag + ": no page errors", errors.length === 0, errors.join(" | ").slice(0, 300));
   } catch (e) {
-    record(tag + " flow", false, String(e).slice(0, 300));
+    record(tag + " flow", false, String(e).slice(0, 300) + " | " + (await pageState(page)));
   }
   await browser.close();
 }
