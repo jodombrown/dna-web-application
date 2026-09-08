@@ -393,6 +393,7 @@ function makeMockDb() {
       visibility: {},
       overrides: {},
       failSection: null,
+      attempts: [],
       saves: [],
       follows: [],
       requests: [],
@@ -628,6 +629,8 @@ async function mockSupabase(page, db, opts = {}) {
       const body = req.postDataJSON() || {};
       const pr = db.profile;
       await new Promise((r) => setTimeout(r, 200));
+      // Every attempt, answered or refused, so a flow can wait on the round trip.
+      pr.attempts.push(body.section);
       if (pr.failSection && body.section === pr.failSection)
         return json(
           { code: "P0001", message: "That did not save.", details: null, hint: null },
@@ -2300,6 +2303,7 @@ module.exports = {
   FULL_PREVIEW_AT,
   JWT,
   UID,
+  SB,
 };
 
 if (require.main === module)
