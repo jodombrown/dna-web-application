@@ -97,6 +97,10 @@ async function newPage(browserType, [w, h], theme, opts = {}) {
       await page.waitForTimeout(100);
     }
   });
+  const flags = { crashed: false };
+  page.on("crash", () => {
+    flags.crashed = true;
+  });
   const errors = [];
   page.on("pageerror", (e) => {
     const text = String(e);
@@ -105,7 +109,7 @@ async function newPage(browserType, [w, h], theme, opts = {}) {
   page.on("console", (m) => {
     if (m.type() === "error" && !IGNORED_CONSOLE.test(m.text())) errors.push(m.text());
   });
-  return { browser, page, db, errors };
+  return { browser, page, db, errors, flags };
 }
 
 async function openProfile(page, search = "") {
@@ -242,6 +246,24 @@ async function pageState(page) {
   }
 }
 
+/**
+ * Rough page weight for a failure detail. WebKit's web process dying reaches Playwright as a closed
+ * target, so the last size of the edit-mode DOM is the first thing to rule in or out.
+ */
+async function domStats(page) {
+  try {
+    return await page.evaluate(() => ({
+      nodes: document.getElementsByTagName("*").length,
+      options: document.getElementsByTagName("option").length,
+      selects: document.getElementsByTagName("select").length,
+      fields: document.querySelectorAll("input, textarea").length,
+      sections: document.querySelectorAll('[data-testid^="section-"]').length,
+    }));
+  } catch (e) {
+    return "unavailable: " + String(e).slice(0, 60);
+  }
+}
+
 const sectionIds = (page) =>
   page.evaluate(() =>
     [...document.querySelectorAll('[data-testid^="section-"]')].map((n) =>
@@ -307,9 +329,10 @@ async function condenseState(page) {
 async function runOwner(browserType, bname, vp, theme) {
   const [w, h] = vp;
   const tag = `${bname}-${w}x${h}-${theme} profile owner`;
-  const { browser, page, db, errors } = await newPage(browserType, vp, theme, {
+  const { browser, page, db, errors, flags } = await newPage(browserType, vp, theme, {
     profile: { mode: "owner" },
   });
+  let weight = null;
   try {
     await signIn(page);
     await openProfile(page);
@@ -450,6 +473,7 @@ async function runOwner(browserType, bname, vp, theme) {
     await noOverflow(page, tag + " edit");
     // One failing save leaves the others intact: about fails at the server, where saves alone; in
     // edit mode every section stays open, the failed draft keeps its text, the saved one refetches.
+    weight = await domStats(page);
     db.profile.failSection = "about";
     await page.waitForSelector('[data-testid="profile"][data-edit="1"]');
     const ABOUT = "Edited about text for the matrix run.";
@@ -535,7 +559,16 @@ async function runOwner(browserType, bname, vp, theme) {
     await page.waitForSelector('[data-testid="profile"][data-view="owner"]');
     record(tag + ": no page errors", errors.length === 0, errors.join(" | ").slice(0, 300));
   } catch (e) {
-    record(tag + " flow", false, String(e).slice(0, 1200) + " | " + (await pageState(page)));
+    record(
+      tag + " flow",
+      false,
+      (flags.crashed ? "WEB PROCESS CRASHED | " : "") +
+        String(e).slice(0, 1200) +
+        " | " +
+        (await pageState(page)) +
+        " | DOM before the section saves " +
+        JSON.stringify(weight),
+    );
     await shot(page, `${bname}-${w}x${h}-${theme}-b3-owner-FAIL`).catch(() => {});
   }
   await browser.close();

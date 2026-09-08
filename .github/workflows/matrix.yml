@@ -9,6 +9,18 @@ on:
         description: Deployed URL to test (defaults to the branch's Pages preview)
         required: false
         default: ""
+      special:
+        description: Run flows only (publish, keyboard, silence, shell, targeted, profile)
+        required: false
+        default: ""
+      only:
+        description: One viewport as JSON, e.g. [1280,800]
+        required: false
+        default: ""
+      theme:
+        description: One theme (light or dark)
+        required: false
+        default: ""
 
 jobs:
   matrix:
@@ -46,6 +58,10 @@ jobs:
           BASE: ${{ steps.target.outputs.url }}
           WEBKIT: "1"
           OUT: ${{ github.workspace }}/matrix-out
+          # Empty is falsy in tests/matrix.cjs, so an unset input runs the whole matrix.
+          SPECIAL: ${{ inputs.special }}
+          ONLY: ${{ inputs.only }}
+          THEME: ${{ inputs.theme }}
         run: node tests/matrix.cjs
       - name: Upload screenshots and results
         if: always()
