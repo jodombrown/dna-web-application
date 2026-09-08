@@ -43,7 +43,8 @@ async function newPage(browserType, [w, h], theme, opts = {}) {
   page.on("console", (m) => {
     if (
       m.type() === "error" &&
-      !/fonts\.g|ERR_CONNECTION_RESET|ERR_NAME_NOT_RESOLVED|ERR_FAILED|406|400/.test(m.text())
+      !/fonts\.g|ERR_CONNECTION_RESET|ERR_NAME_NOT_RESOLVED|ERR_FAILED|406|400/.test(m.text()) &&
+      !/supabase\.co.*(access control checks|cancelled)/.test(m.text())
     )
       errors.push(m.text());
   });
@@ -51,11 +52,27 @@ async function newPage(browserType, [w, h], theme, opts = {}) {
 }
 
 async function openProfile(page, search = "") {
+  // Let the page being left finish its fetches: WebKit reports a fetch cancelled by navigation as
+  // a console error, which would count against the profile.
+  await page.waitForLoadState("networkidle").catch(() => {});
   await page.goto(BASE + "/m/" + HANDLE + search, { waitUntil: "networkidle" });
   await page.waitForSelector('[data-testid="profile"]:not([data-view="loading"])', {
     timeout: 20000,
   });
   await page.waitForTimeout(250);
+}
+
+/**
+ * Click after centring the target inside its scroll container. WebKit's own scroll-into-view can
+ * leave a control beneath the sticky header or the bottom dock at compact widths, where Playwright
+ * then waits on "visible, enabled and stable" until it times out.
+ */
+async function tap(page, selector) {
+  const loc = typeof selector === "string" ? page.locator(selector).first() : selector;
+  await loc.waitFor({ state: "visible", timeout: 15000 });
+  await loc.evaluate((el) => el.scrollIntoView({ block: "center", inline: "nearest" }));
+  await page.waitForTimeout(150);
+  await loc.click({ timeout: 15000 });
 }
 
 const sectionIds = (page) =>
@@ -222,18 +239,18 @@ async function runOwner(browserType, bname, vp, theme) {
 
     // Switches and visibility save through their own RPC calls.
     const before = db.profile.saves.length;
-    await page.locator("label", { hasText: "Share my profile" }).click();
+    await tap(page, page.locator("label", { hasText: "Share my profile" }));
     await page.waitForTimeout(600);
     record(
       tag + ": Share switch saves via save_profile_section",
       db.profile.saves.includes("switches"),
       db.profile.saves.slice(before).join(","),
     );
-    await page.locator("label", { hasText: "Share my profile" }).click();
+    await tap(page, page.locator("label", { hasText: "Share my profile" }));
     await page.waitForTimeout(600);
 
     // Editing mode (check 6).
-    await page.locator('[data-testid="edit-profile"]').click();
+    await tap(page, '[data-testid="edit-profile"]');
     await page.waitForSelector('[data-testid="profile"][data-edit="1"]');
     await page.waitForTimeout(300);
     const saveButtons = await page
@@ -269,14 +286,14 @@ async function runOwner(browserType, bname, vp, theme) {
     db.profile.failSection = "about";
     const about = page.locator('[data-testid="section-about"]');
     await about.locator("textarea").fill("Edited about text for the matrix run.");
-    await about.locator('button:has-text("Save")').click();
+    await tap(page, about.locator('button:has-text("Save")'));
     await page.waitForTimeout(900);
     const aboutStillEditing =
       (await about.locator('button:has-text("Save")').count()) === 1 &&
       (await about.locator("textarea").inputValue()) === "Edited about text for the matrix run.";
     const where = page.locator('[data-testid="section-where"]');
     await where.locator("input").first().fill("Cape Town, SAST");
-    await where.locator('button:has-text("Save")').click();
+    await tap(page, where.locator('button:has-text("Save")'));
     await page.waitForTimeout(900);
     const whereSaved =
       db.profile.saves.includes("where") &&
@@ -290,7 +307,7 @@ async function runOwner(browserType, bname, vp, theme) {
       JSON.stringify({ aboutStillEditing, whereSaved, othersIntact, saves: db.profile.saves }),
     );
     db.profile.failSection = null;
-    await page.locator('[data-testid="edit-done"]').click();
+    await tap(page, '[data-testid="edit-done"]');
     await page.waitForSelector('[data-testid="profile"][data-edit="0"]');
     record(tag + ": Done leaves edit mode", true);
     const seenWhere = await page.locator('[data-testid="section-where"]').innerText();
@@ -301,7 +318,7 @@ async function runOwner(browserType, bname, vp, theme) {
     );
 
     // Check 5: View as public renders exactly what the signed-out page renders.
-    await page.locator('[data-testid="view-as-public"]').click();
+    await tap(page, '[data-testid="view-as-public"]');
     await page.waitForSelector('[data-testid="as-public-banner"]', { timeout: 15000 });
     await page.waitForTimeout(400);
     const pubIds = await sectionIds(page);
@@ -325,7 +342,7 @@ async function runOwner(browserType, bname, vp, theme) {
       );
     await shot(page, `${bname}-${w}x${h}-${theme}-b3-owner-as-public`);
     await noOverflow(page, tag + " as public");
-    await page.getByRole("button", { name: /Back to your profile/ }).click();
+    await tap(page, page.getByRole("button", { name: /Back to your profile/ }));
     await page.waitForSelector('[data-testid="profile"][data-view="owner"]');
     record(tag + ": no page errors", errors.length === 0, errors.join(" | ").slice(0, 300));
   } catch (e) {
@@ -388,7 +405,7 @@ async function runVisitor(browserType, bname, vp, theme, mode) {
         tag + ": DIA line present",
         (await page.locator('[data-testid="dia-line"]').count()) === 1,
       );
-      await page.locator('[data-testid="follow"]').click();
+      await tap(page, '[data-testid="follow"]');
       await page.waitForTimeout(700);
       record(
         tag + ": Follow writes member_follows and flips to Following",
@@ -430,7 +447,7 @@ async function runVisitor(browserType, bname, vp, theme, mode) {
           !ANCHORED_ONLY.some((t) => html.includes(t)),
       );
       // Relationship states: none -> Connect with opens the composer; sent; received (Accept / Decline).
-      await page.locator('[data-testid="connect-with"]').click();
+      await tap(page, '[data-testid="connect-with"]');
       const dialog = page.locator('section[role="dialog"][aria-label="Compose"]');
       await dialog.waitFor({ timeout: 10000 });
       record(
@@ -445,7 +462,7 @@ async function runVisitor(browserType, bname, vp, theme, mode) {
         tag + ": Request sent state",
         (await page.getByRole("button", { name: "Request sent" }).count()) === 1,
       );
-      await page.getByRole("button", { name: "Request sent" }).click();
+      await tap(page, page.getByRole("button", { name: "Request sent" }));
       await page.waitForTimeout(800);
       record(
         tag + ": withdraw returns to Connect with",
@@ -460,7 +477,7 @@ async function runVisitor(browserType, bname, vp, theme, mode) {
         (await page.getByRole("button", { name: "Accept" }).count()) === 1 &&
           (await page.getByRole("button", { name: "Decline" }).count()) === 1,
       );
-      await page.getByRole("button", { name: "Accept" }).click();
+      await tap(page, page.getByRole("button", { name: "Accept" }));
       await page.waitForTimeout(900);
       record(
         tag + ": Accept becomes Connected",
@@ -566,7 +583,7 @@ async function runPublic(browserType, bname, vp, theme) {
         JSON.stringify(deck),
       );
       await page.locator('[data-testid="c-deck"]').evaluate((d) => d.scrollTo({ left: 0 }));
-      await page.locator('[data-testid="c-card-convene"]').click();
+      await tap(page, '[data-testid="c-card-convene"]');
       await page.waitForSelector('[data-testid="c-sheet"]', { timeout: 10000 });
       await page.waitForTimeout(500);
       const sheet = await page.locator('[data-testid="c-sheet"]').boundingBox();
@@ -629,7 +646,7 @@ async function runGate(browserType, bname, vp, theme) {
     );
     await shot(page, `${bname}-${w}x${h}-${theme}-b3-gate`);
     await noOverflow(page, tag);
-    await page.getByRole("button", { name: "Join DNA" }).click();
+    await tap(page, page.getByRole("button", { name: "Join DNA" }));
     await page.waitForTimeout(1500);
     record(
       tag + ": Join DNA leads to sign-up",
