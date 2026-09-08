@@ -4,7 +4,8 @@
 // layer, so the real client code paths run against a deterministic backend. Backend behaviour
 // (RLS, the feed view) is verified separately in SQL against the live project.
 // Usage: BASE=https://b2-shell-feed.dna-web-application.pages.dev WEBKIT=1 node tests/matrix.cjs
-// Env: ONLY='[390,844]' runs one viewport; SPECIAL=publish,keyboard,silence,shell,targeted runs flows only.
+// Env: ONLY='[390,844]' runs one viewport; SPECIAL=publish,keyboard,silence,shell,targeted,profile runs flows only.
+// Brief 3 profile flows live in tests/profile.cjs and share this mock.
 const { chromium, webkit } = require("playwright");
 const fs = require("fs");
 const path = require("path");
@@ -130,6 +131,231 @@ const INFER = {
   },
 };
 
+// Brief 3 profile fixtures: the shape profile_view returns for the seeded persona thandiwe-dube,
+// captured from the live projection so the mock answers the way the database does.
+const OWNER_ID = "b3000000-0000-4000-8000-000000000001";
+const PROFILE_MEMBER = {
+  id: OWNER_ID,
+  name: "Thandiwe Dube",
+  tier: "attested",
+  handle: "thandiwe-dube",
+  pattern: "kente",
+  segment: "returnee",
+  headline: "Solar engineer, mini-grids for rural clinics",
+  local_tz: "Africa/Johannesburg",
+  cover_focus: "center 35%",
+  current_place: "Johannesburg, SAST",
+  current_country: "South Africa",
+  origin_country: "South Africa",
+  avatar_path: OWNER_ID + "/avatar/a.png",
+  cover_path: OWNER_ID + "/cover/c.png",
+};
+const PROFILE_BADGES = [
+  {
+    c: "convene",
+    items: [
+      {
+        role: "host",
+        when: "2026-08-23T10:00:00+00:00",
+        object: "Solar for Clinics, working session",
+        attester: "Kwame Mensah",
+      },
+    ],
+  },
+  {
+    c: "contribute",
+    items: [
+      {
+        role: "Space lead",
+        when: "2026-07-10T10:00:00+00:00",
+        object: "Site survey, Thohoyandou clinic",
+        attester: "Adaeze Nwosu",
+      },
+    ],
+  },
+];
+const ABOUT_TEXT =
+  "Engineer by training, electrician by temperament. I left Cape Town for Berlin in 2014 and came back in 2023 to put power where it changes outcomes: rural clinics. Most weeks I am on a site somewhere in Limpopo, arguing with a battery cabinet or a provincial procurement officer.";
+const INTENT_NOTE = "Clinics that need a site survey, and members with battery storage experience.";
+const LINKS = { website: "dubepower.co.za", linkedin: "thandiwedube", instagram: "dube.power" };
+const SEGMENT_FIELDS = {
+  needs:
+    "A reliable transport partner for panels into Limpopo, and an accountant who knows SARS filings for a small engineering practice.",
+  timeline: "Already back",
+};
+const EVERYONE_SECTIONS = {
+  work: {
+    focus: ["Healthcare & Wellness", "Infrastructure & Energy", "Environment & Climate"],
+    regions: ["East Africa", "Southern Africa"],
+    industries: ["Healthcare", "Energy"],
+  },
+  about: { about: ABOUT_TEXT },
+  where: {
+    local_tz: "Africa/Johannesburg",
+    current_place: "Johannesburg, SAST",
+    current_country: "South Africa",
+  },
+  origin: { pathway: "Already returned", heritage: "Continental", origin_country: "South Africa" },
+  skills: { skills: ["Leadership", "Project Management", "Operations"] },
+  convene: [
+    {
+      sub: "Attested by Kwame Mensah, host",
+      when: "2026-08-23T10:00:00+00:00",
+      title: "Solar for Clinics, working session",
+    },
+  ],
+  segment: { fields: SEGMENT_FIELDS, segment: "returnee" },
+  languages: { languages: ["English", "isiZulu", "Sesotho"] },
+  contribute: [
+    {
+      sub: "Fulfilled a Need from Adaeze Nwosu",
+      when: "2026-07-10T10:00:00+00:00",
+      title: "Site survey, Thohoyandou clinic",
+    },
+  ],
+  collaborate: [
+    {
+      sub: "Member since Sep 2026",
+      when: "2026-09-08T07:22:24+00:00",
+      title: "Diaspora health workers",
+      completed: false,
+    },
+  ],
+};
+const VISIBILITY = {
+  work: "everyone",
+  about: "everyone",
+  links: "connections",
+  where: "everyone",
+  badges: "everyone",
+  convey: "everyone",
+  intent: "anchored",
+  origin: "everyone",
+  skills: "everyone",
+  convene: "everyone",
+  segment: "everyone",
+  languages: "everyone",
+  contribute: "everyone",
+  collaborate: "everyone",
+};
+const VOCAB = {
+  focus: ["Healthcare & Wellness", "Infrastructure & Energy", "Environment & Climate", "Education"],
+  industries: ["Healthcare", "Energy", "Agriculture", "Finance"],
+  regions: ["East Africa", "Southern Africa", "West Africa", "North Africa"],
+  skills: ["Leadership", "Project Management", "Operations", "Engineering", "Fundraising"],
+  languages: ["English", "isiZulu", "Sesotho", "Swahili", "Twi"],
+  intent: ["Find collaborators", "Host and convene", "Contribute skills", "Learn"],
+  interests: ["Energy", "Health", "Farming"],
+  countries: ["South Africa", "Ghana", "Nigeria", "Kenya"],
+  world: ["Germany", "Ghana", "Kenya", "South Africa", "United Kingdom", "United States"],
+  heritage: ["Continental", "First generation", "Second generation"],
+  pathway: ["Already returned", "Planning to return", "Not returning"],
+  timeline: ["Already back", "Within a year", "One to three years", "Someday"],
+};
+const ATTESTATIONS = {
+  convene: [
+    {
+      c: "convene",
+      role: null,
+      when: "2026-08-23T10:00:00+00:00",
+      handle: "thandiwe-dube",
+      member: "Thandiwe Dube",
+      object: "Solar for Clinics, working session",
+      attester: "the host",
+      object_id: "b3e00000-0000-4000-8000-000000000001",
+      avatar_path: null,
+      object_kind: "event",
+    },
+  ],
+  contribute: [
+    {
+      c: "contribute",
+      role: null,
+      when: "2026-07-10T10:00:00+00:00",
+      handle: "thandiwe-dube",
+      member: "Thandiwe Dube",
+      object: "Site survey, Thohoyandou clinic",
+      attester: "a Space lead",
+      object_id: "b3700000-0000-4000-8000-000000000001",
+      avatar_path: null,
+      object_kind: "opportunity",
+    },
+  ],
+};
+
+/**
+ * What profile_view returns for the mock's persona. mode: owner | connected | anchor | stranger.
+ * A signed-out request (or p_as_public) gets the anonymous projection: null when Share is off,
+ * otherwise core plus Everyone sections only. Section writes made through save_profile_section
+ * are folded in so a refetch reflects them.
+ */
+function profileProjection(db, anon) {
+  const pr = db.profile;
+  const sw = pr.switches;
+  const over = pr.overrides;
+  const member = { ...PROFILE_MEMBER, ...(over.core || {}), ...(over.media || {}) };
+  if (over.pattern) member.pattern = over.pattern.pattern;
+  const sections = JSON.parse(JSON.stringify(EVERYONE_SECTIONS));
+  if (over.about) sections.about = { about: over.about.about };
+  if (over.where) sections.where = { ...sections.where, current_place: over.where.current_place };
+  const vis = { ...VISIBILITY, ...pr.visibility };
+  const base = {
+    member,
+    badges: PROFILE_BADGES,
+    mutuals: [],
+    shared_spaces: [],
+    private: sw.private,
+  };
+  if (anon) {
+    if (!sw.shared) return null;
+    // Ruling 141: attesters who do not share publicly render as a role on a signed-out surface.
+    const ROLE = { host: "the host", "Space lead": "a Space lead" };
+    sections.convene = sections.convene.map((r) => ({ ...r, sub: "Attested by " + ROLE.host }));
+    sections.contribute = sections.contribute.map((r) => ({
+      ...r,
+      sub: "Fulfilled a Need from " + ROLE["Space lead"],
+    }));
+    const badges = PROFILE_BADGES.map((b) => ({
+      c: b.c,
+      items: b.items.map((it) => ({ object: it.object, when: it.when, attester: ROLE[it.role] })),
+    }));
+    return { ...base, badges, viewer: "anon", anchored: false, sections };
+  }
+  if (pr.mode === "owner") {
+    sections.links = LINKS;
+    sections.intent = { note: INTENT_NOTE, intent: ["Find collaborators", "Host and convene"] };
+    sections.convey = [];
+    sections.segment.variants = { returnee: SEGMENT_FIELDS, exploring: { interests: [] } };
+    return { ...base, viewer: "owner", anchored: false, sections, switches: sw, visibility: vis };
+  }
+  const anchored = pr.mode === "connected" || pr.mode === "anchor";
+  const connected = pr.rel === "connected";
+  if (vis.links === "everyone" || (vis.links === "connections" && connected))
+    sections.links = LINKS;
+  if (
+    vis.intent === "everyone" ||
+    (vis.intent === "connections" && connected) ||
+    (vis.intent === "anchored" && (anchored || connected))
+  )
+    sections.intent = { note: INTENT_NOTE, intent: ["Find collaborators", "Host and convene"] };
+  const out = {
+    ...base,
+    viewer: "member",
+    anchored,
+    sections,
+    relationship: { state: pr.rel, following: pr.following },
+  };
+  if (pr.mode === "connected") {
+    out.mutuals = [{ name: "Lerato Khumalo", handle: "lerato-khumalo" }];
+    out.dia_line = "Thandiwe was at Solar for Clinics, working session, which you hosted.";
+  }
+  if (pr.mode === "anchor") {
+    out.shared_spaces = ["Diaspora health workers"];
+    out.dia_line = "Thandiwe fulfilled a Need in the Space you lead.";
+  }
+  return out;
+}
+
 function makeMockDb() {
   const db = {
     posts: [],
@@ -158,6 +384,19 @@ function makeMockDb() {
     rpcPayloads: [],
     inferCalls: 0,
     reads: [],
+    // Brief 3: which persona is signed in relative to thandiwe-dube, and the owner's switches.
+    profile: {
+      mode: "owner",
+      rel: "none",
+      following: false,
+      switches: { shared: true, private: false },
+      visibility: {},
+      overrides: {},
+      failSection: null,
+      saves: [],
+      follows: [],
+      requests: [],
+    },
   };
   return db;
 }
@@ -246,8 +485,8 @@ async function mockSupabase(page, db, opts = {}) {
         height: 800,
       });
     }
-    if (p.startsWith("/storage/v1/object/sign/"))
-      return json({ signedURL: "/object/sign/post-media/x.svg?token=t" });
+    if (p.startsWith("/storage/v1/object/sign/") && method === "POST")
+      return json({ signedURL: "/object/sign/" + p.split("/object/sign/")[1] + "?token=t" });
     if (p.startsWith("/storage/v1/object/sign") || p.includes("/object/sign/"))
       return route.fulfill({ status: 200, contentType: "image/svg+xml", body: KENTE });
     if (p === "/rest/v1/rpc/publish_post") {
@@ -376,6 +615,33 @@ async function mockSupabase(page, db, opts = {}) {
       db.drafts.clear();
       return json(id);
     }
+    if (p === "/rest/v1/rpc/profile_view") {
+      const body = req.postDataJSON() || {};
+      const auth = req.headers()["authorization"] || "";
+      const anon = !auth.includes(JWT) || body.p_as_public === true;
+      await new Promise((r) => setTimeout(r, 120));
+      return json(profileProjection(db, anon));
+    }
+    if (p === "/rest/v1/rpc/profile_vocabularies") return json(VOCAB);
+    if (p === "/rest/v1/rpc/public_attestations") return json(ATTESTATIONS);
+    if (p === "/rest/v1/rpc/save_profile_section") {
+      const body = req.postDataJSON() || {};
+      const pr = db.profile;
+      await new Promise((r) => setTimeout(r, 200));
+      if (pr.failSection && body.section === pr.failSection)
+        return json(
+          { code: "P0001", message: "That did not save.", details: null, hint: null },
+          400,
+        );
+      pr.saves.push(body.section);
+      if (body.section === "switches") {
+        if (typeof body.payload.private === "boolean") pr.switches.private = body.payload.private;
+        if (typeof body.payload.shared === "boolean") pr.switches.shared = body.payload.shared;
+      } else if (body.section === "visibility")
+        pr.visibility[body.payload.section] = body.payload.audience;
+      else pr.overrides[body.section] = body.payload;
+      return json(null, 204);
+    }
     if (p.startsWith("/rest/v1/")) {
       const table = p.slice("/rest/v1/".length);
       const inIds = (param) => {
@@ -456,6 +722,45 @@ async function mockSupabase(page, db, opts = {}) {
         let rows = db.notifications.slice();
         if (url.searchParams.get("read_at") === "is.null") rows = rows.filter((n) => !n.read_at);
         return json(rows);
+      }
+      if (table === "members") {
+        const row = { handle: "amara-osei", name: "Amara Osei" };
+        return single ? json(row) : json([row]);
+      }
+      if (table === "member_follows") {
+        if (method === "POST") {
+          db.profile.following = true;
+          db.profile.follows.push("on");
+          return json([], 201);
+        }
+        if (method === "DELETE") {
+          db.profile.following = false;
+          db.profile.follows.push("off");
+          return json([], 200);
+        }
+        return json([]);
+      }
+      if (
+        table === "connection_requests" &&
+        method === "GET" &&
+        url.searchParams.has("from_member_id")
+      ) {
+        const pending = db.profile.rel === "sent" || db.profile.rel === "received";
+        return single
+          ? pending
+            ? json({ id: "cr1" })
+            : json(null)
+          : json(pending ? [{ id: "cr1" }] : []);
+      }
+      if (table === "connection_requests" && method !== "GET") {
+        db.profile.requests.push(method);
+        if (method === "POST") db.profile.rel = "sent";
+        if (method === "DELETE") db.profile.rel = "none";
+        if (method === "PATCH") {
+          const b = req.postDataJSON() || {};
+          db.profile.rel = b.status === "accepted" ? "connected" : "none";
+        }
+        return json([], method === "POST" ? 201 : 200);
       }
       if (table === "space_roles") return json([{ space_id: "s1" }]);
       if (table === "spaces") {
@@ -1978,7 +2283,24 @@ async function runKeyboard(browserType, bname) {
   await browser.close();
 }
 
-module.exports = { launch, makeMockDb, seedPosts, mockSupabase, signIn, BASE };
+module.exports = {
+  launch,
+  makeMockDb,
+  seedPosts,
+  mockSupabase,
+  signIn,
+  record,
+  results,
+  shot,
+  noOverflow,
+  BASE,
+  OUT,
+  VIEWPORTS,
+  THEMES,
+  FULL_PREVIEW_AT,
+  JWT,
+  UID,
+};
 
 if (require.main === module)
   (async () => {
@@ -1997,6 +2319,12 @@ if (require.main === module)
         if (process.env.SPECIAL.includes("targeted"))
           for (const vp of process.env.ONLY ? [JSON.parse(process.env.ONLY)] : TARGETED_VIEWPORTS)
             await runTargeted(bt, bname, vp);
+        if (process.env.SPECIAL.includes("profile")) {
+          const { runProfile } = require("./profile.cjs");
+          for (const vp of process.env.ONLY ? [JSON.parse(process.env.ONLY)] : VIEWPORTS)
+            for (const theme of process.env.THEME ? [process.env.THEME] : THEMES)
+              await runProfile(bt, bname, vp, theme);
+        }
       }
       const fails = results.filter((r) => !r.ok);
       console.log(`${results.length - fails.length}/${results.length} checks passed`);
@@ -2022,6 +2350,10 @@ if (require.main === module)
       await runSilence(bt, bname);
       await runKeyboard(bt, bname);
       for (const vp of TARGETED_VIEWPORTS) await runTargeted(bt, bname, vp);
+      // Brief 3: the profile in its three views plus editing mode, every viewport, both themes.
+      const { runProfile } = require("./profile.cjs");
+      for (const vp of VIEWPORTS)
+        for (const theme of THEMES) await runProfile(bt, bname, vp, theme);
     }
     const fails = results.filter((r) => !r.ok);
     fs.writeFileSync(path.join(OUT, "results.json"), JSON.stringify(results, null, 2));

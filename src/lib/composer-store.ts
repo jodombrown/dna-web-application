@@ -1,5 +1,6 @@
 // One composer shell mounted at the app root, opened from any surface through this store (ruling 56).
 import { useSyncExternalStore } from "react";
+import type { ComposerSeed } from "@/components/strand/Composer";
 import type { C } from "@/components/strand/cmeta";
 
 export type ComposerAnchor = {
@@ -11,6 +12,8 @@ export type ComposerAnchor = {
 export type ComposerRequest = {
   anchor?: ComposerAnchor | undefined;
   initialVerb?: C | undefined;
+  /** Prefilled fields (a Connect from a profile carries the member's name, Brief 3); skips the draft. */
+  initial?: ComposerSeed | undefined;
   /** Host surface the composer opened from; also the draft key (one draft per member per host context). */
   host: string;
 };

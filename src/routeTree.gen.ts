@@ -14,6 +14,7 @@ import { Route as ShellRouteImport } from './routes/_shell'
 import { Route as SignInRouteImport } from './routes/sign-in'
 import { Route as ShellCRouteImport } from './routes/_shell/$c'
 import { Route as ShellFeedRouteImport } from './routes/_shell/feed'
+import { Route as ShellMHandleRouteImport } from './routes/_shell/m.$handle'
 import { Route as ShellPostsIdRouteImport } from './routes/_shell/posts.$id'
 
 const IndexRoute = IndexRouteImport.update({
@@ -40,6 +41,11 @@ const ShellFeedRoute = ShellFeedRouteImport.update({
   path: '/feed',
   getParentRoute: () => ShellRoute,
 } as any)
+const ShellMHandleRoute = ShellMHandleRouteImport.update({
+  id: '/m/$handle',
+  path: '/m/$handle',
+  getParentRoute: () => ShellRoute,
+} as any)
 const ShellPostsIdRoute = ShellPostsIdRouteImport.update({
   id: '/posts/$id',
   path: '/posts/$id',
@@ -51,6 +57,7 @@ export interface FileRoutesByFullPath {
   '/sign-in': typeof SignInRoute
   '/$c': typeof ShellCRoute
   '/feed': typeof ShellFeedRoute
+  '/m/$handle': typeof ShellMHandleRoute
   '/posts/$id': typeof ShellPostsIdRoute
 }
 export interface FileRoutesByTo {
@@ -58,6 +65,7 @@ export interface FileRoutesByTo {
   '/sign-in': typeof SignInRoute
   '/$c': typeof ShellCRoute
   '/feed': typeof ShellFeedRoute
+  '/m/$handle': typeof ShellMHandleRoute
   '/posts/$id': typeof ShellPostsIdRoute
 }
 export interface FileRoutesById {
@@ -67,13 +75,14 @@ export interface FileRoutesById {
   '/sign-in': typeof SignInRoute
   '/_shell/$c': typeof ShellCRoute
   '/_shell/feed': typeof ShellFeedRoute
+  '/_shell/m/$handle': typeof ShellMHandleRoute
   '/_shell/posts/$id': typeof ShellPostsIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/sign-in' | '/$c' | '/feed' | '/posts/$id'
+  fullPaths: '/' | '/sign-in' | '/$c' | '/feed' | '/m/$handle' | '/posts/$id'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/sign-in' | '/$c' | '/feed' | '/posts/$id'
+  to: '/' | '/sign-in' | '/$c' | '/feed' | '/m/$handle' | '/posts/$id'
   id:
     | '__root__'
     | '/'
@@ -81,6 +90,7 @@ export interface FileRouteTypes {
     | '/sign-in'
     | '/_shell/$c'
     | '/_shell/feed'
+    | '/_shell/m/$handle'
     | '/_shell/posts/$id'
   fileRoutesById: FileRoutesById
 }
@@ -127,6 +137,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ShellFeedRouteImport
       parentRoute: typeof ShellRoute
     }
+    '/_shell/m/$handle': {
+      id: '/_shell/m/$handle'
+      path: '/m/$handle'
+      fullPath: '/m/$handle'
+      preLoaderRoute: typeof ShellMHandleRouteImport
+      parentRoute: typeof ShellRoute
+    }
     '/_shell/posts/$id': {
       id: '/_shell/posts/$id'
       path: '/posts/$id'
@@ -140,12 +157,14 @@ declare module '@tanstack/react-router' {
 interface ShellRouteChildren {
   ShellCRoute: typeof ShellCRoute
   ShellFeedRoute: typeof ShellFeedRoute
+  ShellMHandleRoute: typeof ShellMHandleRoute
   ShellPostsIdRoute: typeof ShellPostsIdRoute
 }
 
 const ShellRouteChildren: ShellRouteChildren = {
   ShellCRoute: ShellCRoute,
   ShellFeedRoute: ShellFeedRoute,
+  ShellMHandleRoute: ShellMHandleRoute,
   ShellPostsIdRoute: ShellPostsIdRoute,
 }
 

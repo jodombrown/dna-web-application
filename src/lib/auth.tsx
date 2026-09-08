@@ -8,6 +8,8 @@ export type Member = {
   name: string;
   email: string | undefined;
   avatar: string | undefined;
+  /** The member's public address (/m/:handle), from the members row the sign-up trigger creates (Brief 3). */
+  handle?: string | undefined;
 };
 
 type AuthState = { ready: boolean; session: Session | null; member: Member | null };
@@ -33,13 +35,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const sb = getSupabase();
     if (!sb) return;
     let active = true;
-    void sb.auth.getSession().then(({ data }) => {
+    // The members row (Brief 3) carries the handle and the name the member set on their profile;
+    // auth metadata stays the fallback so the shell renders before the row arrives.
+    const withProfile = async (session: Session | null) => {
+      const base = memberFromUser(session?.user);
+      if (!base) return base;
+      const { data } = await sb
+        .from("members")
+        .select("handle,name")
+        .eq("id", base.id)
+        .maybeSingle();
+      return data ? { ...base, handle: data.handle, name: data.name || base.name } : base;
+    };
+    void sb.auth.getSession().then(async ({ data }) => {
+      const member = await withProfile(data.session);
       if (!active) return;
-      setState({ ready: true, session: data.session, member: memberFromUser(data.session?.user) });
+      setState({ ready: true, session: data.session, member });
     });
     const { data: sub } = sb.auth.onAuthStateChange((_event, session) => {
       if (!active) return;
       setState({ ready: true, session, member: memberFromUser(session?.user) });
+      void withProfile(session).then((member) => {
+        if (active) setState((s) => (s.session === session ? { ...s, member } : s));
+      });
     });
     return () => {
       active = false;

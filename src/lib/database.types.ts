@@ -1,13 +1,66 @@
-// Generated from the canonical Supabase project (dgspjevjoblujcoljvkn) after the B2 migrations.
+// Generated from the canonical Supabase project (dgspjevjoblujcoljvkn) after the B3 migrations.
 // Regenerate with the Supabase MCP generate_typescript_types tool or `supabase gen types`.
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
 
 export type Database = {
+  // Allows to automatically instantiate createClient with right options
+  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
     PostgrestVersion: "14.5";
   };
   public: {
     Tables: {
+      attestations: {
+        Row: {
+          attested_at: string;
+          attester_member_id: string;
+          attester_role: string;
+          c_category: Database["public"]["Enums"]["c_category"];
+          created_at: string;
+          id: string;
+          member_id: string;
+          object_id: string;
+          object_kind: Database["public"]["Enums"]["anchor_kind"];
+        };
+        Insert: {
+          attested_at?: string;
+          attester_member_id: string;
+          attester_role: string;
+          c_category: Database["public"]["Enums"]["c_category"];
+          created_at?: string;
+          id?: string;
+          member_id: string;
+          object_id: string;
+          object_kind: Database["public"]["Enums"]["anchor_kind"];
+        };
+        Update: {
+          attested_at?: string;
+          attester_member_id?: string;
+          attester_role?: string;
+          c_category?: Database["public"]["Enums"]["c_category"];
+          created_at?: string;
+          id?: string;
+          member_id?: string;
+          object_id?: string;
+          object_kind?: Database["public"]["Enums"]["anchor_kind"];
+        };
+        Relationships: [
+          {
+            foreignKeyName: "attestations_attester_member_id_fkey";
+            columns: ["attester_member_id"];
+            isOneToOne: false;
+            referencedRelation: "members";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "attestations_member_id_fkey";
+            columns: ["member_id"];
+            isOneToOne: false;
+            referencedRelation: "members";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       connection_requests: {
         Row: {
           created_at: string;
@@ -36,6 +89,12 @@ export type Database = {
           to_name?: string;
           why?: string | null;
         };
+        Relationships: [];
+      };
+      countries: {
+        Row: { name: string; position: number };
+        Insert: { name: string; position: number };
+        Update: { name?: string; position?: number };
         Relationships: [];
       };
       events: {
@@ -91,6 +150,424 @@ export type Database = {
           },
         ];
       };
+      focus_areas: {
+        Row: { name: string; position: number };
+        Insert: { name: string; position: number };
+        Update: { name?: string; position?: number };
+        Relationships: [];
+      };
+      industries: {
+        Row: { name: string; position: number };
+        Insert: { name: string; position: number };
+        Update: { name?: string; position?: number };
+        Relationships: [];
+      };
+      intents: {
+        Row: { name: string; position: number };
+        Insert: { name: string; position: number };
+        Update: { name?: string; position?: number };
+        Relationships: [];
+      };
+      interests: {
+        Row: { name: string; position: number };
+        Insert: { name: string; position: number };
+        Update: { name?: string; position?: number };
+        Relationships: [];
+      };
+      languages: {
+        Row: { name: string; position: number };
+        Insert: { name: string; position: number };
+        Update: { name?: string; position?: number };
+        Relationships: [];
+      };
+      member_about: {
+        Row: { about: string; member_id: string; updated_at: string };
+        Insert: { about: string; member_id: string; updated_at?: string };
+        Update: { about?: string; member_id?: string; updated_at?: string };
+        Relationships: [
+          {
+            foreignKeyName: "member_about_member_id_fkey";
+            columns: ["member_id"];
+            isOneToOne: true;
+            referencedRelation: "members";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      member_focus_areas: {
+        Row: { member_id: string; name: string };
+        Insert: { member_id: string; name: string };
+        Update: { member_id?: string; name?: string };
+        Relationships: [
+          {
+            foreignKeyName: "member_focus_areas_member_id_fkey";
+            columns: ["member_id"];
+            isOneToOne: false;
+            referencedRelation: "members";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "member_focus_areas_name_fkey";
+            columns: ["name"];
+            isOneToOne: false;
+            referencedRelation: "focus_areas";
+            referencedColumns: ["name"];
+          },
+        ];
+      };
+      member_follows: {
+        Row: { created_at: string; follower_id: string; member_id: string };
+        Insert: { created_at?: string; follower_id: string; member_id: string };
+        Update: { created_at?: string; follower_id?: string; member_id?: string };
+        Relationships: [
+          {
+            foreignKeyName: "member_follows_follower_id_fkey";
+            columns: ["follower_id"];
+            isOneToOne: false;
+            referencedRelation: "members";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "member_follows_member_id_fkey";
+            columns: ["member_id"];
+            isOneToOne: false;
+            referencedRelation: "members";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      member_industries: {
+        Row: { member_id: string; name: string };
+        Insert: { member_id: string; name: string };
+        Update: { member_id?: string; name?: string };
+        Relationships: [
+          {
+            foreignKeyName: "member_industries_member_id_fkey";
+            columns: ["member_id"];
+            isOneToOne: false;
+            referencedRelation: "members";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "member_industries_name_fkey";
+            columns: ["name"];
+            isOneToOne: false;
+            referencedRelation: "industries";
+            referencedColumns: ["name"];
+          },
+        ];
+      };
+      member_intent: {
+        Row: { member_id: string; note: string | null; updated_at: string };
+        Insert: { member_id: string; note?: string | null; updated_at?: string };
+        Update: { member_id?: string; note?: string | null; updated_at?: string };
+        Relationships: [
+          {
+            foreignKeyName: "member_intent_member_id_fkey";
+            columns: ["member_id"];
+            isOneToOne: true;
+            referencedRelation: "members";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      member_intents: {
+        Row: { member_id: string; name: string };
+        Insert: { member_id: string; name: string };
+        Update: { member_id?: string; name?: string };
+        Relationships: [
+          {
+            foreignKeyName: "member_intents_member_id_fkey";
+            columns: ["member_id"];
+            isOneToOne: false;
+            referencedRelation: "members";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "member_intents_name_fkey";
+            columns: ["name"];
+            isOneToOne: false;
+            referencedRelation: "intents";
+            referencedColumns: ["name"];
+          },
+        ];
+      };
+      member_interests: {
+        Row: { member_id: string; name: string };
+        Insert: { member_id: string; name: string };
+        Update: { member_id?: string; name?: string };
+        Relationships: [
+          {
+            foreignKeyName: "member_interests_member_id_fkey";
+            columns: ["member_id"];
+            isOneToOne: false;
+            referencedRelation: "members";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "member_interests_name_fkey";
+            columns: ["name"];
+            isOneToOne: false;
+            referencedRelation: "interests";
+            referencedColumns: ["name"];
+          },
+        ];
+      };
+      member_languages: {
+        Row: { member_id: string; name: string };
+        Insert: { member_id: string; name: string };
+        Update: { member_id?: string; name?: string };
+        Relationships: [
+          {
+            foreignKeyName: "member_languages_member_id_fkey";
+            columns: ["member_id"];
+            isOneToOne: false;
+            referencedRelation: "members";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "member_languages_name_fkey";
+            columns: ["name"];
+            isOneToOne: false;
+            referencedRelation: "languages";
+            referencedColumns: ["name"];
+          },
+        ];
+      };
+      member_links: {
+        Row: { kind: Database["public"]["Enums"]["link_kind"]; member_id: string; url: string };
+        Insert: { kind: Database["public"]["Enums"]["link_kind"]; member_id: string; url: string };
+        Update: {
+          kind?: Database["public"]["Enums"]["link_kind"];
+          member_id?: string;
+          url?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "member_links_member_id_fkey";
+            columns: ["member_id"];
+            isOneToOne: false;
+            referencedRelation: "members";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      member_origin: {
+        Row: {
+          heritage: Database["public"]["Enums"]["heritage_kind"] | null;
+          member_id: string;
+          pathway: Database["public"]["Enums"]["return_pathway"] | null;
+          updated_at: string;
+        };
+        Insert: {
+          heritage?: Database["public"]["Enums"]["heritage_kind"] | null;
+          member_id: string;
+          pathway?: Database["public"]["Enums"]["return_pathway"] | null;
+          updated_at?: string;
+        };
+        Update: {
+          heritage?: Database["public"]["Enums"]["heritage_kind"] | null;
+          member_id?: string;
+          pathway?: Database["public"]["Enums"]["return_pathway"] | null;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "member_origin_member_id_fkey";
+            columns: ["member_id"];
+            isOneToOne: true;
+            referencedRelation: "members";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      member_regional_expertise: {
+        Row: { member_id: string; name: string };
+        Insert: { member_id: string; name: string };
+        Update: { member_id?: string; name?: string };
+        Relationships: [
+          {
+            foreignKeyName: "member_regional_expertise_member_id_fkey";
+            columns: ["member_id"];
+            isOneToOne: false;
+            referencedRelation: "members";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "member_regional_expertise_name_fkey";
+            columns: ["name"];
+            isOneToOne: false;
+            referencedRelation: "regional_expertise";
+            referencedColumns: ["name"];
+          },
+        ];
+      };
+      member_segment_details: {
+        Row: {
+          base: string | null;
+          member_id: string;
+          needs: string | null;
+          offer: string | null;
+          return_timeline: Database["public"]["Enums"]["return_timeline"] | null;
+          segment: Database["public"]["Enums"]["member_segment"];
+          support: string | null;
+          updated_at: string;
+        };
+        Insert: {
+          base?: string | null;
+          member_id: string;
+          needs?: string | null;
+          offer?: string | null;
+          return_timeline?: Database["public"]["Enums"]["return_timeline"] | null;
+          segment: Database["public"]["Enums"]["member_segment"];
+          support?: string | null;
+          updated_at?: string;
+        };
+        Update: {
+          base?: string | null;
+          member_id?: string;
+          needs?: string | null;
+          offer?: string | null;
+          return_timeline?: Database["public"]["Enums"]["return_timeline"] | null;
+          segment?: Database["public"]["Enums"]["member_segment"];
+          support?: string | null;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "member_segment_details_member_id_fkey";
+            columns: ["member_id"];
+            isOneToOne: false;
+            referencedRelation: "members";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      member_skills: {
+        Row: { member_id: string; name: string };
+        Insert: { member_id: string; name: string };
+        Update: { member_id?: string; name?: string };
+        Relationships: [
+          {
+            foreignKeyName: "member_skills_member_id_fkey";
+            columns: ["member_id"];
+            isOneToOne: false;
+            referencedRelation: "members";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "member_skills_name_fkey";
+            columns: ["name"];
+            isOneToOne: false;
+            referencedRelation: "skills";
+            referencedColumns: ["name"];
+          },
+        ];
+      };
+      member_visibility: {
+        Row: {
+          audience: Database["public"]["Enums"]["audience"];
+          member_id: string;
+          section: Database["public"]["Enums"]["profile_section"];
+        };
+        Insert: {
+          audience?: Database["public"]["Enums"]["audience"];
+          member_id: string;
+          section: Database["public"]["Enums"]["profile_section"];
+        };
+        Update: {
+          audience?: Database["public"]["Enums"]["audience"];
+          member_id?: string;
+          section?: Database["public"]["Enums"]["profile_section"];
+        };
+        Relationships: [
+          {
+            foreignKeyName: "member_visibility_member_id_fkey";
+            columns: ["member_id"];
+            isOneToOne: false;
+            referencedRelation: "members";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      members: {
+        Row: {
+          avatar_path: string | null;
+          cover_focus: string;
+          cover_path: string | null;
+          created_at: string;
+          current_country: string | null;
+          current_place: string | null;
+          handle: string;
+          headline: string | null;
+          id: string;
+          identified_at: string | null;
+          local_tz: string | null;
+          name: string;
+          origin_country: string | null;
+          pattern: Database["public"]["Enums"]["masthead_pattern"];
+          profile_private: boolean;
+          profile_shared: boolean;
+          segment: Database["public"]["Enums"]["member_segment"] | null;
+          updated_at: string;
+        };
+        Insert: {
+          avatar_path?: string | null;
+          cover_focus?: string;
+          cover_path?: string | null;
+          created_at?: string;
+          current_country?: string | null;
+          current_place?: string | null;
+          handle: string;
+          headline?: string | null;
+          id: string;
+          identified_at?: string | null;
+          local_tz?: string | null;
+          name: string;
+          origin_country?: string | null;
+          pattern?: Database["public"]["Enums"]["masthead_pattern"];
+          profile_private?: boolean;
+          profile_shared?: boolean;
+          segment?: Database["public"]["Enums"]["member_segment"] | null;
+          updated_at?: string;
+        };
+        Update: {
+          avatar_path?: string | null;
+          cover_focus?: string;
+          cover_path?: string | null;
+          created_at?: string;
+          current_country?: string | null;
+          current_place?: string | null;
+          handle?: string;
+          headline?: string | null;
+          id?: string;
+          identified_at?: string | null;
+          local_tz?: string | null;
+          name?: string;
+          origin_country?: string | null;
+          pattern?: Database["public"]["Enums"]["masthead_pattern"];
+          profile_private?: boolean;
+          profile_shared?: boolean;
+          segment?: Database["public"]["Enums"]["member_segment"] | null;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "members_current_country_fkey";
+            columns: ["current_country"];
+            isOneToOne: false;
+            referencedRelation: "world_countries";
+            referencedColumns: ["name"];
+          },
+          {
+            foreignKeyName: "members_origin_country_fkey";
+            columns: ["origin_country"];
+            isOneToOne: false;
+            referencedRelation: "countries";
+            referencedColumns: ["name"];
+          },
+        ];
+      };
       notifications: {
         Row: {
           actor_id: string | null;
@@ -107,6 +584,7 @@ export type Database = {
         Insert: {
           actor_id?: string | null;
           actor_kind?: Database["public"]["Enums"]["anchor_kind"] | null;
+          c_category?: Database["public"]["Enums"]["c_category"];
           created_at?: string;
           id?: string;
           kind: Database["public"]["Enums"]["notification_kind"];
@@ -116,7 +594,16 @@ export type Database = {
           recipient_member_id: string;
         };
         Update: {
+          actor_id?: string | null;
+          actor_kind?: Database["public"]["Enums"]["anchor_kind"] | null;
+          c_category?: Database["public"]["Enums"]["c_category"];
+          created_at?: string;
+          id?: string;
+          kind?: Database["public"]["Enums"]["notification_kind"];
+          object_id?: string | null;
+          object_kind?: Database["public"]["Enums"]["anchor_kind"] | null;
           read_at?: string | null;
+          recipient_member_id?: string;
         };
         Relationships: [];
       };
@@ -213,6 +700,13 @@ export type Database = {
             foreignKeyName: "post_dia_post_id_fkey";
             columns: ["post_id"];
             isOneToOne: true;
+            referencedRelation: "feed";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "post_dia_post_id_fkey";
+            columns: ["post_id"];
+            isOneToOne: true;
             referencedRelation: "posts";
             referencedColumns: ["id"];
           },
@@ -281,6 +775,13 @@ export type Database = {
             foreignKeyName: "post_links_post_id_fkey";
             columns: ["post_id"];
             isOneToOne: true;
+            referencedRelation: "feed";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "post_links_post_id_fkey";
+            columns: ["post_id"];
+            isOneToOne: true;
             referencedRelation: "posts";
             referencedColumns: ["id"];
           },
@@ -319,28 +820,30 @@ export type Database = {
             foreignKeyName: "post_media_post_id_fkey";
             columns: ["post_id"];
             isOneToOne: false;
+            referencedRelation: "feed";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "post_media_post_id_fkey";
+            columns: ["post_id"];
+            isOneToOne: false;
             referencedRelation: "posts";
             referencedColumns: ["id"];
           },
         ];
       };
       post_reactions: {
-        Row: {
-          created_at: string;
-          member_id: string;
-          post_id: string;
-        };
-        Insert: {
-          created_at?: string;
-          member_id: string;
-          post_id: string;
-        };
-        Update: {
-          created_at?: string;
-          member_id?: string;
-          post_id?: string;
-        };
+        Row: { created_at: string; member_id: string; post_id: string };
+        Insert: { created_at?: string; member_id: string; post_id: string };
+        Update: { created_at?: string; member_id?: string; post_id?: string };
         Relationships: [
+          {
+            foreignKeyName: "post_reactions_post_id_fkey";
+            columns: ["post_id"];
+            isOneToOne: false;
+            referencedRelation: "feed";
+            referencedColumns: ["id"];
+          },
           {
             foreignKeyName: "post_reactions_post_id_fkey";
             columns: ["post_id"];
@@ -351,22 +854,17 @@ export type Database = {
         ];
       };
       post_saves: {
-        Row: {
-          created_at: string;
-          member_id: string;
-          post_id: string;
-        };
-        Insert: {
-          created_at?: string;
-          member_id: string;
-          post_id: string;
-        };
-        Update: {
-          created_at?: string;
-          member_id?: string;
-          post_id?: string;
-        };
+        Row: { created_at: string; member_id: string; post_id: string };
+        Insert: { created_at?: string; member_id: string; post_id: string };
+        Update: { created_at?: string; member_id?: string; post_id?: string };
         Relationships: [
+          {
+            foreignKeyName: "post_saves_post_id_fkey";
+            columns: ["post_id"];
+            isOneToOne: false;
+            referencedRelation: "feed";
+            referencedColumns: ["id"];
+          },
           {
             foreignKeyName: "post_saves_post_id_fkey";
             columns: ["post_id"];
@@ -425,6 +923,18 @@ export type Database = {
           published_at?: string | null;
           status?: Database["public"]["Enums"]["post_status"];
         };
+        Relationships: [];
+      };
+      regional_expertise: {
+        Row: { name: string; position: number };
+        Insert: { name: string; position: number };
+        Update: { name?: string; position?: number };
+        Relationships: [];
+      };
+      skills: {
+        Row: { name: string; position: number };
+        Insert: { name: string; position: number };
+        Update: { name?: string; position?: number };
         Relationships: [];
       };
       space_roles: {
@@ -525,6 +1035,21 @@ export type Database = {
         };
         Relationships: [];
       };
+      world_countries: {
+        Row: {
+          name: string;
+          position: number;
+        };
+        Insert: {
+          name: string;
+          position: number;
+        };
+        Update: {
+          name?: string;
+          position?: number;
+        };
+        Relationships: [];
+      };
     };
     Views: {
       feed: {
@@ -544,11 +1069,53 @@ export type Database = {
           published_at: string | null;
           status: Database["public"]["Enums"]["post_status"] | null;
         };
+        Insert: {
+          anchor_id?: string | null;
+          anchor_kind?: Database["public"]["Enums"]["anchor_kind"] | null;
+          audience?: Database["public"]["Enums"]["audience"] | null;
+          author_id?: string | null;
+          author_kind?: Database["public"]["Enums"]["anchor_kind"] | null;
+          body?: string | null;
+          c_category?: Database["public"]["Enums"]["c_category"] | null;
+          created_at?: string | null;
+          created_by?: string | null;
+          created_object_id?: string | null;
+          created_object_kind?: Database["public"]["Enums"]["anchor_kind"] | null;
+          id?: string | null;
+          published_at?: string | null;
+          status?: Database["public"]["Enums"]["post_status"] | null;
+        };
+        Update: {
+          anchor_id?: string | null;
+          anchor_kind?: Database["public"]["Enums"]["anchor_kind"] | null;
+          audience?: Database["public"]["Enums"]["audience"] | null;
+          author_id?: string | null;
+          author_kind?: Database["public"]["Enums"]["anchor_kind"] | null;
+          body?: string | null;
+          c_category?: Database["public"]["Enums"]["c_category"] | null;
+          created_at?: string | null;
+          created_by?: string | null;
+          created_object_id?: string | null;
+          created_object_kind?: Database["public"]["Enums"]["anchor_kind"] | null;
+          id?: string | null;
+          published_at?: string | null;
+          status?: Database["public"]["Enums"]["post_status"] | null;
+        };
         Relationships: [];
       };
     };
     Functions: {
+      profile_view: {
+        Args: { p_as_public?: boolean; p_handle?: string };
+        Returns: Json;
+      };
+      profile_vocabularies: { Args: never; Returns: Json };
+      public_attestations: { Args: never; Returns: Json };
       publish_post: { Args: { payload: Json }; Returns: string };
+      save_profile_section: {
+        Args: { payload: Json; section: string };
+        Returns: undefined;
+      };
     };
     Enums: {
       anchor_kind: "member" | "space" | "event" | "opportunity" | "connection_request" | "story";
@@ -556,22 +1123,219 @@ export type Database = {
       c_category: "connect" | "convene" | "collaborate" | "contribute" | "convey" | "system";
       contribute_instrument: "time" | "skills" | "in_kind";
       event_mode: "in_person" | "virtual" | "hybrid";
+      heritage_kind:
+        "First generation" | "Second generation" | "Third generation or later" | "Continental";
+      link_kind: "website" | "linkedin" | "x" | "instagram";
+      masthead_pattern: "kente" | "adinkra" | "mudcloth";
+      member_segment: "returnee" | "anchor" | "ally" | "exploring";
       notification_kind:
         "connection_accepted" | "attestation_received" | "space_role_approved" | "event_reminder";
       post_status: "draft" | "published";
+      profile_section:
+        | "about"
+        | "segment"
+        | "origin"
+        | "where"
+        | "work"
+        | "skills"
+        | "languages"
+        | "intent"
+        | "links"
+        | "convene"
+        | "collaborate"
+        | "contribute"
+        | "convey"
+        | "badges";
       request_status: "pending" | "accepted" | "declined" | "withdrawn";
+      return_pathway:
+        | "Already returned"
+        | "Planning a return"
+        | "Circular, both places"
+        | "Not planning a return";
+      return_timeline:
+        "Already back" | "Within a year" | "One to three years" | "Someday, not fixed";
       space_role: "lead" | "member";
       space_role_status: "active" | "invited" | "left";
       space_status: "active" | "paused" | "completed";
       ticket_kind: "free" | "paid";
     };
-    CompositeTypes: { [_ in never]: never };
+    CompositeTypes: {
+      [_ in never]: never;
+    };
   };
 };
 
-type DefaultSchema = Database["public"];
-export type Tables<T extends keyof DefaultSchema["Tables"]> = DefaultSchema["Tables"][T]["Row"];
-export type TablesInsert<T extends keyof DefaultSchema["Tables"]> =
-  DefaultSchema["Tables"][T]["Insert"];
+type DatabaseWithoutInternals = Omit<Database, "__InternalSupabase">;
+
+type DefaultSchema = DatabaseWithoutInternals[Extract<keyof Database, "public">];
+
+export type Tables<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals;
+  }
+    ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+        DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
+    : never) = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals;
+}
+  ? (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+      DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])[TableName] extends {
+      Row: infer R;
+    }
+    ? R
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
+    ? (DefaultSchema["Tables"] & DefaultSchema["Views"])[DefaultSchemaTableNameOrOptions] extends {
+        Row: infer R;
+      }
+      ? R
+      : never
+    : never;
+
+export type TablesInsert<
+  DefaultSchemaTableNameOrOptions extends
+    keyof DefaultSchema["Tables"] | { schema: keyof DatabaseWithoutInternals },
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals;
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+    : never) = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals;
+}
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+      Insert: infer I;
+    }
+    ? I
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+        Insert: infer I;
+      }
+      ? I
+      : never
+    : never;
+
+export type TablesUpdate<
+  DefaultSchemaTableNameOrOptions extends
+    keyof DefaultSchema["Tables"] | { schema: keyof DatabaseWithoutInternals },
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals;
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+    : never) = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals;
+}
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+      Update: infer U;
+    }
+    ? U
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+        Update: infer U;
+      }
+      ? U
+      : never
+    : never;
+
+export type Enums<
+  DefaultSchemaEnumNameOrOptions extends
+    keyof DefaultSchema["Enums"] | { schema: keyof DatabaseWithoutInternals },
+  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals;
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
+    : never) = never,
+> = DefaultSchemaEnumNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals;
+}
+  ? DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"][EnumName]
+  : DefaultSchemaEnumNameOrOptions extends keyof DefaultSchema["Enums"]
+    ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
+    : never;
+
+export type CompositeTypes<
+  PublicCompositeTypeNameOrOptions extends
+    keyof DefaultSchema["CompositeTypes"] | { schema: keyof DatabaseWithoutInternals },
+  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals;
+  }
+    ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
+    : never) = never,
+> = PublicCompositeTypeNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals;
+}
+  ? DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"][CompositeTypeName]
+  : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema["CompositeTypes"]
+    ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
+    : never;
+
+export const Constants = {
+  public: {
+    Enums: {
+      anchor_kind: ["member", "space", "event", "opportunity", "connection_request", "story"],
+      audience: ["everyone", "connections", "anchored"],
+      c_category: ["connect", "convene", "collaborate", "contribute", "convey", "system"],
+      contribute_instrument: ["time", "skills", "in_kind"],
+      event_mode: ["in_person", "virtual", "hybrid"],
+      heritage_kind: [
+        "First generation",
+        "Second generation",
+        "Third generation or later",
+        "Continental",
+      ],
+      link_kind: ["website", "linkedin", "x", "instagram"],
+      masthead_pattern: ["kente", "adinkra", "mudcloth"],
+      member_segment: ["returnee", "anchor", "ally", "exploring"],
+      notification_kind: [
+        "connection_accepted",
+        "attestation_received",
+        "space_role_approved",
+        "event_reminder",
+      ],
+      post_status: ["draft", "published"],
+      profile_section: [
+        "about",
+        "segment",
+        "origin",
+        "where",
+        "work",
+        "skills",
+        "languages",
+        "intent",
+        "links",
+        "convene",
+        "collaborate",
+        "contribute",
+        "convey",
+        "badges",
+      ],
+      request_status: ["pending", "accepted", "declined", "withdrawn"],
+      return_pathway: [
+        "Already returned",
+        "Planning a return",
+        "Circular, both places",
+        "Not planning a return",
+      ],
+      return_timeline: [
+        "Already back",
+        "Within a year",
+        "One to three years",
+        "Someday, not fixed",
+      ],
+      space_role: ["lead", "member"],
+      space_role_status: ["active", "invited", "left"],
+      space_status: ["active", "paused", "completed"],
+      ticket_kind: ["free", "paid"],
+    },
+  },
+} as const;
+
+/** Row type of a view (app addition kept across regenerations; the generator emits Tables only). */
 export type Views<T extends keyof DefaultSchema["Views"]> = DefaultSchema["Views"][T]["Row"];
-export type Enums<T extends keyof DefaultSchema["Enums"]> = DefaultSchema["Enums"][T];
