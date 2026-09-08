@@ -14,7 +14,8 @@ export type AttestationItem = {
   avatar?: string | undefined;
   object: string;
   attester: string;
-  role: string;
+  /** Absent when the attester is unnamed on a signed-out surface (ruling 141). */
+  role?: string | null | undefined;
   when: string;
   href?: string | undefined;
 };
@@ -122,7 +123,8 @@ export function AttestationRail({ c, items = [], onOpen }: AttestationRailProps)
               {it.object}
             </span>
             <span style={{ fontSize: 13, color: "var(--ink-3)", lineHeight: 1.4 }}>
-              Attested by {it.attester}, {it.role} · {it.when}
+              Attested by {it.attester}
+              {it.role ? ", " + it.role : ""} · {it.when}
             </span>
           </a>
         ))}

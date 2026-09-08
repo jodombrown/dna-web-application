@@ -12,6 +12,8 @@ const HANDLE = "thandiwe-dube";
 const COUNT_RE = /\b\d+\s+(connections?|followers?|mutuals?|following)\b/i;
 const CONNECTIONS_ONLY = ["dubepower.co.za", "thandiwedube", "dube.power"];
 const ANCHORED_ONLY = ["Clinics that need a site survey", "Find collaborators"];
+/** Attesters on the seeded persona who do not share their own profile (ruling 141). */
+const UNSHARED_THIRD_PARTIES = ["Kwame Mensah", "Adaeze Nwosu"];
 
 /** What the public page rendered (section ids), kept per run so check 5 can compare owner's View as public with it. */
 const seenPublic = new Map();
@@ -445,6 +447,10 @@ async function runVisitor(browserType, bname, vp, theme, mode) {
         tag + ": DIA line present",
         (await page.locator('[data-testid="dia-line"]').count()) === 1,
       );
+      record(
+        tag + ": a signed-in member still sees attesters by name",
+        /Attested by Kwame Mensah, host/.test(text),
+      );
       await tap(page, '[data-testid="follow"]');
       await page.waitForTimeout(700);
       record(
@@ -589,6 +595,13 @@ async function runPublic(browserType, bname, vp, theme) {
       tag + ": no count of connections, followers or mutuals (check 10)",
       !COUNT_RE.test(text),
       (text.match(COUNT_RE) || [])[0],
+    );
+    record(
+      tag + ": third parties render as roles, never by name (ruling 141)",
+      !UNSHARED_THIRD_PARTIES.some((n) => html.includes(n)) &&
+        /Attested by the host/.test(text) &&
+        !/Attested by the host,/.test(text),
+      (text.match(/Attested by [^·\n]+/) || [])[0],
     );
     record(
       tag + ": five-C close with C deck and Join DNA",

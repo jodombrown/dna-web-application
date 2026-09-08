@@ -154,6 +154,7 @@ function specs(v: Vocabularies | null): SectionSpec[] {
     intent: [],
     interests: [],
     countries: [],
+    world: [],
     heritage: [],
     pathway: [],
     timeline: [],
@@ -183,6 +184,8 @@ function specs(v: Vocabularies | null): SectionSpec[] {
       id: "where",
       title: "Where I am",
       fields: [
+        // Ruling 142: the country comes from the world list; origin keeps the African list.
+        { k: "current_country", label: "Current country", kind: "select", options: V.world },
         {
           k: "current_place",
           label: "Current location",
@@ -190,7 +193,7 @@ function specs(v: Vocabularies | null): SectionSpec[] {
           hint: "City and time zone, written out. Nairobi, EAT.",
         },
       ],
-      emptyLine: "The city you are in now.",
+      emptyLine: "The country and city you are in now.",
       act: "Add where I am",
     },
     {
@@ -1640,7 +1643,7 @@ function ProfileBody(p: BodyProps) {
           cover: profile.coverUrl,
           coverFocus: m.cover_focus,
           originCountry: m.origin_country,
-          currentPlace: m.current_place,
+          currentPlace: m.current_place ?? m.current_country,
           pattern: m.pattern as MastheadPattern,
         }}
         identified={m.tier !== "account"}

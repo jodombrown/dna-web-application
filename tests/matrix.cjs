@@ -145,6 +145,7 @@ const PROFILE_MEMBER = {
   local_tz: "Africa/Johannesburg",
   cover_focus: "center 35%",
   current_place: "Johannesburg, SAST",
+  current_country: "South Africa",
   origin_country: "South Africa",
   avatar_path: OWNER_ID + "/avatar/a.png",
   cover_path: OWNER_ID + "/cover/c.png",
@@ -189,7 +190,11 @@ const EVERYONE_SECTIONS = {
     industries: ["Healthcare", "Energy"],
   },
   about: { about: ABOUT_TEXT },
-  where: { local_tz: "Africa/Johannesburg", current_place: "Johannesburg, SAST" },
+  where: {
+    local_tz: "Africa/Johannesburg",
+    current_place: "Johannesburg, SAST",
+    current_country: "South Africa",
+  },
   origin: { pathway: "Already returned", heritage: "Continental", origin_country: "South Africa" },
   skills: { skills: ["Leadership", "Project Management", "Operations"] },
   convene: [
@@ -242,6 +247,7 @@ const VOCAB = {
   intent: ["Find collaborators", "Host and convene", "Contribute skills", "Learn"],
   interests: ["Energy", "Health", "Farming"],
   countries: ["South Africa", "Ghana", "Nigeria", "Kenya"],
+  world: ["Germany", "Ghana", "Kenya", "South Africa", "United Kingdom", "United States"],
   heritage: ["Continental", "First generation", "Second generation"],
   pathway: ["Already returned", "Planning to return", "Not returning"],
   timeline: ["Already back", "Within a year", "One to three years", "Someday"],
@@ -250,12 +256,12 @@ const ATTESTATIONS = {
   convene: [
     {
       c: "convene",
-      role: "host",
+      role: null,
       when: "2026-08-23T10:00:00+00:00",
       handle: "thandiwe-dube",
       member: "Thandiwe Dube",
       object: "Solar for Clinics, working session",
-      attester: "Kwame Mensah",
+      attester: "the host",
       object_id: "b3e00000-0000-4000-8000-000000000001",
       avatar_path: null,
       object_kind: "event",
@@ -264,12 +270,12 @@ const ATTESTATIONS = {
   contribute: [
     {
       c: "contribute",
-      role: "Space lead",
+      role: null,
       when: "2026-07-10T10:00:00+00:00",
       handle: "thandiwe-dube",
       member: "Thandiwe Dube",
       object: "Site survey, Thohoyandou clinic",
-      attester: "Adaeze Nwosu",
+      attester: "a Space lead",
       object_id: "b3700000-0000-4000-8000-000000000001",
       avatar_path: null,
       object_kind: "opportunity",
@@ -302,7 +308,18 @@ function profileProjection(db, anon) {
   };
   if (anon) {
     if (!sw.shared) return null;
-    return { ...base, viewer: "anon", anchored: false, sections };
+    // Ruling 141: attesters who do not share publicly render as a role on a signed-out surface.
+    const ROLE = { host: "the host", "Space lead": "a Space lead" };
+    sections.convene = sections.convene.map((r) => ({ ...r, sub: "Attested by " + ROLE.host }));
+    sections.contribute = sections.contribute.map((r) => ({
+      ...r,
+      sub: "Fulfilled a Need from " + ROLE["Space lead"],
+    }));
+    const badges = PROFILE_BADGES.map((b) => ({
+      c: b.c,
+      items: b.items.map((it) => ({ object: it.object, when: it.when, attester: ROLE[it.role] })),
+    }));
+    return { ...base, badges, viewer: "anon", anchored: false, sections };
   }
   if (pr.mode === "owner") {
     sections.links = LINKS;

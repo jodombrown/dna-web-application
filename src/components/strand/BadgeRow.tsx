@@ -4,7 +4,12 @@ import { CBadge } from "./CBadge";
 import type { C } from "./cmeta";
 
 export type BadgeC = Extract<C, "convene" | "collaborate" | "contribute">;
-export type BadgeItem = { object: string; attester: string; role: string; when: string };
+export type BadgeItem = {
+  object: string;
+  attester: string;
+  role?: string | null | undefined;
+  when: string;
+};
 export type Badge = { c: BadgeC; items: BadgeItem[] };
 
 const LBL: Record<BadgeC, string> = {
@@ -86,7 +91,8 @@ export function BadgeRow({ badges = [], style }: BadgeRowProps) {
             <div key={i} style={{ display: "flex", flexDirection: "column", gap: 2 }}>
               <span style={{ fontSize: 15, fontWeight: 500, lineHeight: 1.35 }}>{it.object}</span>
               <span style={{ fontSize: 13, color: "var(--ink-3)" }}>
-                Attested by {it.attester}, {it.role} · {it.when}
+                Attested by {it.attester}
+                {it.role ? ", " + it.role : ""} · {it.when}
               </span>
             </div>
           ))}

@@ -496,6 +496,7 @@ export type Database = {
           cover_focus: string;
           cover_path: string | null;
           created_at: string;
+          current_country: string | null;
           current_place: string | null;
           handle: string;
           headline: string | null;
@@ -515,6 +516,7 @@ export type Database = {
           cover_focus?: string;
           cover_path?: string | null;
           created_at?: string;
+          current_country?: string | null;
           current_place?: string | null;
           handle: string;
           headline?: string | null;
@@ -534,6 +536,7 @@ export type Database = {
           cover_focus?: string;
           cover_path?: string | null;
           created_at?: string;
+          current_country?: string | null;
           current_place?: string | null;
           handle?: string;
           headline?: string | null;
@@ -549,6 +552,13 @@ export type Database = {
           updated_at?: string;
         };
         Relationships: [
+          {
+            foreignKeyName: "members_current_country_fkey";
+            columns: ["current_country"];
+            isOneToOne: false;
+            referencedRelation: "world_countries";
+            referencedColumns: ["name"];
+          },
           {
             foreignKeyName: "members_origin_country_fkey";
             columns: ["origin_country"];
@@ -1022,6 +1032,21 @@ export type Database = {
           origin_id?: string | null;
           origin_kind?: Database["public"]["Enums"]["anchor_kind"] | null;
           title?: string;
+        };
+        Relationships: [];
+      };
+      world_countries: {
+        Row: {
+          name: string;
+          position: number;
+        };
+        Insert: {
+          name: string;
+          position: number;
+        };
+        Update: {
+          name?: string;
+          position?: number;
         };
         Relationships: [];
       };

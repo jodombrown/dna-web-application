@@ -154,6 +154,32 @@ async function get(url, headers = {}) {
       ),
       links.status + "/" + intent.status,
     );
+    // Ruling 141: the public rail and the anonymous projection never name a member who does not share.
+    const railRes = await fetch(SUPABASE_URL + "/rest/v1/rpc/public_attestations", {
+      method: "POST",
+      headers: { ...H, "content-type": "application/json" },
+      body: "{}",
+    });
+    const railText = await railRes.text();
+    const viewRes2 = await fetch(SUPABASE_URL + "/rest/v1/rpc/profile_view", {
+      method: "POST",
+      headers: { ...H, "content-type": "application/json" },
+      body: JSON.stringify({ p_handle: SHARED, p_as_public: false }),
+    });
+    const viewText2 = await viewRes2.text();
+    const UNSHARED_NAMES = ["Kwame Mensah", "Adaeze Nwosu"];
+    record(
+      "ruling 141: anon public_attestations names no member who does not share",
+      railRes.status === 200 &&
+        !UNSHARED_NAMES.some((n) => railText.includes(n)) &&
+        /the host|a Space lead/.test(railText),
+      railText.slice(0, 160),
+    );
+    record(
+      "ruling 141: anon profile_view of the shared profile names no third party who does not share",
+      viewRes2.status === 200 && !UNSHARED_NAMES.some((n) => viewText2.includes(n)),
+      (viewText2.match(/Attested by [^"]+/) || [])[0],
+    );
     const all = await rest("members?select=handle");
     record(
       "check 3: anon sees only shared handles in members",

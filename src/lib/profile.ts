@@ -62,7 +62,11 @@ export type ProfileSections = {
     heritage?: string | undefined;
     pathway?: string | undefined;
   };
-  where?: { current_place?: string | undefined; local_tz?: string | undefined };
+  where?: {
+    current_place?: string | undefined;
+    current_country?: string | undefined;
+    local_tz?: string | undefined;
+  };
   work?: { focus: string[]; industries: string[]; regions: string[] };
   skills?: { skills: string[] };
   languages?: { languages: string[] };
@@ -84,6 +88,7 @@ export type ProfileMember = {
   cover_focus: string;
   origin_country?: string | undefined;
   current_place?: string | undefined;
+  current_country?: string | undefined;
   local_tz?: string | undefined;
   segment?: Segment | undefined;
   pattern: MastheadPattern;
@@ -100,7 +105,8 @@ export type ProfileView = {
   sections: ProfileSections;
   badges: {
     c: Badge["c"];
-    items: { object: string; attester: string; role: string; when: string }[];
+    /** role is absent when the attester is rendered as a role only (ruling 141). */
+    items: { object: string; attester: string; role?: string | null | undefined; when: string }[];
   }[];
   visibility?: Partial<Record<SectionKey, Audience>> | undefined;
   relationship?: { state: RelationshipState; following: boolean } | undefined;
@@ -122,6 +128,8 @@ export type Vocabularies = {
   intent: string[];
   interests: string[];
   countries: string[];
+  /** Current location list (ruling 142): the world; countries is the African list. */
+  world: string[];
   heritage: string[];
   pathway: string[];
   timeline: string[];
@@ -294,7 +302,7 @@ type PublicAttestationRow = {
   avatar_path?: string | null;
   object: string;
   attester: string;
-  role: string;
+  role?: string | null;
   when: string;
   c: C;
   object_kind: string;
@@ -312,7 +320,7 @@ export async function loadPublicAttestations(): Promise<Partial<Record<C, Attest
       member: r.member,
       object: r.object,
       attester: r.attester,
-      role: r.role,
+      role: r.role ?? null,
       when: whenShort(r.when),
       // The object's own public page arrives with its C's brief; until then the C's route.
       href: "/" + r.c,
