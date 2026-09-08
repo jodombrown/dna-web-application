@@ -32,15 +32,22 @@ jobs:
         with:
           bun-version: latest
       - run: bun install --frozen-lockfile
-      - name: Resolve target URL
+      - name: Resolve target URL and artifact slug
         id: target
+        env:
+          BASE_URL: ${{ inputs.base_url }}
+          REF_NAME: ${{ github.ref_name }}
         run: |
-          URL="${{ inputs.base_url }}"
-          if [ -z "$URL" ]; then URL="https://${{ github.ref_name }}.dna-web-application.pages.dev"; fi
+          set -uo pipefail
+          URL="$BASE_URL"
+          if [ -z "$URL" ]; then URL="https://${REF_NAME}.dna-web-application.pages.dev"; fi
           echo "url=$URL" >> "$GITHUB_OUTPUT"
-          # An artifact name may not carry a forward slash, and a branch name usually does.
-          echo "slug=$(echo "${{ github.ref_name }}" | tr '/' '-')" >> "$GITHUB_OUTPUT"
-          echo "Testing $URL"
+          # upload-artifact rejects " : < > | * ? \ / CR LF in a name, and our branch names
+          # carry a slash. Map every rejected character, for any branch shape, not just that one.
+          SLUG=$(printf '%s' "$REF_NAME" | tr -d '\r\n' | tr '"/:<>|*?\\' '-')
+          [ -n "$SLUG" ] || SLUG="ref"
+          echo "slug=$SLUG" >> "$GITHUB_OUTPUT"
+          echo "Testing $URL (artifact slug $SLUG)"
       - name: Live check (deployed HTML serves the app)
         run: |
           set -e
