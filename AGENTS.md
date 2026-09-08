@@ -11,11 +11,6 @@
 
 <!-- LOVABLE:END -->
 
->
-
-# AGENTS.md addition — jodombrown/dna-web-application
-
-```
 ## Roles in this repository
 
 Claude Code is the sole developer of core code: schema, RLS, Edge Functions, routes, components, tests. Work is done on a feature branch and merged through a pull request after the responsive matrix passes on the deployed preview URL.
@@ -37,4 +32,3 @@ This app is TanStack Start with SSR (Nitro, Cloudflare Pages preset), not a Vite
 Supabase holds Auth, Postgres, RLS, Storage, Edge Functions, and secrets. Cloudflare Pages hosts and deploys from GitHub Actions. Lovable hosts nothing and holds no credentials.
 
 [absolute] Lovable never creates or alters schema. If a sync introduces a change under `supabase/`, revert it and report it.
-```

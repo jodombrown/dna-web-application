@@ -7,8 +7,42 @@
 const path = require("path");
 const M = require("./matrix.cjs");
 
-const { launch, makeMockDb, seedPosts, mockSupabase, signIn, record, shot, noOverflow, BASE } = M;
+const { launch, makeMockDb, seedPosts, mockSupabase, signIn, record, shot, noOverflow, BASE, SB } =
+  M;
 const HANDLE = "thandiwe-dube";
+const SB_RE = SB.replace(/\./g, "\\.");
+/**
+ * WebKit words every failed load the same way it words a cross-origin denial: "Fetch API cannot
+ * load <url> due to access control checks." A fetch the navigation cancelled is reported that way
+ * too, and Playwright delivers a JavaScript-source console error in WebKit as a page error rather
+ * than a console message, so this shape reaches page.on("pageerror").
+ *
+ * Every request to the mocked Supabase origin is fulfilled in-process by tests/matrix.cjs with
+ * access-control-allow-origin: *, so a real access-control denial cannot happen there. Only this
+ * exact wording, and only for that origin, is ignored; any other page error still fails the check.
+ */
+const CANCELLED_MOCK_FETCH = new RegExp(
+  `^(?:\\w*Error: )?Fetch API cannot load https?:[\\s/]*${SB_RE}\\S*\\s+due to access control checks\\.?$`,
+);
+/**
+ * Console errors that carry no signal about the app: Google Fonts is unreachable from CI and the
+ * mock aborts it, and an endpoint that deliberately answers 400 or 406 (a refused section save, an
+ * empty maybeSingle) is logged by the browser as a resource error while the flow asserts the
+ * behaviour itself. The status codes match as whole numbers, so a message that merely carries the
+ * seeded member id (…-4000-8000-…) is not swallowed.
+ */
+const IGNORED_CONSOLE = new RegExp(
+  [
+    "fonts\\.g",
+    "ERR_CONNECTION_RESET",
+    "ERR_NAME_NOT_RESOLVED",
+    "ERR_FAILED",
+    "\\b(?:400|406)\\b",
+    CANCELLED_MOCK_FETCH.source,
+  ].join("|"),
+);
+/** Per page: wait for the mocked Supabase surface to go quiet. Set by newPage. */
+const sbIdle = new WeakMap();
 const COUNT_RE = /\b\d+\s+(connections?|followers?|mutuals?|following)\b/i;
 const CONNECTIONS_ONLY = ["dubepower.co.za", "thandiwedube", "dube.power"];
 const ANCHORED_ONLY = ["Clinics that need a site survey", "Find collaborators"];
@@ -40,24 +74,47 @@ async function newPage(browserType, [w, h], theme, opts = {}) {
     { theme },
   );
   await mockSupabase(page, db);
+  // The Feed hydrates in a chain (post_media, then post_links, then the member's own save and react
+  // marks) whose later links start after Playwright already reports network idle. Track the mocked
+  // surface so a flow can wait for it to go quiet before navigating away, rather than leaving a
+  // fetch in flight for the teardown to cancel.
+  const pending = new Set();
+  let lastCall = Date.now();
+  page.on("request", (r) => {
+    if (!r.url().includes(SB)) return;
+    pending.add(r);
+    lastCall = Date.now();
+  });
+  const settled = (r) => {
+    if (pending.delete(r)) lastCall = Date.now();
+  };
+  page.on("requestfinished", settled);
+  page.on("requestfailed", settled);
+  sbIdle.set(page, async (quiet = 700, cap = 10000) => {
+    const end = Date.now() + cap;
+    while (Date.now() < end) {
+      if (pending.size === 0 && Date.now() - lastCall >= quiet) return;
+      await page.waitForTimeout(100);
+    }
+  });
   const errors = [];
-  page.on("pageerror", (e) => errors.push(String(e)));
+  page.on("pageerror", (e) => {
+    const text = String(e);
+    if (!CANCELLED_MOCK_FETCH.test(text)) errors.push(text);
+  });
   page.on("console", (m) => {
-    if (
-      m.type() === "error" &&
-      !/fonts\.g|ERR_CONNECTION_RESET|ERR_NAME_NOT_RESOLVED|ERR_FAILED|406|400/.test(m.text()) &&
-      // WebKit's wording for a mocked fetch cancelled by the navigation away from Feed.
-      !(/supabase\.co/.test(m.text()) && /access control checks|cancelled/i.test(m.text()))
-    )
-      errors.push(m.text());
+    if (m.type() === "error" && !IGNORED_CONSOLE.test(m.text())) errors.push(m.text());
   });
   return { browser, page, db, errors };
 }
 
 async function openProfile(page, search = "") {
   // Let the page being left finish its fetches: WebKit reports a fetch cancelled by navigation as
-  // a console error, which would count against the profile.
+  // a page error, which would count against the profile. Network idle is not enough on its own,
+  // the Feed's hydration chain starts its last requests after it.
   await page.waitForLoadState("networkidle").catch(() => {});
+  const idle = sbIdle.get(page);
+  if (idle) await idle();
   await page.goto(BASE + "/m/" + HANDLE + search, { waitUntil: "networkidle" });
   await page.waitForSelector('[data-testid="profile"]:not([data-view="loading"])', {
     timeout: 20000,
@@ -72,13 +129,84 @@ async function openProfile(page, search = "") {
  */
 async function tap(page, selector) {
   const loc = typeof selector === "string" ? page.locator(selector).first() : selector;
-  await loc.waitFor({ state: "visible", timeout: 30000 });
+  await waitInteractive(page, loc);
   await loc.evaluate((el) =>
     el.scrollIntoView({ block: "center", inline: "nearest", behavior: "instant" }),
   );
   // The masthead may condense on that scroll; let its 300ms height transition finish.
   await page.waitForTimeout(400);
+  await clearOfStickies(page, loc);
   await loc.click({ timeout: 15000 });
+}
+
+/**
+ * Wait for a control to be usable, not merely present. WebKit lands a section in the DOM before
+ * the edit-mode layout has settled, and Playwright's actionability check on a control clicked in
+ * that window keeps retrying until the click times out.
+ */
+async function waitInteractive(page, selector, timeout = 30000) {
+  const loc = typeof selector === "string" ? page.locator(selector).first() : selector;
+  await loc.waitFor({ state: "visible", timeout });
+  const end = Date.now() + timeout;
+  for (;;) {
+    // Enabled, laid out, and holding still: a box that is still moving is a box Playwright will
+    // wait on after we hand it the click.
+    const a = await loc.boundingBox();
+    await page.waitForTimeout(120);
+    const b = await loc.boundingBox();
+    if (
+      (await loc.isEnabled()) &&
+      a &&
+      b &&
+      a.width > 0 &&
+      a.height > 0 &&
+      Math.abs(a.y - b.y) < 1 &&
+      Math.abs(a.x - b.x) < 1
+    )
+      return loc;
+    if (Date.now() > end) throw new Error("control never became interactive: " + String(selector));
+  }
+}
+
+/**
+ * Scroll the control clear of the sticky header, the bottom dock and the sticky Done bar. Centring
+ * inside the scroller is not enough near either end of the column, where the scroller cannot move
+ * far enough and the control stays underneath a fixed element; Playwright then waits on the hit
+ * test until the click times out.
+ */
+async function clearOfStickies(page, loc) {
+  for (let i = 0; i < 4; i++) {
+    const delta = await loc.evaluate((el) => {
+      const r = el.getBoundingClientRect();
+      const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+      if (!hit || hit === el || el.contains(hit) || hit.contains(el)) return 0;
+      const h = hit.getBoundingClientRect();
+      // A blocker above the control means scroll back (negative); one below means scroll on.
+      return h.top <= r.top ? -(h.bottom - r.top + 12) : r.bottom - h.top + 12;
+    });
+    if (!delta) return true;
+    const moved = await loc.evaluate((el, d) => {
+      const sc = el.closest("[data-scroller]") || document.scrollingElement;
+      if (!sc) return false;
+      const before = sc.scrollTop;
+      sc.scrollTop = before + d;
+      return sc.scrollTop !== before;
+    }, delta);
+    if (!moved) return false;
+    await page.waitForTimeout(250);
+  }
+  return false;
+}
+
+/** Poll until the predicate holds. WebKit settles a save later than Chromium, and a fixed pause
+ * turns the assertion that follows it into a race. */
+async function until(page, fn, timeout = 15000) {
+  const end = Date.now() + timeout;
+  for (;;) {
+    if (await fn()) return true;
+    if (Date.now() >= end) return false;
+    await page.waitForTimeout(100);
+  }
 }
 
 /** Flip a Strand Switch by its label with a DOM click (the input is 0 by 0 and the label's hit test
@@ -324,25 +452,44 @@ async function runOwner(browserType, bname, vp, theme) {
     // edit mode every section stays open, the failed draft keeps its text, the saved one refetches.
     db.profile.failSection = "about";
     await page.waitForSelector('[data-testid="profile"][data-edit="1"]');
+    const ABOUT = "Edited about text for the matrix run.";
     const about = page.locator('[data-testid="section-about"]');
-    await about.locator("textarea").fill("Edited about text for the matrix run.");
+    await waitInteractive(page, about.locator("textarea"));
+    await about.locator("textarea").fill(ABOUT);
     await tap(page, about.locator('button:has-text("Save")'));
-    await page.waitForTimeout(900);
-    const aboutStillEditing =
-      (await about.locator('button:has-text("Save")').count()) === 1 &&
-      (await about.locator("textarea").inputValue()) === "Edited about text for the matrix run.";
+    // The server refuses this one with a 400. Wait for that round trip rather than for a fixed
+    // pause, then read the section back.
+    await until(page, () => db.profile.attempts.includes("about"));
+    const aboutStillEditing = await until(
+      page,
+      async () =>
+        (await about.locator('button:has-text("Save")').count()) === 1 &&
+        (await about.locator("textarea").inputValue()) === ABOUT,
+    );
+
     await page.waitForSelector('[data-testid="profile"][data-edit="1"]');
+    const WHERE = "Cape Town, SAST";
     const where = page.locator('[data-testid="section-where"]');
-    await where.locator('button:has-text("Save")').waitFor({ state: "attached", timeout: 30000 });
-    await where.locator("input").first().fill("Cape Town, SAST");
+    // Interactive, not merely attached: the section is in the DOM well before its controls are
+    // usable, and WebKit takes the longer path there.
+    const whereInput = await waitInteractive(page, where.locator("input").first());
+    await whereInput.fill(WHERE);
+    await until(page, async () => (await whereInput.inputValue()) === WHERE);
+    await waitInteractive(page, where.locator('button:has-text("Save")'));
     await tap(page, where.locator('button:has-text("Save")'));
-    await page.waitForTimeout(900);
     const whereSaved =
-      db.profile.saves.includes("where") &&
-      (await where.locator("input").first().inputValue()) === "Cape Town, SAST";
-    const othersIntact =
-      (await page.locator('[data-testid^="section-"] button:has-text("Save")').count()) ===
-      saveButtons;
+      (await until(page, () => db.profile.saves.includes("where"))) &&
+      // The section refetches after the save, so read through a fresh locator each time.
+      (await until(
+        page,
+        async () => (await where.locator("input").first().inputValue()) === WHERE,
+      ));
+    const othersIntact = await until(
+      page,
+      async () =>
+        (await page.locator('[data-testid^="section-"] button:has-text("Save")').count()) ===
+        saveButtons,
+    );
     record(
       tag + ": a failed save on one section leaves the others intact; each saves alone (check 6)",
       aboutStillEditing && whereSaved && othersIntact && !db.profile.saves.includes("about"),
