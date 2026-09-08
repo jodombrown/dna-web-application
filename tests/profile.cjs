@@ -44,7 +44,8 @@ async function newPage(browserType, [w, h], theme, opts = {}) {
     if (
       m.type() === "error" &&
       !/fonts\.g|ERR_CONNECTION_RESET|ERR_NAME_NOT_RESOLVED|ERR_FAILED|406|400/.test(m.text()) &&
-      !/supabase\.co.*(access control checks|cancelled)/.test(m.text())
+      // WebKit's wording for a mocked fetch cancelled by the navigation away from Feed.
+      !(/supabase\.co/.test(m.text()) && /access control checks|cancelled/i.test(m.text()))
     )
       errors.push(m.text());
   });
@@ -76,6 +77,17 @@ async function tap(page, selector) {
   // The masthead may condense on that scroll; let its 300ms height transition finish.
   await page.waitForTimeout(400);
   await loc.click({ timeout: 15000 });
+}
+
+/** Flip a Strand Switch by its label with a DOM click (the input is 0 by 0 and the label's hit test
+ * is what WebKit keeps retrying); the change handler and the save path are what the check covers. */
+async function toggle(page, labelText) {
+  const loc = page.locator("label", { hasText: labelText }).first();
+  await loc.waitFor({ state: "visible", timeout: 30000 });
+  await loc.evaluate((el) => {
+    el.scrollIntoView({ block: "center", inline: "nearest", behavior: "instant" });
+    el.click();
+  });
 }
 
 /** Page state for a failure detail: URL, view and edit flags, open sections, the toast text. */
@@ -264,14 +276,14 @@ async function runOwner(browserType, bname, vp, theme) {
 
     // Switches and visibility save through their own RPC calls.
     const before = db.profile.saves.length;
-    await tap(page, page.locator("label", { hasText: "Share my profile" }));
+    await toggle(page, "Share my profile");
     await page.waitForTimeout(600);
     record(
       tag + ": Share switch saves via save_profile_section",
       db.profile.saves.includes("switches"),
       db.profile.saves.slice(before).join(","),
     );
-    await tap(page, page.locator("label", { hasText: "Share my profile" }));
+    await toggle(page, "Share my profile");
     await page.waitForTimeout(600);
 
     // Editing mode (check 6).
@@ -374,7 +386,7 @@ async function runOwner(browserType, bname, vp, theme) {
     await page.waitForSelector('[data-testid="profile"][data-view="owner"]');
     record(tag + ": no page errors", errors.length === 0, errors.join(" | ").slice(0, 300));
   } catch (e) {
-    record(tag + " flow", false, String(e).slice(0, 300) + " | " + (await pageState(page)));
+    record(tag + " flow", false, String(e).slice(0, 1200) + " | " + (await pageState(page)));
     await shot(page, `${bname}-${w}x${h}-${theme}-b3-owner-FAIL`).catch(() => {});
   }
   await browser.close();
@@ -523,7 +535,7 @@ async function runVisitor(browserType, bname, vp, theme, mode) {
     await noOverflow(page, tag + " condensed");
     record(tag + ": no page errors", errors.length === 0, errors.join(" | ").slice(0, 300));
   } catch (e) {
-    record(tag + " flow", false, String(e).slice(0, 300) + " | " + (await pageState(page)));
+    record(tag + " flow", false, String(e).slice(0, 1200) + " | " + (await pageState(page)));
     await shot(page, `${bname}-${w}x${h}-${theme}-b3-visitor-${mode}-FAIL`).catch(() => {});
   }
   await browser.close();
@@ -645,7 +657,7 @@ async function runPublic(browserType, bname, vp, theme) {
     await scrollTo(page, 0);
     record(tag + ": no page errors", errors.length === 0, errors.join(" | ").slice(0, 300));
   } catch (e) {
-    record(tag + " flow", false, String(e).slice(0, 300) + " | " + (await pageState(page)));
+    record(tag + " flow", false, String(e).slice(0, 1200) + " | " + (await pageState(page)));
     await shot(page, `${bname}-${w}x${h}-${theme}-b3-public-FAIL`).catch(() => {});
   }
   await browser.close();
@@ -683,7 +695,7 @@ async function runGate(browserType, bname, vp, theme) {
     );
     record(tag + ": no page errors", errors.length === 0, errors.join(" | ").slice(0, 300));
   } catch (e) {
-    record(tag + " flow", false, String(e).slice(0, 300) + " | " + (await pageState(page)));
+    record(tag + " flow", false, String(e).slice(0, 1200) + " | " + (await pageState(page)));
   }
   await browser.close();
 }
