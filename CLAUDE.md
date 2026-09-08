@@ -36,6 +36,10 @@ Before you start, say in one line what you are about to do. Brief updates while 
 [absolute] Every new table ships with RLS enabled and explicit policies for every persona (member, Space lead, event host, admin, service role). A table without RLS is a failed task.
 [absolute] No secrets in code, logs, or commit messages.
 [absolute] Lovable never creates or alters schema.
+[absolute] Fixed vocabularies (focus areas, industries, regional expertise, skills, languages, countries) are database tables read at runtime, never hardcoded arrays in a component. The legacy build kept them in a React file with a comment admitting they had to be hand-synced with the database; that is the named anti-pattern.
+[absolute] One read projection and one write path per surface. Profile ships profile_view and save_profile_section; every surface after it follows the same shape. The legacy build had ten-plus duplicate profile-read functions.
+[absolute] The attestations table is chassis and already exists. Every engine writes to it; no engine creates its own attestation, endorsement, or trust table.
+[absolute] No numeric score, percentage, progress indicator, match score, trust score, or completion score is ever computed for display, in any surface, in any form.
 
 ## Doctrine that affects code
 Every post, thread, and notification carries a C tag or the system category; the column is NOT NULL.
@@ -43,6 +47,30 @@ Polymorphic references (author, anchor, notification object) use the shared anch
 Counts shown to a viewer are computed within that viewer's RLS scope and render nothing below five.
 Confirmed flags on contributions are set only by the counterparty or a payment rail record, never by inference or by DIA.
 DIA reads message metadata only; no query it runs may select message body content unless the member invoked a "help me reply" action in that thread.
-Build order for any surface: schema and RLS, then Edge Functions, then UI. No surface is built without an approved Claude Design prototype (ruling 62); the extraction and SPEC.md are the visual contract, the brief is the behavior contract.
+Build order for any surface: schema and RLS, then Edge Functions, then UI. Confirm any design extraction arrived with real content before building from it; a missing or empty extraction is a stop-and-report condition, never a reason to reconstruct the prototype from ruling summaries (ruling 90). No surface is built without an approved Claude Design prototype (ruling 62); the extraction and SPEC.md are the visual contract, the brief is the behavior contract.
 Design tokens and components come from Strand via the extraction; never from shadcn, never from the old repo (rulings 70, 72).
 Exit check for every surface is the responsive test matrix on the deployed URL: 360, 390, 430, 744, 820, 1024 both orientations, 1280, 1536, both themes, Safari and Chrome (ruling 61).
+
+## The Digital Trust Layer (rulings 139 to 141)
+
+Member-authorized visibility is DNA's Digital Trust Layer, governed by DNA's Terms and Privacy Policy and built to GDPR and equivalent standards. Three rules bind every surface that shows one member's data to another:
+
+Audience scope (everyone / connections / anchored) is enforced as row policy, never client-side filtering. A viewer who may not see a row gets no row, not a hidden element.
+
+A member's name never reaches a signed-out surface through another member's content unless that member has opted into public sharing themselves. Use private.third_party_label; an unshared third party renders as a role ("the host", "a Space lead", "the recipient"), never as a name. This applies to every public surface, not just the profile rail.
+
+Anchored qualifies on a shared Space role or a shared attested event.
+
+## Phase posture (ruling 140)
+
+The canonical project holds no real member data. Report every visibility, RLS, and consent finding plainly, with a severity, and continue; none of them blocks a merge. They are recorded as invite-boundary gates to close before the first real member invite. Do not describe findings as leaks or breaches.
+
+## Connection Engine (rulings 111 to 116)
+
+The graph lives in Postgres. One typed edges table (connect, follow, event_rsvp, event_attested, space_role, space_role_completed, contribution_fulfilled, story_about, authored) plus the attestations table. Only counterparty-attested completion edges carry trust weight; follow, RSVP, and co-membership carry none.
+
+First degree and mutuals come from a symmetric adjacency table. Second degree is served from a materialized set, refreshed incrementally on new connections and fully overnight; never computed live, because recursive CTEs at this shape run seconds, not milliseconds. Third degree is computed only for a specific pair with a bounded, cycle-guarded CTE, never enumerated.
+
+No graph database. If three-hop interactive traversal or online community detection becomes routine, pilot Apache AGE inside the same Postgres before proposing any external engine, and raise it as a decision rather than building it.
+
+Embeddings come from a separate provider (Anthropic has no embedding model); DIA on Claude writes explanations only. Matching may rank internally and must display only words: the reasons that produced a suggestion, never a distance, score, or percentage. Dismissals persist and are applied as an anti-join. If the rules stage yields nothing real, render nothing.
