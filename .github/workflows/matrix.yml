@@ -38,6 +38,8 @@ jobs:
           URL="${{ inputs.base_url }}"
           if [ -z "$URL" ]; then URL="https://${{ github.ref_name }}.dna-web-application.pages.dev"; fi
           echo "url=$URL" >> "$GITHUB_OUTPUT"
+          # An artifact name may not carry a forward slash, and a branch name usually does.
+          echo "slug=$(echo "${{ github.ref_name }}" | tr '/' '-')" >> "$GITHUB_OUTPUT"
           echo "Testing $URL"
       - name: Live check (deployed HTML serves the app)
         run: |
@@ -67,6 +69,6 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: matrix-${{ github.ref_name }}-${{ github.run_number }}
+          name: matrix-${{ steps.target.outputs.slug }}-${{ github.run_number }}
           path: matrix-out
           if-no-files-found: warn
