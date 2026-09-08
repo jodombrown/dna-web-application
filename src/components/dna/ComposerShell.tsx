@@ -46,7 +46,9 @@ export function ComposerShell() {
     let active = true;
     void (async () => {
       const [restored, memberSpaces] = await Promise.all([
-        request.initialVerb ? Promise.resolve(null) : loadDraft(member.id, hostContext),
+        request.initialVerb || request.initial
+          ? Promise.resolve(null)
+          : loadDraft(member.id, hostContext),
         loadMemberSpaces(member.id),
       ]);
       if (!active) return;
@@ -96,6 +98,7 @@ export function ComposerShell() {
       unfurl={unfurl}
       upload={upload}
       initialVerb={request.initialVerb ?? null}
+      initial={request.initial ?? null}
       draft={draft}
       onDraft={onDraft}
       maxImages={4}

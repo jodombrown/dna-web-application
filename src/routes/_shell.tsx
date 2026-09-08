@@ -38,15 +38,24 @@ function ShellLayout() {
   const pathname = useLocation({ select: (l) => l.pathname });
   const fromFeed = useLocation({ select: (l) => !!l.state.fromFeed });
   const reveal = useLocation({ select: (l) => !!l.state.reveal });
-  const search = useSearch({ strict: false }) as { lens?: string };
+  const search = useSearch({ strict: false }) as { lens?: string; as?: string };
+  // /m/:handle (Brief 3) is the one route a signed-out visitor may open: the public profile renders
+  // its own signed-out chrome, as does the owner's "View as public" (?as=public), so the shell steps
+  // aside for both instead of redirecting to sign-in.
+  const profilePath = pathname.startsWith("/m/");
+  const bare = profilePath && (!member || search.as === "public");
   const lens = parseLens(search.lens);
   const tier = useTier();
   const { seed } = useComposerState();
   const [toast, setToast] = useState<string | null>(null);
 
+  // The layout renders once more with the outgoing location while a navigation to /sign-in is in
+  // flight (the public profile's Sign in and Join DNA); that render must not issue a second
+  // redirect, which would drop the search the first one carried (?join=1).
+  const leavingShell = pathname === "/sign-in";
   useEffect(() => {
-    if (ready && !member) void navigate({ to: "/sign-in" });
-  }, [ready, member, navigate]);
+    if (ready && !member && !profilePath && !leavingShell) void navigate({ to: "/sign-in" });
+  }, [ready, member, profilePath, leavingShell, navigate]);
 
   // Publishing returns to Feed on All and toasts for 2.6s (SPEC section 3); the composer itself
   // never navigates (ruling 52), the shell does.
@@ -77,7 +86,16 @@ function ShellLayout() {
     return () => window.removeEventListener("keydown", k);
   }, []);
 
-  if (!ready || !member) return null;
+  if (!ready) return null;
+  if (bare) {
+    return (
+      <>
+        <Outlet />
+        {member && <ComposerShell />}
+      </>
+    );
+  }
+  if (!member) return null;
 
   const active = activeC(pathname);
   const feedView = feedViewOf(pathname, { fromFeed, reveal, __TSR_index: 0 });

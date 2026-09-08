@@ -18,6 +18,7 @@ import type { Member } from "@/lib/auth";
 import { openComposer, useComposerState } from "@/lib/composer-store";
 import type { FeedView } from "@/lib/feed-view";
 import { LENSES, type LensId } from "@/lib/lens";
+import { useRailOverride } from "@/lib/rail-store";
 import { ShellScrollProvider, useScrollState } from "@/lib/shell-scroll";
 import { getSupabase } from "@/lib/supabase";
 import { useTheme, useTier, useWide } from "@/lib/tier";
@@ -74,6 +75,7 @@ export function AppShell({
   const [account, setAccount] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
   const composer = useComposerState();
+  const railOverride = useRailOverride();
   const expanded = tier === "expanded";
   const compact = tier === "compact";
   const scrollerRef = useRef<HTMLElement | null>(null);
@@ -247,7 +249,7 @@ export function AppShell({
                 padding: "24px 0 48px",
               }}
             >
-              <LeftRail member={member} />
+              {railOverride ?? <LeftRail member={member} />}
             </aside>
             <main
               ref={attachScroller}
@@ -454,6 +456,58 @@ export function AppShell({
               <div style={{ padding: "16px", display: "flex", flexDirection: "column", gap: 16 }}>
                 {member.email && (
                   <span style={{ fontSize: 15, color: "var(--ink-3)" }}>{member.email}</span>
+                )}
+                {member.handle && (
+                  <div
+                    style={{ display: "flex", flexDirection: "column", gap: 4, margin: "-4px 0" }}
+                  >
+                    <button
+                      type="button"
+                      data-testid="view-my-profile"
+                      onClick={() => {
+                        setAccount(false);
+                        void navigate({
+                          to: "/m/$handle",
+                          params: { handle: member.handle as string },
+                          search: {},
+                        });
+                      }}
+                      style={{
+                        all: "unset",
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        minHeight: 44,
+                        fontSize: 15,
+                        fontWeight: 500,
+                      }}
+                    >
+                      View my profile
+                    </button>
+                    <button
+                      type="button"
+                      data-testid="edit-my-profile"
+                      onClick={() => {
+                        setAccount(false);
+                        void navigate({
+                          to: "/m/$handle",
+                          params: { handle: member.handle as string },
+                          search: { edit: true },
+                        });
+                      }}
+                      style={{
+                        all: "unset",
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        minHeight: 44,
+                        fontSize: 15,
+                        fontWeight: 500,
+                      }}
+                    >
+                      Edit profile
+                    </button>
+                  </div>
                 )}
                 <Switch
                   label="Dark theme"

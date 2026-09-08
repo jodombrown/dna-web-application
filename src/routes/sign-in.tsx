@@ -9,13 +9,19 @@ import { useAuth } from "@/lib/auth";
 import { getSupabase } from "@/lib/supabase";
 import { useTheme } from "@/lib/tier";
 
-export const Route = createFileRoute("/sign-in")({ component: SignIn });
+export const Route = createFileRoute("/sign-in")({
+  // ?join=1 opens the form in its sign-up state (the public profile's "Join DNA", Brief 3).
+  validateSearch: (search: Record<string, unknown>): { join?: boolean } =>
+    search["join"] === true || search["join"] === "1" || search["join"] === 1 ? { join: true } : {},
+  component: SignIn,
+});
 
 function SignIn() {
   const { ready, member } = useAuth();
   const navigate = useNavigate();
+  const { join } = Route.useSearch();
   useTheme();
-  const [mode, setMode] = useState<"in" | "up">("in");
+  const [mode, setMode] = useState<"in" | "up">(join ? "up" : "in");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");

@@ -1,11 +1,16 @@
 // media-upload: accept one image from a signed-in member, run it through Tinify (compress and fit
-// within 2000 px), store the result in post-media under {member_id}/{post_id}/{uuid}.{ext}, and
-// return { storage_path, width, height }. The original bytes are never stored (ruling 55).
-// multipart/form-data: file (image/jpeg | image/png | image/webp), post_id (uuid minted by the composer).
+// within 2000 px), store the result and return { storage_path, width, height }. The original bytes
+// are never stored (ruling 55).
+// multipart/form-data: file (image/jpeg | image/png | image/webp), then either
+//   post_id (uuid minted by the composer): post-media under {member_id}/{post_id}/{uuid}.{ext}, or
+//   slot (avatar | cover, Brief 3): profile-media under {member_id}/{slot}/{uuid}.{ext}.
+// Both paths are the same Tinify pass; the profile's portrait and cover use the composer's media path.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 
 const BUCKET = "post-media";
+const PROFILE_BUCKET = "profile-media";
+const SLOTS = new Set(["avatar", "cover"]);
 const MAX_INPUT_BYTES = 10 * 1024 * 1024;
 const MAX_EDGE = 2000;
 const ALLOWED: Record<string, string> = {
@@ -116,8 +121,11 @@ Deno.serve(async (req: Request) => {
   }
   const file = form.get("file");
   const postId = String(form.get("post_id") ?? "");
+  const slot = String(form.get("slot") ?? "");
   if (!(file instanceof File)) return json({ error: "no_file" }, 400);
-  if (!UUID.test(postId)) return json({ error: "bad_post_id" }, 400);
+  if (slot) {
+    if (!SLOTS.has(slot)) return json({ error: "bad_slot" }, 400);
+  } else if (!UUID.test(postId)) return json({ error: "bad_post_id" }, 400);
   if (file.size > MAX_INPUT_BYTES) return json({ error: "too_large" }, 413);
 
   const bytes = new Uint8Array(await file.arrayBuffer());
@@ -129,9 +137,10 @@ Deno.serve(async (req: Request) => {
   if (!processed) return json({ error: "processing_failed" }, 502);
 
   const ext = ALLOWED[processed.type] ?? ALLOWED[type]!;
-  const storagePath = `${uid}/${postId}/${crypto.randomUUID()}.${ext}`;
+  const bucket = slot ? PROFILE_BUCKET : BUCKET;
+  const storagePath = `${uid}/${slot || postId}/${crypto.randomUUID()}.${ext}`;
   const admin = createClient(supabaseUrl, serviceKey);
-  const { error: upErr } = await admin.storage.from(BUCKET).upload(storagePath, processed.data, {
+  const { error: upErr } = await admin.storage.from(bucket).upload(storagePath, processed.data, {
     contentType: processed.type,
     cacheControl: "31536000",
     upsert: false,
@@ -143,6 +152,7 @@ Deno.serve(async (req: Request) => {
   console.log(
     JSON.stringify({
       event: "media_uploaded",
+      bucket,
       bytes_in: bytes.byteLength,
       bytes_out: processed.data.byteLength,
     }),
