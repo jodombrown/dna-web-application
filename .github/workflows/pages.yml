@@ -36,14 +36,40 @@ jobs:
       - name: Cloudflare secrets missing
         if: ${{ env.CF_API_TOKEN == '' || env.CF_ACCOUNT_ID == '' }}
         run: echo "::notice::Deploy skipped. Add CLOUDFLARE_API_TOKEN (Pages:Edit) and CLOUDFLARE_ACCOUNT_ID as repository secrets to enable per-branch Pages previews."
-      - name: Ensure the Pages project exists (no-op once created)
+      # Genuinely idempotent (ruling 147): ask whether the project exists before creating it,
+      # and treat "already exists" (code 8000002) as the steady state rather than an error.
+      # A step that is red on every run teaches us to stop reading red.
+      - name: Ensure the Pages project exists
         if: ${{ env.CF_API_TOKEN != '' && env.CF_ACCOUNT_ID != '' }}
-        uses: cloudflare/wrangler-action@v3
-        continue-on-error: true
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages project create dna-web-application --production-branch=main
+        env:
+          PROJECT: dna-web-application
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -uo pipefail
+          code=$(curl -sS -o /dev/null -w '%{http_code}' \
+            -H "Authorization: Bearer $CF_API_TOKEN" \
+            "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/pages/projects/$PROJECT" \
+            || echo 000)
+          if [ "$code" = "200" ]; then
+            echo "Pages project $PROJECT already exists; nothing to create."
+            exit 0
+          fi
+          if [ "$code" != "404" ]; then
+            echo "::notice::Could not read the Pages project (HTTP $code). Trying create and tolerating 'already exists'."
+          fi
+          # Hold wrangler's output back so a tolerated "already exists" never prints as an error.
+          out=$(bunx wrangler pages project create "$PROJECT" --production-branch=main 2>&1) && status=0 || status=$?
+          if [ "$status" -eq 0 ]; then
+            echo "Created Pages project $PROJECT."
+            exit 0
+          fi
+          if printf '%s\n' "$out" | grep -qE '8000002|already exists'; then
+            echo "Pages project $PROJECT already exists; nothing to create."
+            exit 0
+          fi
+          printf '%s\n' "$out"
+          exit "$status"
       - name: Deploy to Cloudflare Pages
         id: deploy
         if: ${{ env.CF_API_TOKEN != '' && env.CF_ACCOUNT_ID != '' }}
