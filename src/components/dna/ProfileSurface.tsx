@@ -70,6 +70,11 @@ import { setRail } from "@/lib/rail-store";
 import { useTier } from "@/lib/tier";
 
 const CONDENSE_PX = 120;
+// Once condensed, the masthead expands again only near the top. The condensed row is some 250px
+// shorter than the hero, so on a browser without scroll anchoring (Safari) the content under the
+// finger moves up by that much the moment it condenses; a single threshold would then flip the
+// state back and forth around 120px. The release point sits below the collapse point instead.
+const RELEASE_PX = 24;
 const EDITABLE = [
   "core",
   "about",
@@ -510,7 +515,8 @@ export function ProfileSurface({ handle, edit, asPublic }: ProfileSurfaceProps) 
     if (!col) return;
     const scroller = col.closest("[data-scroller]") as HTMLElement | null;
     if (!scroller) return;
-    const onScroll = () => setCondensed(scroller.scrollTop > CONDENSE_PX);
+    const onScroll = () =>
+      setCondensed((was) => scroller.scrollTop > (was ? RELEASE_PX : CONDENSE_PX));
     onScroll();
     scroller.addEventListener("scroll", onScroll, { passive: true });
     const measure = () => {

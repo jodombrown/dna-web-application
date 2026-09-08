@@ -70,8 +70,11 @@ async function openProfile(page, search = "") {
 async function tap(page, selector) {
   const loc = typeof selector === "string" ? page.locator(selector).first() : selector;
   await loc.waitFor({ state: "visible", timeout: 15000 });
-  await loc.evaluate((el) => el.scrollIntoView({ block: "center", inline: "nearest" }));
-  await page.waitForTimeout(150);
+  await loc.evaluate((el) =>
+    el.scrollIntoView({ block: "center", inline: "nearest", behavior: "instant" }),
+  );
+  // The masthead may condense on that scroll; let its 300ms height transition finish.
+  await page.waitForTimeout(400);
   await loc.click({ timeout: 15000 });
 }
 
