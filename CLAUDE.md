@@ -114,7 +114,8 @@ contract, so the next wordmark lands by overwriting files in one directory plus 
 | --- | --- |
 | `public/strand/logo.png` | wordmark: `AppHeader`, public profile chrome, sign-in (660 wide) |
 | `public/strand/logo-dark.png` | dark-theme wordmark, if the redesign needs one |
-| `public/favicon.png` | browser tab (the founder's own 9 September asset) |
+| `public/favicon.png` | browser tab, and the square master every other icon derives from |
+| `public/favicon.ico` | browser tab, legacy, 32 and 16 (arrives with the wordmark redesign) |
 | `public/apple-touch-icon.png` | iOS home screen, 180 |
 | `public/icon-192.png`, `public/icon-512.png` | PWA manifest, maskable safe area |
 

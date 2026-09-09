@@ -75,6 +75,45 @@ area and industry was logged rather than built, because it turns the chip row, t
 the empty-state copy into their own design problem. `docs/connect/SPEC.md` §13 refers to this as the
 "logged gap"; this is where it is logged.
 
+## G4. Hardcoded vocabularies still in merged surfaces
+
+**Severity: moderate. Not fixed here by instruction: reported, not repaired.**
+
+Ruling 187's work turned up that Profile had been reading segment labels from two hardcoded maps in
+`SegmentBlock.tsx` since Brief 3 merged (ruling 145), against the standing rule that fixed
+vocabularies are database tables read at runtime. Those two are gone. This gap records the sweep of
+the other merged surfaces for the same pattern.
+
+Same class, a vocabulary the database already serves duplicated in a component:
+
+- `src/components/strand/SegmentBlock.tsx`, `SEG.returnee.fields[0].options` — the four
+  `return_timeline` values. The live source is `profile_vocabularies().timeline`, passed in as
+  `timelineOptions`; the literal is the fallback used when the prop is absent, so it shadows the
+  runtime source rather than replacing it. Surface: Profile (Brief 3). The values happen to match
+  the enum today, which is what makes this the dangerous shape: it stays correct until it silently
+  does not.
+
+Adjacent, and a weaker case worth a ruling rather than an assumption:
+
+- `src/components/strand/verb-schema.ts`, the Contribute verb's `instrument` options
+  (`["Time", "Skills", "In-kind"]`). Surface: Composer (Brief 1). Backed by the
+  `public.contribute_instrument` enum, which no projection serves to the client at all;
+  `publish_post` maps the display strings back to enum values server-side.
+- `src/lib/feed.ts`, `INSTRUMENT_LABEL` — display labels for that same enum. Surface: Feed
+  (Brief 2).
+
+The open question on those two is whether an enum counts. CLAUDE.md's absolute names tables, and
+these are enums. But `heritage_kind`, `return_pathway` and `return_timeline` are also enums and are
+already served at runtime through `profile_vocabularies` via `enum_range`, so the precedent is that
+an enum is served, not hardcoded. On that precedent both are the same mistake.
+
+Deliberately not findings, listed so the sweep is not re-run over them: the five Cs and their
+labels, glyphs and copy (`cmeta.ts`, `cinfo.ts`, `VerbChip`, `BadgeRow`, `Composer`'s DIA lines),
+audience labels and section titles (`ProfileSurface`), notification kinds
+(`NotificationListItem`), lens ids (`lens.ts`, `connect.ts`), relationship states (`MemberCard`),
+and the generated enum constants in `src/lib/database.types.ts`. These are structure, doctrine or
+UI copy, not vocabularies members choose values from.
+
 ## Audit: `member_blocks` as an absolute filter (ruling 186, item 4)
 
 Run against the canonical project on 9 September 2026, as a real member with real blocks, not by
