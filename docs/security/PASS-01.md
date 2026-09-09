@@ -199,7 +199,10 @@ Two things a client could sum, both about its own graph and neither rendered:
 
 ### 2. Nothing reaches an anonymous caller beyond the public projection of a profile whose owner opted in — **two findings**
 
-Tested at the role boundary as `anon`, inside rolled-back transactions, not through the app.
+Tested at the role boundary as `anon`, inside rolled-back transactions, not through the app. The
+same boundary is also exercised over real HTTP by `tests/live-checks.cjs` on every push, which
+passed on the run carrying this report; see the coverage section for what that suite does and does
+not reach, and why it is green while F1 to F4 hold.
 
 What `anon` can reach, and it is a short list: `SELECT` on `members` (13 columns, `USING
 (profile_shared)`), on `attestations`, and on the eleven profile section tables under P-section;
@@ -402,15 +405,54 @@ Gap Register, not in a fix that rides on this report.
 
 ## 5. What this pass did not cover, and why
 
-- **The HTTP surface itself.** This environment's network policy refuses outbound HTTPS to
-  `dgspjevjoblujcoljvkn.supabase.co` (the proxy answers 403 to CONNECT), so no `curl` reached
-  `/rest/v1/`. Every anonymous check was instead run at the role boundary — `BEGIN; SET LOCAL ROLE
-  anon; …; ROLLBACK;` — which is the same grant-and-policy evaluation PostgREST performs as that
-  role. What it does **not** cover is PostgREST's own layer: the `db-schemas` setting, RPC routing,
-  embedded-resource expansion through foreign keys (`?select=*,members(*)`), `Prefer` headers, and
-  the `graphql_public` schema. F15's containment rests on `private` not being in `db-schemas`, which
-  is read from the migrations' stated intent and **not** proved here. **A repeat of check 2 over
-  real HTTP is the first thing the next pass should do.**
+- **The HTTP surface, from this session.** This environment's network policy refuses outbound HTTPS
+  to `dgspjevjoblujcoljvkn.supabase.co` (the proxy answers 403 to CONNECT), so no `curl` in this
+  pass reached `/rest/v1/`. Every anonymous check here was run at the role boundary instead —
+  `BEGIN; SET LOCAL ROLE anon; …; ROLLBACK;` — which is the same grant-and-policy evaluation
+  PostgREST performs as that role, but not PostgREST's own layer: the `db-schemas` setting, RPC
+  routing, embedded-resource expansion through foreign keys (`?select=*,members(*)`), `Prefer`
+  headers, and the `graphql_public` schema. F15's containment rests on `private` not being in
+  `db-schemas`, which is read from the migrations' stated intent and **not** proved here.
+
+  **CI already covers much of that, and this section said otherwise in the first version of this
+  report.** `tests/live-checks.cjs`, run by `pages.yml` on every push, hits `/rest/v1/` over real
+  HTTP with the publishable key and asserts: ten tables and `profile_view` return nothing for a
+  non-shared profile; the shared profile's core row is readable while its switches are refused by
+  the column grant; `member_links` and `member_intent` return zero rows; ruling 141 on both
+  anonymous projections; ruling 156 across eight Connect tables and four Connect RPCs; and
+  `via_count` absent from every anonymous payload. It passed on the run carrying this report. The
+  earlier claim that a repeat of check 2 over real HTTP was the first thing the next pass should do
+  pointed at work that largely exists.
+
+  What is genuinely left for the next pass is narrower: PostgREST's own layer as listed above, and
+  the gap described next.
+- **The shape of the existing live-check suite, which is why it is green while F1 to F4 hold.**
+  Worth stating plainly, because a green suite beside four High findings otherwise reads as a
+  contradiction. Three reasons, all structural rather than a bug in the suite:
+
+  1. **Every check in it is anonymous.** There is no signed-in-member arm at all. F1 (any member
+     reads the whole `members` table) and the Connect half of F3 (a Private member still renders as
+     a card) are signed-in findings, so nothing in the suite could see them.
+  2. **The core row's contents are never checked against the section audiences.** `check 1` asserts
+     that anon reads the core row and that the *switches* are excluded from it. It asserts nothing
+     about `origin_country`, `current_place`, `local_tz` or `segment` against the Origin, Where and
+     Segment audiences — which is exactly F2a. The seeded fixture hides it too: the shared persona's
+     only `member_visibility` row is `intent = anchored`, so Where, Origin and Segment sit at the
+     `everyone` default and no case exists where the audience and the core row disagree. F2a was
+     found by *creating* that disagreement in a rolled-back transaction.
+  3. **No block is ever in place**, so F4 has no arm anywhere in CI.
+
+  Two narrower notes on the same suite. Its ruling-141 assertion is a substring match against two
+  hardcoded names, so it proves those two are not named and not that the mechanism is general; the
+  mechanism was read separately here and holds. And its `attestations` read is scoped to the
+  non-shared member, expecting zero rows, so it never reads the *shared* member's attestation rows —
+  which is where F7's third-party identifiers are exposed.
+
+  None of this is a criticism of the suite, which is checking what Briefs 3 and 4 asked it to check.
+  It is the answer to "why did CI not catch these", and it is the most useful thing this pass can
+  hand the next one: a signed-in arm, a fixture where a section audience and the core row disagree,
+  and an arm with a block in place would each catch one of the four.
+
 - **Realtime.** Whether Realtime publication is enabled on any of these tables, and whether its
   row filters match the RLS policies, was not examined at all. Realtime is a second read path with
   its own authorisation model.
