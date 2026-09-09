@@ -66,6 +66,17 @@ jobs:
           test "$code" = "200"
       - name: Install browsers
         run: bunx playwright install --with-deps chromium webkit
+      # Ruling 200: a dispatched run reproduces the web-process crash but, without this, records
+      # only that it happened. Core dumps cost nothing on a passing run and are the only route to
+      # the signal and stack the investigation still lacks. Diagnostic only; no pass criterion.
+      - name: Enable core dumps
+        run: |
+          sudo mkdir -p /tmp/cores
+          sudo chmod 1777 /tmp/cores
+          sudo sysctl -w kernel.core_pattern='/tmp/cores/core.%e.%p.sig%s' || true
+          sudo sysctl -w kernel.core_uses_pid=0 || true
+          sudo sysctl -w fs.suid_dumpable=1 || true
+          cat /proc/sys/kernel/core_pattern
       - name: Run matrix (Chromium and WebKit)
         env:
           BASE: ${{ steps.target.outputs.url }}
@@ -76,7 +87,30 @@ jobs:
           ONLY: ${{ inputs.only }}
           THEME: ${{ inputs.theme }}
           RULING200_PROBE: ${{ inputs.probe }}
-        run: node tests/matrix.cjs
+        run: |
+          ulimit -c unlimited
+          node tests/matrix.cjs
+      - name: Extract the signal and stack from any core (ruling 200)
+        if: always()
+        run: |
+          set -uo pipefail
+          shopt -s nullglob
+          cores=(/tmp/cores/core.*)
+          echo "cores written: ${#cores[@]}"
+          [ "${#cores[@]}" -eq 0 ] && exit 0
+          sudo apt-get update -qq && sudo apt-get install -y -qq gdb elfutils
+          mkdir -p "$OUT/cores"
+          for c in "${cores[@]}"; do
+            name=$(basename "$c")
+            echo "=== $name ===" | tee -a "$OUT/cores/stacks.txt"
+            file "$c" | tee -a "$OUT/cores/stacks.txt"
+            exe=$(eu-readelf -n "$c" 2>/dev/null | grep -o '/[^ ]*WebKitWebProcess[^ ]*' | head -1 || true)
+            echo "exe: ${exe:-unknown}" | tee -a "$OUT/cores/stacks.txt"
+            gdb -batch -q -ex "set pagination off" -ex "thread apply all bt 40" \
+              ${exe:+"$exe"} "$c" 2>&1 | head -400 | tee -a "$OUT/cores/stacks.txt"
+          done
+        env:
+          OUT: ${{ github.workspace }}/matrix-out
       - name: Upload screenshots and results
         if: always()
         uses: actions/upload-artifact@v4
