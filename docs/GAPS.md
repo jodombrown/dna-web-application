@@ -532,3 +532,47 @@ anything owner-specific.
 addresses are unsymbolised because the shipped WPE build has no debug info. They can still be
 resolved to the nearest exported symbol from the library's dynamic table, which is the next step and
 is cheap.
+
+### Update, 09:37: the loop reproduces it, and a truncation cost the second stack
+
+Run 38 (`34332754044`, job `102404960483`), a 170-iteration owner-flow loop, crashed. The pipeline
+worked end to end: a core was written, gdb produced frames, the offsets resolver ran, and the
+retention guard did its job — `frames extracted; core not retained (266M)`. A 266 MB core copied
+into the artifact would have been the upload failure that guard was added to prevent.
+
+Two things the run establishes beyond the crash itself:
+
+- **The loop reproduces the defect**, at roughly 11.5 seconds an iteration against about 80 seconds
+  an owner case in a profile matrix run. That is the sampling instrument the rest of this
+  investigation should use.
+- **gdb does resolve some exported symbols in this build.** `libWPEWebKit-2.0.so.1+0x771180` came
+  back as `WebKit::WebProcessMain(int, char**)`. That does not change the decision not to guess at
+  the unexported ones: the frames that matter are still `??`, and a nearest-export guess for those
+  would still name the wrong function.
+
+**The faulting thread's frames were lost to my own truncation, not to the crash.** The extraction
+piped gdb through `head -600`. This core has eight threads and `thread apply all bt` prints them in
+descending order, so the faulting thread is printed last and `head` ate exactly it; the resolver's
+`tail -60` then showed threads 8 down to 2. The `grep: write error: Broken pipe` at the top of the
+step is the tell. Every thread that did survive is parked in `poll`, a futex wait, or `g_cond_wait`,
+which is consistent with the earlier finding but adds nothing.
+
+Fixed by asking gdb for the current thread first: in a core gdb positions itself on the thread that
+faulted, so `bt 60` before `thread apply all bt 25` puts the frames that matter at the top of the
+output where nothing can truncate them. The head limit is raised to 4000 and the resolver now prints
+its first 80 lines rather than its last 60, for the same reason.
+
+This is the third defect in this investigation's own instrumentation, after the `WebKitWebProcess`
+exe lookup that fed gdb a core with no executable, and the `tee` that opened `loop.log` before its
+directory existed. All three were found by reading the output rather than by a wrong conclusion
+reaching the report, which is the reason for reading it.
+
+The finding is unchanged: run 34's stack already established the cause, and run 38 corroborates that
+the loop reproduces it. Sampling, by run:
+
+| Arm                 | Runs | Crashed                                                                    |
+| ------------------- | ---- | -------------------------------------------------------------------------- |
+| Control, matrix     | 23   | 3                                                                          |
+| Control, loop       | 4    | 1 (run 38; runs 35 to 37 were the `tee` defect, and their loops ran clean) |
+| Probe `appearance`  | 7    | 1 (visitor)                                                                |
+| Probe `compositing` | 2    | 0, uninformative                                                           |
