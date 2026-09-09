@@ -150,7 +150,8 @@ async function runConnect(browserType, bname, vp, theme) {
     );
     const cardStyle = await cards.first().evaluate((el) => {
       const cs = getComputedStyle(el);
-      const portrait = el.querySelector('span[style*="grid-area: portrait"]');
+      // A data attribute, not the serialised inline style: WebKit writes grid-area as longhands.
+      const portrait = el.querySelector('[data-testid="portrait"]');
       return {
         shadow: cs.boxShadow,
         radius: cs.borderRadius,

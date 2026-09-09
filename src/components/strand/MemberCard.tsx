@@ -417,7 +417,10 @@ export function MemberCard({
     >
       {head}
       {body}
-      <span style={{ gridArea: "portrait", position: "relative", width: size, height: size }}>
+      <span
+        data-testid="portrait"
+        style={{ gridArea: "portrait", position: "relative", width: size, height: size }}
+      >
         <Avatar name={m.name} src={m.avatar} size={size} />
         {m.identified && (
           <span style={{ position: "absolute", right: -5, bottom: -5 }}>

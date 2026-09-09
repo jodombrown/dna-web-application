@@ -1866,17 +1866,18 @@ async function runShell(browserType, bname, [w, h]) {
     await page.waitForURL((u) => u.pathname === "/feed");
     await page.locator("[data-feed] article[data-c]").first().waitFor({ timeout: 10000 });
     record(tag + " Back to Feed from the direct view lands on Feed", true);
-    // Five C stubs render inside the same shell; Home returns to Feed; no remount.
+    // The four remaining C stubs render inside the same shell (Connect is a real surface since
+    // Brief 4, covered by tests/connect.cjs); Home returns to Feed; no remount.
     const stampBefore = await page.getAttribute("html", "data-shell");
-    await page.locator('nav[aria-label="Pulse"] button', { hasText: "Connect" }).click();
-    await page.waitForURL("**/connect");
-    await page.locator('[data-testid="c-stub"][data-c="connect"]').waitFor({ timeout: 10000 });
+    await page.locator('nav[aria-label="Pulse"] button', { hasText: "Convene" }).click();
+    await page.waitForURL("**/convene");
+    await page.locator('[data-testid="c-stub"][data-c="convene"]').waitFor({ timeout: 10000 });
     record(
-      tag + " /connect: stub inside the shell, Connect active, no remount",
-      (await page.locator('[data-testid="c-stub"]').textContent()).includes("Connect is next") &&
+      tag + " /convene: stub inside the shell, Convene active, no remount",
+      (await page.locator('[data-testid="c-stub"]').textContent()).includes("Convene is next") &&
         (
           await page.locator('nav[aria-label="Pulse"] [aria-current="page"]').textContent()
-        ).includes("Connect") &&
+        ).includes("Convene") &&
         (await page.getAttribute("html", "data-shell")) === stampBefore &&
         (await page.locator("[data-app-header]").count()) === 1,
     );
