@@ -21,6 +21,14 @@ on:
         description: One theme (light or dark)
         required: false
         default: ""
+      probe:
+        description: Ruling 200 diagnostic; compositing, appearance or color-scheme. Empty runs the control.
+        required: false
+        default: ""
+      loop:
+        description: Ruling 200; iterations of the owner-flow crash loop instead of the matrix. Empty runs the matrix.
+        required: false
+        default: ""
 
 jobs:
   matrix:
@@ -62,7 +70,44 @@ jobs:
           test "$code" = "200"
       - name: Install browsers
         run: bunx playwright install --with-deps chromium webkit
+      # Ruling 200: a dispatched run reproduces the web-process crash but, without this, records
+      # only that it happened. Core dumps cost nothing on a passing run and are the only route to
+      # the signal and stack the investigation still lacks. Diagnostic only; no pass criterion.
+      - name: Enable core dumps
+        run: |
+          sudo mkdir -p /tmp/cores
+          sudo chmod 1777 /tmp/cores
+          sudo sysctl -w kernel.core_pattern='/tmp/cores/core.%e.%p.sig%s' || true
+          sudo sysctl -w kernel.core_uses_pid=0 || true
+          sudo sysctl -w fs.suid_dumpable=1 || true
+          cat /proc/sys/kernel/core_pattern
+      # Ruling 200: the crash lands about once in six full profile runs, so waiting for one is a poor
+      # use of a runner. tests/webkit-crash-loop.cjs drives tests/profile.cjs's own runOwner in a
+      # tight loop instead, concentrating on the flow that has produced most sightings, and always
+      # exits 0 because a crash is the observation rather than a failure. Diagnostic only.
+      - name: Run the owner-flow crash loop (ruling 200)
+        if: ${{ inputs.loop != '' }}
+        env:
+          BASE: ${{ steps.target.outputs.url }}
+          OUT: ${{ github.workspace }}/matrix-out
+          LOOPS: ${{ inputs.loop }}
+          ONLY: ${{ inputs.only }}
+          THEME: ${{ inputs.theme || 'both' }}
+          ARM: ${{ inputs.probe != '' && 'probe' || 'control' }}
+          PROBE: ${{ inputs.probe }}
+        run: |
+          # The shell opens loop.log before node runs, and matrix-out is otherwise created only
+          # once tests/matrix.cjs loads, so without this tee fails to open the file, streams to
+          # stdout anyway and exits non-zero, failing a step whose loop actually succeeded.
+          mkdir -p "$OUT"
+          ulimit -c unlimited
+          node tests/webkit-crash-loop.cjs 2>&1 | tee "$OUT/loop.log"
+          echo "### ruling 200 loop" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          grep -E '^(ruling 200 loop|RESULT|LOOP .*CRASHED)' "$OUT/loop.log" >> "$GITHUB_STEP_SUMMARY" || true
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
       - name: Run matrix (Chromium and WebKit)
+        if: ${{ inputs.loop == '' }}
         env:
           BASE: ${{ steps.target.outputs.url }}
           WEBKIT: "1"
@@ -71,7 +116,70 @@ jobs:
           SPECIAL: ${{ inputs.special }}
           ONLY: ${{ inputs.only }}
           THEME: ${{ inputs.theme }}
-        run: node tests/matrix.cjs
+          RULING200_PROBE: ${{ inputs.probe }}
+        run: |
+          ulimit -c unlimited
+          node tests/matrix.cjs
+      - name: Extract the signal and stack from any core (ruling 200)
+        if: always()
+        run: |
+          set -uo pipefail
+          shopt -s nullglob
+          cores=(/tmp/cores/core.*)
+          echo "cores written: ${#cores[@]}"
+          [ "${#cores[@]}" -eq 0 ] && exit 0
+          sudo apt-get update -qq && sudo apt-get install -y -qq gdb elfutils
+          mkdir -p "$OUT/cores"
+          for c in "${cores[@]}"; do
+            name=$(basename "$c")
+            echo "=== $name ===" | tee -a "$OUT/cores/stacks.txt"
+            file "$c" | tee -a "$OUT/cores/stacks.txt"
+            # `file` names the binary in execfn; that is the only reliable source here, because the
+            # crashing thread's comm (ThreadedCompositor, truncated to 15 chars) is what %e records,
+            # not the executable. Passing the core with no executable makes gdb read it as one.
+            exe=$(file "$c" | grep -o "execfn: '[^']*'" | head -1 | sed "s/execfn: '//; s/'$//")
+            [ -n "$exe" ] || exe=$(file "$c" | grep -o "from '[^']*'" | head -1 | sed "s/from '//; s/'$//" | awk '{print $1}')
+            echo "exe: ${exe:-unknown}" | tee -a "$OUT/cores/stacks.txt"
+            frames=0
+            if [ -n "$exe" ] && [ -e "$exe" ]; then
+              # info sharedlibrary is what makes the frames portable: without debug info the
+              # addresses mean nothing on their own, but library-relative offsets anchor to an
+              # exact build that someone with symbols can map.
+              # `bt` on the current thread comes first and is what matters: in a core gdb positions
+              # itself on the thread that faulted, and `thread apply all` prints threads in
+              # descending order, so the faulting thread is last and a truncating `head` eats
+              # exactly the frames worth having. That is how run 38's stack was lost.
+              gdb -batch -q -ex "set pagination off" -ex "info registers rip" \
+                -ex "info sharedlibrary" -ex "echo \n=== FAULTING THREAD ===\n" -ex "bt 60" \
+                -ex "echo \n=== ALL THREADS ===\n" -ex "thread apply all bt 25" \
+                "$exe" --core "$c" 2>&1 |
+                head -4000 | tee -a "$OUT/cores/gdb-$name.txt"
+              cat "$OUT/cores/gdb-$name.txt" >> "$OUT/cores/stacks.txt"
+              grep -qE '^#[0-9]+ ' "$OUT/cores/gdb-$name.txt" && frames=1
+              if [ "$frames" -eq 1 ]; then
+                wk=$(grep -o '/[^ ]*libWPEWebKit[^ ]*' "$OUT/cores/gdb-$name.txt" | head -1 || true)
+                [ -n "$wk" ] && file "$wk" > "$OUT/cores/buildid-$name.txt" 2>/dev/null || true
+                node scripts/frame-offsets.mjs "$OUT/cores/gdb-$name.txt" \
+                  "$OUT/cores/buildid-$name.txt" > "$OUT/cores/offsets-$name.txt" 2>&1 || true
+                # Print the faulting thread's offsets in full; the all-threads dump stays in the
+                # artifact. Printing the tail would again show the least interesting threads.
+                sed -n '1,80p' "$OUT/cores/offsets-$name.txt"
+              fi
+            else
+              echo "executable not resolvable" | tee -a "$OUT/cores/stacks.txt"
+            fi
+            # A web-process core runs to hundreds of megabytes or more, and an artifact that fails
+            # to upload takes the stack down with it. Keep the core only when no frames came back,
+            # which is the only case where it is still worth analysing offline.
+            if [ "$frames" -eq 1 ]; then
+              echo "frames extracted; core not retained ($(du -h "$c" | cut -f1))" | tee -a "$OUT/cores/stacks.txt"
+            else
+              echo "no frames; retaining core ($(du -h "$c" | cut -f1))" | tee -a "$OUT/cores/stacks.txt"
+              cp "$c" "$OUT/cores/" 2>/dev/null || echo "core copy failed (size?)" | tee -a "$OUT/cores/stacks.txt"
+            fi
+          done
+        env:
+          OUT: ${{ github.workspace }}/matrix-out
       - name: Upload screenshots and results
         if: always()
         uses: actions/upload-artifact@v4

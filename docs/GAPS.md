@@ -147,3 +147,568 @@ sides, and the database was returned to its prior state (zero block rows, `where
 
 The `connect_where` rows sit below the floor of five on real data, so that line was proved by
 dropping `where_floor` to 1 for the two calls and restoring it to 5 immediately after.
+
+## G5. The WebKit web-process crash on the Profile surface (ruling 200)
+
+**Severity: medium. Open, root-caused to a named class and anchored to exact library offsets, not
+fixed. The fault is in engine code, so under ruling 200's guardrail it is reported rather than
+changed.**
+
+### The finding
+
+A **SIGSEGV in WebKit's compositing thread**, `ThreadedCompositor`, in the `WPEWebProcess` of
+Playwright's WPE build of WebKit 26.6 (`webkit-2359`). The thread is servicing a scheduled update
+dispatched from `g_main_context_dispatch` when it walks a structure recursively — three functions
+cycling about eight or nine levels — completes the walk, calls into a function far outside that
+cluster, and faults there.
+
+Frames, as offsets into `libWPEWebKit-2.0.so.1`:
+
+| Frame     | Offset                                                            |                                                 |
+| --------- | ----------------------------------------------------------------- | ----------------------------------------------- |
+| #0        | `+0x588b98a`                                                      | **fault site**, far outside the cycle's cluster |
+| #1        | `+0x27b6be4`                                                      |                                                 |
+| #2 … #26  | `+0x27b76f4` → `+0x27b23f1` → `+0x27b555f`                        | the cycle, 9x / 8x / 8x                         |
+| #27       | `+0x27b1885`                                                      | the recursion is entered here                   |
+| #28 … #32 | `+0x7607e1`, `+0x75f51a`, `+0x7659a9`, `+0x1d3726b`, `+0x1d356e6` |                                                 |
+| #33, #34  | glib, `g_main_context_dispatch`                                   |                                                 |
+| #35 … #38 | `+0x1d35d51`, `+0x1d36067`, `+0x1cd2ac3`, `+0x1d3bd46`            |                                                 |
+| #39, #40  | `start_thread`, `clone3`                                          |                                                 |
+
+Two crashes forty minutes apart, in different processes with different ASLR bases, produce
+byte-identical offsets. The crash has one path, not several. No function is named because the build
+ships no debug info and gdb prints `??` for these frames; a nearest-exported-symbol guess would name
+a function that is not the one in the frame. The offsets are exact against this build and visibly
+useless against another, which is what makes them safe to hand on.
+
+### What it explains, and what it dissolves
+
+Ruling 200 asked for a cause explaining three facts: every sighting dark, every sighting the Profile
+owner flow, Chromium never. The finding explains all three, and two of them by showing they were
+never facts.
+
+- **Dark.** Broken by evidence before the cause was found: run 62's second attempt crashed at
+  `webkit-1536x960-light`. Compositing is not theme-dependent.
+- **Owner flow.** Broken too: a `profile visitor stranger` flow crashed on plain `page.goto`.
+  Compositing runs on every view.
+- **Viewport.** Never a variable. Six viewports have now produced it (430, 744, 820, 1280, 1366,
+  1536), and the DOM census is identical at every one.
+- **Chromium never.** Chromium has no `ThreadedCompositor`; it paints through Skia in its own
+  process architecture. The one engine-specific fact is the one that held.
+
+What survives as constant is **WebKit, and the Profile surface at `/m/:handle`**. The crash lands
+during whatever the flow happens to be doing — a section save, `edit-done`, a navigation — because
+the compositor is servicing a _scheduled_ update, not responding to the action.
+
+### Whose defect
+
+Every frame is inside `libWPEWebKit-2.0.so.1` or glib. None is DNA's, and none could be: no
+application has code on that thread. That does not by itself make it WebKit's bug, because a page
+can hand the compositor a layer tree that trips a latent fault in it. Establishing which of those it
+is needs the symbolised frames, which needs a debug build.
+
+Nothing in `src/` was touched, and no test was weakened, skipped, retried or quarantined.
+
+### Two wrong answers, recorded because they were wrong
+
+This entry named a cause twice before the evidence arrived, and both were refuted.
+
+1. **`color-scheme: dark` on native form controls.** Reached by measuring that `color-scheme` is the
+   only computed-style difference between the themes anywhere in the surface — which is true, and
+   which read forward actually _predicts_ the light sighting that killed it. In light,
+   `color-scheme` resolves to `normal` and the dark control path is never taken; the crash happened
+   anyway.
+2. **Native-appearance form controls, theme-independent.** Reached by measuring that they are the
+   only element class present in the owner view and absent from every other — also true. Refuted by
+   a crash in the visitor view, which mounts none of them, and again by the faulting thread being
+   the compositor rather than any form-control paint path.
+
+Both were reached by elimination on a small sample, both looked strong, and both were coincidences
+of exactly the kind ruling 200 warned about. The guardrail that kept `src/` untouched is the only
+reason neither shipped as a fix for a defect that lives in the engine.
+
+Ruled out along the way, each by measurement rather than inspection: pattern and Adinkra SVG masks,
+`backdrop-filter`, `mix-blend-mode`, dark-only `color-mix` / `oklch` / relative colour, DOM-size
+cliffs, page nesting depth, stack exhaustion, and a remount storm at the section saves.
+
+### Ruling 152, and ruling 200's own premise
+
+**Ruling 152 is corrected.** It characterised this as a navigation-timing race that moves each run.
+The condition is static: present from the first paint, unchanged by navigation, unchanged by the
+saves. What 152 read as movement is sampling across identical at-risk cases.
+
+**Ruling 200's premise is corrected too.** It replaced 152's one moving variable with three
+constants. Two of the three broke on their own evidence within hours. A constant asserted from four
+samples is a description of the sample.
+
+### Reproducing it
+
+Dispatch `matrix.yml` with a `loop` input (170 iterations fits the job timeout) to run
+`tests/webkit-crash-loop.cjs`, which drives `tests/profile.cjs`'s own `runOwner` so the flow under
+test is the matrix's flow. Core dumps, gdb frames, offset resolution and the library build id are
+captured automatically.
+
+**A single clean loop run proves nothing.** Four of five confirmed loop runs crashed, about one
+crash per 210 iterations, so roughly one run in five comes back clean with nothing changed. Any
+probe needs several runs per arm and a control arm run at the same time on the same head. The
+`appearance` probe arm is the cautionary case: five clean runs there looked like a result and were a
+coincidence.
+
+The `compositing` probe arm (`WEBKIT_DISABLE_COMPOSITING_MODE=1`) is **not** evidence and should not
+be read as any: whether this WPE build honours that variable was never verified, and the pass-count
+test proposed for checking it was withdrawn as non-discriminating.
+
+### The next step
+
+Take the offsets above to a WebKit 26.6 debug build, or to the matching source, and symbolise
+`+0x27b1885` (the recursion's entry), the cycle at `+0x27b76f4` / `+0x27b23f1` / `+0x27b555f`, and
+`+0x588b98a` (the fault). That names the walk and the function that faults, and it is the one step
+that decides whether the trigger is a layer tree the Profile surface builds or a latent fault in the
+engine. Everything before it is done.
+
+### Ruling 201, and where the evidence since corrects it
+
+Ruling 201 corrects ruling 200's evidence: the crash is **intermittent, not deterministic once the
+viewport is fixed**. It was absent from runs 53, 57, 59, 60 and 63, every one of which exercised
+WebKit dark at all nine viewports, against three sightings at the time it was written.
+
+**That correction is right, and the work in this entry measures it.** The crash rate is about one
+per six full profile matrix runs, and about one per 210 owner-flow iterations in the loop. A given
+viewport in a given theme passes far more often than it fails, exactly as 201 says. 201's practical
+advice follows from the same number and is worth keeping verbatim: prioritise capturing a crash log
+over bisecting, and treat a clean local loop as uninformative rather than as evidence there is
+nothing there. Quantified: fifty loop iterations carry roughly a one-in-five chance of firing, so a
+clean fifty-loop run is close to meaningless.
+
+That advice was followed and it was the right call. The crash log settled the cause in one step;
+every bisect-shaped line of attack in this entry produced a wrong answer.
+
+**Two points in 201's evidence are superseded by primary evidence gathered afterwards**, both read
+from job logs rather than inferred, and both recorded above:
+
+- **Not every sighting is dark.** Run 62's _second attempt_ (`34314303037`, job `102354990849`)
+  failed one check of 5990: `FAIL: webkit-1536x960-light profile owner flow WEB PROCESS CRASHED`.
+  Ruling 200's table records run 62 as `webkit-820x1180-dark`, which was attempt 1. Both are run 62.
+- **Not every sighting is the owner flow.** A `profile visitor stranger` flow crashed on plain
+  `page.goto` (`34321583032`, job `102369208850`), in a view that mounts no form controls at all.
+
+So the envelope 201 describes — WebKit, dark, Profile owner flow — is narrower than the defect. The
+envelope that survives all sampling is **WebKit, and the Profile surface**. This matters for method
+rather than priority: an investigator who restricts sampling to dark and to the owner flow halves
+the at-risk population per run for no reason, and may read a clean light or visitor run as
+exonerating when it is not.
+
+**On 201's reading that intermittency within a narrow envelope means a race inside that envelope.**
+The captured stack says otherwise, and says something more specific. The fault is a SIGSEGV on
+WebKit's compositing thread while it services a _scheduled_ update dispatched from
+`g_main_context_dispatch`. That is asynchronous with respect to whatever the flow is doing, which is
+why the crash lands at a section save in one sighting, at `edit-done` in another and at `page.goto`
+in a third, and why it looks like a race against the flow when it is not one. Ruling 152 called it a
+navigation-timing race and offered the moving viewport as evidence; 201 is right that the viewport
+is the only thing that varies and so evidences nothing. Both readings are superseded by the stack:
+the timing that matters is the compositor's own scheduling, not the navigation's.
+
+### How this was reached, in order
+
+The sections below are the working record, kept in the order it happened, including the two wrong
+answers, the withdrawn test, and four defects in this investigation's own instrumentation. A reader
+who only wants the answer has it above.
+
+### Update, 07:23: the owner constant breaks too, and the experiment is confounded
+
+The probe arm produced a crash, and not the one it was looking for. Run 12
+(`34321583032`, job `102369208850`, env `RULING200_PROBE: appearance` confirmed in the log):
+
+```
+3533/3534 checks passed
+FAIL: webkit-820x1180-dark profile visitor stranger flow Error: page.goto: Page crashed
+  - navigating to ".../m/thandiwe-dube", waiting until "networkidle"
+  | state unavailable: Error: page.evaluate: Target crashed
+```
+
+**`profile visitor stranger`**, dying during `page.goto` on plain navigation, before any
+interaction. The visitor view mounts zero form controls (the census above: 0 selects, 0 options, 0
+native-appearance controls). So if this is the same defect, native form controls cannot be its cause,
+and the surviving suspect is refuted along with the first one.
+
+The arms as they stand, counting owner cases only:
+
+| Arm                  | Owner cases | Owner crashes                         | Other crashes                                     |
+| -------------------- | ----------- | ------------------------------------- | ------------------------------------------------- |
+| Control              | 90          | 2 (`744x1133-dark`, `1536x960-light`) | none, across roughly 270 visitor and public flows |
+| Probe (`appearance`) | 90          | **0**                                 | 1, `820x1180-dark` visitor stranger               |
+
+**This does not confirm the probe and it does not cleanly refute it, and the reason is a confound
+this entry has to state rather than argue past.** Two readings fit:
+
+1. The crash was never owner-specific. The owner flow is simply the longest and busiest case, so it
+   drew the first six sightings; the probe removed nothing, and 0 owner crashes in 90 is the 13%
+   that a rate of 2-in-90 produces by chance.
+2. The probe caused it. `appearance: none` on every control is a real rendering change, and it was
+   only ever validated as _behaviour_-neutral (95/99 in both arms in Chromium), which is not the
+   same as crash-neutral in WebKit. On that reading the probe traded an owner crash for a visitor
+   one, and proves nothing about either.
+
+The control arm's silence on visitor flows is the one piece of evidence that bears on this, and it
+cuts towards reading 2: roughly 270 visitor and public flows across the control runs produced no
+crash, while the first probe arm produced one in 90. That is weak — one event — but it is the
+asymmetry to test.
+
+What is now certain regardless of which reading survives: **ruling 200's three facts are down to
+one.** Not theme (the light sighting), not viewport (six viewports, and the DOM census identical at
+every one), and the owner constant is at best unproven. What is left is WebKit, and the Profile
+surface at `/m/:handle`.
+
+The disambiguating step, and it is a fork rather than a single instruction:
+
+- Run more probe iterations. A second visitor crash under the probe, where the control has none in
+  several hundred visitor flows, makes reading 2 the answer: the probe is unsafe as an instrument
+  and must be replaced by one that removes native controls without a global rule (for example,
+  rendering `VisibilitySelect` and `Switch` from a build flag rather than restyling them).
+- Run more control iterations, watching the visitor and public flows specifically. A visitor crash
+  in the control makes reading 1 the answer, the defect is a Profile-surface defect rather than an
+  owner-flow one, and the whole owner-only line of investigation in this entry is a dead end that
+  the first six samples made look alive.
+
+Both are running. Neither has enough samples yet, and this entry will not call it until one of them
+does.
+
+### Update, 07:36: the core, and the cause class
+
+The core capture worked on its first crash. Run 17 (`34322686504`, job `102372710843`), a **control**
+run:
+
+```
+=== core.eadedCompositor.15835.sig11 ===
+ELF 64-bit LSB core file, x86-64, version 1 (SYSV), SVR4-style,
+from '/home/runner/.cache/ms-playwright/webkit-2359/minibrowser-wpe/bin/WPEWebProcess'
+execfn: '/home/runner/.cache/ms-playwright/webkit-2359/minibrowser-wpe/bin/WPEWebProcess'
+```
+
+Three facts, none of them inferred:
+
+1. **Signal 11, SIGSEGV.** A segmentation fault, not an abort, not an OOM kill.
+2. **The faulting thread is `ThreadedCompositor`.** The core pattern's `%e` records the crashing
+   thread's comm, which the kernel truncates to 15 characters: `eadedCompositor` is
+   `ThreadedCompositor`. This is WebKit's compositing thread.
+3. **The process is `WPEWebProcess`.** Playwright's Linux WebKit is the **WPE** port. Earlier
+   revisions of this entry said the Linux port paints through `RenderThemeAdwaita`, which is the GTK
+   port; that was wrong and is corrected here.
+
+This is the outcome ruling 200's method predicted: "A stack naming a compositor, a rasteriser, a
+font or an image decoder tells you the class of cause in one step and saves the entire bisect." The
+class is **compositing**, and ruling 200's own first sentence under "Where to look first" — that a
+web-process crash in one engine is usually compositing, rasterisation or memory rather than
+JavaScript — is the part of that ruling the evidence has now confirmed rather than broken.
+
+It also settles, without needing more sampling, why the constants kept falling. Compositing runs on
+every view, in every theme, at every viewport. A fault in the compositor thread has no reason to
+respect the owner flow, dark theme, or 820x1180, and it did not: it merely appeared there first
+because the owner flow is the longest and busiest case in the matrix and therefore the most
+compositing the run does in one page.
+
+Consequences for the two suspects this entry has already withdrawn: both were surface styling, and
+neither is where the fault is. `color-scheme` was refuted by the light sighting; native form
+controls are refuted twice over, by the visitor crash and now by the faulting thread being the
+compositor rather than a form-control paint path.
+
+**The probe that matches the evidence** is therefore neither of the stylesheets. `RULING200_PROBE`
+now accepts `compositing`, which launches the engine with `WEBKIT_DISABLE_COMPOSITING_MODE=1` rather
+than injecting CSS. If the crash stops with accelerated compositing off and the control keeps
+producing it, the cause is in WebKit's threaded compositor, and the question for DNA becomes which
+composited layer the Profile surface creates that trips it, not which component is at fault.
+
+**The stack is still missing, and the reason is my own extraction bug, not the capture.** `gdb` was
+handed the core with no executable, because the exe was resolved from `eu-readelf` looking for
+`WebKitWebProcess` — the GTK port's binary name, which the WPE build does not have. gdb then read
+the core as an executable and reported "not in executable format". `file` names the binary in
+`execfn`, so the step now parses that and calls `gdb <exe> --core <core>`. Fixed here; the next
+control-arm crash should produce the frames.
+
+Sampling at this point, all read from job logs:
+
+| Arm                | Runs | Owner cases | Owner crashes | Visitor/public crashes |
+| ------------------ | ---- | ----------- | ------------- | ---------------------- |
+| Control            | 11   | 162         | 3             | 0                      |
+| Probe `appearance` | 5    | 90          | 0             | 1                      |
+
+The `appearance` arm's numbers are no longer the interesting comparison, since the faulting thread
+tells us it was testing the wrong thing. They are kept because a null result against a wrong
+hypothesis is still a record of what was tried.
+
+### Update, 08:05: the compositing arm is uninformative, and the test I proposed for it was wrong
+
+Two compositing-probe runs finished clean (`34324908709`, `34324916741`, both with
+`RULING200_PROBE: compositing` confirmed in the job env, both `3540/3540 checks passed`).
+
+The entry above committed, in advance, to a way of reading that: an arm whose pass counts matched
+the control digit for digit would be evidence the switch was a no-op. **That test does not work and
+is withdrawn.** 3540 is the structural total for this flow set — nine viewports, two themes, six
+flows — so any run that does not crash reports 3540/3540 whether or not the probe did anything. The
+control runs report the same number. Identical totals distinguish nothing.
+
+So the compositing arm says nothing yet, for two independent reasons, and neither is that the
+compositor is innocent:
+
+1. Two runs is far below the control's crash rate of roughly one run in five. Zero crashes in two
+   runs is the expected result under any hypothesis.
+2. Whether this WPE build honours `WEBKIT_DISABLE_COMPOSITING_MODE` is still unverified, and this
+   repo has no way to verify it. Playwright passes `env` to the browser process and the web process
+   inherits it, so it reaches the process; whether the engine acts on it is the open part.
+
+**The stack is worth more than this probe.** The core already names the class, and a probe whose
+effect cannot be confirmed cannot narrow it further, whereas frames would name the function. The
+gdb fix landed in `b5d38b9`, and the two control runs on that head (`34324924043`, `34324930989`)
+both passed, so it has not yet had a crash to work on. More control runs are dispatched for that
+purpose alone.
+
+Sampling to date, counted by run rather than by case, because crashes have now appeared in owner and
+visitor flows and a per-case denominator would imply a precision this does not have:
+
+| Arm                 | Runs | Runs that crashed                                                                     |
+| ------------------- | ---- | ------------------------------------------------------------------------------------- |
+| Control             | 15   | 3 (`744x1133-dark` owner, `1536x960-light` owner, and run 17 whose core was captured) |
+| Probe `appearance`  | 7    | 1 (`820x1180-dark`, visitor stranger)                                                 |
+| Probe `compositing` | 2    | 0                                                                                     |
+
+### Update, 08:54: the stack. DONE MEANS item 1 is met
+
+Run 34 (`34329351986`, job `102394030379`), a control run on the fixed-gdb head, crashed and the
+extraction produced frames. The faulting thread:
+
+```
+Thread 1 (Thread 0x7f4fa6ffe6c0 (LWP 13535)):
+#0  0x00007f603bea0f8a  libWPEWebKit-2.0.so.1     <- fault site
+#1  0x00007f6038dcc1e4  libWPEWebKit-2.0.so.1
+#2  0x00007f6038dcccf4  ]
+#3  0x00007f6038dc79f1  ]  three-frame cycle
+#4  0x00007f6038dcab5f  ]
+   ... same three addresses repeating, through #26 (about eight levels)
+#27 0x00007f6038dc6e85  libWPEWebKit-2.0.so.1     <- recursion entered here
+#28 0x00007f6036d75de1
+#29 0x00007f6036d74b1a
+#30 0x00007f6036d7afa9
+#31 0x00007f603834c86b
+#32 0x00007f603834ace6
+#33 libglib-2.0.so.0
+#34 g_main_context_dispatch
+#35 0x00007f603834b351  libWPEWebKit-2.0.so.1
+#36 0x00007f603834b667
+#37 0x00007f60382e80c3
+#38 0x00007f6038351346
+#39 start_thread
+```
+
+That this is the faulting thread is not an assumption: the other two threads in the core are parked
+in `__GI___poll` and `__futex_abstimed_wait_common64`, and a thread blocked in poll or in a futex
+wait cannot take a SIGSEGV. It is also the thread the core's own name records,
+`ThreadedCompositor`.
+
+What the shape says, and what it rules out:
+
+- **A recursive descent, bounded, not runaway.** Frames #2 to #26 are three addresses repeating for
+  about eight levels, and #27 onward is an ordinary entry path from the glib main loop. A stack
+  overflow would show the cycle continuing to the base of the stack with no entry path visible, and
+  would raise SIGSEGV on the guard page rather than inside a callee. **Stack exhaustion is ruled
+  out.** So is "the page is too deep": eight levels is a shallow tree.
+- **The fault is not in the recursion itself.** Frame #0 sits at `0x7f603bea0f8a`, far from the
+  `0x7f6038dc…` cluster the recursive frames occupy, so the walk descends normally and then calls
+  something else, which faults. The defect is in what the eighth level reached, not in the walking.
+- **Driven from the main loop, not from script.** Frames #33 and #34 are
+  `g_main_context_dispatch`. This is the compositor servicing a scheduled update, which is why the
+  crash lands "during or around" whatever the flow happens to be doing rather than on a particular
+  action, and why it has appeared at a section save, at `edit-done`, and at `page.goto`.
+
+This closes ruling 200's DONE MEANS item 1: a named cause, with the evidence that names it. A
+SIGSEGV in a bounded recursive walk on WebKit's compositing thread, entered from the glib main
+loop, faulting in a callee at the bottom of the walk.
+
+**Whose defect it is, stated as far as the evidence goes and no further.** Every frame is inside
+`libWPEWebKit-2.0.so.1` or glib. None is in DNA's code, because DNA has no code in that process's
+compositor thread — no application ever does. That does not by itself make it WebKit's bug: a page
+can hand the compositor a layer tree that trips a latent fault in it. What the evidence does settle
+is that the trigger cannot be any of the three things this entry previously chased, because none of
+them is reachable from a compositing tree walk: not `color-scheme`, not native form controls, not
+anything owner-specific.
+
+**What is still unknown** is the name of the function at frame #0 and of the three in the cycle. The
+addresses are unsymbolised because the shipped WPE build has no debug info. They can still be
+resolved to the nearest exported symbol from the library's dynamic table, which is the next step and
+is cheap.
+
+### Update, 09:37: the loop reproduces it, and a truncation cost the second stack
+
+Run 38 (`34332754044`, job `102404960483`), a 170-iteration owner-flow loop, crashed. The pipeline
+worked end to end: a core was written, gdb produced frames, the offsets resolver ran, and the
+retention guard did its job — `frames extracted; core not retained (266M)`. A 266 MB core copied
+into the artifact would have been the upload failure that guard was added to prevent.
+
+Two things the run establishes beyond the crash itself:
+
+- **The loop reproduces the defect**, at roughly 11.5 seconds an iteration against about 80 seconds
+  an owner case in a profile matrix run. That is the sampling instrument the rest of this
+  investigation should use.
+- **gdb does resolve some exported symbols in this build.** `libWPEWebKit-2.0.so.1+0x771180` came
+  back as `WebKit::WebProcessMain(int, char**)`. That does not change the decision not to guess at
+  the unexported ones: the frames that matter are still `??`, and a nearest-export guess for those
+  would still name the wrong function.
+
+**The faulting thread's frames were lost to my own truncation, not to the crash.** The extraction
+piped gdb through `head -600`. This core has eight threads and `thread apply all bt` prints them in
+descending order, so the faulting thread is printed last and `head` ate exactly it; the resolver's
+`tail -60` then showed threads 8 down to 2. The `grep: write error: Broken pipe` at the top of the
+step is the tell. Every thread that did survive is parked in `poll`, a futex wait, or `g_cond_wait`,
+which is consistent with the earlier finding but adds nothing.
+
+Fixed by asking gdb for the current thread first: in a core gdb positions itself on the thread that
+faulted, so `bt 60` before `thread apply all bt 25` puts the frames that matter at the top of the
+output where nothing can truncate them. The head limit is raised to 4000 and the resolver now prints
+its first 80 lines rather than its last 60, for the same reason.
+
+This is the third defect in this investigation's own instrumentation, after the `WebKitWebProcess`
+exe lookup that fed gdb a core with no executable, and the `tee` that opened `loop.log` before its
+directory existed. All three were found by reading the output rather than by a wrong conclusion
+reaching the report, which is the reason for reading it.
+
+The finding is unchanged: run 34's stack already established the cause, and run 38 corroborates that
+the loop reproduces it. Sampling, by run:
+
+| Arm                 | Runs | Crashed                                                                    |
+| ------------------- | ---- | -------------------------------------------------------------------------- |
+| Control, matrix     | 23   | 3                                                                          |
+| Control, loop       | 4    | 1 (run 38; runs 35 to 37 were the `tee` defect, and their loops ran clean) |
+| Probe `appearance`  | 7    | 1 (visitor)                                                                |
+| Probe `compositing` | 2    | 0, uninformative                                                           |
+
+### Update, 09:40: the loop makes it reproducible on demand
+
+Run 39 (`34332764279`) crashed as well, reporting `frames extracted; core not retained (262M)`. So
+both 170-iteration loop runs crashed, and both lost their faulting thread to the `head -600`
+truncation described above, which the following runs correct.
+
+The rate is the point of this entry, and it changes what this defect costs to investigate:
+
+| Instrument                            | Owner cases per run      | Crash rate                  |
+| ------------------------------------- | ------------------------ | --------------------------- |
+| Profile matrix run, `special=profile` | 18, in about 24 minutes  | about 1 run in 6            |
+| Owner-flow loop, 170 iterations       | 170, in about 35 minutes | 1 per run, twice out of two |
+
+Two crashes in roughly 340 iterations is about one per 170, consistent with the matrix arm's rate
+per owner case rather than better than it. What changed is not the defect's frequency but the
+sampling: a single loop run now contains enough owner cases to fire, so the crash reproduces
+**within one run** instead of once per six. Ruling 200's method asked for exactly this — "looping
+the owner flow until it fires" — and it is now available to anyone dispatching `matrix.yml` with a
+`loop` input.
+
+That matters for what comes next rather than for the finding, which run 34's stack already settled.
+A hypothesis about this crash can now be tested in one runner, against a control arm of the same
+shape, instead of waiting on a one-in-six sighting. Whoever picks this up should use the loop and
+not the matrix for that.
+
+Recorded rate, by run, at this point:
+
+| Arm                 | Runs | Crashed                                                                           |
+| ------------------- | ---- | --------------------------------------------------------------------------------- |
+| Control, matrix     | 23   | 3                                                                                 |
+| Control, loop       | 5    | 2 (runs 38 and 39; runs 35 to 37 were the `tee` defect and their loops ran clean) |
+| Probe `appearance`  | 7    | 1, a visitor flow                                                                 |
+| Probe `compositing` | 2    | 0, uninformative: effect unverified, pass-count test withdrawn                    |
+
+### Update, 10:12: run 40 crashed; the resolver was dropping the frames it existed to resolve
+
+Run 40 (`34336015250`), a 170-iteration loop on the faulting-thread-first head, crashed:
+`frames extracted; core not retained (260M)`. Three loop runs, three crashes.
+
+The gdb change worked — the faulting thread's frames are in the raw output and the artifact. The
+**resolver** then dropped them. It grouped frames under `Thread N` headers, and gdb's `bt` on the
+current thread emits frames with no such header, so the one backtrace worth resolving was the one
+discarded. Its printed output began at the all-threads sweep instead, which for this core meant
+threads 32 down to 28, every one of them parked in a futex or a semaphore wait.
+
+Fixed: frames now attach to the most recent header of either kind, the `=== FAULTING THREAD ===`
+marker opens a group, and frames appearing before any header open an implicit one rather than
+vanishing. Verified against a fixture before dispatch.
+
+That is the fourth defect in this investigation's own instrumentation, after the `WebKitWebProcess`
+exe lookup, the `tee` ordering, and the `head -600` truncation. This one was predicted before the
+log was read — the parser groups by a header the new gdb output does not emit — which is the only
+reason it was caught on the first crash rather than the third.
+
+Worth recording about the core itself: this process had **32 or more threads**, against three in run
+34's. Every thread visible in the sweep was idle in a futex, a semaphore, `poll` or `g_cond_wait`.
+Thread count is a property of the run, not of the crash, and it does not change the finding; it does
+mean a truncating `head` is even less forgiving here than it was at run 38.
+
+### Update, 10:47: the offsets, and two crashes that name the same three functions
+
+Run 42 (`34339173919`), a 170-iteration loop on the head carrying both instrumentation fixes,
+crashed and produced what the previous four runs could not: the faulting thread's frames as
+**library-relative offsets**.
+
+The faulting thread, against `libWPEWebKit-2.0.so.1` from `webkit-2359` (WebKit 26.6, Playwright's
+WPE build):
+
+| Frame     | Offset                                                            | Note                                            |
+| --------- | ----------------------------------------------------------------- | ----------------------------------------------- |
+| #0        | `+0x588b98a`                                                      | **fault site**, far outside the cycle's cluster |
+| #1        | `+0x27b6be4`                                                      |                                                 |
+| #2 … #26  | `+0x27b76f4` → `+0x27b23f1` → `+0x27b555f`                        | the cycle, repeating (9x, 8x, 8x)               |
+| #27       | `+0x27b1885`                                                      | the recursion is entered here                   |
+| #28 … #32 | `+0x7607e1`, `+0x75f51a`, `+0x7659a9`, `+0x1d3726b`, `+0x1d356e6` |                                                 |
+| #33, #34  | glib, `g_main_context_dispatch`                                   | scheduled update being serviced                 |
+| #35 … #38 | `+0x1d35d51`, `+0x1d36067`, `+0x1cd2ac3`, `+0x1d3bd46`            |                                                 |
+| #39, #40  | `start_thread`, `clone3`                                          | thread entry                                    |
+
+**Run 34 and run 42 crashed in the same three functions.** Run 34's absolute addresses were captured
+before offsets existed; subtracting run 42's offsets from them yields one load base,
+`0x7f6036615600`, for all three cycle frames — and the same base maps run 34's entry frame to
+`+0x27b1885`, which is run 42's `#27` exactly. Two crashes, in different processes with different
+ASLR bases about forty minutes apart, in different runs, produce byte-identical offsets. Under the
+same base run 34's fault site is `+0x588b98a` and its `#1` is `+0x27b6be4`, matching run 42 there
+too.
+
+That is corroboration, not a new finding: run 34's stack already established the cause. What it adds
+is that the crash has **one** path rather than several, and that these offsets are stable enough to
+be worth handing to someone with symbols.
+
+**What these offsets are for.** They are exact against this build and useless against any other, and
+that is the point: anyone with a WebKit 26.6 debug build, or the matching source, maps
+`+0x27b76f4`, `+0x27b23f1`, `+0x27b555f`, `+0x27b1885` and `+0x588b98a` to functions and lines in
+one step; anyone with a different build sees immediately that they cannot. No function is named here
+because naming one from the nearest exported symbol would name the wrong function, and this entry
+has already produced two wrong answers reached by plausible-looking inference.
+
+Loop tally: four loop runs on heads whose exit codes are trustworthy, four crashes (runs 38, 39, 40,
+42; run 41's outcome was not separately confirmed and is not counted either way). The crash
+reproduces inside a single loop run, every time so far.
+
+### Correction, 10:48: "every time" was wrong
+
+The entry above closed by saying the crash "reproduces inside a single loop run, every time so far".
+Run 43 (`34339182619`), dispatched alongside run 42 and identical to it, reported `cores written: 0`
+after its 170 iterations. It did not crash.
+
+Corrected tally for loop runs whose exit codes are trustworthy:
+
+| Run | Iterations | Outcome                                       |
+| --- | ---------- | --------------------------------------------- |
+| 38  | 170        | crash                                         |
+| 39  | 170        | crash                                         |
+| 40  | 170        | crash                                         |
+| 42  | 170        | crash, offsets captured                       |
+| 43  | 170        | **no crash**                                  |
+| 41  | 170        | not separately confirmed, counted neither way |
+
+Four crashes in five confirmed runs, about 850 iterations, so roughly one per 210 iterations. The
+honest statement is that a loop run fires **most** of the time, not every time, and that a single
+clean loop run is therefore worth nothing as evidence against a hypothesis — about one run in five
+comes back clean with nothing changed.
+
+That matters for the next person more than for the finding. A probe arm judged on one clean loop run
+would be read exactly as wrongly as the `appearance` arm was: its five clean runs looked like a
+result and were a coincidence. Anything tested against this crash needs several runs per arm and a
+control arm run at the same time on the same head.
+
+Recorded because the claim was made one message before the sample that broke it, which is the third
+time in this investigation an over-strong reading has been corrected by the next observation — after
+`color-scheme` and after native form controls.

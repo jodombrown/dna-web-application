@@ -1,0 +1,157 @@
+# Ruling 200 diagnostic. Not the matrix and not a merge gate: it loops the Profile owner flow in
+# WebKit until the web process dies and captures the crash log, signal and stack that the
+# investigation in docs/GAPS.md G5 could not obtain locally.
+#
+# Two arms run in the same job so one runner's conditions cover both:
+#   control  the flow as the matrix runs it, which supplies the crash and its stack.
+#   probe    the same flow with accelerated compositing disabled. The captured core is a SIGSEGV in
+#            the WPEWebProcess thread named ThreadedCompositor, so that is the variable worth
+#            moving. Theme is not one of the arms: run 62's second attempt crashed in light, so the
+#            two themes are both at risk and the loop alternates them.
+name: Ruling 200 WebKit crash loop
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: Deployed URL to loop against (defaults to the branch's Pages preview)
+        required: false
+        default: ""
+      loops:
+        description: Iterations per arm
+        required: false
+        default: "40"
+      viewport:
+        description: One viewport as JSON, e.g. [820,1180]
+        required: false
+        default: "[1536,960]"
+      theme:
+        description: Theme to loop in (both alternates per iteration; theme is not a variable)
+        required: false
+        default: both
+      probe:
+        description: What the probe arm neutralises (compositing, appearance or color-scheme)
+        required: false
+        default: compositing
+      arms:
+        description: Which arms to run (control, probe, or both)
+        required: false
+        default: both
+
+jobs:
+  loop:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+      - name: Resolve target URL
+        id: target
+        env:
+          BASE_URL: ${{ inputs.base_url }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -uo pipefail
+          URL="$BASE_URL"
+          if [ -z "$URL" ]; then URL="https://${REF_NAME}.dna-web-application.pages.dev"; fi
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+          echo "Looping against $URL"
+      - name: Live check (the deployment serves the app)
+        run: |
+          set -e
+          code=$(curl -sS -o /tmp/sign-in.html -w '%{http_code}' "${{ steps.target.outputs.url }}/sign-in")
+          echo "GET /sign-in -> $code"
+          test "$code" = "200"
+          grep -q '<title>DNA</title>' /tmp/sign-in.html
+      - name: Install WebKit and a debugger
+        run: |
+          bunx playwright install --with-deps webkit
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq gdb elfutils
+      - name: Enable core dumps
+        run: |
+          sudo mkdir -p /tmp/cores
+          sudo chmod 1777 /tmp/cores
+          # %e process name, %p pid, %s terminating signal.
+          sudo sysctl -w kernel.core_pattern='/tmp/cores/core.%e.%p.sig%s'
+          sudo sysctl -w kernel.core_uses_pid=0
+          # Some images ship a suid_dumpable of 0, which silently drops dumps from setuid helpers.
+          sudo sysctl -w fs.suid_dumpable=1 || true
+          cat /proc/sys/kernel/core_pattern
+      - name: Control arm
+        if: ${{ inputs.arms != 'probe' }}
+        env:
+          BASE: ${{ steps.target.outputs.url }}
+          ARM: control
+          LOOPS: ${{ inputs.loops }}
+          ONLY: ${{ inputs.viewport }}
+          THEME: ${{ inputs.theme }}
+          OUT: ${{ github.workspace }}/crash-out/control
+        run: |
+          mkdir -p "$OUT"
+          ulimit -c unlimited
+          ulimit -c
+          node tests/webkit-crash-loop.cjs 2>&1 | tee "$OUT/loop.log"
+      - name: Probe arm (the suspect neutralised, nothing else changed)
+        if: ${{ inputs.arms != 'control' }}
+        env:
+          BASE: ${{ steps.target.outputs.url }}
+          ARM: probe
+          PROBE: ${{ inputs.probe }}
+          LOOPS: ${{ inputs.loops }}
+          ONLY: ${{ inputs.viewport }}
+          THEME: ${{ inputs.theme }}
+          OUT: ${{ github.workspace }}/crash-out/probe
+        run: |
+          mkdir -p "$OUT"
+          ulimit -c unlimited
+          node tests/webkit-crash-loop.cjs 2>&1 | tee "$OUT/loop.log"
+      - name: Extract the crash log, signal and stack from any core
+        if: always()
+        run: |
+          set -uo pipefail
+          mkdir -p crash-out/cores
+          shopt -s nullglob
+          cores=(/tmp/cores/core.*)
+          echo "cores written: ${#cores[@]}"
+          if [ "${#cores[@]}" -eq 0 ]; then
+            echo "No core file was written. If the loop reported a crash, the web process was"
+            echo "killed in a way that produced no dump, or the runner discarded it."
+            ls -la /tmp/cores || true
+            exit 0
+          fi
+          for c in "${cores[@]}"; do
+            name=$(basename "$c")
+            echo "=== $name ===" | tee -a crash-out/cores/stacks.txt
+            file "$c" | tee -a crash-out/cores/stacks.txt
+            # The recorded executable path lets gdb resolve symbols for the web process binary.
+            exe=$(eu-readelf -n "$c" 2>/dev/null | grep -o '/[^ ]*WebKitWebProcess[^ ]*' | head -1 || true)
+            echo "exe: ${exe:-unknown}" | tee -a crash-out/cores/stacks.txt
+            gdb -batch -q \
+              -ex "set pagination off" \
+              -ex "thread apply all bt 40" \
+              ${exe:+"$exe"} "$c" 2>&1 | head -400 | tee -a crash-out/cores/stacks.txt
+            cp "$c" crash-out/cores/ 2>/dev/null || true
+          done
+      - name: Summarise
+        if: always()
+        run: |
+          echo "## Ruling 200 WebKit crash loop" >> "$GITHUB_STEP_SUMMARY"
+          for arm in control probe; do
+            f="crash-out/$arm/loop.log"
+            [ -f "$f" ] || continue
+            echo "### $arm" >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            grep -E '^(ruling 200 loop|RESULT|LOOP .*CRASHED)' "$f" >> "$GITHUB_STEP_SUMMARY" || true
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+          done
+      - name: Upload loop logs, stacks and cores
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ruling-200-webkit-${{ github.run_number }}
+          path: crash-out
+          if-no-files-found: warn
