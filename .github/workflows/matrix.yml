@@ -96,6 +96,10 @@ jobs:
           ARM: ${{ inputs.probe != '' && 'probe' || 'control' }}
           PROBE: ${{ inputs.probe }}
         run: |
+          # The shell opens loop.log before node runs, and matrix-out is otherwise created only
+          # once tests/matrix.cjs loads, so without this tee fails to open the file, streams to
+          # stdout anyway and exits non-zero, failing a step whose loop actually succeeded.
+          mkdir -p "$OUT"
           ulimit -c unlimited
           node tests/webkit-crash-loop.cjs 2>&1 | tee "$OUT/loop.log"
           echo "### ruling 200 loop" >> "$GITHUB_STEP_SUMMARY"
