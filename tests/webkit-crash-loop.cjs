@@ -12,14 +12,20 @@
 //
 // Arms, chosen by ARM and PROBE:
 //   ARM=control                the flow exactly as the matrix runs it.
-//   ARM=probe PROBE=appearance the same flow with every form control taken off the engine's native
-//                              form-control paint path via `appearance: none`. Native-appearance
-//                              controls are the only element class that exists in the owner view
-//                              and in no other view (G5, finding 2), and they are what survives the
-//                              light sighting. This is the live suspect.
-//   ARM=probe PROBE=color-scheme  forces `color-scheme: light`. Kept because it is cheap, and
-//                              because the light sighting predicts it makes no difference; a run
-//                              where it does would mean the light sighting has a second cause.
+//   ARM=probe PROBE=compositing  the live probe. The core from run 17 (34322686504) is a SIGSEGV in
+//                              the WPEWebProcess thread named ThreadedCompositor, so this launches
+//                              the engine with WEBKIT_DISABLE_COMPOSITING_MODE=1 instead of
+//                              injecting CSS. Caveat on reading it: whether this WPE build honours
+//                              that variable is not verifiable from the repo, so a clean arm counts
+//                              only if the run also perturbs something compositing-dependent. An
+//                              arm whose pass counts match the control digit for digit is evidence
+//                              the switch was a no-op, not that the compositor is innocent.
+//   ARM=probe PROBE=appearance the flow with every form control taken off the native form-control
+//                              paint path. Superseded: the faulting thread is the compositor, not a
+//                              form-control paint path, and a visitor flow (which mounts no
+//                              controls at all) crashed under this probe. Kept for the record.
+//   ARM=probe PROBE=color-scheme  forces `color-scheme: light`. Superseded by the light sighting,
+//                              which refuted color-scheme as the discriminator outright.
 //
 // A probe is injected into the running page. It changes no product code, no repo style and no pass
 // criterion, and it is not a quarantine.
@@ -30,7 +36,9 @@ const M = require("./matrix.cjs");
 const P = require("./profile.cjs");
 
 const ARM = process.env.ARM === "probe" ? "probe" : "control";
-const PROBE = process.env.PROBE === "color-scheme" ? "color-scheme" : "appearance";
+const PROBE = ["compositing", "appearance", "color-scheme"].includes(process.env.PROBE)
+  ? process.env.PROBE
+  : "compositing";
 const LOOPS = Number(process.env.LOOPS || 40);
 const VP = process.env.ONLY ? JSON.parse(process.env.ONLY) : [1536, 960];
 const THEME = process.env.THEME || "both";
@@ -51,9 +59,14 @@ const CSS = {
  */
 const engine = {
   async launch(opts) {
-    const browser = await webkit.launch(opts);
+    const o =
+      ARM === "probe" && PROBE === "compositing"
+        ? { ...opts, env: { ...process.env, WEBKIT_DISABLE_COMPOSITING_MODE: "1" } }
+        : opts;
+    const browser = await webkit.launch(o);
     if (ARM !== "probe") return browser;
     const css = CSS[PROBE];
+    if (!css) return browser;
     const newContext = browser.newContext.bind(browser);
     browser.newContext = async (o) => {
       const ctx = await newContext(o);

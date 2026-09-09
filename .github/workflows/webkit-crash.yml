@@ -4,10 +4,10 @@
 #
 # Two arms run in the same job so one runner's conditions cover both:
 #   control  the flow as the matrix runs it, which supplies the crash and its stack.
-#   probe    the same flow with every form control taken off the engine's native form-control paint
-#            path (appearance: none), which is the single-variable test of G5's surviving suspect.
-#            Theme is not one of the arms: run 62's second attempt crashed in light, so the two
-#            themes are both at risk and the loop alternates them.
+#   probe    the same flow with accelerated compositing disabled. The captured core is a SIGSEGV in
+#            the WPEWebProcess thread named ThreadedCompositor, so that is the variable worth
+#            moving. Theme is not one of the arms: run 62's second attempt crashed in light, so the
+#            two themes are both at risk and the loop alternates them.
 name: Ruling 200 WebKit crash loop
 
 on:
@@ -30,9 +30,9 @@ on:
         required: false
         default: both
       probe:
-        description: What the probe arm neutralises (appearance or color-scheme)
+        description: What the probe arm neutralises (compositing, appearance or color-scheme)
         required: false
-        default: appearance
+        default: compositing
       arms:
         description: Which arms to run (control, probe, or both)
         required: false
