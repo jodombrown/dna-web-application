@@ -727,10 +727,11 @@ Recorded because the claim was made one message before the sample that broke it,
 time in this investigation an over-strong reading has been corrected by the next observation — after
 `color-scheme` and after native form controls.
 
-## G6. Withdraw separates the two states ruling 214 joined
+## G6. Withdraw separated the two states ruling 214 joined — closed (ruling 229)
 
-**Severity: low at the invite boundary. Not a merge blocker (ruling 140). Opened 9 September 2026 by
-Fix PR 01, which found it and did not choose an answer for it.**
+**Opened and closed 9 September 2026, both inside Fix PR 01. Ruling 227 stated the requirement,
+ruling 229 chose option 1 of the three the gap set out. Kept here rather than deleted, because the
+rejected options are the reason the chosen one costs what it costs.**
 
 Ruling 214 joined `window` to `sent`: a decline inside the window and a request still waiting return
 byte-identical payloads from every projection, so the sender cannot tell them apart by reading.
@@ -747,15 +748,42 @@ The action is not joined. On Profile a `sent` relationship renders a **Request s
 One click separates the two, which is the thing ruling 157 exists to prevent. The payload half of
 ruling 214 holds; the transition half was never stated.
 
-Two answers are defensible and this is recorded rather than guessed, in the shape G2 had before
-ruling 198:
+Three answers were defensible and the gap recorded them rather than guessing, in the shape G2 had
+before ruling 198: keep the button and hold the display at Pending; remove the button from Profile
+so nothing is clickable; or remember the press so both land on `none`.
 
-- **A window that withdraw appears to accept.** `withdraw_request` returns silently either way and
-  the projection moves the sender to `none` once the window row is acknowledged, which costs the
-  window its purpose unless the state is kept somewhere the sender cannot reach.
-- **A Profile that renders `sent` without an action**, matching the Members card, which already has
-  no primary action for either state. Cheaper, and it removes a real affordance from a member who
-  simply changed their mind about a pending request.
+**Ruling 229 chose the first.** `private.relationship_display` maps a withdrawn request to `sent`
+for the rest of the decline window, exactly as it already maps `window` to `sent`. Server behaviour
+inside the window is untouched and stays a literal no-op, there is no schema change, and because no
+Connect action comes back in either case the sender cannot re-send from the surface.
 
-Nothing is enforced against it today beyond the payload identity. Ruling 157 is the constraint any
-answer has to satisfy.
+The button was not the only surface, and the other three are closed with it:
+
+| Surface | Before | After |
+| --- | --- | --- |
+| Profile's Request sent button | pending → `none`, window → `sent` | both stay `sent` |
+| Members card `rel` | pending `sent`, window `sent`, withdrawn `none` | all three `sent` |
+| My Network → Sent | row vanishes on withdrawal, stays for the window | row stays for both, for the window's length |
+| Suggested | a withdrawn candidate reappears, a window one does not | neither reappears |
+| `send_introduction` | accepts a re-send from the withdrawn sender, refuses the window one | refuses both, one message |
+
+**Accepted cost, recorded rather than discovered.** A sender who withdraws a genuine pending request
+does not get the Connect action back for that member until the window elapses, even though the
+withdrawal really happened and the recipient's Requests row really did leave. They gave up their
+turn. Verified live: a withdrawal older than `decline_window_days` releases, and the pair returns to
+`none` on every surface.
+
+## G7. My Network's Sent section has no withdraw affordance
+
+**Severity: low. Not a merge blocker. Opened 9 September 2026 while closing G6. A Connect
+increment, deliberately not built in Fix PR 01.**
+
+`src/lib/connect.ts` exports `withdrawIntroduction`, and no component calls it. The only withdraw a
+member can reach is Profile's **Request sent** button, so withdrawing a request means navigating to
+the recipient's profile rather than acting on the Sent row that shows the request.
+
+Ruling 229's display rule is already in place for it: a Sent row reads `sent` whether the request is
+pending, inside the window, or withdrawn inside the window, so an affordance added there inherits
+the rule rather than restating it. What the increment has to decide is only what the control looks
+like on a card that has no primary action slot, which is a Connect surface question and belongs to a
+Connect brief.

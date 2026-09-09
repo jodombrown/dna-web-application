@@ -4,7 +4,8 @@ Session 13, 9 September 2026. Audit, not a build. Run before Brief 5, against `m
 against the canonical Supabase project `dgspjevjoblujcoljvkn`.
 
 > **Amended in place, 9 September 2026, after Fix PR 01** (rulings 212 to 218, migration
-> `20260909160000_fix_pr_01_rulings_212_216.sql`). The body below is the pass as written and is not
+> `20260909160000_fix_pr_01_rulings_212_216.sql` and
+> `20260909170000_r229_withdraw_renders_as_sent.sql`). The body below is the pass as written and is not
 > rewritten; **Status after Fix PR 01** at the end of section 4 carries one line per finding, and
 > two of this report's own statements are corrected there.
 
@@ -482,6 +483,7 @@ before and after and is unchanged.
 | **F8** | **No fix; record corrected** | Ruling 216. `docs/GAPS.md` G1 no longer says the table can only hold rows placed by hand. The irreversibility is intended and ruling 211 says so; the audit did not have 211 when it wrote the finding |
 | **F9 to F15, F17** | Open, at their severities | Not in this PR. F9 lands on Brief 5; F10 is not worth a migration in a PR this security-sensitive; F15 is defence in depth behind a schema that is not exposed, and the next pass proves that over real HTTP |
 | **F16** | **Closed** (IB-10) | Ruling 215. `publish_post`'s Connect branch calls `send_introduction` or writes nothing. Live: a recipient inside the window and a recipient who had blocked the author were both refused with `send_introduction: not available`; a valid recipient wrote exactly one row, `pending`, with `to_name` taken from the members row rather than the composer's free text. CLAUDE.md's five named write paths are true again |
+| **G6** | **Closed** (227, 229) | Not one of the seventeen: opened by this PR while closing F6, and closed inside it rather than split across two. `private.relationship_display` maps a withdrawn request to `sent` for the rest of the window, as it already maps `window` to `sent`. Live, sender Yusuf against one pending, one declined three days ago and one withdrawn: raw `relationship_state` reads `sent`, `window`, `none`; the Members cards read `sent, sent, sent`; all three hold a Sent row reading `sent`; Suggested returns `[]`; `profile_view.relationship` is `{"state": "sent", "following": false}` for all three; and `send_introduction` refuses all three at the same line with the same message. A genuine `none` pair still succeeds, and a withdrawal older than the window releases |
 
 ### Two corrections to this report, and one residual it did not have
 
@@ -505,14 +507,17 @@ instead would have changed what the filter sheet offers, which is a visual chang
 for. No change made; recorded here because the difference is between the handoff and the code, not
 between two readings of a finding.
 
-**Residual, new, Low, not in F6.** On Profile a `sent` relationship renders a **Request sent** button
+**Residual, new, Low, not in F6 — raised here, then closed here.** On Profile a `sent` relationship renders a **Request sent** button
 wired to `withdraw_request`. After ruling 214 a decline inside the window renders as `sent` too, and
 the two diverge under the action rather than in the payload: withdrawing a pending request moves the
 sender to `none` and the Connect action returns, while withdrawing inside the window is a silent
 no-op and the button stays. The payloads are byte-identical, which is what ruling 214 and Done Means
-item 5 ask for; the state transition is not. Closing it needs a ruling this PR was not given — a
-window that withdraw appears to accept, or a Profile that renders `sent` without an action — so it
-is reported rather than chosen. Logged as G6 in `docs/GAPS.md`.
+item 5 ask for; the state transition was not. Three answers were defensible, so the choice went to a
+ruling rather than being made here: ruling 227 stated the requirement and ruling 229 chose option 1,
+which holds the display at `sent` for the rest of the window and leaves the server no-op literal.
+Built in this PR, because withdraw is F6 one layer up and leaving it would split ruling 214 across
+two PRs. G6 in `docs/GAPS.md` records the two rejected options and the accepted cost; G7 records the
+one thing deliberately not built, a withdraw affordance on My Network's Sent rows.
 
 ### What passed, stated as results
 
