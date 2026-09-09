@@ -138,11 +138,21 @@ jobs:
             echo "exe: ${exe:-unknown}" | tee -a "$OUT/cores/stacks.txt"
             frames=0
             if [ -n "$exe" ] && [ -e "$exe" ]; then
+              # info sharedlibrary is what makes the frames portable: without debug info the
+              # addresses mean nothing on their own, but library-relative offsets anchor to an
+              # exact build that someone with symbols can map.
               gdb -batch -q -ex "set pagination off" -ex "info registers rip" \
-                -ex "thread apply all bt 40" "$exe" --core "$c" 2>&1 |
-                head -500 | tee -a "$OUT/cores/gdb-$name.txt"
+                -ex "info sharedlibrary" -ex "thread apply all bt 40" "$exe" --core "$c" 2>&1 |
+                head -600 | tee -a "$OUT/cores/gdb-$name.txt"
               cat "$OUT/cores/gdb-$name.txt" >> "$OUT/cores/stacks.txt"
               grep -qE '^#[0-9]+ ' "$OUT/cores/gdb-$name.txt" && frames=1
+              if [ "$frames" -eq 1 ]; then
+                wk=$(grep -o '/[^ ]*libWPEWebKit[^ ]*' "$OUT/cores/gdb-$name.txt" | head -1 || true)
+                [ -n "$wk" ] && file "$wk" > "$OUT/cores/buildid-$name.txt" 2>/dev/null || true
+                node scripts/frame-offsets.mjs "$OUT/cores/gdb-$name.txt" \
+                  "$OUT/cores/buildid-$name.txt" 2>&1 |
+                  tee "$OUT/cores/offsets-$name.txt" | tail -60
+              fi
             else
               echo "executable not resolvable" | tee -a "$OUT/cores/stacks.txt"
             fi
