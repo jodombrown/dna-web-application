@@ -148,168 +148,129 @@ sides, and the database was returned to its prior state (zero block rows, `where
 The `connect_where` rows sit below the floor of five on real data, so that line was proved by
 dropping `where_floor` to 1 for the two calls and restoring it to 5 immediately after.
 
-## G5. The WebKit web-process crash in the Profile owner flow (ruling 200)
+## G5. The WebKit web-process crash on the Profile surface (ruling 200)
 
-**Severity: medium. Open, narrowed to one element class, not fixed. Ruling 200's premise that every
-sighting is dark is false, and the named suspect this entry first carried is refuted.**
+**Severity: medium. Open, root-caused to a named class and anchored to exact library offsets, not
+fixed. The fault is in engine code, so under ruling 200's guardrail it is reported rather than
+changed.**
 
-Ruling 200 asked for a cause explaining three facts: why every sighting was dark, why every sighting
-was the owner flow, and why Chromium has never produced it. One of those three facts did not
-survive.
+### The finding
 
-### The light sighting, which changes the question
+A **SIGSEGV in WebKit's compositing thread**, `ThreadedCompositor`, in the `WPEWebProcess` of
+Playwright's WPE build of WebKit 26.6 (`webkit-2359`). The thread is servicing a scheduled update
+dispatched from `g_main_context_dispatch` when it walks a structure recursively — three functions
+cycling about eight or nine levels — completes the walk, calls into a function far outside that
+cluster, and faults there.
 
-Run 62's **second attempt** (`34314303037`, job `102354990849`, finished 06:34 on 9 September 2026,
-after this investigation opened) failed one check out of 5990:
+Frames, as offsets into `libWPEWebKit-2.0.so.1`:
 
-```
-5989/5990 checks passed
-FAIL: webkit-1536x960-light profile owner flow WEB PROCESS CRASHED
-  | Error: locator.evaluate: Target page, context or browser has been closed
-  | Call log: - waiting for locator('[data-testid="edit-done"]').first()
-  | state unavailable: Error: page.evaluate: Target crashed
-  | DOM before the section saves {"nodes":598,"options":71,"selects":20,"fields":14,"sections":15}
-```
+| Frame     | Offset                                                            |                                                 |
+| --------- | ----------------------------------------------------------------- | ----------------------------------------------- |
+| #0        | `+0x588b98a`                                                      | **fault site**, far outside the cycle's cluster |
+| #1        | `+0x27b6be4`                                                      |                                                 |
+| #2 … #26  | `+0x27b76f4` → `+0x27b23f1` → `+0x27b555f`                        | the cycle, 9x / 8x / 8x                         |
+| #27       | `+0x27b1885`                                                      | the recursion is entered here                   |
+| #28 … #32 | `+0x7607e1`, `+0x75f51a`, `+0x7659a9`, `+0x1d3726b`, `+0x1d356e6` |                                                 |
+| #33, #34  | glib, `g_main_context_dispatch`                                   |                                                 |
+| #35 … #38 | `+0x1d35d51`, `+0x1d36067`, `+0x1cd2ac3`, `+0x1d3bd46`            |                                                 |
+| #39, #40  | `start_thread`, `clone3`                                          |                                                 |
 
-`webkit-1536x960-**light**`. Read from the job log, not inferred. Ruling 200's table records run 62
-as `webkit-820x1180-dark`, which was attempt 1; attempt 2 of the same run number crashed in light,
-at a different viewport, in the same flow.
+Two crashes forty minutes apart, in different processes with different ASLR bases, produce
+byte-identical offsets. The crash has one path, not several. No function is named because the build
+ships no debug info and gdb prints `??` for these frames; a nearest-exported-symbol guess would name
+a function that is not the one in the frame. The offsets are exact against this build and visibly
+useless against another, which is what makes them safe to hand on.
 
-So the constants are two, not three: **WebKit, and the Profile owner flow.** Theme is not one, and
-neither is viewport. Both are labels on whichever at-risk case happened to be running.
+### What it explains, and what it dissolves
 
-### What that refutes, including this entry's own first answer
+Ruling 200 asked for a cause explaining three facts: every sighting dark, every sighting the Profile
+owner flow, Chromium never. The finding explains all three, and two of them by showing they were
+never facts.
 
-This entry originally named `color-scheme: dark` on native form controls as the cause. **That is
-refuted.** In light theme `color-scheme` resolves to `normal`, so the dark form-control path is
-never taken, and the crash happened anyway. A cause that is absent from a sighting is not the cause.
+- **Dark.** Broken by evidence before the cause was found: run 62's second attempt crashed at
+  `webkit-1536x960-light`. Compositing is not theme-dependent.
+- **Owner flow.** Broken too: a `profile visitor stranger` flow crashed on plain `page.goto`.
+  Compositing runs on every view.
+- **Viewport.** Never a variable. Six viewports have now produced it (430, 744, 820, 1280, 1366,
+  1536), and the DOM census is identical at every one.
+- **Chromium never.** Chromium has no `ThreadedCompositor`; it paints through Skia in its own
+  process architecture. The one engine-specific fact is the one that held.
 
-The measurement that named it is still correct, and now says something better. Across the whole
-owner flow, in both read and edit mode, the only computed-style difference between light and dark on
-any compositing-relevant property is `color-scheme`; after removing it the residual is **zero
-differing signatures**. Read forward rather than backward, that predicts the light sighting: if the
-two themes are identical in every compositing respect, whatever kills the process in dark can kill
-it in light. The "every sighting is dark" run of four was a coin landing the same way four times
-across a population of nine dark and nine light owner cases per run, and then landing the other way.
+What survives as constant is **WebKit, and the Profile surface at `/m/:handle`**. The crash lands
+during whatever the flow happens to be doing — a section save, `edit-done`, a navigation — because
+the compositor is servicing a _scheduled_ update, not responding to the action.
 
-That same measurement still rules out, by measurement rather than inspection, four of ruling 200's
-five listed suspects — pattern and Adinkra masks (69 masked elements in each theme),
-`backdrop-filter` (`none` on every element), `mix-blend-mode` (`normal` on every element), and
-dark-only `color-mix` / `oklch` / relative colour (the `[data-theme="dark"]` block is plain hex, and
-`styles.css`'s `oklch` is defined in both `:root` and `.dark`). It rules them out as _theme_
-discriminators. Since theme is no longer a discriminator at all, they are ruled out of that role and
-back into the general population — but none of them is owner-specific, and the owner constant is the
-one that held.
+### Whose defect
 
-### What survives
+Every frame is inside `libWPEWebKit-2.0.so.1` or glib. None is DNA's, and none could be: no
+application has code on that thread. That does not by itself make it WebKit's bug, because a page
+can hand the compositor a layer tree that trips a latent fault in it. Establishing which of those it
+is needs the symbolised frames, which needs a debug build.
 
-The owner discriminator, which is now the only structural one left, and is unaffected by the light
-sighting. Native-appearance form controls exist in the owner view and in no other view:
+Nothing in `src/` was touched, and no test was weakened, skipped, retried or quarantined.
 
-|                                | selects | options | inputs | textareas | native-appearance controls |
-| ------------------------------ | ------- | ------- | ------ | --------- | -------------------------- |
-| public / visitor, either theme | 0       | 0       | 0      | 0         | **0**                      |
-| owner read, either theme       | 14      | 42      | 2      | 0         | **16**                     |
-| owner edit, either theme       | 20      | 71      | 9      | 3         | **26**                     |
+### Two wrong answers, recorded because they were wrong
 
-Visitor and public never crash and mount none of them. The crashing run's own DOM sample —
-71 options, 20 selects, 14 fields, 15 sections — matches this census exactly, at every viewport
-measured (430, 820, 1280, 1366, 1536) and in both themes, which is also why viewport cannot be the
-variable: the at-risk population is identical at every one of them.
+This entry named a cause twice before the evidence arrived, and both were refuted.
 
-Of the 26 in edit mode, 16 are painted by the engine's own form-control theme while invisible: 14
-`VisibilitySelect` overlays (`appearance: auto`, `opacity: 0`, `position: absolute`) and 2 `Switch`
-checkboxes (`appearance: auto`, `opacity: 0`, and a **0x0** box). The other 10 are the visible text
-inputs and textareas, also `appearance: auto`. The six `Select` controls set `appearance: none` and
-are author-painted.
+1. **`color-scheme: dark` on native form controls.** Reached by measuring that `color-scheme` is the
+   only computed-style difference between the themes anywhere in the surface — which is true, and
+   which read forward actually _predicts_ the light sighting that killed it. In light,
+   `color-scheme` resolves to `normal` and the dark control path is never taken; the crash happened
+   anyway.
+2. **Native-appearance form controls, theme-independent.** Reached by measuring that they are the
+   only element class present in the owner view and absent from every other — also true. Refuted by
+   a crash in the visitor view, which mounts none of them, and again by the faulting thread being
+   the compositor rather than any form-control paint path.
 
-**The surviving suspect** is therefore native-appearance form controls on WebKit's form-control
-paint path, theme-independent — not the dark branch of that path. It still explains owner (nothing
-else in the surface is owner-only) and Chromium-never (Blink paints controls itself in Skia; WebKit's
-Linux port paints through a separate native theme). It no longer has to explain dark, because dark
-is not a fact about this crash.
+Both were reached by elimination on a small sample, both looked strong, and both were coincidences
+of exactly the kind ruling 200 warned about. The guardrail that kept `src/` untouched is the only
+reason neither shipped as a fix for a defect that lives in the engine.
 
-It is a suspect narrowed by elimination, not a proven cause, and this entry has now been wrong once
-about a suspect reached the same way. The confirming experiment is below.
-
-### Where the crash sits in the flow
-
-At `[data-testid="edit-done"]`, which the flow clicks after the section saves. A section save
-remounts nothing — across the `where` save all 26 native controls survived, 0 newly mounted, 0
-unmounted — so the crash window is a standing condition being exercised, not an event that creates
-one.
-
-### Why nothing was changed
-
-Every artefact in the suspect set is Strand's, ported verbatim, and ruled:
-
-| Artefact                                                   | Provenance                                                             | Ruling   |
-| ---------------------------------------------------------- | ---------------------------------------------------------------------- | -------- |
-| `Switch.tsx`, the 0x0 `opacity: 0` native checkbox         | "Ported from Strand `components/core/Switch.jsx`. Behavior unchanged." | 98       |
-| `Select.tsx`                                               | "Ported from Strand `components/core/Select.jsx`. Behavior unchanged." | 98       |
-| `VisibilitySelect.tsx`, the 14 `opacity: 0` native selects | "Ported from `profile/strand-patch/Profile.jsx`. Behavior unchanged."  | 124, 136 |
-
-`color-scheme: dark` in `src/styles/strand.css` (rulings 57, 98) was in this table while it was the
-suspect and is out of it now, but the conclusion is unchanged for the rest: if the surviving suspect
-is confirmed, the fix is a Strand change under a reopened ruling 98, not an edit to this repo's
-copy. Ruling 200 says a ruled style gets its ruling reopened rather than quietly changed, and a
-cause in Strand is reported as a Strand request. Nothing in `src/` was touched, and the case was not
-weakened, skipped, retried or quarantined.
+Ruled out along the way, each by measurement rather than inspection: pattern and Adinkra SVG masks,
+`backdrop-filter`, `mix-blend-mode`, dark-only `color-mix` / `oklch` / relative colour, DOM-size
+cliffs, page nesting depth, stack exhaustion, and a remount storm at the section saves.
 
 ### Ruling 152, and ruling 200's own premise
 
-Ruling 152 called this a moving navigation-timing race. Corrected: the condition that separates
-crashing from passing cases is static, present from the first paint of the owner view, unchanged by
-navigation and unchanged by the saves. What 152 read as movement is sampling across identical
-at-risk cases.
+**Ruling 152 is corrected.** It characterised this as a navigation-timing race that moves each run.
+The condition is static: present from the first paint, unchanged by navigation, unchanged by the
+saves. What 152 read as movement is sampling across identical at-risk cases.
 
-Ruling 200 replaced 152's one moving variable with three constants. Corrected too: there are two.
-The theme constant broke on its own evidence within hours of the ruling being written, which is what
-a constant asserted from four samples does. The correct statement is that the crash is
-**WebKit-only and owner-flow-only**, and that every other axis so far — theme, viewport — is a label
-on the sample, not a property of the defect.
+**Ruling 200's premise is corrected too.** It replaced 152's one moving variable with three
+constants. Two of the three broke on their own evidence within hours. A constant asserted from four
+samples is a description of the sample.
 
-### The instrument, and the next step
+### Reproducing it
 
-`tests/webkit-crash-loop.cjs` loops `tests/profile.cjs`'s own `runOwner`, so the flow under test is
-the flow the matrix runs. `.github/workflows/webkit-crash.yml` runs it with core dumps enabled and
-extracts the signal and stack from any core with gdb. It is `workflow_dispatch` only: not the
-matrix, not a merge gate, no pass criterion changed. Themes alternate per iteration, because theme
-is not a variable and pinning one halves the at-risk population.
+Dispatch `matrix.yml` with a `loop` input (170 iterations fits the job timeout) to run
+`tests/webkit-crash-loop.cjs`, which drives `tests/profile.cjs`'s own `runOwner` so the flow under
+test is the matrix's flow. Core dumps, gdb frames, offset resolution and the library build id are
+captured automatically.
 
-- **Control.** The flow unmodified. Supplies the crash log, signal and stack this entry still lacks.
-- **Probe.** The same flow with `appearance: none` forced on every form control, taking them off the
-  engine's native form-control paint path. Validated in Chromium before use: native-appearance
-  controls go from 16 to 0, and the flow records the same 29 checks with the same single
-  dev-server-only warning, so the probe moves the variable without perturbing the flow.
-- **`PROBE=color-scheme`** is kept only because it is cheap. The light sighting predicts it makes no
-  difference; a run where it does would mean the light sighting has a second cause.
+**A single clean loop run proves nothing.** Four of five confirmed loop runs crashed, about one
+crash per 210 iterations, so roughly one run in five comes back clean with nothing changed. Any
+probe needs several runs per arm and a control arm run at the same time on the same head. The
+`appearance` probe arm is the cautionary case: five clean runs there looked like a result and were a
+coincidence.
 
-Reading the result: crash in control and none in probe across at least three times the control's
-mean iteration count confirms the surviving suspect, and the change then belongs in Strand under a
-reopened ruling 98. Crash in both refutes it, and the next place to look is what else is owner-only
-— the edit bar, the audience machinery, and the write path itself, which is the one thing the owner
-flow does that no other view does. No crash in fifty control loops is the finding ruling 200
-anticipated, and the step becomes running the full at-risk population in one browser process, in
-order, as the matrix does, since the matrix produces this crash roughly once per run and a tight
-loop over a single case may not reproduce the conditions that matter.
+The `compositing` probe arm (`WEBKIT_DISABLE_COMPOSITING_MODE=1`) is **not** evidence and should not
+be read as any: whether this WPE build honours that variable was never verified, and the pass-count
+test proposed for checking it was withdrawn as non-discriminating.
 
-### Sampling so far
+### The next step
 
-| Run                                                      | Population                                         | Result                                        |
-| -------------------------------------------------------- | -------------------------------------------------- | --------------------------------------------- |
-| `34314303037` (run 62, attempt 2)                        | full matrix, both themes, both engines             | **crash**, `webkit-1536x960-light`, 5989/5990 |
-| `34319186149` (dispatched, `special=profile theme=dark`) | 9 dark WebKit owner cases + visitors, both engines | no crash, 1770/1770                           |
+Take the offsets above to a WebKit 26.6 debug build, or to the matching source, and symbolise
+`+0x27b1885` (the recursion's entry), the cycle at `+0x27b76f4` / `+0x27b23f1` / `+0x27b555f`, and
+`+0x588b98a` (the fault). That names the walk and the function that faults, and it is the one step
+that decides whether the trigger is a layer tree the Profile surface builds or a latent fault in the
+engine. Everything before it is done.
 
-One clean run of the nine dark owner cases is consistent with the historical rate of about one
-crash per full run and refutes nothing on its own. Three further dispatched runs of the same shape
-were queued; they were aimed at dark before the light sighting was found, which halves their
-coverage but does not invalidate them.
+### How this was reached, in order
 
-One constraint on running the instrument: GitHub dispatches a `workflow_dispatch` workflow only from
-the default branch, so `webkit-crash.yml` becomes dispatchable when this branch merges. Until then
-the control arm is sampled by dispatching the existing `matrix.yml` with `special=profile` and no
-theme filter.
+The sections below are the working record, kept in the order it happened, including the two wrong
+answers, the withdrawn test, and four defects in this investigation's own instrumentation. A reader
+who only wants the answer has it above.
 
 ### Update, 07:23: the owner constant breaks too, and the experiment is confounded
 
