@@ -85,7 +85,7 @@ function SignIn() {
             lineHeight: 1.2,
           }}
         >
-          {mode === "in" ? "Sign in to DNA" : "Join DNA"}
+          {mode === "in" ? "\n" : "Join DNA"}
         </h1>
         {mode === "up" && (
           <Input
