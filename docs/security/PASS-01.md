@@ -204,7 +204,10 @@ Two things a client could sum, both about its own graph and neither rendered:
 
 ### 2. Nothing reaches an anonymous caller beyond the public projection of a profile whose owner opted in — **two findings**
 
-Tested at the role boundary as `anon`, inside rolled-back transactions, not through the app.
+Tested at the role boundary as `anon`, inside rolled-back transactions, not through the app. The
+same boundary is also exercised over real HTTP by `tests/live-checks.cjs` on every push, which
+passed on the run carrying this report; see the coverage section for what that suite does and does
+not reach, and why it is green while F1 to F4 hold.
 
 What `anon` can reach, and it is a short list: `SELECT` on `members` (13 columns, `USING
 (profile_shared)`), on `attestations`, and on the eleven profile section tables under P-section;
@@ -375,6 +378,91 @@ still off, confirmed by the Supabase security advisor in this pass) and Resend A
 | **F16** | Two writers insert into `connection_requests`: `send_introduction` and `publish_post`'s Connect branch. Only the first enforces `is_blocked` and `relationship_state = 'none'`, so the composer's Connect verb can create a pending request to a member who has blocked the author or who is inside the decline window. CLAUDE.md names five write paths for the graph; this is a sixth entry point into the same table | **Medium** | IB-10 |
 | **F17** | Two stores answer "is following": `profile_view` reads `member_follows`, `connect_card` reads `edges`. They agree today because a trigger mirrors one into the other, and `set_follow` is the only writer. Recorded so the mirror is not mistaken for a second source of truth, and so a future writer of `edges` that bypasses the trigger is caught | **Low** | — |
 
+### Addendum, 9 September 18:30: the grants moved under this report, and it is half a fix
+
+Between this pass's live checks (16:55 to 17:02) and 18:30, the column grants on `public.members`
+changed on the canonical project. Verified live, not inferred:
+
+| Role | `SELECT` columns during the audit | `SELECT` columns at 18:30 |
+| --- | --- | --- |
+| `anon` | 13 | **8**: `id, handle, name, headline, avatar_path, cover_path, cover_focus, pattern` |
+| `authenticated` | all 18 | **8**, the same list |
+
+Revoked from both: `origin_country`, `current_place`, `current_country`, `local_tz`, `segment`;
+and from `authenticated` additionally `profile_private`, `profile_shared`, `identified_at`,
+`updated_at`. The `UPDATE` grant is untouched at 14 columns, so `save_profile_section` still writes.
+
+**No migration in this repository accounts for it.** The newest migration on `main` is
+`20260909150000_r198_block_semantics.sql`, which this pass audited; the repo's migrations still
+grant the wide set. The change was applied to the live project directly, so the tree and the
+canonical database now disagree, and a fresh `db reset` would restore the wide grants. That drift is
+worth a finding of its own and is recorded here rather than fixed.
+
+**It does not close F2a or F2b.** `profile_view` and `private.connect_card` are `SECURITY DEFINER`;
+column grants do not apply to them, and the app renders from those projections rather than from the
+table. Verified live at 18:30 with the revoke in place:
+
+- `profile_view('thandiwe-dube')` as `anon` still returns `current_place`, `origin_country`,
+  `local_tz`, `segment` and `segment_label` in its `member` object.
+- `connect_cards('members')` as a signed-in stranger still returns `place`, `origin`, `heritage` and
+  `segment_label` on the card.
+
+So the public profile page and the Connect card are unchanged. What the revoke closed is the raw
+`/rest/v1/members` path, which is the F1 half of the problem, not the F2 half.
+
+**F1 is narrowed, not closed.** `members_member_select` is still `USING (true)`, so any signed-in
+member still enumerates every member row; the row now carries eight identity columns instead of
+eighteen. The flags, location and segment are gone from that path, which is the substance of the
+severity. Read F1 as Medium against the live database and High against the migrations, until the two
+agree.
+
+**Consequence for CI, and it is the reason `main` is red.** `tests/live-checks.cjs` hardcodes
+`CORE_COLS` including four of the revoked columns, so `check 1: anon reads the shared profile's core
+row` now returns 401 and the suite scores 35 of 40 on `main` (run 92). The test and the database
+disagree, and which one is wrong depends on whether the revoke was intended. That decision is not
+this report's to make.
+
+### The addendum resolved, 9 September 18:55
+
+The drift the addendum found was Fix PR 01's, caught mid-application. That session was replacing the
+grants, the policies and the projections in sequence against the live project while the migration
+file was still uncommitted in its working tree, so for a period the canonical database really did
+carry narrowed grants with no migration on `main` to account for them. Recording it was right, and
+the sequencing that made it possible was not: the migration is now committed as
+`20260909160000_fix_pr_01_rulings_212_216.sql`, and every function body in it matches
+`pg_proc.prosrc` on the project by md5, so the tree and the canonical database agree again and a
+`db reset` reproduces the live state rather than reverting it.
+
+Two of the addendum's readings do not survive that, and one does.
+
+**"It does not close F2a or F2b" was true at 18:30 and is false now.** At that moment the grants had
+been replaced and `profile_view` and `private.connect_card` had not, which is exactly what the
+addendum observed. Both have since been replaced. The probe it used cannot decide the question
+either way, though, and that is worth more than the timing: it read `thandiwe-dube`, whose Origin,
+Where and Segment audiences sit at their default of `everyone`, where returning those attributes is
+the audience working rather than a gate missing. `member_visibility` holds one row on this project
+(`intent = anchored`), so any probe that does not set the fixture first sees the `everyone` case.
+Paired, one transaction each, viewer Yusuf:
+
+| Probe | `profile_view.member` keys |
+| --- | --- |
+| Audiences at their default `everyone` | `cover_focus, current_place, handle, headline, id, local_tz, name, origin_country, pattern, segment, segment_label, tier` |
+| Same probe, audiences at `connections` | `cover_focus, handle, headline, id, name, pattern, tier` |
+
+The Connect card behaves the same way: `origin`, `place` and `segment_label` present in the first,
+absent in the second. This is the F2 fixture the pass built by hand in section 3, and it is the only
+thing that separates the two cases.
+
+**"`members_member_select` is still `USING (true)`" was not live-checked.** The policy replacement
+and the grant narrowing were applied in one statement batch, so a window carrying one without the
+other never existed. The addendum marks the grant table "verified live, not inferred" and does not
+make that claim for the policy; it was read from the migrations on `main`, which did not yet carry
+the change. The policy is `private.can_see_core(id)` and F1 is closed rather than narrowed.
+
+**The CI consequence was correct and is fixed here.** `tests/live-checks.cjs` did hardcode `CORE_COLS`
+with four of the revoked columns. It now asserts the eight identity columns come back and that the
+five section-gated ones are refused, which is the assertion ruling 212 wants standing.
+
 ### Status after Fix PR 01
 
 One line per finding. Every closed line was re-tested live with this report's own probe, as a member
@@ -458,15 +546,72 @@ Gap Register, not in a fix that rides on this report.
 
 ## 5. What this pass did not cover, and why
 
-- **The HTTP surface itself.** This environment's network policy refuses outbound HTTPS to
-  `dgspjevjoblujcoljvkn.supabase.co` (the proxy answers 403 to CONNECT), so no `curl` reached
-  `/rest/v1/`. Every anonymous check was instead run at the role boundary — `BEGIN; SET LOCAL ROLE
-  anon; …; ROLLBACK;` — which is the same grant-and-policy evaluation PostgREST performs as that
-  role. What it does **not** cover is PostgREST's own layer: the `db-schemas` setting, RPC routing,
-  embedded-resource expansion through foreign keys (`?select=*,members(*)`), `Prefer` headers, and
-  the `graphql_public` schema. F15's containment rests on `private` not being in `db-schemas`, which
-  is read from the migrations' stated intent and **not** proved here. **A repeat of check 2 over
-  real HTTP is the first thing the next pass should do.**
+- **The HTTP surface, from this session.** This environment's network policy refuses outbound HTTPS
+  to `dgspjevjoblujcoljvkn.supabase.co` (the proxy answers 403 to CONNECT), so no `curl` in this
+  pass reached `/rest/v1/`. Every anonymous check here was run at the role boundary instead —
+  `BEGIN; SET LOCAL ROLE anon; …; ROLLBACK;` — which is the same grant-and-policy evaluation
+  PostgREST performs as that role, but not PostgREST's own layer: the `db-schemas` setting, RPC
+  routing, embedded-resource expansion through foreign keys (`?select=*,members(*)`), `Prefer`
+  headers, and the `graphql_public` schema. F15's containment rests on `private` not being in
+  `db-schemas`, which is read from the migrations' stated intent and **not** proved here.
+
+  **CI already covers much of that, and this section said otherwise in the first version of this
+  report.** `tests/live-checks.cjs`, run by `pages.yml` on every push, hits `/rest/v1/` over real
+  HTTP with the publishable key and asserts: ten tables and `profile_view` return nothing for a
+  non-shared profile; the shared profile's core row is readable while its switches are refused by
+  the column grant; `member_links` and `member_intent` return zero rows; ruling 141 on both
+  anonymous projections; ruling 156 across eight Connect tables and four Connect RPCs; and
+  `via_count` absent from every anonymous payload. It passed on the run carrying this report. The
+  earlier claim that a repeat of check 2 over real HTTP was the first thing the next pass should do
+  pointed at work that largely exists.
+
+  What is genuinely left for the next pass is narrower: PostgREST's own layer as listed above, and
+  the gap described next.
+- **The shape of the existing live-check suite, which is why it is green while F1 to F4 hold.**
+  Worth stating plainly, because a green suite beside four High findings otherwise reads as a
+  contradiction. Three reasons, all structural rather than a bug in the suite:
+
+  1. **Every check in it is anonymous.** There is no signed-in-member arm at all. F1 (any member
+     reads the whole `members` table) and the Connect half of F3 (a Private member still renders as
+     a card) are signed-in findings, so nothing in the suite could see them.
+  2. **The core row's contents are never checked against the section audiences.** `check 1` asserts
+     that anon reads the core row and that the *switches* are excluded from it. It asserts nothing
+     about `origin_country`, `current_place`, `local_tz` or `segment` against the Origin, Where and
+     Segment audiences — which is exactly F2a. The seeded fixture hides it too: the shared persona's
+     only `member_visibility` row is `intent = anchored`, so Where, Origin and Segment sit at the
+     `everyone` default and no case exists where the audience and the core row disagree. F2a was
+     found by *creating* that disagreement in a rolled-back transaction.
+  3. **No block is ever in place**, so F4 has no arm anywhere in CI.
+
+  Two narrower notes on the same suite. Its ruling-141 assertion is a substring match against two
+  hardcoded names, so it proves those two are not named and not that the mechanism is general; the
+  mechanism was read separately here and holds. And its `attestations` read is scoped to the
+  non-shared member, expecting zero rows, so it never reads the *shared* member's attestation rows —
+  which is where F7's third-party identifiers are exposed.
+
+  None of this is a criticism of the suite, which is checking what Briefs 3 and 4 asked it to check.
+  It is the answer to "why did CI not catch these", and it is the most useful thing this pass can
+  hand the next one: a signed-in arm, a fixture where a section audience and the core row disagree,
+  and an arm with a block in place would each catch one of the four.
+
+  **One observation about the suite's reliability, recorded rather than fixed.** On `main`'s
+  post-merge run for PR #12 (run 86, 9 September 16:10) the suite scored **39 of 40** and the job
+  failed, taking the whole matrix with it as a skipped step. The single failure was
+  `ruling 156: /connect served HTML carries no card, tile or filter (status 404)` — a `GET
+  $BASE/connect` returning 404 on that Pages deployment. **Every anonymous REST assertion in that
+  run passed**, so the failure was the served page, not the data layer, and it is not a finding
+  against any doctrine here. The same check passed on `main`'s next run (run 88, 17:25) and on the
+  branch run at 17:04, with no code change in between.
+
+  A mechanism fits the two observations and is offered as no more than that (ruling 205, on a
+  sample of two): step 5 polls `/sign-in` up to twelve times at ten-second intervals before
+  proceeding, while step 6 requests `/connect` once, with no retry, seconds after a fresh
+  direct-upload deployment. A partially propagated deployment would produce exactly this split. The
+  consequence worth naming is not the 404 itself but that a single unretried request gates the
+  entire matrix, and that `main` was left red at 16:10 for a reason unrelated to the WebKit defect
+  in G5 and unrelated to the diagnostic runs PR #12's merge note invoked under ruling 199. Adding a
+  retry is a fix and belongs in a PR of its own, not in this report.
+
 - **Realtime.** Whether Realtime publication is enabled on any of these tables, and whether its
   row filters match the RLS policies, was not examined at all. Realtime is a second read path with
   its own authorisation model.
