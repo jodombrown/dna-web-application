@@ -290,26 +290,46 @@ this: viewport does not predict it because viewport has nothing to do with it.
 The framing ruling 152 withdrew — cumulative resource — is not reinstated here either. Finding 3
 rules out accumulation across the saves.
 
-### The single next step
+### The single next step, and the instrument that runs it
 
-Run the Profile owner flow in **WebKit, dark, at 820x1180**, looping until it fires, in an
-environment that can obtain the WebKit binary — CI, where the matrix already runs WebKit, since this
-session's egress policy cannot. Do it in two arms and compare:
+The step is: run the Profile owner flow in **WebKit, dark, at 820x1180**, looping until it fires, in
+an environment that can obtain the WebKit binary. CI is that environment — `pages.yml` and
+`matrix.yml` both `playwright install ... webkit` and run the matrix with `WEBKIT: "1"` — so the
+experiment is built here rather than left as an instruction for someone else to build.
 
-1. **Control.** Loop the unmodified flow and record how many iterations produce the crash. This also
-   supplies the crash log, signal and stack that this entry lacks; capture them.
-2. **Probe.** Loop the same flow with `page.addStyleTag({ content: '*{color-scheme: light !important}' })`
-   injected after load. This is a test-time injection into the running page and changes no product
-   code, no repo style and no pass criterion; it is a probe, not a fix, and not a quarantine.
+`tests/webkit-crash-loop.cjs` loops `tests/profile.cjs`'s own `runOwner`, so the flow under test is
+the flow the matrix runs rather than a reimplementation that could diverge from it.
+`.github/workflows/webkit-crash.yml` runs it on a runner with core dumps enabled and pulls the
+signal and stack out of any core with gdb. It is `workflow_dispatch` only: not the matrix, not a
+merge gate, and it changes no pass criterion. Two arms:
 
-If the crash stops in arm 2 across at least three times the control's mean iteration count, the
-suspect is confirmed, and the change belongs in Strand under a reopened ruling 57 or 98 — not in
-this repo. If it still fires in arm 2, the elimination above is wrong and the next place to look is
-the six `appearance: none` controls and the author-painted surface, since `color-scheme` would then
-have been excluded as the discriminator.
+1. **Control.** The flow unmodified. Supplies the crash log, signal and stack this entry lacks, and
+   the iteration count the probe is measured against.
+2. **Probe.** The same flow with `color-scheme: light` forced on every element and nothing else
+   changed. It is injected into the running page through a drop-in engine object that wraps
+   `newContext`, so `profile.cjs` is untouched; it is a probe, not a fix, not a repo style change,
+   and not a quarantine.
 
-If fifty loops of arm 1 produce nothing, that is itself the finding ruling 200 anticipated, and the
-approach changes: the condition is standing rather than event-driven, so a crash that will not
-reproduce under a tight loop points at the run's cumulative state across cases rather than the flow,
-and the next step becomes running the nine dark owner cases in one browser process, in order, as the
-matrix does.
+The probe was validated in Chromium before being committed, because a probe that does not move the
+variable would make a null result meaningless. Under injection all 26 native-appearance controls go
+from `color-scheme: dark` to `color-scheme: light`, while `data-theme="dark"`, `--ink` (`#f2ede5`)
+and `--bg` (`#141412`) are byte-identical to the control. Exactly one variable moves.
+
+Reading the result:
+
+- Crash in control, none in probe across at least three times the control's mean iteration count →
+  the suspect is confirmed. The change then belongs in **Strand**, under a reopened ruling 57 or 98,
+  not in this repo.
+- Crash in both → the elimination in this entry is wrong. `color-scheme` is excluded as the
+  discriminator and the next place to look is the six `appearance: none` controls and the
+  author-painted surface.
+- No crash in fifty loops of the control → the finding ruling 200 anticipated. The condition is
+  standing rather than event-driven, so a crash that will not reproduce under a tight loop points at
+  the run's cumulative state across cases rather than at the flow. The step then becomes running the
+  nine dark owner cases in one browser process, in order, as the matrix does.
+
+One constraint on running it: GitHub only dispatches a `workflow_dispatch` workflow that exists on
+the default branch, so `webkit-crash.yml` is dispatchable once this branch merges and not before.
+Until then the same arm-1 sample is obtained by dispatching the existing `matrix.yml` with
+`special=profile`, `only=[820,1180]`, `theme=dark`, which runs the identical owner flow in WebKit
+against the branch's deployment, one owner iteration per dispatch.
