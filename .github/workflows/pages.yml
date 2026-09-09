@@ -106,6 +106,17 @@ jobs:
           test "$code" = "200"
           grep -q '<title>DNA</title>' /tmp/sign-in.html
           grep -q 'manifest.webmanifest' /tmp/sign-in.html
+          # tests/live-checks.cjs asserts /connect (ruling 156) in a single GET with no retry,
+          # seconds after a fresh direct-upload deployment. Run 86 returned 404 there and took
+          # the whole matrix with it while every REST assertion passed. Poll it the way
+          # /sign-in is polled, so the suite runs against a deployment that has propagated.
+          for i in $(seq 1 12); do
+            code=$(curl -sS -o /tmp/connect.html -w '%{http_code}' "$BASE/connect" || true)
+            [ "$code" = "200" ] && break
+            sleep 10
+          done
+          echo "GET /connect -> $code"
+          test "$code" = "200"
           code=$(curl -sS -o /dev/null -w '%{http_code}' "$BASE/strand/adinkra/mate-masie.svg")
           echo "GET /strand/adinkra/mate-masie.svg -> $code"
           test "$code" = "200"
@@ -124,6 +135,14 @@ jobs:
           ! grep -q 'mate-masie' /tmp/manifest.json
       - name: Brief 3 live checks (served HTML and the anonymous REST surface)
         run: node tests/live-checks.cjs
+      # The runner image ships a Google Chrome apt source the matrix never reads: browsers come
+      # from Playwright. On 9 September its Packages index served a hash sum mismatch, apt-get
+      # update inside --with-deps exited 100, and the matrix never started. Drop the source.
+      - name: Drop the unused Google Chrome apt source
+        run: |
+          set -e
+          sudo rm -f /etc/apt/sources.list.d/google-chrome.list \
+                     /etc/apt/sources.list.d/google-chrome.sources
       - name: Install browsers
         run: bunx playwright install --with-deps chromium webkit
       - name: Run matrix (Chromium and WebKit)
