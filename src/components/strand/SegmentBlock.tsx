@@ -9,24 +9,21 @@ import { VocabularyPicker } from "./VocabularyPicker";
 export type Segment = "returnee" | "anchor" | "ally" | "exploring";
 
 export type SegmentField =
-  | { k: "timeline"; label: string; kind: "select"; options: string[] }
+  | { k: "timeline"; label: string; kind: "select" }
   | { k: "needs" | "offer" | "support"; label: string; kind: "text"; short?: false }
   | { k: "base"; label: string; kind: "text"; short: true }
   | { k: "interests"; label: string; kind: "vocab" };
 
 // Ruling 187: the labels are not here. public.member_segments is the one label source, reaching
-// this component as profile_vocabularies().segments (the chooser) and profile_view's
-// member.segment_label (the heading). SEG carries only the per-variant field sets, which are
-// structure, not vocabulary.
+// this component as vocabularies().segments (the chooser) and profile_view's member.segment_label
+// (the heading). Ruling 194: nor are the return_timeline values, which come in as timelineOptions
+// from the same projection; the literal that used to sit beside them as a fallback is gone, and a
+// vocabulary that does not load renders an empty control rather than a stale one. SEG carries only
+// the per-variant field sets, which are structure, not vocabulary.
 export const SEG: Record<Segment, { fields: SegmentField[] }> = {
   returnee: {
     fields: [
-      {
-        k: "timeline",
-        label: "Return timeline",
-        kind: "select",
-        options: ["Already back", "Within a year", "One to three years", "Someday, not fixed"],
-      },
+      { k: "timeline", label: "Return timeline", kind: "select" },
       { k: "needs", label: "What I need on the ground", kind: "text" },
     ],
   },
@@ -59,7 +56,7 @@ export type SegmentBlockProps = {
   onChange?: ((data: SegmentData) => void) | undefined;
   interestOptions?: string[];
   timelineOptions?: string[] | undefined;
-  /** Ruling 187: the chooser's values and labels, from profile_vocabularies().segments. */
+  /** Ruling 187: the chooser's values and labels, from vocabularies().segments. */
   segmentOptions?: { value: Segment; label: string }[] | undefined;
   style?: CSSProperties | undefined;
 };
@@ -106,7 +103,7 @@ export function SegmentBlock({
                 value={(v as string | undefined) || ""}
                 options={[
                   { value: "", label: "Choose" },
-                  ...(timelineOptions ?? f.options).map((o) => ({ value: o, label: o })),
+                  ...(timelineOptions ?? []).map((o) => ({ value: o, label: o })),
                 ]}
                 onChange={(e) => set(f.k, e.target.value)}
               />

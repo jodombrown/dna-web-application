@@ -71,13 +71,10 @@ export const VERB_SCHEMA: Record<C, VerbSchema> = {
     action: "Offer to help",
     fields: [
       { key: "title", label: "Title", title: true },
-      {
-        key: "instrument",
-        label: "Instrument",
-        icon: "briefcase",
-        kind: "segment",
-        options: ["Time", "Skills", "In-kind"],
-      },
+      // Ruling 193: the instrument values are public.contribute_instrument, served by
+      // vocabularies() and passed in as fieldOptions. No literal here, and no fallback: an
+      // instrument vocabulary that does not load leaves the control with no options (ruling 194).
+      { key: "instrument", label: "Instrument", icon: "briefcase", kind: "segment" },
       { key: "need", label: "What is needed", icon: "circle-dot", multiline: true },
       { key: "by", label: "By when", icon: "calendar" },
     ],

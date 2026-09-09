@@ -40,31 +40,45 @@ filter on the same table (ruling 186), so the surface is written once and every 
 Its brief also has to settle what a block does to work already shared between the two members, which
 is a product question no ruling has yet answered.
 
-## G2. `profile_view` does not block-filter its subject (rulings 157, 186)
+What that brief no longer has to settle: what a block does to a profile and to the relationship.
+Ruling 198 answered both, and the enforcement sits in `profile_view` and in a trigger on
+`member_blocks`, not in a write path, so the Block action inherits the semantics rather than
+restating them. The gap here is still the whole surface: no Block, no unblock, no report.
 
-**Severity: moderate at the invite boundary. Not a merge blocker (ruling 140). Needs a ruling before
-it is coded, because it is a product decision, not an oversight.**
+## G2. What a block means on a profile — closed (ruling 198)
 
-Confirmed live during the Brief 4 audit: with a block in place, `profile_view('<blocker>')` called by
-the blocked member returned the full profile. Every projection *inside* the payload behaved (mutual
-names emptied correctly, in both directions); the subject itself is unfiltered.
+**Closed 9 September 2026. The gap was a missing decision, not missing code, which is why PR #10 was
+right to report it rather than patch it.**
 
-The open question is what block means for a profile, and the rulings do not settle it. Ruling 119
-calls block "the hard stop" and ruling 157 calls it terminal both ways, but both describe the
-connection path, not the readability of a member's page. Two defensible answers:
+The finding: with a block in place, `profile_view('<blocker>')` called by the blocked member returned
+the full profile. Every projection inside the payload behaved; the subject itself was unfiltered.
 
-1. A blocked pair cannot open each other's profile at all: `profile_view` returns null and
-   `/m/:handle` renders the same not-found the route already has for an unknown handle.
-2. Block governs discovery and contact, not a page a member chose to make visible; the profile stays
-   readable and only the actions come off.
+Ruling 198 settles it. A block removes discovery and contact, drops the blocked party to the lowest
+audience scope, and revokes the relationship in both directions. It does not hide the profile.
 
-Answer 1 is the stronger reading of "terminal both ways" and is what a member blocking someone
-almost certainly expects. It also leaks the block: a profile that used to open and now does not
-tells the blocked member they were blocked, which the `member_blocks` RLS is written specifically to
-avoid ("the blocked member never learns of the row"). That tension is why this needs a founder
-ruling rather than a patch.
+- Audience scope: the blocked viewer gets the public projection, enforced in `profile_view` as row
+  policy through the same `private.admit_section` predicate every other viewer goes through, given a
+  null viewer. No connections-scoped section, no anchored-scoped section, no mutual name, no shared
+  Space, no anchored qualification, no DIA line, and third parties as roles rather than names.
+- Actions: no relationship object at all, so the surface renders no Connect and no Follow, in either
+  direction. `private.is_blocked` is symmetric and so is this.
+- The relationship itself: the connect and follow edges are revoked (not deleted, so the history
+  stays auditable) and the adjacency and follow rows removed, by a trigger on `member_blocks` rather
+  than by a write path, so every future writer of that table inherits the semantics.
+- The profile shell still loads. Hiding it discloses the block — a page that opened yesterday and
+  fails today says exactly what happened — and is circumvented by signing out, so hiding is both
+  leaky and legible. This is neither. The answer this file previously called "the stronger reading"
+  was rejected for that reason.
 
-Not changed in this PR. Ruling 188 also holds Profile still until its full matrix has run.
+Accepted cost, recorded so it is not reopened by accident: a member who blocks someone will find the
+blocked person can still read their public page, and that will feel like the block did less than they
+asked for.
+
+Verified live on 9 September 2026 with a real block in place, both directions, as a member rather
+than by reading the SQL, and the database returned to its prior state afterwards. What was not
+changed and is not a defect: a pending `connection_requests` row between a blocked pair is left as it
+stands. Neither party can see it — every projection filters the pair, and the sender has no direct
+read on the table (ruling 157) — and withdrawing it would be a status change nobody asked for.
 
 ## G3. Multi-select filters on Connect (ruling 163)
 
@@ -75,44 +89,44 @@ area and industry was logged rather than built, because it turns the chip row, t
 the empty-state copy into their own design problem. `docs/connect/SPEC.md` §13 refers to this as the
 "logged gap"; this is where it is logged.
 
-## G4. Hardcoded vocabularies still in merged surfaces
+## G4. Hardcoded vocabularies in merged surfaces — closed (rulings 193, 194)
 
-**Severity: moderate. Not fixed here by instruction: reported, not repaired.**
+**Closed 9 September 2026. Recorded rather than deleted, because the shape is worth remembering.**
 
 Ruling 187's work turned up that Profile had been reading segment labels from two hardcoded maps in
 `SegmentBlock.tsx` since Brief 3 merged (ruling 145), against the standing rule that fixed
-vocabularies are database tables read at runtime. Those two are gone. This gap records the sweep of
-the other merged surfaces for the same pattern.
-
-Same class, a vocabulary the database already serves duplicated in a component:
+vocabularies are database tables read at runtime. Those went with ruling 187. The sweep of the other
+merged surfaces found three more, and rulings 193 and 194 closed all three:
 
 - `src/components/strand/SegmentBlock.tsx`, `SEG.returnee.fields[0].options` — the four
-  `return_timeline` values. The live source is `profile_vocabularies().timeline`, passed in as
-  `timelineOptions`; the literal is the fallback used when the prop is absent, so it shadows the
-  runtime source rather than replacing it. Surface: Profile (Brief 3). The values happen to match
-  the enum today, which is what makes this the dangerous shape: it stays correct until it silently
-  does not.
-
-Adjacent, and a weaker case worth a ruling rather than an assumption:
-
+  `return_timeline` values, sitting beside `timelineOptions` as its fallback, so the literal shadowed
+  the live source rather than being replaced by it. Surface: Profile (Brief 3). Removed; the select
+  reads `vocabularies().timeline` or renders no options.
 - `src/components/strand/verb-schema.ts`, the Contribute verb's `instrument` options
-  (`["Time", "Skills", "In-kind"]`). Surface: Composer (Brief 1). Backed by the
-  `public.contribute_instrument` enum, which no projection serves to the client at all;
-  `publish_post` maps the display strings back to enum values server-side.
-- `src/lib/feed.ts`, `INSTRUMENT_LABEL` — display labels for that same enum. Surface: Feed
-  (Brief 2).
+  (`["Time", "Skills", "In-kind"]`). Surface: Composer (Brief 1). Removed; the options arrive as
+  `fieldOptions.instrument` from the same projection.
+- `src/lib/feed.ts`, `INSTRUMENT_LABEL`. Surface: Feed (Brief 2). Removed; the labels come from the
+  projection, and a Need whose vocabulary did not load renders no instrument row.
 
-The open question on those two is whether an enum counts. CLAUDE.md's absolute names tables, and
-these are enums. But `heritage_kind`, `return_pathway` and `return_timeline` are also enums and are
-already served at runtime through `profile_vocabularies` via `enum_range`, so the precedent is that
-an enum is served, not hardcoded. On that precedent both are the same mistake.
+The open question the earlier entry left — whether an enum counts, when CLAUDE.md's absolute names
+tables — was answered by ruling 193 on the precedent already in the code: `heritage_kind`,
+`return_pathway` and `return_timeline` are enums and were already served at runtime through
+`enum_range`. `contribute_instrument` now goes the same way. Its labels are derived from its values
+in the projection rather than listed, because a list in SQL is the same anti-pattern relocated.
 
-Deliberately not findings, listed so the sweep is not re-run over them: the five Cs and their
-labels, glyphs and copy (`cmeta.ts`, `cinfo.ts`, `VerbChip`, `BadgeRow`, `Composer`'s DIA lines),
-audience labels and section titles (`ProfileSurface`), notification kinds
-(`NotificationListItem`), lens ids (`lens.ts`, `connect.ts`), relationship states (`MemberCard`),
-and the generated enum constants in `src/lib/database.types.ts`. These are structure, doctrine or
-UI copy, not vocabularies members choose values from.
+`public.profile_vocabularies()` is now `public.vocabularies()`: the projection serves three surfaces,
+so it is no longer Profile's, and ruling 193 says rename the path rather than add a second one. The
+old name was dropped in the same migration, not kept as an alias.
+
+Deliberately not findings, listed so the sweep is not re-run over them (the G4 exclusions, ratified
+by ruling 193): the five Cs and their labels, glyphs and copy (`cmeta.ts`, `cinfo.ts`, `VerbChip`,
+`BadgeRow`, `Composer`'s DIA lines), audience labels and section titles (`ProfileSurface`),
+notification kinds (`NotificationListItem`), lens ids (`lens.ts`, `connect.ts`), relationship states
+(`MemberCard`), and the generated enum constants in `src/lib/database.types.ts`. These are structure,
+doctrine or UI copy, not vocabularies members choose values from, and none can drift from the
+database because the database does not own them. Convene's `ticket_kind` (`["Free", "Paid"]` in
+`verb-schema.ts`) is the one adjacent case this PR left alone: it is a Brief 5 surface's vocabulary,
+not one of the three sites the audit found, and widening the sweep into it was ruled out.
 
 ## Audit: `member_blocks` as an absolute filter (ruling 186, item 4)
 

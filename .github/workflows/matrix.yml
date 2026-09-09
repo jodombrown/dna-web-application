@@ -10,7 +10,7 @@ on:
         required: false
         default: ""
       special:
-        description: Run flows only (publish, keyboard, silence, shell, targeted, profile)
+        description: Run flows only (publish, keyboard, silence, shell, targeted, profile, connect, vocab, block)
         required: false
         default: ""
       only:

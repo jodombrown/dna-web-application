@@ -1629,7 +1629,6 @@ export type Database = {
         Args: { p_as_public?: boolean; p_handle?: string };
         Returns: Json;
       };
-      profile_vocabularies: { Args: never; Returns: Json };
       public_attestations: { Args: never; Returns: Json };
       publish_post: { Args: { payload: Json }; Returns: string };
       respond_to_request: {
@@ -1648,6 +1647,7 @@ export type Database = {
         Args: { p_on: boolean; p_target: string };
         Returns: undefined;
       };
+      vocabularies: { Args: never; Returns: Json };
       withdraw_request: { Args: { p_recipient: string }; Returns: undefined };
     };
     Enums: {
