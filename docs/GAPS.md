@@ -432,3 +432,38 @@ Sampling at this point, all read from job logs:
 The `appearance` arm's numbers are no longer the interesting comparison, since the faulting thread
 tells us it was testing the wrong thing. They are kept because a null result against a wrong
 hypothesis is still a record of what was tried.
+
+### Update, 08:05: the compositing arm is uninformative, and the test I proposed for it was wrong
+
+Two compositing-probe runs finished clean (`34324908709`, `34324916741`, both with
+`RULING200_PROBE: compositing` confirmed in the job env, both `3540/3540 checks passed`).
+
+The entry above committed, in advance, to a way of reading that: an arm whose pass counts matched
+the control digit for digit would be evidence the switch was a no-op. **That test does not work and
+is withdrawn.** 3540 is the structural total for this flow set — nine viewports, two themes, six
+flows — so any run that does not crash reports 3540/3540 whether or not the probe did anything. The
+control runs report the same number. Identical totals distinguish nothing.
+
+So the compositing arm says nothing yet, for two independent reasons, and neither is that the
+compositor is innocent:
+
+1. Two runs is far below the control's crash rate of roughly one run in five. Zero crashes in two
+   runs is the expected result under any hypothesis.
+2. Whether this WPE build honours `WEBKIT_DISABLE_COMPOSITING_MODE` is still unverified, and this
+   repo has no way to verify it. Playwright passes `env` to the browser process and the web process
+   inherits it, so it reaches the process; whether the engine acts on it is the open part.
+
+**The stack is worth more than this probe.** The core already names the class, and a probe whose
+effect cannot be confirmed cannot narrow it further, whereas frames would name the function. The
+gdb fix landed in `b5d38b9`, and the two control runs on that head (`34324924043`, `34324930989`)
+both passed, so it has not yet had a crash to work on. More control runs are dispatched for that
+purpose alone.
+
+Sampling to date, counted by run rather than by case, because crashes have now appeared in owner and
+visitor flows and a per-case denominator would imply a precision this does not have:
+
+| Arm                 | Runs | Runs that crashed                                                                     |
+| ------------------- | ---- | ------------------------------------------------------------------------------------- |
+| Control             | 15   | 3 (`744x1133-dark` owner, `1536x960-light` owner, and run 17 whose core was captured) |
+| Probe `appearance`  | 7    | 1 (`820x1180-dark`, visitor stranger)                                                 |
+| Probe `compositing` | 2    | 0                                                                                     |
