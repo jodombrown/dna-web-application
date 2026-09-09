@@ -814,9 +814,16 @@ ruling 205 caught, and this entry predicted it one update earlier: if a WebKit f
 third flow, the honest reading may be that the envelope is WebKit. It turned up, in the composer
 flow, twice.
 
-Sightings restated: four labelled crashes on the Profile surface, plus two unlabelled ones on the
-composer flow (`webkit-430x932-light` and `webkit-360x800-dark`), across three of the last four full
-runs. The Profile surface is where the defect is most *visible*, not where it lives.
+Sightings restated: four labelled crashes on the Profile surface, plus **three** unlabelled ones on
+the composer flow — `webkit-430x932-light`, `webkit-360x800-dark` and, on run 101
+([34407997137](https://github.com/jodombrown/dna-web-application/actions/runs/34407997137)),
+`webkit-744x1133-light` with the identical `Target page, context or browser has been closed` after
+3 locator resolutions. Seven across four of the last five full runs.
+
+The composer sightings now span **three distinct viewports and both themes**, which is the same
+spread the Profile sightings took four crashes to reach. Two flows, the same signature, the same
+engine, and the only thing that distinguishes them in the log is which one happens to register
+`page.on("crash")`. The Profile surface is where the defect is most *visible*, not where it lives.
 
 **Follow-up, not done here** (this PR is a security fix and CLAUDE.md's scope rule keeps it out):
 register `page.on("crash")` in `tests/matrix.cjs` the way `tests/profile.cjs` already does, so a
