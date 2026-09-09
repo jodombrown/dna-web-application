@@ -268,19 +268,19 @@ async function get(url, headers = {}) {
     );
 
     // -----------------------------------------------------------------------------------------
+    // -----------------------------------------------------------------------------------------
     // Ruling 218: the standing arms for Fix PR 01. The checks above are the anonymous surface;
-    // F1, F2b, F3, F4 and F5 are all signed-in findings and none of them could be caught from an
-    // anonymous key, which is why the pass had to find them by hand. These three arms are the
-    // permanent replacement: a signed-in member, a fixture in which a section audience and the
-    // core row disagree, and a real block.
+    // F1, F2b, F3, F4 and F5 are signed-in findings and none could be caught from an anonymous
+    // key, which is why the pass had to find them by hand.
     //
-    // Two accounts, both supplied by the runner, never by this file (no secrets in the repo):
-    // OWNER_EMAIL/OWNER_PASSWORD is the SHARED persona whose profile carries the fixture, and
-    // MEMBER_EMAIL/MEMBER_PASSWORD is a signed-in member who is NOT connected to them. Without
-    // both the arms are skipped rather than failed, the same way SKIP_REST skips the block above.
+    // Two accounts, both supplied by the runner, never by this file (no secrets in the repo).
+    // OWNER_EMAIL/OWNER_PASSWORD owns the fixture; MEMBER_EMAIL/MEMBER_PASSWORD is a signed-in
+    // member who is NOT connected to them. Without both, the arms report unproven (ruling 228).
     //
-    // Every arm restores what it changed and the restore is itself recorded, so a failed teardown
-    // is a FAIL rather than a silent change to the project's state.
+    // The arms BUILD the fixture they need and restore it, rather than assuming a seeded state.
+    // Assuming was a real defect: the first version read the fixture owner as SHARED, so it would
+    // have set audiences on the account it signed in as and asserted them against a different
+    // member. The owner is now read from their own session.
     // -----------------------------------------------------------------------------------------
     const OWNER_EMAIL = process.env.OWNER_EMAIL;
     const OWNER_PASSWORD = process.env.OWNER_PASSWORD;
@@ -304,12 +304,12 @@ async function get(url, headers = {}) {
       const body = await r.json().catch(() => null);
       return body && body.access_token ? body.access_token : null;
     };
-    const asMember = (token) => ({ apikey: KEY, Authorization: "Bearer " + token });
     const memberRest = async (token, q, init = {}) => {
       const r = await fetch(SUPABASE_URL + "/rest/v1/" + q, {
         ...init,
         headers: {
-          ...asMember(token),
+          apikey: KEY,
+          Authorization: "Bearer " + token,
           "content-type": "application/json",
           ...(init.headers || {}),
         },
@@ -323,14 +323,11 @@ async function get(url, headers = {}) {
     };
     const memberRpc = (token, fn, args) =>
       memberRest(token, "rpc/" + fn, { method: "POST", body: JSON.stringify(args) });
-    /** The one write path for an audience (CLAUDE.md: one write path per surface). */
-    const setAudience = (token, section, audience) =>
-      memberRpc(token, "save_profile_section", {
-        section: "visibility",
-        payload: { section, audience },
-      });
-    /** Teardown only: save_profile_section can set an audience but not unset one, and a row left
-     *  behind would not be the state the project was in. member_visibility carries an owner delete. */
+    /** The one write path for an audience and for the switches (CLAUDE.md: one write path). */
+    const saveSection = (token, section, payload) =>
+      memberRpc(token, "save_profile_section", { section, payload });
+    /** Teardown only: save_profile_section sets an audience but cannot unset one, and a row left
+     *  behind is not the state the project was in. member_visibility carries an owner delete. */
     const clearAudience = (token, ownerId, section) =>
       memberRest(token, "member_visibility?member_id=eq." + ownerId + "&section=eq." + section, {
         method: "DELETE",
@@ -349,25 +346,42 @@ async function get(url, headers = {}) {
         !!ownerToken && !!memberToken,
         ownerToken ? (memberToken ? "" : "member sign-in failed") : "owner sign-in failed",
       );
-      if (!ownerToken || !memberToken) {
+      if (!ownerToken || !memberToken)
         skip("ruling 218: every signed-in arm", "sign-in did not return an access token");
-      }
       if (ownerToken && memberToken) {
-        const ownerView = await memberRpc(ownerToken, "profile_view", { p_handle: SHARED });
-        const ownerId = ownerView.body && ownerView.body.member && ownerView.body.member.id;
+        // The fixture owner is whoever OWNER_EMAIL signs in as, read from their own session:
+        // profile_view() with no handle returns the caller's own profile, switches included.
+        const ownerView = await memberRpc(ownerToken, "profile_view", {});
+        const om = (ownerView.body && ownerView.body.member) || {};
+        const ownerId = om.id;
+        const ownerHandle = om.handle;
+        const ownerOrigin = om.origin_country || null;
+        const ownerWasShared = !!(
+          ownerView.body &&
+          ownerView.body.switches &&
+          ownerView.body.switches.shared
+        );
         const memberSelf = await memberRpc(memberToken, "profile_view", {});
         const memberId = memberSelf.body && memberSelf.body.member && memberSelf.body.member.id;
-        const ownerOrigin =
-          (ownerView.body && ownerView.body.member && ownerView.body.member.origin_country) || null;
         record(
-          "ruling 218: the fixture owner is " + SHARED + " and the viewer is another member",
+          "ruling 218: the fixture owner and the viewer are two different members",
           !!ownerId && !!memberId && ownerId !== memberId,
-          "owner " + ownerId + " viewer " + memberId,
+          "owner " + ownerHandle + " (" + ownerId + ") viewer " + memberId,
         );
+        // The viewer must be a stranger, or F2b, F3 and F5 assert the wrong thing.
+        const relToOwner =
+          ownerHandle &&
+          (await memberRpc(memberToken, "profile_view", { p_handle: ownerHandle })).body;
+        const relState =
+          relToOwner && relToOwner.relationship ? relToOwner.relationship.state : "none";
+        if (relState === "connected")
+          skip(
+            "ruling 218: the fixture arms (F2a, F2b, F3, F5)",
+            "the two test accounts are connected; the arms need a stranger",
+          );
 
         // ARM 1 (F1, gate IB-1). A signed-in member reads the identity columns of public.members
-        // and nothing else. Before ruling 212 this arm would have returned every column of every
-        // row, which is the finding it exists to catch coming back.
+        // and nothing else. Before ruling 212 this returned every column of every row.
         if (!memberId) skip("F1: the signed-in member arm", "the viewer's own id did not resolve");
         if (memberId) {
           const identity = await memberRest(memberToken, "members?select=" + CORE_COLS);
@@ -379,7 +393,7 @@ async function get(url, headers = {}) {
           record(
             "F1: a signed-in member reads the identity columns of members",
             identity.status === 200 && Array.isArray(identity.body) && identity.body.length > 0,
-            "status " + identity.status,
+            "status " + identity.status + " rows " + (identity.body || []).length,
           );
           record(
             "F1: a signed-in member cannot read the section-gated columns of members",
@@ -393,192 +407,248 @@ async function get(url, headers = {}) {
           );
         }
 
-        // ARM 2 (F2a, F2b, F5, gate IB-2 and IB-5). The fixture the pass built by hand: Origin,
-        // Where and Segment set to My connections on a profile the viewer is not connected to, so
-        // the section audience and the core row disagree. Omit, never blank: the assertion is that
-        // the key is absent, not that it is empty.
+        const canFixture = !!ownerId && !!ownerHandle && relState !== "connected";
+        // ARM 2 (F2a, F2b, F5, gates IB-2 and IB-5). Origin, Where and Segment set to My
+        // connections on a profile the viewer is not connected to, so the section audience and the
+        // core row disagree. Omit, never blank: the assertion is that the key is absent.
         const SECTIONS = ["origin", "where", "segment"];
-        const priorVis = await memberRest(
-          ownerToken,
-          "member_visibility?member_id=eq." + ownerId + "&select=section,audience",
-        );
-        const prior = new Map(
-          (Array.isArray(priorVis.body) ? priorVis.body : []).map((r) => [r.section, r.audience]),
-        );
-        let fixtureSet = true;
-        for (const section of SECTIONS) {
-          const r = await setAudience(ownerToken, section, "connections");
-          if (r.status >= 300) fixtureSet = false;
-        }
-        record("F2: the fixture sets Origin, Where and Segment to connections", fixtureSet);
-
-        const cardOf = async (token, handle) => {
-          const r = await memberRpc(token, "connect_cards", { p_lens: "members" });
-          const items = (r.body && r.body.items) || [];
-          return items.find((i) => i.handle === handle) || null;
-        };
-        const gatedView = await memberRpc(memberToken, "profile_view", { p_handle: SHARED });
-        const gatedMember = (gatedView.body && gatedView.body.member) || {};
-        record(
-          "F2b: profile_view.member carries no origin, place, time zone or segment for a stranger",
-          gatedView.status === 200 && GATED_KEYS.every((k) => !(k in gatedMember)),
-          "keys " + Object.keys(gatedMember).join(","),
-        );
-        record(
-          "F2b: profile_view.member still carries name, handle and headline",
-          !!gatedMember.name && !!gatedMember.handle && "tier" in gatedMember,
-          "keys " + Object.keys(gatedMember).join(","),
-        );
-        const gatedCard = await cardOf(memberToken, SHARED);
-        record(
-          "F2b: the Connect card carries no place, origin or segment label",
-          !!gatedCard &&
-            !("place" in gatedCard) &&
-            !("origin" in gatedCard) &&
-            !("segment_label" in gatedCard),
-          gatedCard ? Object.keys(gatedCard).join(",") : "no card",
-        );
-        record(
-          "F2b: the Connect card still carries name, handle and headline",
-          !!gatedCard && !!gatedCard.name && !!gatedCard.handle,
-          gatedCard ? Object.keys(gatedCard).join(",") : "no card",
-        );
-        const anonGated = await fetch(SUPABASE_URL + "/rest/v1/rpc/profile_view", {
-          method: "POST",
-          headers: { ...H, "content-type": "application/json" },
-          body: JSON.stringify({ p_handle: SHARED, p_as_public: false }),
-        });
-        const anonGatedBody = JSON.parse((await anonGated.text()) || "null");
-        const anonMember = (anonGatedBody && anonGatedBody.member) || {};
-        record(
-          "F2a: the anonymous projection carries none of them either",
-          anonGated.status === 200 && GATED_KEYS.every((k) => !(k in anonMember)),
-          "keys " + Object.keys(anonMember).join(","),
-        );
-        if (!ownerOrigin)
-          skip(
-            "F5: the origin axis does not return a member who withheld Origin",
-            "the fixture owner has no origin_country set, so there is no value to filter on",
+        let prior = new Map();
+        if (canFixture) {
+          const priorVis = await memberRest(
+            ownerToken,
+            "member_visibility?member_id=eq." + ownerId + "&select=section,audience",
           );
-        if (ownerOrigin) {
-          const byOrigin = await memberRpc(memberToken, "connect_cards", {
-            p_lens: "members",
-            p_filters: { origin: ownerOrigin },
-          });
-          const originItems = (byOrigin.body && byOrigin.body.items) || [];
+          prior = new Map(
+            (Array.isArray(priorVis.body) ? priorVis.body : []).map((r) => [r.section, r.audience]),
+          );
+          let fixtureSet = true;
+          for (const section of SECTIONS) {
+            const r = await saveSection(ownerToken, "visibility", {
+              section,
+              audience: "connections",
+            });
+            if (r.status >= 300) fixtureSet = false;
+          }
+          // The anonymous half of F2a needs a profile anon may read at all. Restored below.
+          const sharedOn = await saveSection(ownerToken, "switches", { shared: true });
+          if (sharedOn.status >= 300) fixtureSet = false;
           record(
-            "F5: the origin axis does not return a member who withheld Origin",
-            !originItems.some((i) => i.handle === SHARED),
-            originItems.map((i) => i.handle).join(",") || "no items",
+            "F2: the fixture sets Origin, Where and Segment to connections and shares the profile",
+            fixtureSet,
+          );
+
+          const cardOf = async (token, handle) => {
+            const r = await memberRpc(token, "connect_cards", { p_lens: "members" });
+            const items = (r.body && r.body.items) || [];
+            return items.find((i) => i.handle === handle) || null;
+          };
+          const gatedView = await memberRpc(memberToken, "profile_view", { p_handle: ownerHandle });
+          const gatedMember = (gatedView.body && gatedView.body.member) || {};
+          record(
+            "F2b: profile_view.member carries no origin, place, time zone or segment for a stranger",
+            gatedView.status === 200 && GATED_KEYS.every((k) => !(k in gatedMember)),
+            "keys " + Object.keys(gatedMember).join(","),
+          );
+          record(
+            "F2b: profile_view.member still carries name, handle and tier",
+            !!gatedMember.name && !!gatedMember.handle && "tier" in gatedMember,
+            "keys " + Object.keys(gatedMember).join(","),
+          );
+          const gatedCard = await cardOf(memberToken, ownerHandle);
+          record(
+            "F2b: the Connect card carries no place, origin or segment label",
+            !!gatedCard &&
+              !("place" in gatedCard) &&
+              !("origin" in gatedCard) &&
+              !("segment_label" in gatedCard),
+            gatedCard ? Object.keys(gatedCard).join(",") : "no card for " + ownerHandle,
+          );
+          record(
+            "F2b: the Connect card still carries name and handle",
+            !!gatedCard && !!gatedCard.name && !!gatedCard.handle,
+            gatedCard ? Object.keys(gatedCard).join(",") : "no card",
+          );
+          // F2a: the same fixture read with no session at all.
+          const anonGated = await fetch(SUPABASE_URL + "/rest/v1/rpc/profile_view", {
+            method: "POST",
+            headers: { ...H, "content-type": "application/json" },
+            body: JSON.stringify({ p_handle: ownerHandle, p_as_public: false }),
+          });
+          const anonGatedText = await anonGated.text();
+          const anonGatedBody = JSON.parse(anonGatedText || "null");
+          const anonMember = (anonGatedBody && anonGatedBody.member) || null;
+          if (!anonMember)
+            skip(
+              "F2a: the anonymous projection carries none of the gated attributes",
+              "the anonymous projection returned null, so there is no member object to inspect",
+            );
+          if (anonMember)
+            record(
+              "F2a: the anonymous projection carries none of the gated attributes",
+              GATED_KEYS.every((k) => !(k in anonMember)),
+              "keys " + Object.keys(anonMember).join(","),
+            );
+          if (!ownerOrigin)
+            skip(
+              "F5: the origin axis does not return a member who withheld Origin",
+              "the fixture owner has no origin_country, so there is no value to filter on",
+            );
+          if (ownerOrigin) {
+            const byOrigin = await memberRpc(memberToken, "connect_cards", {
+              p_lens: "members",
+              p_filters: { origin: ownerOrigin },
+            });
+            const originItems = (byOrigin.body && byOrigin.body.items) || [];
+            record(
+              "F5: the origin axis does not return a member who withheld Origin",
+              !originItems.some((i) => i.handle === ownerHandle),
+              "filter origin=" +
+                ownerOrigin +
+                " returned " +
+                (originItems.map((i) => i.handle).join(",") || "no items"),
+            );
+          }
+
+          // ARM 3 (F3, gate IB-3). The whole-profile Private switch, on the same fixture.
+          const privOn = await saveSection(ownerToken, "switches", { private: true });
+          record(
+            "F3: the fixture sets the Private switch",
+            privOn.status < 300,
+            "status " + privOn.status,
+          );
+          const privView = await memberRpc(memberToken, "profile_view", { p_handle: ownerHandle });
+          record(
+            "F3: a non-connection's handle lookup of a Private member returns null",
+            privView.status === 200 && (privView.text === "null" || privView.body === null),
+            privView.text.slice(0, 80),
+          );
+          record(
+            "F3: a Private member is absent from Members for a non-connection",
+            (await cardOf(memberToken, ownerHandle)) === null,
+          );
+          const privIntro = await memberRpc(memberToken, "send_introduction", {
+            p_recipient: ownerId,
+            p_message: "Hello, I would like to connect.",
+          });
+          record(
+            "F3: send_introduction refuses a Private recipient with the standard message",
+            privIntro.status >= 400 && /not available/.test(privIntro.text),
+            "status " + privIntro.status + " " + privIntro.text.slice(0, 90),
+          );
+          const privAnon = await fetch(SUPABASE_URL + "/rest/v1/rpc/profile_view", {
+            method: "POST",
+            headers: { ...H, "content-type": "application/json" },
+            body: JSON.stringify({ p_handle: ownerHandle, p_as_public: false }),
+          });
+          const privAnonText = await privAnon.text();
+          record(
+            "F3: the anonymous surface returns null for a Private member, even a shared one",
+            privAnon.status === 200 && (privAnonText === "null" || privAnonText === ""),
+            privAnonText.slice(0, 80),
+          );
+          const privOff = await saveSection(ownerToken, "switches", { private: false });
+          record(
+            "F3: the Private switch is restored",
+            privOff.status < 300,
+            "status " + privOff.status,
+          );
+
+          // Teardown for arm 2: the audiences the owner had, and the Share switch as it was.
+          let restored = true;
+          for (const section of SECTIONS) {
+            const before = prior.get(section);
+            const r = before
+              ? await saveSection(ownerToken, "visibility", { section, audience: before })
+              : await clearAudience(ownerToken, ownerId, section);
+            if (r.status >= 300) restored = false;
+          }
+          const sharedBack = await saveSection(ownerToken, "switches", { shared: ownerWasShared });
+          if (sharedBack.status >= 300) restored = false;
+          const afterVis = await memberRest(
+            ownerToken,
+            "member_visibility?member_id=eq." + ownerId + "&select=section,audience",
+          );
+          const after = new Map(
+            (Array.isArray(afterVis.body) ? afterVis.body : []).map((r) => [r.section, r.audience]),
+          );
+          const afterOwn = await memberRpc(ownerToken, "profile_view", {});
+          const sharedNow = !!(
+            afterOwn.body &&
+            afterOwn.body.switches &&
+            afterOwn.body.switches.shared
+          );
+          record(
+            "ruling 218: the audience and Share fixture is torn down and the profile is as it was",
+            restored &&
+              after.size === prior.size &&
+              [...prior].every(([k, v]) => after.get(k) === v) &&
+              sharedNow === ownerWasShared,
+            "audiences " +
+              ([...after].map(([k, v]) => k + "=" + v).join(",") || "none") +
+              " shared " +
+              sharedNow,
           );
         }
-
-        // ARM 3 (F3, gate IB-3). The whole-profile Private switch, from the same fixture.
-        const setPrivate = (token, on) =>
-          memberRpc(token, "save_profile_section", {
-            section: "switches",
-            payload: { private: on },
-          });
-        const privOn = await setPrivate(ownerToken, true);
-        record(
-          "F3: the fixture sets the Private switch",
-          privOn.status < 300,
-          "status " + privOn.status,
-        );
-        const privView = await memberRpc(memberToken, "profile_view", { p_handle: SHARED });
-        record(
-          "F3: a non-connection's handle lookup of a Private member returns null",
-          privView.status === 200 && (privView.text === "null" || privView.body === null),
-          privView.text.slice(0, 80),
-        );
-        record(
-          "F3: a Private member is absent from Members for a non-connection",
-          (await cardOf(memberToken, SHARED)) === null,
-        );
-        const privIntro = await memberRpc(memberToken, "send_introduction", {
-          p_recipient: ownerId,
-          p_message: "Hello, I would like to connect.",
-        });
-        record(
-          "F3: send_introduction refuses a Private recipient with the standard message",
-          privIntro.status >= 400 && /not available/.test(privIntro.text),
-          "status " + privIntro.status + " " + privIntro.text.slice(0, 90),
-        );
-        const privAnon = await fetch(SUPABASE_URL + "/rest/v1/rpc/profile_view", {
-          method: "POST",
-          headers: { ...H, "content-type": "application/json" },
-          body: JSON.stringify({ p_handle: SHARED, p_as_public: false }),
-        });
-        const privAnonText = await privAnon.text();
-        record(
-          "F3: the anonymous surface returns null for a Private member too",
-          privAnon.status === 200 && (privAnonText === "null" || privAnonText === ""),
-          privAnonText.slice(0, 80),
-        );
-        const privOff = await setPrivate(ownerToken, false);
-        record(
-          "F3: the Private switch is restored",
-          privOff.status < 300,
-          "status " + privOff.status,
-        );
-
-        // Teardown for arm 2: back to the audiences the owner had, and no row where there was none.
-        let restored = true;
-        for (const section of SECTIONS) {
-          const before = prior.get(section);
-          const r = before
-            ? await setAudience(ownerToken, section, before)
-            : await clearAudience(ownerToken, ownerId, section);
-          if (r.status >= 300) restored = false;
-        }
-        const afterVis = await memberRest(
-          ownerToken,
-          "member_visibility?member_id=eq." + ownerId + "&select=section,audience",
-        );
-        const after = new Map(
-          (Array.isArray(afterVis.body) ? afterVis.body : []).map((r) => [r.section, r.audience]),
-        );
-        record(
-          "ruling 218: the audience fixture is torn down and member_visibility is as it was",
-          restored && after.size === prior.size && [...prior].every(([k, v]) => after.get(k) === v),
-          [...after].map(([k, v]) => k + "=" + v).join(",") || "no rows",
-        );
 
         // ARM 4 (F4, gate IB-4). A real block, and the Feed and everything hanging off a post.
+        // The arm publishes a post as the owner when they have none, because asserting "the
+        // blocker reads zero of the blocked member's posts" against a member with zero posts
+        // passes while proving nothing — the exact shape ruling 228 exists to prevent.
         if (!memberId || !ownerId) skip("F4: the block arm", "the two member ids did not resolve");
         if (memberId && ownerId) {
-          const ownerPosts = await memberRest(
+          let ownerPosts = await memberRest(
             ownerToken,
             "feed?author_id=eq." + ownerId + "&select=id",
           );
-          const postIds = (Array.isArray(ownerPosts.body) ? ownerPosts.body : []).map((p) => p.id);
-          const blockIn = await memberRest(memberToken, "member_blocks", {
-            method: "POST",
-            headers: { Prefer: "return=minimal" },
-            body: JSON.stringify({ blocker_id: memberId, blocked_id: ownerId }),
-          });
-          record(
-            "F4: the viewer blocks the other member",
-            blockIn.status < 300,
-            "status " + blockIn.status + " " + blockIn.text.slice(0, 80),
-          );
-          const blockedFeed = await memberRest(
-            memberToken,
-            "feed?author_id=eq." + ownerId + "&select=id",
-          );
-          record(
-            "F4: the blocker reads zero of the blocked member's posts through feed",
-            blockedFeed.status === 200 &&
-              Array.isArray(blockedFeed.body) &&
-              blockedFeed.body.length === 0,
-            "status " + blockedFeed.status + " rows " + (blockedFeed.body || []).length,
-          );
-          if (!postIds.length)
-            skip(
-              "F4: nothing hanging off those posts reaches the blocker either",
-              "the fixture owner has no visible posts, so post_media and post_links have no parent to inherit from",
+          let postIds = (Array.isArray(ownerPosts.body) ? ownerPosts.body : []).map((p) => p.id);
+          let seededPostId = null;
+          if (!postIds.length) {
+            const pub = await memberRpc(ownerToken, "publish_post", {
+              payload: {
+                body: "Ruling 218 block arm fixture. Deleted by the same run.",
+                author_kind: "member",
+                author_id: ownerId,
+                audience: "everyone",
+                host_context: "live-checks",
+              },
+            });
+            if (pub.status < 300 && typeof pub.body === "string") {
+              seededPostId = pub.body;
+              postIds = [seededPostId];
+            }
+            record(
+              "F4: the arm publishes a post as the owner so the block has something to hide",
+              !!seededPostId,
+              "status " + pub.status + " " + pub.text.slice(0, 90),
             );
-          if (postIds.length) {
+          }
+          if (!postIds.length) {
+            skip(
+              "F4: the blocker reads zero of the blocked member's posts",
+              "the fixture owner has no visible posts and one could not be published, so a zero-row result would prove nothing",
+            );
+          } else {
+            const blockIn = await memberRest(memberToken, "member_blocks", {
+              method: "POST",
+              headers: { Prefer: "return=minimal" },
+              body: JSON.stringify({ blocker_id: memberId, blocked_id: ownerId }),
+            });
+            record(
+              "F4: the viewer blocks the other member",
+              blockIn.status < 300,
+              "status " + blockIn.status + " " + blockIn.text.slice(0, 80),
+            );
+            const blockedFeed = await memberRest(
+              memberToken,
+              "feed?author_id=eq." + ownerId + "&select=id",
+            );
+            record(
+              "F4: the blocker reads zero of the blocked member's " + postIds.length + " post(s)",
+              blockedFeed.status === 200 &&
+                Array.isArray(blockedFeed.body) &&
+                blockedFeed.body.length === 0,
+              "status " + blockedFeed.status + " rows " + (blockedFeed.body || []).length,
+            );
             const inList = "(" + postIds.join(",") + ")";
             const media = await memberRest(
               memberToken,
@@ -595,38 +665,44 @@ async function get(url, headers = {}) {
               ),
               "media " + (media.body || []).length + " links " + (links.body || []).length,
             );
+            const blockOut = await memberRest(
+              memberToken,
+              "member_blocks?blocker_id=eq." + memberId + "&blocked_id=eq." + ownerId,
+              { method: "DELETE" },
+            );
+            const blocksLeft = await memberRest(
+              memberToken,
+              "member_blocks?blocker_id=eq." + memberId + "&select=blocked_id",
+            );
+            record(
+              "ruling 218: the block is torn down and member_blocks is as it was",
+              blockOut.status < 300 &&
+                blocksLeft.status === 200 &&
+                Array.isArray(blocksLeft.body) &&
+                blocksLeft.body.length === 0,
+              "status " + blockOut.status + " left " + (blocksLeft.body || []).length,
+            );
+            if (seededPostId) {
+              const del = await memberRest(ownerToken, "posts?id=eq." + seededPostId, {
+                method: "DELETE",
+              });
+              const gone = await memberRest(
+                ownerToken,
+                "posts?id=eq." + seededPostId + "&select=id",
+              );
+              record(
+                "ruling 218: the seeded post is deleted and posts is as it was",
+                del.status < 300 &&
+                  gone.status === 200 &&
+                  Array.isArray(gone.body) &&
+                  gone.body.length === 0,
+                "status " + del.status + " left " + (gone.body || []).length,
+              );
+            }
           }
-          const reverseFeed = await memberRest(
-            ownerToken,
-            "feed?author_id=eq." + memberId + "&select=id",
-          );
-          record(
-            "F4: the filter is symmetric, so the blocked member reads none of the blocker's posts",
-            reverseFeed.status === 200 &&
-              Array.isArray(reverseFeed.body) &&
-              reverseFeed.body.length === 0,
-            "rows " + (reverseFeed.body || []).length,
-          );
-          const blockOut = await memberRest(
-            memberToken,
-            "member_blocks?blocker_id=eq." + memberId + "&blocked_id=eq." + ownerId,
-            { method: "DELETE" },
-          );
-          const blocksLeft = await memberRest(
-            memberToken,
-            "member_blocks?blocker_id=eq." + memberId + "&select=blocked_id",
-          );
-          record(
-            "ruling 218: the block is torn down and member_blocks is as it was",
-            blockOut.status < 300 &&
-              blocksLeft.status === 200 &&
-              Array.isArray(blocksLeft.body) &&
-              blocksLeft.body.length === 0,
-            "status " + blockOut.status + " left " + (blocksLeft.body || []).length,
-          );
-          // Ruling 211: a block revokes the edges and unblocking restores nothing. The two members
-          // above are deliberately unconnected, so this arm has nothing to restore and does not
-          // leave the graph changed. Pointing an arm like this at a connected pair would.
+          // Ruling 211: a block revokes edges and unblocking restores nothing. The two accounts
+          // are deliberately unconnected, so this arm has nothing to restore and leaves the graph
+          // unchanged. Pointing it at a connected pair would not.
         }
       }
     }

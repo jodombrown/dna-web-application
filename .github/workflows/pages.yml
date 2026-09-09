@@ -133,7 +133,16 @@ jobs:
           grep -q '/icon-192.png' /tmp/manifest.json
           grep -q '/icon-512.png' /tmp/manifest.json
           ! grep -q 'mate-masie' /tmp/manifest.json
-      - name: Brief 3 live checks (served HTML and the anonymous REST surface)
+      # Ruling 218's arms are signed-in and need two seeded non-real accounts. Repository secrets
+      # are not visible to a step unless the workflow passes them, so without this block the arms
+      # skip and report unproven (ruling 228) however many secrets exist. A fork PR gets empty
+      # strings here and the arms skip, which is the correct outcome rather than a failure.
+      - name: Brief 3 live checks (served HTML, the anonymous REST surface, and the signed-in arms)
+        env:
+          OWNER_EMAIL: ${{ secrets.OWNER_EMAIL }}
+          OWNER_PASSWORD: ${{ secrets.OWNER_PASSWORD }}
+          MEMBER_EMAIL: ${{ secrets.MEMBER_EMAIL }}
+          MEMBER_PASSWORD: ${{ secrets.MEMBER_PASSWORD }}
         run: node tests/live-checks.cjs
       # The runner image ships a Google Chrome apt source the matrix never reads: browsers come
       # from Playwright. On 9 September its Packages index served a hash sum mismatch, apt-get
