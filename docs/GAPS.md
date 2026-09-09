@@ -678,3 +678,34 @@ has already produced two wrong answers reached by plausible-looking inference.
 Loop tally: four loop runs on heads whose exit codes are trustworthy, four crashes (runs 38, 39, 40,
 42; run 41's outcome was not separately confirmed and is not counted either way). The crash
 reproduces inside a single loop run, every time so far.
+
+### Correction, 10:48: "every time" was wrong
+
+The entry above closed by saying the crash "reproduces inside a single loop run, every time so far".
+Run 43 (`34339182619`), dispatched alongside run 42 and identical to it, reported `cores written: 0`
+after its 170 iterations. It did not crash.
+
+Corrected tally for loop runs whose exit codes are trustworthy:
+
+| Run | Iterations | Outcome                                       |
+| --- | ---------- | --------------------------------------------- |
+| 38  | 170        | crash                                         |
+| 39  | 170        | crash                                         |
+| 40  | 170        | crash                                         |
+| 42  | 170        | crash, offsets captured                       |
+| 43  | 170        | **no crash**                                  |
+| 41  | 170        | not separately confirmed, counted neither way |
+
+Four crashes in five confirmed runs, about 850 iterations, so roughly one per 210 iterations. The
+honest statement is that a loop run fires **most** of the time, not every time, and that a single
+clean loop run is therefore worth nothing as evidence against a hypothesis — about one run in five
+comes back clean with nothing changed.
+
+That matters for the next person more than for the finding. A probe arm judged on one clean loop run
+would be read exactly as wrongly as the `appearance` arm was: its five clean runs looked like a
+result and were a coincidence. Anything tested against this crash needs several runs per arm and a
+control arm run at the same time on the same head.
+
+Recorded because the claim was made one message before the sample that broke it, which is the third
+time in this investigation an over-strong reading has been corrected by the next observation — after
+`color-scheme` and after native form controls.
