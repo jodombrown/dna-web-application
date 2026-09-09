@@ -40,31 +40,45 @@ filter on the same table (ruling 186), so the surface is written once and every 
 Its brief also has to settle what a block does to work already shared between the two members, which
 is a product question no ruling has yet answered.
 
-## G2. `profile_view` does not block-filter its subject (rulings 157, 186)
+What that brief no longer has to settle: what a block does to a profile and to the relationship.
+Ruling 198 answered both, and the enforcement sits in `profile_view` and in a trigger on
+`member_blocks`, not in a write path, so the Block action inherits the semantics rather than
+restating them. The gap here is still the whole surface: no Block, no unblock, no report.
 
-**Severity: moderate at the invite boundary. Not a merge blocker (ruling 140). Needs a ruling before
-it is coded, because it is a product decision, not an oversight.**
+## G2. What a block means on a profile — closed (ruling 198)
 
-Confirmed live during the Brief 4 audit: with a block in place, `profile_view('<blocker>')` called by
-the blocked member returned the full profile. Every projection *inside* the payload behaved (mutual
-names emptied correctly, in both directions); the subject itself is unfiltered.
+**Closed 9 September 2026. The gap was a missing decision, not missing code, which is why PR #10 was
+right to report it rather than patch it.**
 
-The open question is what block means for a profile, and the rulings do not settle it. Ruling 119
-calls block "the hard stop" and ruling 157 calls it terminal both ways, but both describe the
-connection path, not the readability of a member's page. Two defensible answers:
+The finding: with a block in place, `profile_view('<blocker>')` called by the blocked member returned
+the full profile. Every projection inside the payload behaved; the subject itself was unfiltered.
 
-1. A blocked pair cannot open each other's profile at all: `profile_view` returns null and
-   `/m/:handle` renders the same not-found the route already has for an unknown handle.
-2. Block governs discovery and contact, not a page a member chose to make visible; the profile stays
-   readable and only the actions come off.
+Ruling 198 settles it. A block removes discovery and contact, drops the blocked party to the lowest
+audience scope, and revokes the relationship in both directions. It does not hide the profile.
 
-Answer 1 is the stronger reading of "terminal both ways" and is what a member blocking someone
-almost certainly expects. It also leaks the block: a profile that used to open and now does not
-tells the blocked member they were blocked, which the `member_blocks` RLS is written specifically to
-avoid ("the blocked member never learns of the row"). That tension is why this needs a founder
-ruling rather than a patch.
+- Audience scope: the blocked viewer gets the public projection, enforced in `profile_view` as row
+  policy through the same `private.admit_section` predicate every other viewer goes through, given a
+  null viewer. No connections-scoped section, no anchored-scoped section, no mutual name, no shared
+  Space, no anchored qualification, no DIA line, and third parties as roles rather than names.
+- Actions: no relationship object at all, so the surface renders no Connect and no Follow, in either
+  direction. `private.is_blocked` is symmetric and so is this.
+- The relationship itself: the connect and follow edges are revoked (not deleted, so the history
+  stays auditable) and the adjacency and follow rows removed, by a trigger on `member_blocks` rather
+  than by a write path, so every future writer of that table inherits the semantics.
+- The profile shell still loads. Hiding it discloses the block — a page that opened yesterday and
+  fails today says exactly what happened — and is circumvented by signing out, so hiding is both
+  leaky and legible. This is neither. The answer this file previously called "the stronger reading"
+  was rejected for that reason.
 
-Not changed in this PR. Ruling 188 also holds Profile still until its full matrix has run.
+Accepted cost, recorded so it is not reopened by accident: a member who blocks someone will find the
+blocked person can still read their public page, and that will feel like the block did less than they
+asked for.
+
+Verified live on 9 September 2026 with a real block in place, both directions, as a member rather
+than by reading the SQL, and the database returned to its prior state afterwards. What was not
+changed and is not a defect: a pending `connection_requests` row between a blocked pair is left as it
+stands. Neither party can see it — every projection filters the pair, and the sender has no direct
+read on the table (ruling 157) — and withdrawing it would be a status change nobody asked for.
 
 ## G3. Multi-select filters on Connect (ruling 163)
 

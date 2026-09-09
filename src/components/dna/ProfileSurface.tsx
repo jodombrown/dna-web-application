@@ -1137,77 +1137,81 @@ function ProfileBody(p: BodyProps) {
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
       {visitor && (
         <>
-          <div
-            data-testid="relationship"
-            data-state={p.rel?.state ?? "none"}
-            style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}
-          >
-            {(p.rel?.state === "none" || !p.rel) && (
-              <Button c="connect" onClick={p.connectWith} data-testid="connect-with">
-                Connect with {p.first}
-              </Button>
-            )}
-            {p.rel?.state === "sent" && (
-              <Button
-                variant="secondary"
-                c="connect"
-                onClick={() => void p.relAct(() => withdrawRequest(p.me as string, m.id))}
-              >
-                Request sent
-              </Button>
-            )}
-            {p.rel?.state === "received" && (
-              <>
-                <Button
-                  c="connect"
-                  onClick={() =>
-                    void p.relAct(
-                      () => respondRequest(p.me as string, m.id, true),
-                      "You and " + p.first + " are connected.",
-                    )
-                  }
-                >
-                  Accept
+          {/* Ruling 198: no relationship object means the pair is blocked, and a blocked pair gets no
+              Connect action and no Follow, in either direction. Every other visitor has one. */}
+          {p.rel && (
+            <div
+              data-testid="relationship"
+              data-state={p.rel.state}
+              style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}
+            >
+              {p.rel.state === "none" && (
+                <Button c="connect" onClick={p.connectWith} data-testid="connect-with">
+                  Connect with {p.first}
                 </Button>
+              )}
+              {p.rel?.state === "sent" && (
                 <Button
                   variant="secondary"
-                  onClick={() => void p.relAct(() => respondRequest(p.me as string, m.id, false))}
+                  c="connect"
+                  onClick={() => void p.relAct(() => withdrawRequest(p.me as string, m.id))}
                 >
-                  Decline
+                  Request sent
                 </Button>
-              </>
-            )}
-            {p.rel?.state === "connected" && (
-              <span
-                data-testid="connected"
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 6,
-                  minHeight: 44,
-                  padding: "0 14px",
-                  borderRadius: "var(--radius-m)",
-                  background: "var(--c-connect-tint)",
-                  color: "var(--c-connect-text)",
-                  fontSize: 15,
-                  fontWeight: 500,
-                }}
+              )}
+              {p.rel?.state === "received" && (
+                <>
+                  <Button
+                    c="connect"
+                    onClick={() =>
+                      void p.relAct(
+                        () => respondRequest(p.me as string, m.id, true),
+                        "You and " + p.first + " are connected.",
+                      )
+                    }
+                  >
+                    Accept
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    onClick={() => void p.relAct(() => respondRequest(p.me as string, m.id, false))}
+                  >
+                    Decline
+                  </Button>
+                </>
+              )}
+              {p.rel?.state === "connected" && (
+                <span
+                  data-testid="connected"
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 6,
+                    minHeight: 44,
+                    padding: "0 14px",
+                    borderRadius: "var(--radius-m)",
+                    background: "var(--c-connect-tint)",
+                    color: "var(--c-connect-text)",
+                    fontSize: 15,
+                    fontWeight: 500,
+                  }}
+                >
+                  <Icon name="check" size={16} />
+                  Connected
+                </span>
+              )}
+              <Button
+                variant="secondary"
+                aria-pressed={!!p.rel?.following}
+                onClick={() =>
+                  void p.relAct(() => setFollow(p.me as string, m.id, !p.rel?.following))
+                }
+                data-testid="follow"
               >
-                <Icon name="check" size={16} />
-                Connected
-              </span>
-            )}
-            <Button
-              variant="secondary"
-              aria-pressed={!!p.rel?.following}
-              onClick={() =>
-                void p.relAct(() => setFollow(p.me as string, m.id, !p.rel?.following))
-              }
-              data-testid="follow"
-            >
-              {p.rel?.following ? "Following" : "Follow"}
-            </Button>
-          </div>
+                {p.rel?.following ? "Following" : "Follow"}
+              </Button>
+            </div>
+          )}
           {p.rel?.state === "received" && (
             <p style={{ margin: 0, fontSize: 15, lineHeight: 1.45, color: "var(--ink-2)" }}>
               {p.first} asked to connect with you.

@@ -4,7 +4,7 @@
 // layer, so the real client code paths run against a deterministic backend. Backend behaviour
 // (RLS, the feed view) is verified separately in SQL against the live project.
 // Usage: BASE=https://b2-shell-feed.dna-web-application.pages.dev WEBKIT=1 node tests/matrix.cjs
-// Env: ONLY='[390,844]' runs one viewport; SPECIAL=publish,keyboard,silence,shell,targeted,profile,connect,vocab runs flows only.
+// Env: ONLY='[390,844]' runs one viewport; SPECIAL=publish,keyboard,silence,shell,targeted,profile,connect,vocab,block runs flows only.
 // Brief 3 profile flows live in tests/profile.cjs and Brief 4 Connect flows in tests/connect.cjs; both share this mock.
 const { chromium, webkit } = require("playwright");
 const fs = require("fs");
@@ -299,7 +299,8 @@ const ATTESTATIONS = {
 };
 
 /**
- * What profile_view returns for the mock's persona. mode: owner | connected | anchor | stranger.
+ * What profile_view returns for the mock's persona. mode: owner | connected | anchor | stranger |
+ * blocked (ruling 198).
  * A signed-out request (or p_as_public) gets the anonymous projection: null when Share is off,
  * otherwise core plus Everyone sections only. Section writes made through save_profile_section
  * are folded in so a refetch reflects them.
@@ -321,21 +322,28 @@ function profileProjection(db, anon) {
     shared_spaces: [],
     private: sw.private,
   };
-  if (anon) {
-    if (!sw.shared) return null;
-    // Ruling 141: attesters who do not share publicly render as a role on a signed-out surface.
+  // Ruling 141: attesters who do not share publicly render as a role on a public projection.
+  const publicBadges = () => {
     const ROLE = { host: "the host", "Space lead": "a Space lead" };
     sections.convene = sections.convene.map((r) => ({ ...r, sub: "Attested by " + ROLE.host }));
     sections.contribute = sections.contribute.map((r) => ({
       ...r,
       sub: "Fulfilled a Need from " + ROLE["Space lead"],
     }));
-    const badges = PROFILE_BADGES.map((b) => ({
+    return PROFILE_BADGES.map((b) => ({
       c: b.c,
       items: b.items.map((it) => ({ object: it.object, when: it.when, attester: ROLE[it.role] })),
     }));
-    return { ...base, badges, viewer: "anon", anchored: false, sections };
+  };
+  if (anon) {
+    if (!sw.shared) return null;
+    return { ...base, badges: publicBadges(), viewer: "anon", anchored: false, sections };
   }
+  // Ruling 198: a blocked viewer is signed in and gets the public projection, whatever the prior
+  // relationship and whether or not the profile is shared. No relationship object at all, so the
+  // surface renders no Connect action and no Follow, and no mutual name or DIA line reaches them.
+  if (pr.mode === "blocked")
+    return { ...base, badges: publicBadges(), viewer: "member", anchored: false, sections };
   if (pr.mode === "owner") {
     sections.links = LINKS;
     sections.intent = { note: INTENT_NOTE, intent: ["Find collaborators", "Host and convene"] };
@@ -2697,6 +2705,18 @@ if (require.main === module)
               ])
             for (const theme of process.env.THEME ? [process.env.THEME] : THEMES)
               for (const fail of [false, true]) await runVocabulary(bt, bname, vp, theme, fail);
+        }
+        // Ruling 198: the blocked viewer's profile, on both layouts and both themes.
+        if (process.env.SPECIAL.includes("block")) {
+          const { runBlock } = require("./block.cjs");
+          for (const vp of process.env.ONLY
+            ? [JSON.parse(process.env.ONLY)]
+            : [
+                [390, 844],
+                [1280, 800],
+              ])
+            for (const theme of process.env.THEME ? [process.env.THEME] : THEMES)
+              await runBlock(bt, bname, vp, theme);
         }
         if (process.env.SPECIAL.includes("connect")) {
           const { runConnect } = require("./connect.cjs");
