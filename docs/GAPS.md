@@ -635,3 +635,46 @@ Worth recording about the core itself: this process had **32 or more threads**, 
 34's. Every thread visible in the sweep was idle in a futex, a semaphore, `poll` or `g_cond_wait`.
 Thread count is a property of the run, not of the crash, and it does not change the finding; it does
 mean a truncating `head` is even less forgiving here than it was at run 38.
+
+### Update, 10:47: the offsets, and two crashes that name the same three functions
+
+Run 42 (`34339173919`), a 170-iteration loop on the head carrying both instrumentation fixes,
+crashed and produced what the previous four runs could not: the faulting thread's frames as
+**library-relative offsets**.
+
+The faulting thread, against `libWPEWebKit-2.0.so.1` from `webkit-2359` (WebKit 26.6, Playwright's
+WPE build):
+
+| Frame     | Offset                                                            | Note                                            |
+| --------- | ----------------------------------------------------------------- | ----------------------------------------------- |
+| #0        | `+0x588b98a`                                                      | **fault site**, far outside the cycle's cluster |
+| #1        | `+0x27b6be4`                                                      |                                                 |
+| #2 … #26  | `+0x27b76f4` → `+0x27b23f1` → `+0x27b555f`                        | the cycle, repeating (9x, 8x, 8x)               |
+| #27       | `+0x27b1885`                                                      | the recursion is entered here                   |
+| #28 … #32 | `+0x7607e1`, `+0x75f51a`, `+0x7659a9`, `+0x1d3726b`, `+0x1d356e6` |                                                 |
+| #33, #34  | glib, `g_main_context_dispatch`                                   | scheduled update being serviced                 |
+| #35 … #38 | `+0x1d35d51`, `+0x1d36067`, `+0x1cd2ac3`, `+0x1d3bd46`            |                                                 |
+| #39, #40  | `start_thread`, `clone3`                                          | thread entry                                    |
+
+**Run 34 and run 42 crashed in the same three functions.** Run 34's absolute addresses were captured
+before offsets existed; subtracting run 42's offsets from them yields one load base,
+`0x7f6036615600`, for all three cycle frames — and the same base maps run 34's entry frame to
+`+0x27b1885`, which is run 42's `#27` exactly. Two crashes, in different processes with different
+ASLR bases about forty minutes apart, in different runs, produce byte-identical offsets. Under the
+same base run 34's fault site is `+0x588b98a` and its `#1` is `+0x27b6be4`, matching run 42 there
+too.
+
+That is corroboration, not a new finding: run 34's stack already established the cause. What it adds
+is that the crash has **one** path rather than several, and that these offsets are stable enough to
+be worth handing to someone with symbols.
+
+**What these offsets are for.** They are exact against this build and useless against any other, and
+that is the point: anyone with a WebKit 26.6 debug build, or the matching source, maps
+`+0x27b76f4`, `+0x27b23f1`, `+0x27b555f`, `+0x27b1885` and `+0x588b98a` to functions and lines in
+one step; anyone with a different build sees immediately that they cannot. No function is named here
+because naming one from the nearest exported symbol would name the wrong function, and this entry
+has already produced two wrong answers reached by plausible-looking inference.
+
+Loop tally: four loop runs on heads whose exit codes are trustworthy, four crashes (runs 38, 39, 40,
+42; run 41's outcome was not separately confirmed and is not counted either way). The crash
+reproduces inside a single loop run, every time so far.
