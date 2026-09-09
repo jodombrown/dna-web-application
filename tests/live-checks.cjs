@@ -34,6 +34,17 @@ const record = (name, ok, detail = "") => {
   results.push({ name, ok, detail });
   console.log((ok ? "PASS " : "FAIL ") + name + (detail ? "  (" + detail + ")" : ""));
 };
+/**
+ * Ruling 228: an arm that cannot run is reported as unproven, never as passing. It is not a FAIL
+ * either — nothing was measured — so it is counted apart and named in the summary. An arm that
+ * silently vanishes reads as coverage the suite does not have, which is the failure mode this
+ * exists to prevent.
+ */
+const unproven = [];
+const skip = (name, why) => {
+  unproven.push({ name, why });
+  console.log("UNPROVEN " + name + "  (" + why + ")");
+};
 
 async function get(url, headers = {}) {
   const res = await fetch(url, { headers, redirect: "manual" });
@@ -326,8 +337,9 @@ async function get(url, headers = {}) {
       });
 
     if (!OWNER_EMAIL || !OWNER_PASSWORD || !MEMBER_EMAIL || !MEMBER_PASSWORD) {
-      console.log(
-        "ruling 218 arms skipped: set OWNER_EMAIL, OWNER_PASSWORD, MEMBER_EMAIL and MEMBER_PASSWORD",
+      skip(
+        "ruling 218: the signed-in, fixture and block arms (F1, F2a, F2b, F3, F4, F5)",
+        "set OWNER_EMAIL, OWNER_PASSWORD, MEMBER_EMAIL and MEMBER_PASSWORD",
       );
     } else {
       const ownerToken = await signIn(OWNER_EMAIL, OWNER_PASSWORD);
@@ -337,6 +349,9 @@ async function get(url, headers = {}) {
         !!ownerToken && !!memberToken,
         ownerToken ? (memberToken ? "" : "member sign-in failed") : "owner sign-in failed",
       );
+      if (!ownerToken || !memberToken) {
+        skip("ruling 218: every signed-in arm", "sign-in did not return an access token");
+      }
       if (ownerToken && memberToken) {
         const ownerView = await memberRpc(ownerToken, "profile_view", { p_handle: SHARED });
         const ownerId = ownerView.body && ownerView.body.member && ownerView.body.member.id;
@@ -353,6 +368,7 @@ async function get(url, headers = {}) {
         // ARM 1 (F1, gate IB-1). A signed-in member reads the identity columns of public.members
         // and nothing else. Before ruling 212 this arm would have returned every column of every
         // row, which is the finding it exists to catch coming back.
+        if (!memberId) skip("F1: the signed-in member arm", "the viewer's own id did not resolve");
         if (memberId) {
           const identity = await memberRest(memberToken, "members?select=" + CORE_COLS);
           const gatedCols = await memberRest(memberToken, "members?select=" + GATED_COLS);
@@ -439,6 +455,11 @@ async function get(url, headers = {}) {
           anonGated.status === 200 && GATED_KEYS.every((k) => !(k in anonMember)),
           "keys " + Object.keys(anonMember).join(","),
         );
+        if (!ownerOrigin)
+          skip(
+            "F5: the origin axis does not return a member who withheld Origin",
+            "the fixture owner has no origin_country set, so there is no value to filter on",
+          );
         if (ownerOrigin) {
           const byOrigin = await memberRpc(memberToken, "connect_cards", {
             p_lens: "members",
@@ -524,6 +545,7 @@ async function get(url, headers = {}) {
         );
 
         // ARM 4 (F4, gate IB-4). A real block, and the Feed and everything hanging off a post.
+        if (!memberId || !ownerId) skip("F4: the block arm", "the two member ids did not resolve");
         if (memberId && ownerId) {
           const ownerPosts = await memberRest(
             ownerToken,
@@ -551,6 +573,11 @@ async function get(url, headers = {}) {
               blockedFeed.body.length === 0,
             "status " + blockedFeed.status + " rows " + (blockedFeed.body || []).length,
           );
+          if (!postIds.length)
+            skip(
+              "F4: nothing hanging off those posts reaches the blocker either",
+              "the fixture owner has no visible posts, so post_media and post_links have no parent to inherit from",
+            );
           if (postIds.length) {
             const inList = "(" + postIds.join(",") + ")";
             const media = await memberRest(
@@ -606,6 +633,12 @@ async function get(url, headers = {}) {
   }
   const fails = results.filter((r) => !r.ok);
   console.log(`\n${results.length - fails.length}/${results.length} live checks passed`);
+  // Ruling 228: unproven is its own outcome. It does not fail the run, and it is never folded into
+  // the passing count, so a suite that could not exercise an arm cannot read as one that did.
+  if (unproven.length) {
+    console.log(`${unproven.length} arm(s) unproven, not passing:`);
+    for (const u of unproven) console.log(`  - ${u.name}: ${u.why}`);
+  }
   process.exit(fails.length ? 1 : 0);
 })().catch((e) => {
   console.error(e);

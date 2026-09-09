@@ -5,7 +5,7 @@ against the canonical Supabase project `dgspjevjoblujcoljvkn`.
 
 > **Amended in place, 9 September 2026, after Fix PR 01** (rulings 212 to 218, migration
 > `20260909160000_fix_pr_01_rulings_212_216.sql` and
-> `20260909170000_r229_withdraw_renders_as_sent.sql`). The body below is the pass as written and is not
+> `20260909170000_r229_withdraw_renders_as_sent.sql`; rulings 225, 226 and 228 arrived with them). The body below is the pass as written and is not
 > rewritten; **Status after Fix PR 01** at the end of section 4 carries one line per finding, and
 > two of this report's own statements are corrected there.
 
@@ -429,7 +429,10 @@ The drift the addendum found was Fix PR 01's, caught mid-application. That sessi
 grants, the policies and the projections in sequence against the live project while the migration
 file was still uncommitted in its working tree, so for a period the canonical database really did
 carry narrowed grants with no migration on `main` to account for them. Recording it was right, and
-the sequencing that made it possible was not: the migration is now committed as
+the sequencing that made it possible was not; **ruling 225** is the rule it broke, written after the
+fact: a migration is committed before the state it describes is applied to the shared project, and a
+batch applied in pieces is carried whole by the repo before the first piece runs. The migration is
+now committed as
 `20260909160000_fix_pr_01_rulings_212_216.sql`, and every function body in it matches
 `pg_proc.prosrc` on the project by md5, so the tree and the canonical database agree again and a
 `db reset` reproduces the live state rather than reverting it.
@@ -455,14 +458,24 @@ absent in the second. This is the F2 fixture the pass built by hand in section 3
 thing that separates the two cases.
 
 **"`members_member_select` is still `USING (true)`" was not live-checked.** The policy replacement
-and the grant narrowing were applied in one statement batch, so a window carrying one without the
-other never existed. The addendum marks the grant table "verified live, not inferred" and does not
-make that claim for the policy; it was read from the migrations on `main`, which did not yet carry
-the change. The policy is `private.can_see_core(id)` and F1 is closed rather than narrowed.
+and the grant narrowing were applied in one statement batch, so the state the addendum describes —
+`USING (true)` over eight columns — never existed. The addendum marks the grant table "verified
+live, not inferred" and does not make that claim for the policy; that half was read from the
+migrations on `main`, which did not yet carry the change. The policy is `private.can_see_core(id)`.
+**Ruling 226** settles it: F1 is closed, not narrowed.
 
 **The CI consequence was correct and is fixed here.** `tests/live-checks.cjs` did hardcode `CORE_COLS`
 with four of the revoked columns. It now asserts the eight identity columns come back and that the
 five section-gated ones are refused, which is the assertion ruling 212 wants standing.
+
+**Ruling 228 applies to the arms that replaced it.** The ruling-218 arms cannot run without two test
+accounts, and an arm that cannot run is reported as unproven, never as passing and never folded into
+a passing count. `tests/live-checks.cjs` now prints an `UNPROVEN` line per arm it could not
+exercise, names them in the summary, and counts them apart from the passes. Without the credentials
+one line fires and covers the whole group, which is what CI prints today; the other five guards sit
+inside the block, for the case where the accounts exist but a precondition does not — no access
+token, no resolvable member id, a fixture owner with no `origin_country` to filter on, or one with
+no visible posts for `post_media` and `post_links` to hang off.
 
 ### Status after Fix PR 01
 
@@ -472,7 +485,7 @@ before and after and is unchanged.
 
 | # | Status | What was done, and what the probe returned |
 | --- | --- | --- |
-| **F1** | **Closed** (IB-1) | `members_member_select` is now `private.can_see_core(id)`, ruling 213's rule, and the `authenticated` grant is `id, handle, name, headline, avatar_path, cover_path, cover_focus, pattern`. `anon` is narrowed to the same eight, because an anonymous read of `members.origin_country` is F2a one step back. Live as an isolated member: the identity columns return 6 rows; `profile_private, profile_shared, identified_at, updated_at` and the five section-gated columns are refused, `42501 permission denied for table members` |
+| **F1** | **Closed** (IB-1, ruling 226) | `members_member_select` is now `private.can_see_core(id)`, ruling 213's rule, and the `authenticated` grant is `id, handle, name, headline, avatar_path, cover_path, cover_focus, pattern`. `anon` is narrowed to the same eight, because an anonymous read of `members.origin_country` is F2a one step back. Live as an isolated member: the identity columns return 6 rows; `profile_private, profile_shared, identified_at, updated_at` and the five section-gated columns are refused, `42501 permission denied for table members` |
 | **F2a** | **Closed** (IB-2) | `profile_view` admits or omits `origin_country`, `current_place`, `current_country`, `local_tz`, `segment` and `segment_label` per `admit_section` with the explicit viewer, anonymous callers included. Live as `anon` against the same fixture: the `member` object carried `id, handle, name, headline, cover_focus, pattern, tier` and none of the six |
 | **F2b** | **Closed** (IB-2) | Ruling 212 settled the collision the report could not: the five are section-gated on every path. Same fixture, viewer Yusuf, live: `profile_view.member` as above; the Connect card returned `name, handle, headline, chips, badges, mutuals, rel, following` and no `place`, `origin` or `segment_label`. The section guard and the attribute now read the same three booleans, so they cannot disagree again |
 | **F3** | **Closed** (IB-3) | Ruling 213. `private.admit_member` is the single row rule, called by the `members` policies, `profile_view`, the Members and Suggested lenses, `connect_where` and `send_introduction`. Live with `profile_private = true`: for a non-connection `profile_view` returned `NULL` (identical to an unknown handle), the member was absent from Members and Suggested, `connect_where` returned `{"continent":[],"diaspora":[]}`, the row was gone from `members`, and `send_introduction` refused with `send_introduction: not available`. For an existing connection: card, row and profile unchanged, `sections {}`, `private true`, exactly as before |
