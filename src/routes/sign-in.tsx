@@ -74,19 +74,8 @@ function SignIn() {
         <img
           src={assetBase() + "logo.png"}
           alt="DNA"
-          style={{ height: 40, width: "auto", alignSelf: "flex-start", display: "block" }}
+          style={{ height: 80, width: "auto", alignSelf: "center", display: "block" }}
         />
-        <h1
-          style={{
-            margin: 0,
-            fontFamily: "var(--font-display)",
-            fontWeight: 400,
-            fontSize: 26,
-            lineHeight: 1.2,
-          }}
-        >
-          {mode === "in" ? "\n" : "Join DNA"}
-        </h1>
         {mode === "up" && (
           <Input
             label="Name"
