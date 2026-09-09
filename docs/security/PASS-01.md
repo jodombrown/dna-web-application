@@ -453,6 +453,24 @@ Gap Register, not in a fix that rides on this report.
   hand the next one: a signed-in arm, a fixture where a section audience and the core row disagree,
   and an arm with a block in place would each catch one of the four.
 
+  **One observation about the suite's reliability, recorded rather than fixed.** On `main`'s
+  post-merge run for PR #12 (run 86, 9 September 16:10) the suite scored **39 of 40** and the job
+  failed, taking the whole matrix with it as a skipped step. The single failure was
+  `ruling 156: /connect served HTML carries no card, tile or filter (status 404)` — a `GET
+  $BASE/connect` returning 404 on that Pages deployment. **Every anonymous REST assertion in that
+  run passed**, so the failure was the served page, not the data layer, and it is not a finding
+  against any doctrine here. The same check passed on `main`'s next run (run 88, 17:25) and on the
+  branch run at 17:04, with no code change in between.
+
+  A mechanism fits the two observations and is offered as no more than that (ruling 205, on a
+  sample of two): step 5 polls `/sign-in` up to twelve times at ten-second intervals before
+  proceeding, while step 6 requests `/connect` once, with no retry, seconds after a fresh
+  direct-upload deployment. A partially propagated deployment would produce exactly this split. The
+  consequence worth naming is not the 404 itself but that a single unretried request gates the
+  entire matrix, and that `main` was left red at 16:10 for a reason unrelated to the WebKit defect
+  in G5 and unrelated to the diagnostic runs PR #12's merge note invoked under ruling 199. Adding a
+  retry is a fix and belongs in a PR of its own, not in this report.
+
 - **Realtime.** Whether Realtime publication is enabled on any of these tables, and whether its
   row filters match the RLS policies, was not examined at all. Realtime is a second read path with
   its own authorisation model.
