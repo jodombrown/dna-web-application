@@ -282,6 +282,17 @@ a:hover {
     opacity: 1;
   }
 }
+/* Brief 4 (Connect.jsx's injected focus styles, carried here per SPEC section 12.3): the card's name
+   button gets the emerald ring with a 3px offset and a 4px radius; the Where tile keeps the base ring. */
+.strand-mc-name:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+.strand-placetile:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
 /* Hidden native file inputs (the composer triggers them from its own buttons). */
 input[type="file"][hidden] {
   display: none;

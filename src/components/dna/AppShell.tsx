@@ -18,7 +18,7 @@ import type { Member } from "@/lib/auth";
 import { openComposer, useComposerState } from "@/lib/composer-store";
 import type { FeedView } from "@/lib/feed-view";
 import { LENSES, type LensId } from "@/lib/lens";
-import { useRailOverride } from "@/lib/rail-store";
+import { useLeftRail, useRightRail, useSurfaceGround } from "@/lib/rail-store";
 import { ShellScrollProvider, useScrollState } from "@/lib/shell-scroll";
 import { getSupabase } from "@/lib/supabase";
 import { useTheme, useTier, useWide } from "@/lib/tier";
@@ -75,7 +75,10 @@ export function AppShell({
   const [account, setAccount] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
   const composer = useComposerState();
-  const railOverride = useRailOverride();
+  const leftRail = useLeftRail();
+  const rightRail = useRightRail();
+  // Brief 4 (ruling 181): a surface may ask for the lens column to sit on --bg-sunken.
+  const sunken = useSurfaceGround() === "sunken";
   const expanded = tier === "expanded";
   const compact = tier === "compact";
   const scrollerRef = useRef<HTMLElement | null>(null);
@@ -238,57 +241,80 @@ export function AppShell({
               overflow: "hidden",
             }}
           >
-            <aside
-              aria-label="Your quick state"
-              data-scroller="left"
-              style={{
-                ...column,
-                display: "flex",
-                flexDirection: "column",
-                gap: 24,
-                padding: "24px 0 48px",
-              }}
-            >
-              {railOverride ?? <LeftRail member={member} />}
-            </aside>
+            {/* main precedes both rails in the DOM (ruling 174); grid placement puts the rails in
+                columns 1 and 3, so keyboard order reaches the content before any rail control. */}
             <main
               ref={attachScroller}
               data-scroller="feed"
               onScroll={onScroll}
               style={{
                 ...column,
+                gridColumn: 2,
+                gridRow: 1,
                 display: "flex",
                 flexDirection: "column",
                 gap: 12,
                 // No top padding of its own: the composer control's wrapper carries it (SPEC 3.0).
                 // The bottom pad keeps a short list able to hold the pinned block's scroll position.
-                padding: "0 0 calc(100dvh - 240px)",
+                // A sunken surface (Connect) carries its own padding: 0 24 48 (Connect SPEC 2).
+                padding: sunken ? "0 24px 48px" : "0 0 calc(100dvh - 240px)",
+                background: sunken ? "var(--bg-sunken)" : undefined,
               }}
             >
               {children}
             </main>
-            {wide && (
+            {leftRail && leftRail.label === null ? (
+              // An empty rail renders no landmark (ruling 170): the column stays reserved.
+              <div data-scroller="left" style={{ ...column, gridColumn: 1, gridRow: 1 }} />
+            ) : (
               <aside
-                aria-label="DIA suggests"
-                data-scroller="right"
+                aria-label={leftRail?.label ?? "Your quick state"}
+                data-scroller="left"
                 style={{
                   ...column,
+                  gridColumn: 1,
+                  gridRow: 1,
                   display: "flex",
                   flexDirection: "column",
                   gap: 24,
                   padding: "24px 0 48px",
                 }}
               >
-                <RightRail />
+                {leftRail ? leftRail.node : <LeftRail member={member} />}
               </aside>
             )}
+            {wide &&
+              (rightRail && rightRail.label === null ? (
+                <div data-scroller="right" style={{ ...column, gridColumn: 3, gridRow: 1 }} />
+              ) : (
+                <aside
+                  aria-label={rightRail?.label ?? "DIA suggests"}
+                  data-scroller="right"
+                  style={{
+                    ...column,
+                    gridColumn: 3,
+                    gridRow: 1,
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 24,
+                    padding: "24px 0 48px",
+                  }}
+                >
+                  {rightRail ? rightRail.node : <RightRail />}
+                </aside>
+              ))}
           </div>
         ) : (
           <div
             ref={attachScroller}
             data-scroller="feed"
             onScroll={onScroll}
-            style={{ ...column, flex: 1, WebkitOverflowScrolling: "touch" }}
+            style={{
+              ...column,
+              flex: 1,
+              WebkitOverflowScrolling: "touch",
+              background: sunken ? "var(--bg-sunken)" : undefined,
+            }}
           >
             <main
               style={{

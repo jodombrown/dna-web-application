@@ -4,7 +4,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState, type FormEvent } from "react";
 import { Button } from "@/components/strand/Button";
 import { Input } from "@/components/strand/Input";
-import { CBadge } from "@/components/strand/CBadge";
+import { assetBase } from "@/components/strand/cmeta";
 import { useAuth } from "@/lib/auth";
 import { getSupabase } from "@/lib/supabase";
 import { useTheme } from "@/lib/tier";
@@ -71,7 +71,11 @@ function SignIn() {
         onSubmit={(e) => void submit(e)}
         style={{ width: "100%", maxWidth: 400, display: "flex", flexDirection: "column", gap: 14 }}
       >
-        <CBadge c="brand" size={48} label />
+        <img
+          src={assetBase() + "logo.png"}
+          alt="DNA"
+          style={{ height: 40, width: "auto", alignSelf: "flex-start", display: "block" }}
+        />
         <h1
           style={{
             margin: 0,

@@ -4,8 +4,8 @@
 // layer, so the real client code paths run against a deterministic backend. Backend behaviour
 // (RLS, the feed view) is verified separately in SQL against the live project.
 // Usage: BASE=https://b2-shell-feed.dna-web-application.pages.dev WEBKIT=1 node tests/matrix.cjs
-// Env: ONLY='[390,844]' runs one viewport; SPECIAL=publish,keyboard,silence,shell,targeted,profile runs flows only.
-// Brief 3 profile flows live in tests/profile.cjs and share this mock.
+// Env: ONLY='[390,844]' runs one viewport; SPECIAL=publish,keyboard,silence,shell,targeted,profile,connect runs flows only.
+// Brief 3 profile flows live in tests/profile.cjs and Brief 4 Connect flows in tests/connect.cjs; both share this mock.
 const { chromium, webkit } = require("playwright");
 const fs = require("fs");
 const path = require("path");
@@ -356,6 +356,218 @@ function profileProjection(db, anon) {
   return out;
 }
 
+// Brief 4 Connect fixtures: the card shape connect_cards returns, one member per relationship state
+// (including the sender-side window, ruling 168), a Suggested set with DIA's reason already written
+// (connect-suggest), eight demo countries above the floor, and the ten filter option lists.
+const CONNECT_MEMBERS = [
+  {
+    id: "c4000000-0000-4000-8000-000000000001",
+    handle: "adaeze-nwosu",
+    name: "Adaeze Nwosu",
+    identified: true,
+    headline: "Clinic coordinator, Enugu and Manchester",
+    segment_label: "Returnee",
+    place: "Manchester, United Kingdom",
+    origin: "Nigeria",
+    heritage: "Second generation",
+    chips: ["Healthcare & Wellness", "Project Management", "West Africa"],
+    badges: [],
+    mutuals: [
+      { name: "Lerato Khumalo", avatar_path: null },
+      { name: "Kwame Mensah", avatar_path: null },
+    ],
+    rel: "none",
+    following: false,
+    _segment: "returnee",
+    _location: "United Kingdom",
+    _focus: "Healthcare & Wellness",
+  },
+  {
+    id: "c4000000-0000-4000-8000-000000000002",
+    handle: "yusuf-diallo",
+    name: "Yusuf Diallo",
+    identified: false,
+    headline: "Solar engineer between Dakar and Lyon",
+    segment_label: "Anchor",
+    place: "Dakar, Senegal",
+    origin: "Senegal",
+    heritage: "Continental",
+    chips: ["Infrastructure & Energy", "Operations"],
+    badges: [],
+    mutuals: [{ name: "Lerato Khumalo", avatar_path: null }],
+    rel: "sent",
+    following: true,
+    _segment: "anchor",
+    _location: "Senegal",
+    _focus: "Infrastructure & Energy",
+  },
+  {
+    id: "c4000000-0000-4000-8000-000000000003",
+    handle: "kwame-mensah",
+    name: "Kwame Mensah",
+    identified: true,
+    headline: "Fintech founder, Accra",
+    segment_label: "Anchor",
+    place: "Accra, Ghana",
+    origin: "Ghana",
+    heritage: "Continental",
+    chips: ["Finance & Investment", "Strategy"],
+    badges: [],
+    mutuals: [],
+    rel: "received",
+    following: false,
+    message:
+      "Hello Amara. I saw your note on savings products for market traders. I have done two of these in Accra and would like to compare notes.",
+    _segment: "anchor",
+    _location: "Ghana",
+    _focus: "Finance & Investment",
+  },
+  {
+    id: "c4000000-0000-4000-8000-000000000004",
+    handle: "lerato-khumalo",
+    name: "Lerato Khumalo",
+    identified: false,
+    headline: "Community organiser, Soweto",
+    segment_label: "Ally",
+    place: "Johannesburg, South Africa",
+    origin: "South Africa",
+    heritage: "Continental",
+    chips: ["Education & Training"],
+    badges: [
+      {
+        c: "convene",
+        items: [
+          {
+            object: "Solar for Clinics, working session",
+            attester: "Thandiwe Dube",
+            role: "host",
+            when: "2026-08-22T18:00:00Z",
+          },
+        ],
+      },
+    ],
+    mutuals: [],
+    rel: "connected",
+    following: true,
+    _segment: "ally",
+    _location: "South Africa",
+    _focus: "Education & Training",
+  },
+  {
+    id: "c4000000-0000-4000-8000-000000000005",
+    handle: "thandiwe-dube",
+    name: "Thandiwe Dube",
+    identified: true,
+    headline: "Building clinics between Johannesburg and Houston",
+    segment_label: "Returnee",
+    place: "Houston, United States",
+    origin: "South Africa",
+    heritage: "First generation",
+    chips: ["Healthcare & Wellness", "Leadership"],
+    badges: [],
+    mutuals: [{ name: "Lerato Khumalo", avatar_path: null }],
+    rel: "window",
+    following: false,
+    _segment: "returnee",
+    _location: "United States",
+    _focus: "Healthcare & Wellness",
+  },
+  {
+    id: "c4000000-0000-4000-8000-000000000006",
+    handle: "ngozi-okafor",
+    name: "Ngozi Okafor",
+    identified: false,
+    headline: "Agritech, Lagos",
+    segment_label: "Still Exploring",
+    place: "Lagos, Nigeria",
+    origin: "Nigeria",
+    heritage: "Continental",
+    chips: ["Agriculture & Food Systems", "Data Analysis"],
+    badges: [],
+    mutuals: [],
+    rel: "none",
+    following: false,
+    _segment: "exploring",
+    _location: "Nigeria",
+    _focus: "Agriculture & Food Systems",
+  },
+];
+const CONNECT_SUGGESTED = [
+  {
+    ...CONNECT_MEMBERS[0],
+    reason:
+      "You were both at Solar for Clinics, working session, and Lerato and Kwame are connections you share.",
+  },
+  {
+    ...CONNECT_MEMBERS[5],
+    reason: "You share Agriculture & Food Systems as a focus area.",
+  },
+];
+const CONNECT_WHERE = {
+  continent: ["Ghana", "Kenya", "Nigeria", "South Africa"],
+  diaspora: ["Canada", "France", "United Kingdom", "United States"],
+};
+const CONNECT_OPTIONS = {
+  segments: [
+    { value: "returnee", label: "Returnee" },
+    { value: "anchor", label: "Anchor" },
+    { value: "ally", label: "Ally" },
+    { value: "exploring", label: "Still Exploring" },
+  ],
+  locations: [
+    "Canada",
+    "France",
+    "Ghana",
+    "Kenya",
+    "Nigeria",
+    "Senegal",
+    "South Africa",
+    "United Kingdom",
+    "United States",
+  ],
+  origins: ["Ghana", "Nigeria", "Senegal", "South Africa"],
+  heritage: ["First generation", "Second generation", "Third generation or later", "Continental"],
+  pathway: [
+    "Already returned",
+    "Planning a return",
+    "Circular, both places",
+    "Not planning a return",
+  ],
+  corridors: [],
+  focus: [
+    "Agriculture & Food Systems",
+    "Technology & Innovation",
+    "Healthcare & Wellness",
+    "Education & Training",
+    "Finance & Investment",
+    "Arts & Culture",
+    "Policy & Governance",
+    "Infrastructure & Energy",
+    "Trade & Commerce",
+    "Environment & Climate",
+  ],
+  industries: ["Agriculture", "Technology", "Healthcare", "Education", "Finance"],
+  skills: ["Leadership", "Project Management", "Software Development", "Marketing", "Sales"],
+  regions: [
+    "West Africa",
+    "East Africa",
+    "Southern Africa",
+    "Central Africa",
+    "North Africa",
+    "African Diaspora",
+  ],
+};
+
+/** A card as connect_cards emits it: the private fixture keys (_segment, _location, _focus) never leave the mock. */
+function connectCard(m, overrides) {
+  const out = {};
+  for (const k of Object.keys(m)) if (!k.startsWith("_")) out[k] = m[k];
+  const st = overrides[m.id] || {};
+  if (st.rel) out.rel = st.rel;
+  if (typeof st.following === "boolean") out.following = st.following;
+  return out;
+}
+
 function makeMockDb() {
   const db = {
     posts: [],
@@ -397,6 +609,16 @@ function makeMockDb() {
       saves: [],
       follows: [],
       requests: [],
+    },
+    // Brief 4: Connect's projection state and the writes the surface made.
+    connect: {
+      overrides: {},
+      dismissed: [],
+      writes: [],
+      whereEmpty: false,
+      membersEmpty: false,
+      suggestFail: false,
+      corridors: [],
     },
   };
   return db;
@@ -486,8 +708,112 @@ async function mockSupabase(page, db, opts = {}) {
         height: 800,
       });
     }
-    if (p.startsWith("/storage/v1/object/sign/") && method === "POST")
+    if (p.startsWith("/storage/v1/object/sign/") && method === "POST") {
+      // Batch signing (createSignedUrls): a bucket path with {paths} in the body.
+      const b = req.postDataJSON() || {};
+      if (Array.isArray(b.paths))
+        return json(
+          b.paths.map((x) => ({
+            error: null,
+            path: x,
+            signedURL: "/object/sign/profile-media/" + x + "?token=t",
+          })),
+        );
       return json({ signedURL: "/object/sign/" + p.split("/object/sign/")[1] + "?token=t" });
+    }
+    if (p === "/functions/v1/connect-suggest") {
+      await new Promise((r) => setTimeout(r, 150));
+      if (db.connect.suggestFail) return json({ items: [] });
+      return json({
+        items: CONNECT_SUGGESTED.filter((c) => !db.connect.dismissed.includes(c.id)).map((c) =>
+          connectCard(c, db.connect.overrides),
+        ),
+      });
+    }
+    if (
+      p.startsWith("/rest/v1/rpc/") &&
+      /^\/rest\/v1\/rpc\/(connect_cards|connect_where|connect_filter_options|connection_request_intros|send_introduction|respond_to_request|withdraw_request|set_follow|dismiss_suggestion)$/.test(
+        p,
+      )
+    ) {
+      const fn = p.slice("/rest/v1/rpc/".length);
+      const body = req.postDataJSON() || {};
+      const cx = db.connect;
+      await new Promise((r) => setTimeout(r, 120));
+      if (fn === "connect_filter_options")
+        return json({ ...CONNECT_OPTIONS, corridors: cx.corridors });
+      if (fn === "connection_request_intros") return json([]);
+      if (fn === "connect_where")
+        return json(cx.whereEmpty ? { continent: [], diaspora: [] } : CONNECT_WHERE);
+      if (fn === "connect_cards") {
+        const f = body.p_filters || {};
+        if (body.p_lens === "members") {
+          let rows = cx.membersEmpty ? [] : CONNECT_MEMBERS.slice();
+          if (f.segment) rows = rows.filter((m) => m._segment === f.segment);
+          if (f.location) rows = rows.filter((m) => m._location === f.location);
+          if (f.focus) rows = rows.filter((m) => m._focus === f.focus);
+          if (f.origin) rows = rows.filter((m) => m.origin === f.origin);
+          if (f.heritage) rows = rows.filter((m) => m.heritage === f.heritage);
+          for (const k of ["industry", "skill", "region"])
+            if (f[k]) rows = rows.filter((m) => m.chips.includes(f[k]));
+          // No fixture carries a pathway or a corridor: those axes filter to nothing.
+          if (f.pathway || f.corridor) rows = [];
+          return json({ items: rows.map((m) => connectCard(m, cx.overrides)), next_cursor: null });
+        }
+        if (body.p_lens === "suggested")
+          return json({
+            items: CONNECT_SUGGESTED.filter((c) => !cx.dismissed.includes(c.id)).map((c) =>
+              connectCard(c, cx.overrides),
+            ),
+          });
+        if (body.p_lens === "network") {
+          const cards = CONNECT_MEMBERS.map((m) => connectCard(m, cx.overrides));
+          return json({
+            requests: cards.filter((c) => c.rel === "received"),
+            sent: cards
+              .filter((c) => c.rel === "sent" || (cx.overrides[c.id] || {}).sentPending)
+              .map((c) => ({ ...c, rel: "sent" })),
+            connections: cards.filter((c) => c.rel === "connected"),
+            following: cards.filter((c) => c.following),
+          });
+        }
+        return json({ code: "22023", message: "unknown lens" }, 400);
+      }
+      cx.writes.push(fn + ":" + JSON.stringify(body));
+      const over = (id, o) => (cx.overrides[id] = { ...(cx.overrides[id] || {}), ...o });
+      if (fn === "send_introduction") {
+        if (!body.p_message || !String(body.p_message).trim())
+          return json(
+            { code: "22023", message: "An introduction needs a message of up to 300 characters." },
+            400,
+          );
+        over(body.p_recipient, { rel: "sent" });
+        db.profile.rel = "sent";
+        return json("cr-new");
+      }
+      if (fn === "respond_to_request") {
+        over(body.p_sender, { rel: body.p_accept ? "connected" : "none" });
+        db.profile.requests.push("PATCH");
+        db.profile.rel = body.p_accept ? "connected" : "none";
+        return json(null, 204);
+      }
+      if (fn === "withdraw_request") {
+        over(body.p_recipient, { rel: "none" });
+        db.profile.requests.push("PATCH");
+        db.profile.rel = "none";
+        return json(null, 204);
+      }
+      if (fn === "set_follow") {
+        over(body.p_target, { following: !!body.p_on });
+        db.profile.following = !!body.p_on;
+        db.profile.follows.push(body.p_on ? "on" : "off");
+        return json(null, 204);
+      }
+      if (fn === "dismiss_suggestion") {
+        cx.dismissed.push(body.p_target);
+        return json(null, 204);
+      }
+    }
     if (p.startsWith("/storage/v1/object/sign") || p.includes("/object/sign/"))
       return route.fulfill({ status: 200, contentType: "image/svg+xml", body: KENTE });
     if (p === "/rest/v1/rpc/publish_post") {
@@ -765,6 +1091,7 @@ async function mockSupabase(page, db, opts = {}) {
         }
         return json([], method === "POST" ? 201 : 200);
       }
+      if (table === "member_connections") return json([]);
       if (table === "space_roles") return json([{ space_id: "s1" }]);
       if (table === "spaces") {
         const ids = inIds("id");
@@ -2304,6 +2631,9 @@ module.exports = {
   JWT,
   UID,
   SB,
+  CONNECT_MEMBERS,
+  CONNECT_SUGGESTED,
+  CONNECT_WHERE,
 };
 
 if (require.main === module)
@@ -2328,6 +2658,12 @@ if (require.main === module)
           for (const vp of process.env.ONLY ? [JSON.parse(process.env.ONLY)] : VIEWPORTS)
             for (const theme of process.env.THEME ? [process.env.THEME] : THEMES)
               await runProfile(bt, bname, vp, theme);
+        }
+        if (process.env.SPECIAL.includes("connect")) {
+          const { runConnect } = require("./connect.cjs");
+          for (const vp of process.env.ONLY ? [JSON.parse(process.env.ONLY)] : VIEWPORTS)
+            for (const theme of process.env.THEME ? [process.env.THEME] : THEMES)
+              await runConnect(bt, bname, vp, theme);
         }
       }
       const fails = results.filter((r) => !r.ok);
@@ -2358,6 +2694,10 @@ if (require.main === module)
       const { runProfile } = require("./profile.cjs");
       for (const vp of VIEWPORTS)
         for (const theme of THEMES) await runProfile(bt, bname, vp, theme);
+      // Brief 4: Connect's four lenses, sheets and rails, every viewport, both themes.
+      const { runConnect } = require("./connect.cjs");
+      for (const vp of VIEWPORTS)
+        for (const theme of THEMES) await runConnect(bt, bname, vp, theme);
     }
     const fails = results.filter((r) => !r.ok);
     fs.writeFileSync(path.join(OUT, "results.json"), JSON.stringify(results, null, 2));

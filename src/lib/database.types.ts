@@ -1,4 +1,4 @@
-// Generated from the canonical Supabase project (dgspjevjoblujcoljvkn) after the B3 migrations.
+// Generated from the canonical Supabase project (dgspjevjoblujcoljvkn) after the B4 migrations.
 // Regenerate with the Supabase MCP generate_typescript_types tool or `supabase gen types`.
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
 
@@ -66,6 +66,8 @@ export type Database = {
           created_at: string;
           from_member_id: string;
           id: string;
+          message: string;
+          responded_at: string | null;
           status: Database["public"]["Enums"]["request_status"];
           to_member_id: string | null;
           to_name: string;
@@ -75,6 +77,8 @@ export type Database = {
           created_at?: string;
           from_member_id: string;
           id?: string;
+          message: string;
+          responded_at?: string | null;
           status?: Database["public"]["Enums"]["request_status"];
           to_member_id?: string | null;
           to_name?: string;
@@ -84,6 +88,8 @@ export type Database = {
           created_at?: string;
           from_member_id?: string;
           id?: string;
+          message?: string;
+          responded_at?: string | null;
           status?: Database["public"]["Enums"]["request_status"];
           to_member_id?: string | null;
           to_name?: string;
@@ -91,11 +97,115 @@ export type Database = {
         };
         Relationships: [];
       };
-      countries: {
-        Row: { name: string; position: number };
-        Insert: { name: string; position: number };
-        Update: { name?: string; position?: number };
+      corridors: {
+        Row: {
+          continental_place: string;
+          created_at: string;
+          diaspora_place: string;
+          id: string;
+          sector: string | null;
+          status: string;
+        };
+        Insert: {
+          continental_place: string;
+          created_at?: string;
+          diaspora_place: string;
+          id: string;
+          sector?: string | null;
+          status?: string;
+        };
+        Update: {
+          continental_place?: string;
+          created_at?: string;
+          diaspora_place?: string;
+          id?: string;
+          sector?: string | null;
+          status?: string;
+        };
         Relationships: [];
+      };
+      countries: {
+        Row: {
+          name: string;
+          position: number;
+        };
+        Insert: {
+          name: string;
+          position: number;
+        };
+        Update: {
+          name?: string;
+          position?: number;
+        };
+        Relationships: [];
+      };
+      dismissed_suggestions: {
+        Row: {
+          created_at: string;
+          dismissed_id: string;
+          member_id: string;
+        };
+        Insert: {
+          created_at?: string;
+          dismissed_id: string;
+          member_id: string;
+        };
+        Update: {
+          created_at?: string;
+          dismissed_id?: string;
+          member_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "dismissed_suggestions_dismissed_id_fkey";
+            columns: ["dismissed_id"];
+            isOneToOne: false;
+            referencedRelation: "members";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "dismissed_suggestions_member_id_fkey";
+            columns: ["member_id"];
+            isOneToOne: false;
+            referencedRelation: "members";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      edges: {
+        Row: {
+          created_at: string;
+          edge_type: Database["public"]["Enums"]["edge_type"];
+          from_id: string;
+          id: string;
+          revoked_at: string | null;
+          to_id: string;
+        };
+        Insert: {
+          created_at?: string;
+          edge_type: Database["public"]["Enums"]["edge_type"];
+          from_id: string;
+          id?: string;
+          revoked_at?: string | null;
+          to_id: string;
+        };
+        Update: {
+          created_at?: string;
+          edge_type?: Database["public"]["Enums"]["edge_type"];
+          from_id?: string;
+          id?: string;
+          revoked_at?: string | null;
+          to_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "edges_from_id_fkey";
+            columns: ["from_id"];
+            isOneToOne: false;
+            referencedRelation: "members";
+            referencedColumns: ["id"];
+          },
+        ];
       };
       events: {
         Row: {
@@ -151,39 +261,96 @@ export type Database = {
         ];
       };
       focus_areas: {
-        Row: { name: string; position: number };
-        Insert: { name: string; position: number };
-        Update: { name?: string; position?: number };
+        Row: {
+          name: string;
+          position: number;
+        };
+        Insert: {
+          name: string;
+          position: number;
+        };
+        Update: {
+          name?: string;
+          position?: number;
+        };
         Relationships: [];
       };
       industries: {
-        Row: { name: string; position: number };
-        Insert: { name: string; position: number };
-        Update: { name?: string; position?: number };
+        Row: {
+          name: string;
+          position: number;
+        };
+        Insert: {
+          name: string;
+          position: number;
+        };
+        Update: {
+          name?: string;
+          position?: number;
+        };
         Relationships: [];
       };
       intents: {
-        Row: { name: string; position: number };
-        Insert: { name: string; position: number };
-        Update: { name?: string; position?: number };
+        Row: {
+          name: string;
+          position: number;
+        };
+        Insert: {
+          name: string;
+          position: number;
+        };
+        Update: {
+          name?: string;
+          position?: number;
+        };
         Relationships: [];
       };
       interests: {
-        Row: { name: string; position: number };
-        Insert: { name: string; position: number };
-        Update: { name?: string; position?: number };
+        Row: {
+          name: string;
+          position: number;
+        };
+        Insert: {
+          name: string;
+          position: number;
+        };
+        Update: {
+          name?: string;
+          position?: number;
+        };
         Relationships: [];
       };
       languages: {
-        Row: { name: string; position: number };
-        Insert: { name: string; position: number };
-        Update: { name?: string; position?: number };
+        Row: {
+          name: string;
+          position: number;
+        };
+        Insert: {
+          name: string;
+          position: number;
+        };
+        Update: {
+          name?: string;
+          position?: number;
+        };
         Relationships: [];
       };
       member_about: {
-        Row: { about: string; member_id: string; updated_at: string };
-        Insert: { about: string; member_id: string; updated_at?: string };
-        Update: { about?: string; member_id?: string; updated_at?: string };
+        Row: {
+          about: string;
+          member_id: string;
+          updated_at: string;
+        };
+        Insert: {
+          about: string;
+          member_id: string;
+          updated_at?: string;
+        };
+        Update: {
+          about?: string;
+          member_id?: string;
+          updated_at?: string;
+        };
         Relationships: [
           {
             foreignKeyName: "member_about_member_id_fkey";
@@ -194,10 +361,154 @@ export type Database = {
           },
         ];
       };
+      member_blocks: {
+        Row: {
+          blocked_id: string;
+          blocker_id: string;
+          created_at: string;
+        };
+        Insert: {
+          blocked_id: string;
+          blocker_id: string;
+          created_at?: string;
+        };
+        Update: {
+          blocked_id?: string;
+          blocker_id?: string;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "member_blocks_blocked_id_fkey";
+            columns: ["blocked_id"];
+            isOneToOne: false;
+            referencedRelation: "members";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "member_blocks_blocker_id_fkey";
+            columns: ["blocker_id"];
+            isOneToOne: false;
+            referencedRelation: "members";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      member_connections: {
+        Row: {
+          created_at: string;
+          member_id: string;
+          other_id: string;
+          source_request_id: string | null;
+        };
+        Insert: {
+          created_at?: string;
+          member_id: string;
+          other_id: string;
+          source_request_id?: string | null;
+        };
+        Update: {
+          created_at?: string;
+          member_id?: string;
+          other_id?: string;
+          source_request_id?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "member_connections_member_id_fkey";
+            columns: ["member_id"];
+            isOneToOne: false;
+            referencedRelation: "members";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "member_connections_other_id_fkey";
+            columns: ["other_id"];
+            isOneToOne: false;
+            referencedRelation: "members";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "member_connections_source_request_id_fkey";
+            columns: ["source_request_id"];
+            isOneToOne: false;
+            referencedRelation: "connection_requests";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      member_corridors: {
+        Row: {
+          corridor_id: string;
+          created_at: string;
+          member_id: string;
+        };
+        Insert: {
+          corridor_id: string;
+          created_at?: string;
+          member_id: string;
+        };
+        Update: {
+          corridor_id?: string;
+          created_at?: string;
+          member_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "member_corridors_corridor_id_fkey";
+            columns: ["corridor_id"];
+            isOneToOne: false;
+            referencedRelation: "corridors";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "member_corridors_member_id_fkey";
+            columns: ["member_id"];
+            isOneToOne: false;
+            referencedRelation: "members";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      member_embeddings: {
+        Row: {
+          embedding: string;
+          member_id: string;
+          updated_at: string;
+        };
+        Insert: {
+          embedding: string;
+          member_id: string;
+          updated_at?: string;
+        };
+        Update: {
+          embedding?: string;
+          member_id?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "member_embeddings_member_id_fkey";
+            columns: ["member_id"];
+            isOneToOne: true;
+            referencedRelation: "members";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       member_focus_areas: {
-        Row: { member_id: string; name: string };
-        Insert: { member_id: string; name: string };
-        Update: { member_id?: string; name?: string };
+        Row: {
+          member_id: string;
+          name: string;
+        };
+        Insert: {
+          member_id: string;
+          name: string;
+        };
+        Update: {
+          member_id?: string;
+          name?: string;
+        };
         Relationships: [
           {
             foreignKeyName: "member_focus_areas_member_id_fkey";
@@ -216,9 +527,21 @@ export type Database = {
         ];
       };
       member_follows: {
-        Row: { created_at: string; follower_id: string; member_id: string };
-        Insert: { created_at?: string; follower_id: string; member_id: string };
-        Update: { created_at?: string; follower_id?: string; member_id?: string };
+        Row: {
+          created_at: string;
+          follower_id: string;
+          member_id: string;
+        };
+        Insert: {
+          created_at?: string;
+          follower_id: string;
+          member_id: string;
+        };
+        Update: {
+          created_at?: string;
+          follower_id?: string;
+          member_id?: string;
+        };
         Relationships: [
           {
             foreignKeyName: "member_follows_follower_id_fkey";
@@ -237,9 +560,18 @@ export type Database = {
         ];
       };
       member_industries: {
-        Row: { member_id: string; name: string };
-        Insert: { member_id: string; name: string };
-        Update: { member_id?: string; name?: string };
+        Row: {
+          member_id: string;
+          name: string;
+        };
+        Insert: {
+          member_id: string;
+          name: string;
+        };
+        Update: {
+          member_id?: string;
+          name?: string;
+        };
         Relationships: [
           {
             foreignKeyName: "member_industries_member_id_fkey";
@@ -258,9 +590,21 @@ export type Database = {
         ];
       };
       member_intent: {
-        Row: { member_id: string; note: string | null; updated_at: string };
-        Insert: { member_id: string; note?: string | null; updated_at?: string };
-        Update: { member_id?: string; note?: string | null; updated_at?: string };
+        Row: {
+          member_id: string;
+          note: string | null;
+          updated_at: string;
+        };
+        Insert: {
+          member_id: string;
+          note?: string | null;
+          updated_at?: string;
+        };
+        Update: {
+          member_id?: string;
+          note?: string | null;
+          updated_at?: string;
+        };
         Relationships: [
           {
             foreignKeyName: "member_intent_member_id_fkey";
@@ -272,9 +616,18 @@ export type Database = {
         ];
       };
       member_intents: {
-        Row: { member_id: string; name: string };
-        Insert: { member_id: string; name: string };
-        Update: { member_id?: string; name?: string };
+        Row: {
+          member_id: string;
+          name: string;
+        };
+        Insert: {
+          member_id: string;
+          name: string;
+        };
+        Update: {
+          member_id?: string;
+          name?: string;
+        };
         Relationships: [
           {
             foreignKeyName: "member_intents_member_id_fkey";
@@ -293,9 +646,18 @@ export type Database = {
         ];
       };
       member_interests: {
-        Row: { member_id: string; name: string };
-        Insert: { member_id: string; name: string };
-        Update: { member_id?: string; name?: string };
+        Row: {
+          member_id: string;
+          name: string;
+        };
+        Insert: {
+          member_id: string;
+          name: string;
+        };
+        Update: {
+          member_id?: string;
+          name?: string;
+        };
         Relationships: [
           {
             foreignKeyName: "member_interests_member_id_fkey";
@@ -314,9 +676,18 @@ export type Database = {
         ];
       };
       member_languages: {
-        Row: { member_id: string; name: string };
-        Insert: { member_id: string; name: string };
-        Update: { member_id?: string; name?: string };
+        Row: {
+          member_id: string;
+          name: string;
+        };
+        Insert: {
+          member_id: string;
+          name: string;
+        };
+        Update: {
+          member_id?: string;
+          name?: string;
+        };
         Relationships: [
           {
             foreignKeyName: "member_languages_member_id_fkey";
@@ -335,8 +706,16 @@ export type Database = {
         ];
       };
       member_links: {
-        Row: { kind: Database["public"]["Enums"]["link_kind"]; member_id: string; url: string };
-        Insert: { kind: Database["public"]["Enums"]["link_kind"]; member_id: string; url: string };
+        Row: {
+          kind: Database["public"]["Enums"]["link_kind"];
+          member_id: string;
+          url: string;
+        };
+        Insert: {
+          kind: Database["public"]["Enums"]["link_kind"];
+          member_id: string;
+          url: string;
+        };
         Update: {
           kind?: Database["public"]["Enums"]["link_kind"];
           member_id?: string;
@@ -382,9 +761,18 @@ export type Database = {
         ];
       };
       member_regional_expertise: {
-        Row: { member_id: string; name: string };
-        Insert: { member_id: string; name: string };
-        Update: { member_id?: string; name?: string };
+        Row: {
+          member_id: string;
+          name: string;
+        };
+        Insert: {
+          member_id: string;
+          name: string;
+        };
+        Update: {
+          member_id?: string;
+          name?: string;
+        };
         Relationships: [
           {
             foreignKeyName: "member_regional_expertise_member_id_fkey";
@@ -443,10 +831,37 @@ export type Database = {
           },
         ];
       };
+      member_segments: {
+        Row: {
+          label: string;
+          position: number;
+          segment: Database["public"]["Enums"]["member_segment"];
+        };
+        Insert: {
+          label: string;
+          position: number;
+          segment: Database["public"]["Enums"]["member_segment"];
+        };
+        Update: {
+          label?: string;
+          position?: number;
+          segment?: Database["public"]["Enums"]["member_segment"];
+        };
+        Relationships: [];
+      };
       member_skills: {
-        Row: { member_id: string; name: string };
-        Insert: { member_id: string; name: string };
-        Update: { member_id?: string; name?: string };
+        Row: {
+          member_id: string;
+          name: string;
+        };
+        Insert: {
+          member_id: string;
+          name: string;
+        };
+        Update: {
+          member_id?: string;
+          name?: string;
+        };
         Relationships: [
           {
             foreignKeyName: "member_skills_member_id_fkey";
@@ -833,9 +1248,21 @@ export type Database = {
         ];
       };
       post_reactions: {
-        Row: { created_at: string; member_id: string; post_id: string };
-        Insert: { created_at?: string; member_id: string; post_id: string };
-        Update: { created_at?: string; member_id?: string; post_id?: string };
+        Row: {
+          created_at: string;
+          member_id: string;
+          post_id: string;
+        };
+        Insert: {
+          created_at?: string;
+          member_id: string;
+          post_id: string;
+        };
+        Update: {
+          created_at?: string;
+          member_id?: string;
+          post_id?: string;
+        };
         Relationships: [
           {
             foreignKeyName: "post_reactions_post_id_fkey";
@@ -854,9 +1281,21 @@ export type Database = {
         ];
       };
       post_saves: {
-        Row: { created_at: string; member_id: string; post_id: string };
-        Insert: { created_at?: string; member_id: string; post_id: string };
-        Update: { created_at?: string; member_id?: string; post_id?: string };
+        Row: {
+          created_at: string;
+          member_id: string;
+          post_id: string;
+        };
+        Insert: {
+          created_at?: string;
+          member_id: string;
+          post_id: string;
+        };
+        Update: {
+          created_at?: string;
+          member_id?: string;
+          post_id?: string;
+        };
         Relationships: [
           {
             foreignKeyName: "post_saves_post_id_fkey";
@@ -926,15 +1365,72 @@ export type Database = {
         Relationships: [];
       };
       regional_expertise: {
-        Row: { name: string; position: number };
-        Insert: { name: string; position: number };
-        Update: { name?: string; position?: number };
+        Row: {
+          name: string;
+          position: number;
+        };
+        Insert: {
+          name: string;
+          position: number;
+        };
+        Update: {
+          name?: string;
+          position?: number;
+        };
         Relationships: [];
       };
+      second_degree: {
+        Row: {
+          fof_id: string;
+          member_id: string;
+          refreshed_at: string;
+          sample_via_ids: string[];
+          via_count: number;
+        };
+        Insert: {
+          fof_id: string;
+          member_id: string;
+          refreshed_at?: string;
+          sample_via_ids?: string[];
+          via_count: number;
+        };
+        Update: {
+          fof_id?: string;
+          member_id?: string;
+          refreshed_at?: string;
+          sample_via_ids?: string[];
+          via_count?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "second_degree_fof_id_fkey";
+            columns: ["fof_id"];
+            isOneToOne: false;
+            referencedRelation: "members";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "second_degree_member_id_fkey";
+            columns: ["member_id"];
+            isOneToOne: false;
+            referencedRelation: "members";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       skills: {
-        Row: { name: string; position: number };
-        Insert: { name: string; position: number };
-        Update: { name?: string; position?: number };
+        Row: {
+          name: string;
+          position: number;
+        };
+        Insert: {
+          name: string;
+          position: number;
+        };
+        Update: {
+          name?: string;
+          position?: number;
+        };
         Relationships: [];
       };
       space_roles: {
@@ -1105,6 +1601,30 @@ export type Database = {
       };
     };
     Functions: {
+      connect_cards: {
+        Args: {
+          p_cursor?: string;
+          p_filters?: Json;
+          p_lens: string;
+          p_limit?: number;
+        };
+        Returns: Json;
+      };
+      connect_filter_options: { Args: never; Returns: Json };
+      connect_where: { Args: never; Returns: Json };
+      connection_request_intros: {
+        Args: { p_ids: string[] };
+        Returns: {
+          created_at: string;
+          from_member_id: string;
+          id: string;
+          message: string;
+          to_member_id: string;
+          to_name: string;
+          why: string;
+        }[];
+      };
+      dismiss_suggestion: { Args: { p_target: string }; Returns: undefined };
       profile_view: {
         Args: { p_as_public?: boolean; p_handle?: string };
         Returns: Json;
@@ -1112,16 +1632,39 @@ export type Database = {
       profile_vocabularies: { Args: never; Returns: Json };
       public_attestations: { Args: never; Returns: Json };
       publish_post: { Args: { payload: Json }; Returns: string };
+      respond_to_request: {
+        Args: { p_accept: boolean; p_sender: string };
+        Returns: undefined;
+      };
       save_profile_section: {
         Args: { payload: Json; section: string };
         Returns: undefined;
       };
+      send_introduction: {
+        Args: { p_message: string; p_recipient: string };
+        Returns: string;
+      };
+      set_follow: {
+        Args: { p_on: boolean; p_target: string };
+        Returns: undefined;
+      };
+      withdraw_request: { Args: { p_recipient: string }; Returns: undefined };
     };
     Enums: {
       anchor_kind: "member" | "space" | "event" | "opportunity" | "connection_request" | "story";
       audience: "everyone" | "connections" | "anchored";
       c_category: "connect" | "convene" | "collaborate" | "contribute" | "convey" | "system";
       contribute_instrument: "time" | "skills" | "in_kind";
+      edge_type:
+        | "connect"
+        | "follow"
+        | "event_rsvp"
+        | "event_attested"
+        | "space_role"
+        | "space_role_completed"
+        | "contribution_fulfilled"
+        | "story_about"
+        | "authored";
       event_mode: "in_person" | "virtual" | "hybrid";
       heritage_kind:
         "First generation" | "Second generation" | "Third generation or later" | "Continental";
@@ -1283,6 +1826,17 @@ export const Constants = {
       audience: ["everyone", "connections", "anchored"],
       c_category: ["connect", "convene", "collaborate", "contribute", "convey", "system"],
       contribute_instrument: ["time", "skills", "in_kind"],
+      edge_type: [
+        "connect",
+        "follow",
+        "event_rsvp",
+        "event_attested",
+        "space_role",
+        "space_role_completed",
+        "contribution_fulfilled",
+        "story_about",
+        "authored",
+      ],
       event_mode: ["in_person", "virtual", "hybrid"],
       heritage_kind: [
         "First generation",

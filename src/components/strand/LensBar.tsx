@@ -215,7 +215,9 @@ export function LensBar<Id extends string = string>({
           data-lens-scope
           data-open={showScope ? "1" : "0"}
           style={{
-            maxHeight: showScope ? 40 : 0,
+            // 72 rather than 40: Connect's scope lines wrap to two lines on compact (Brief 4) and a
+            // 40 cap clipped the second line. The collapse still animates to 0.
+            maxHeight: showScope ? 72 : 0,
             overflow: "hidden",
             transition: rm ? "none" : "max-height var(--dur-default) var(--ease)",
           }}

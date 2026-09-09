@@ -1,4 +1,4 @@
-// Brief 3 live checks against the deployed URL and the live project (targeted checks 1, 2, 3 and 11
+// Brief 3 and Brief 4 live checks against the deployed URL and the live project (targeted checks 1, 2, 3 and 11
 // in DNA-Brief-3-Profile-Code-Handoff.md). No browser: the served HTML and the anonymous REST
 // surface, so a failure here is a data-level finding, not a rendering one.
 // Usage: BASE=https://<preview>.dna-web-application.pages.dev node tests/live-checks.cjs
@@ -179,6 +179,60 @@ async function get(url, headers = {}) {
       "ruling 141: anon profile_view of the shared profile names no third party who does not share",
       viewRes2.status === 200 && !UNSHARED_NAMES.some((n) => viewText2.includes(n)),
       (viewText2.match(/Attested by [^"]+/) || [])[0],
+    );
+    // Brief 4 (ruling 156): the anonymous REST surface returns nothing from Connect. Tables and the
+    // projections alike; a 200 with zero rows or a 401/403 are the same answer.
+    const connectTables = [
+      "edges?select=*",
+      "member_connections?select=*",
+      "second_degree?select=*",
+      "connection_requests?select=*",
+      "dismissed_suggestions?select=*",
+      "member_corridors?select=*",
+      "member_embeddings?select=*",
+      "member_blocks?select=*",
+    ];
+    for (const q of connectTables) {
+      const r = await rest(q);
+      const zero =
+        (r.status === 200 && Array.isArray(r.body) && r.body.length === 0) ||
+        r.status === 401 ||
+        r.status === 403 ||
+        r.status === 404;
+      record(
+        "ruling 156: anon " + q.split("?")[0] + " returns nothing",
+        zero,
+        "status " + r.status + " " + r.text.slice(0, 100),
+      );
+    }
+    for (const [fn, body] of [
+      ["connect_cards", { p_lens: "members" }],
+      ["connect_where", {}],
+      ["connect_filter_options", {}],
+      ["send_introduction", { p_recipient: UNSHARED_ID, p_message: "x" }],
+    ]) {
+      const r = await fetch(SUPABASE_URL + "/rest/v1/rpc/" + fn, {
+        method: "POST",
+        headers: { ...H, "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const t = await r.text();
+      record(
+        "ruling 156: anon " + fn + " is refused or empty",
+        r.status === 401 || r.status === 403 || r.status === 404 || t === "null" || t === "",
+        "status " + r.status + " " + t.slice(0, 100),
+      );
+      record("via_count never in an anonymous payload from " + fn, !t.includes("via_count"));
+    }
+    const connectPage = await get(BASE + "/connect");
+    record(
+      "ruling 156: /connect served HTML carries no card, tile or filter",
+      connectPage.status === 200 &&
+        !/member-card|place-tile|Show members there|Connect lens/.test(connectPage.text) &&
+        /name="robots"[^>]+content="noindex"|content="noindex"[^>]+name="robots"/.test(
+          connectPage.text,
+        ),
+      "status " + connectPage.status,
     );
     const all = await rest("members?select=handle");
     record(
