@@ -583,8 +583,18 @@ Gap Register, not in a fix that rides on this report.
   earlier claim that a repeat of check 2 over real HTTP was the first thing the next pass should do
   pointed at work that largely exists.
 
-  What is genuinely left for the next pass is narrower: PostgREST's own layer as listed above, and
-  the gap described next.
+  **Closed by evidence, 9 September 19:59, and not by argument.** Fix PR 01's matrix run on
+  `93d5f75` ([34394466777](https://github.com/jodombrown/dna-web-application/actions/runs/34394466777))
+  passed **step 6** against the deployed preview, over real HTTP, on a head carrying the narrowed
+  grant. That step now asserts the grant in both directions rather than only that the switches are
+  excluded: the eight identity columns come back for a shared profile, and `origin_country`,
+  `current_place`, `current_country`, `local_tz` and `segment` are refused. So **F1 and F2a have
+  HTTP evidence, not only role-boundary evidence**, and this section's original "first thing the
+  next pass should do" was done inside the fix PR without a second pass being scheduled for it.
+
+  What is genuinely left for the next pass is narrower still: PostgREST's own layer as listed above
+  — `db-schemas`, RPC routing, embedded-resource expansion, `Prefer` headers, `graphql_public` — and
+  the gap described next. F15's containment is in that remainder and is still unproved.
 - **The shape of the existing live-check suite, which is why it is green while F1 to F4 hold.**
   Worth stating plainly, because a green suite beside four High findings otherwise reads as a
   contradiction. Three reasons, all structural rather than a bug in the suite:

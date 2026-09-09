@@ -727,6 +727,87 @@ Recorded because the claim was made one message before the sample that broke it,
 time in this investigation an over-strong reading has been corrected by the next observation — after
 `color-scheme` and after native form controls.
 
+### Update, 9 September 19:59: the fourth sighting, and the envelope has still only ever widened
+
+Fix PR 01's matrix run on `93d5f75` ([34394466777](https://github.com/jodombrown/dna-web-application/actions/runs/34394466777), job `102611352995`) failed one check of 5990 with G5's own words:
+
+```
+FAIL: webkit-360x800-dark profile owner flow WEB PROCESS CRASHED
+  | Error: locator.inputValue: Target page, context or browser has been closed
+  - waiting for locator('[data-testid="section-where"]').locator('input').first()
+  | state unavailable: Error: page.evaluate: Target crashed
+  | DOM before the section saves {"nodes":546,"options":71,"selects":20,"fields":14,"sections":15}
+```
+
+Sighting four, and it did not repeat on the next full run, which is consistent with the roughly
+one-crash-per-six-full-runs rate this entry already records. With the `1536x960-light` one recorded
+above, the sampled population now spans **both themes, six viewports, and both the owner and the
+visitor flow**. The envelope this entry already
+settled on — **WebKit plus the Profile surface** — holds, and nothing narrower does.
+
+**What to watch for next, because it is the reverse of the mistake ruling 205 caught.** Every new
+sighting so far has *widened* the envelope and none has narrowed it. That is a one-directional
+record, and a one-directional record is exactly the shape that invites an over-strong reading in the
+other direction: if a WebKit failure turns up in a **third flow**, one that is not the Profile
+surface at all, the honest reading may be that the envelope is WebKit rather than WebKit-plus-
+Profile, and this entry's own framing would be the thing that was too narrow.
+
+There is already a candidate. The same run failed a second WebKit check, `webkit-430x932-light
+flow`, on the composer rather than on Profile: `page.waitForSelector` timed out after 30s waiting
+for `section[role="dialog"][aria-label="Compose"]` to detach, with the locator resolving visible 64
+times. It is a hang, not a crash, so it is **not** recorded here as a G5 sighting and must not be
+counted as one. Two things narrow it and are worth keeping:
+
+- `Sheet` unmounts on a plain `setTimeout(SHEET_DUR)`, 300ms, not on `transitionend`. A dropped
+  animation event therefore cannot produce a 30-second hang, and that hypothesis is out.
+- What remains is either that `open` never flipped — the close is `page.keyboard.press("Escape")`
+  against a `window` keydown listener, fired straight after a click on an audience radio, so a
+  keypress that does not land flips nothing — or that the web process was wedged enough that timers
+  and React commits stopped while the DOM still answered Playwright's queries.
+
+The first is a test-robustness question and the second would be G5's envelope widening past Profile.
+One sample does not separate them, and a decision rule was fixed in advance of the next run rather
+than after seeing it: if the composer hang recurs on a head that still touches no composer code it
+is systematic and gets a root cause, and if it does not it stays recorded as a single unproven
+anomaly, called neither passing nor a flake (ruling 228).
+
+**Outcome, 20:38: it did not recur.** The next run, on `3213f77`
+([34398547302](https://github.com/jodombrown/dna-web-application/actions/runs/34398547302), job
+`102624597019`), passed **5996 of 5996** with both engines and every tier green — no composer hang
+and no G5 crash. `3213f77` is docs and test-reporting only and touches no composer code, so it is
+the second sample the rule asked for. Per the rule, the hang stays a single unproven anomaly and no
+speculative fix was made to the Escape step.
+
+**On the two totals, because they differ and the difference is not the suite growing.** The failing
+run recorded 5990 checks and the green one 5996. Nothing was added to `tests/matrix.cjs` between
+them. A flow that throws — a timeout or a crashed web process — stops before its remaining checks
+run, so the six missing checks are the tail of the two flows that died, not six checks that did not
+exist. Read a lower total in a failing matrix run as truncation, not as a smaller suite.
+
+## G8. `main` is unverified, not green (ruling 237)
+
+**Severity: high for sequencing, not for correctness. Opened 9 September 2026. Closed by Fix PR 01
+merging and `main` completing a matrix again.**
+
+`main`'s matrix job has failed at **step 6**, the Brief 3 live checks, since the `members` grants
+moved on the canonical project: runs 86, 88, 92 and 94 all die there on the `CORE_COLS` breakage
+PR #14 recorded. Step 6 gates step 9, so **no browser matrix has completed on `main` for hours**,
+and `main`'s last full verification predates the grant change entirely.
+
+This is not the same as `main` being red on a known defect. It is `main` being **unverified**: the
+responsive matrix that ruling 61 makes the exit check for every surface has not run there, so
+nothing is known about `main` in either engine at any width since the change.
+
+The practical consequence is sequencing, and it is the reason this is written down rather than left
+for someone to infer from four red runs:
+
+- Fix PR 01 is what restores it. Its branch is the only one that has reached step 9, because it
+  carries the `CORE_COLS` fix that lets step 6 pass.
+- **Nothing else should merge until it does**, and no Code session should start on Brief 4A or 4B
+  until Fix PR 01 lands and `main` completes a matrix again. Both would otherwise branch from a
+  `main` whose last full verification predates the grant change.
+- Design work on 4B is unaffected. A prototype does not branch from `main`.
+
 ## G6. Withdraw separated the two states ruling 214 joined — closed (ruling 229)
 
 **Opened and closed 9 September 2026, both inside Fix PR 01. Ruling 227 stated the requirement,
