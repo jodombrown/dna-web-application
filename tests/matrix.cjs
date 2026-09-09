@@ -1154,12 +1154,43 @@ async function mockSupabase(page, db, opts = {}) {
 }
 
 // CHROME_PATH points Chromium at a preinstalled binary (sandboxes without a Playwright download).
-function launch(browserType) {
+//
+// RULING200_PROBE is a diagnostic switch for ruling 200, off unless set, and it changes no pass
+// criterion: it injects one stylesheet into every context the run opens so a dispatched matrix run
+// can be compared against an identical run without it. `appearance` takes every form control off
+// the engine's native form-control paint path, which is the surviving suspect in docs/GAPS.md G5;
+// `color-scheme` forces the light branch of that path. Anything else is ignored.
+const PROBE_CSS = {
+  appearance:
+    "select, input, textarea, button, ::-webkit-inner-spin-button, ::-webkit-search-decoration" +
+    " { appearance: none !important; -webkit-appearance: none !important; }",
+  "color-scheme": "*, *::before, *::after { color-scheme: light !important; }",
+};
+
+async function launch(browserType) {
   const opts =
     browserType === chromium && process.env.CHROME_PATH
       ? { executablePath: process.env.CHROME_PATH }
       : {};
-  return browserType.launch(opts);
+  const browser = await browserType.launch(opts);
+  const css = PROBE_CSS[process.env.RULING200_PROBE];
+  if (!css) return browser;
+  const newContext = browser.newContext.bind(browser);
+  browser.newContext = async (o) => {
+    const ctx = await newContext(o);
+    await ctx.addInitScript((text) => {
+      const add = () => {
+        const s = document.createElement("style");
+        s.setAttribute("data-ruling-200-probe", "");
+        s.textContent = text;
+        document.documentElement.appendChild(s);
+      };
+      if (document.documentElement) add();
+      else document.addEventListener("readystatechange", add, { once: true });
+    }, css);
+    return ctx;
+  };
+  return browser;
 }
 
 const results = [];

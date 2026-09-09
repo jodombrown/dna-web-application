@@ -21,6 +21,10 @@ on:
         description: One theme (light or dark)
         required: false
         default: ""
+      probe:
+        description: Ruling 200 diagnostic; appearance or color-scheme. Empty runs the control.
+        required: false
+        default: ""
 
 jobs:
   matrix:
@@ -71,6 +75,7 @@ jobs:
           SPECIAL: ${{ inputs.special }}
           ONLY: ${{ inputs.only }}
           THEME: ${{ inputs.theme }}
+          RULING200_PROBE: ${{ inputs.probe }}
         run: node tests/matrix.cjs
       - name: Upload screenshots and results
         if: always()
