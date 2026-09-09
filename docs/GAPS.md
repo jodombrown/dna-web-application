@@ -310,3 +310,62 @@ One constraint on running the instrument: GitHub dispatches a `workflow_dispatch
 the default branch, so `webkit-crash.yml` becomes dispatchable when this branch merges. Until then
 the control arm is sampled by dispatching the existing `matrix.yml` with `special=profile` and no
 theme filter.
+
+### Update, 07:23: the owner constant breaks too, and the experiment is confounded
+
+The probe arm produced a crash, and not the one it was looking for. Run 12
+(`34321583032`, job `102369208850`, env `RULING200_PROBE: appearance` confirmed in the log):
+
+```
+3533/3534 checks passed
+FAIL: webkit-820x1180-dark profile visitor stranger flow Error: page.goto: Page crashed
+  - navigating to ".../m/thandiwe-dube", waiting until "networkidle"
+  | state unavailable: Error: page.evaluate: Target crashed
+```
+
+**`profile visitor stranger`**, dying during `page.goto` on plain navigation, before any
+interaction. The visitor view mounts zero form controls (the census above: 0 selects, 0 options, 0
+native-appearance controls). So if this is the same defect, native form controls cannot be its cause,
+and the surviving suspect is refuted along with the first one.
+
+The arms as they stand, counting owner cases only:
+
+| Arm                  | Owner cases | Owner crashes                         | Other crashes                                     |
+| -------------------- | ----------- | ------------------------------------- | ------------------------------------------------- |
+| Control              | 90          | 2 (`744x1133-dark`, `1536x960-light`) | none, across roughly 270 visitor and public flows |
+| Probe (`appearance`) | 90          | **0**                                 | 1, `820x1180-dark` visitor stranger               |
+
+**This does not confirm the probe and it does not cleanly refute it, and the reason is a confound
+this entry has to state rather than argue past.** Two readings fit:
+
+1. The crash was never owner-specific. The owner flow is simply the longest and busiest case, so it
+   drew the first six sightings; the probe removed nothing, and 0 owner crashes in 90 is the 13%
+   that a rate of 2-in-90 produces by chance.
+2. The probe caused it. `appearance: none` on every control is a real rendering change, and it was
+   only ever validated as _behaviour_-neutral (95/99 in both arms in Chromium), which is not the
+   same as crash-neutral in WebKit. On that reading the probe traded an owner crash for a visitor
+   one, and proves nothing about either.
+
+The control arm's silence on visitor flows is the one piece of evidence that bears on this, and it
+cuts towards reading 2: roughly 270 visitor and public flows across the control runs produced no
+crash, while the first probe arm produced one in 90. That is weak — one event — but it is the
+asymmetry to test.
+
+What is now certain regardless of which reading survives: **ruling 200's three facts are down to
+one.** Not theme (the light sighting), not viewport (six viewports, and the DOM census identical at
+every one), and the owner constant is at best unproven. What is left is WebKit, and the Profile
+surface at `/m/:handle`.
+
+The disambiguating step, and it is a fork rather than a single instruction:
+
+- Run more probe iterations. A second visitor crash under the probe, where the control has none in
+  several hundred visitor flows, makes reading 2 the answer: the probe is unsafe as an instrument
+  and must be replaced by one that removes native controls without a global rule (for example,
+  rendering `VisibilitySelect` and `Switch` from a build flag rather than restyling them).
+- Run more control iterations, watching the visitor and public flows specifically. A visitor crash
+  in the control makes reading 1 the answer, the defect is a Profile-surface defect rather than an
+  owner-flow one, and the whole owner-only line of investigation in this entry is a dead end that
+  the first six samples made look alive.
+
+Both are running. Neither has enough samples yet, and this entry will not call it until one of them
+does.
