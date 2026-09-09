@@ -92,6 +92,12 @@ export type ProfileMember = {
   current_country?: string | undefined;
   local_tz?: string | undefined;
   segment?: Segment | undefined;
+  /**
+   * Ruling 187: the segment's display label, resolved by profile_view from public.member_segments,
+   * the one label source. It rides on the member object so the Public (signed-out) view has it too,
+   * where profile_vocabularies is revoked from anon. The client keeps no map of its own.
+   */
+  segment_label?: string | undefined;
   pattern: MastheadPattern;
   tier: "account" | "identified" | "attested";
 };
@@ -132,6 +138,8 @@ export type Vocabularies = {
   countries: string[];
   /** Current location list (ruling 142): the world; countries is the African list. */
   world: string[];
+  /** Ruling 187: the segment vocabulary from public.member_segments, in its own position order. */
+  segments: { value: Segment; label: string }[];
   heritage: string[];
   pathway: string[];
   timeline: string[];

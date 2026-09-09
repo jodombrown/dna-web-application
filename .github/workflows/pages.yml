@@ -109,6 +109,19 @@ jobs:
           code=$(curl -sS -o /dev/null -w '%{http_code}' "$BASE/strand/adinkra/mate-masie.svg")
           echo "GET /strand/adinkra/mate-masie.svg -> $code"
           test "$code" = "200"
+          # Ruling 184's asset contract: every path in the table serves from the deployment, so the
+          # redesign is a file overwrite. favicon.ico is absent by the founder's own 9 September
+          # edit and is deliberately not checked here.
+          for p in /strand/logo.png /favicon.png /apple-touch-icon.png /icon-192.png /icon-512.png; do
+            code=$(curl -sS -o /dev/null -w '%{http_code}' "$BASE$p")
+            echo "GET $p -> $code"
+            test "$code" = "200"
+          done
+          # The manifest's icons must resolve, or an install produces an iconless app.
+          curl -sS "$BASE/manifest.webmanifest" -o /tmp/manifest.json
+          grep -q '/icon-192.png' /tmp/manifest.json
+          grep -q '/icon-512.png' /tmp/manifest.json
+          ! grep -q 'mate-masie' /tmp/manifest.json
       - name: Brief 3 live checks (served HTML and the anonymous REST surface)
         run: node tests/live-checks.cjs
       - name: Install browsers

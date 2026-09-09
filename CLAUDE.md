@@ -74,3 +74,54 @@ First degree and mutuals come from a symmetric adjacency table. Second degree is
 No graph database. If three-hop interactive traversal or online community detection becomes routine, pilot Apache AGE inside the same Postgres before proposing any external engine, and raise it as a decision rather than building it.
 
 Embeddings come from a separate provider (Anthropic has no embedding model); DIA on Claude writes explanations only. Matching may rank internally and must display only words: the reasons that produced a suggestion, never a distance, score, or percentage. Dismissals persist and are applied as an anti-join. If the rules stage yields nothing real, render nothing.
+
+## Connect (Brief 4, rulings 153 to 188)
+
+Four read projections and five write paths. Nothing else reads or writes the graph from a surface; a
+sixth of either is the v1/v2 stack starting again (the absolute above).
+
+Projections: `connect_cards(lens, filters, cursor, limit)` for Members, Suggested and Network;
+`connect_where()` for the country mosaic; `connect_filter_options()` for the ten filter axes;
+`connection_request_intros(ids)` for what a Feed Connect post shows. Suggested reaches the client
+through the `connect-suggest` Edge Function, which calls `connect_cards('suggested')` with the
+member's own JWT so nothing the member may not see becomes a fact DIA reasons over.
+
+Write paths: `send_introduction`, `respond_to_request`, `withdraw_request`, `set_follow`,
+`dismiss_suggestion`.
+
+`private.relationship_state(viewer, target)` is the single source for none, sent, received,
+connected and window, on Connect and on Profile alike (ruling 188). Neither surface keeps a private
+copy and no surface derives a relationship from `connection_requests` directly; the sender has no
+direct read on that table at all, because a declined status must never reach them (ruling 157).
+
+`private.is_blocked` is symmetric and absolute: every projection that returns a member filters on it
+in both directions. `member_blocks` is chassis, not Connect's (ruling 186); it has no writer in the
+app yet, logged as gap G1 in `docs/GAPS.md`.
+
+Segment has one source (ruling 187): `public.members.segment` is the axis, `public.member_segments`
+is the label vocabulary every surface reads, and `public.member_segment_details` holds the
+per-variant fields. No component keeps a segment label map.
+
+## Brand assets (ruling 184)
+
+A brand or logo change is its own change with its own ruling and never rides in another brief's PR.
+Scope that enters through a build is scope nobody decided.
+
+The swap is a file replacement, never a code change. Every logo and icon resolves by path from this
+contract, so the next wordmark lands by overwriting files in one directory plus a cache bust:
+
+| Path | Use |
+| --- | --- |
+| `public/strand/logo.png` | wordmark: `AppHeader`, public profile chrome, sign-in (660 wide) |
+| `public/strand/logo-dark.png` | dark-theme wordmark, if the redesign needs one |
+| `public/favicon.png` | browser tab, and the square master every other icon derives from |
+| `public/favicon.ico` | browser tab, legacy, 32 and 16 (arrives with the wordmark redesign) |
+| `public/apple-touch-icon.png` | iOS home screen, 180 |
+| `public/icon-192.png`, `public/icon-512.png` | PWA manifest, maskable safe area |
+
+No component may import a logo as a module, inline it as SVG, or hardcode a dimension that assumes
+the current wordmark's aspect ratio. Size by height, width auto.
+
+Lovable commits straight to `main` (ruling 146). Check `main`'s recent commits at the start of any
+code session, report lovable-bot commits, and rebase onto them. On conflict keep the founder's
+visual change and report it rather than resolving it silently.
