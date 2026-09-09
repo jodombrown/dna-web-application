@@ -266,6 +266,48 @@ Take the offsets above to a WebKit 26.6 debug build, or to the matching source, 
 that decides whether the trigger is a layer tree the Profile surface builds or a latent fault in the
 engine. Everything before it is done.
 
+### Ruling 201, and where the evidence since corrects it
+
+Ruling 201 corrects ruling 200's evidence: the crash is **intermittent, not deterministic once the
+viewport is fixed**. It was absent from runs 53, 57, 59, 60 and 63, every one of which exercised
+WebKit dark at all nine viewports, against three sightings at the time it was written.
+
+**That correction is right, and the work in this entry measures it.** The crash rate is about one
+per six full profile matrix runs, and about one per 210 owner-flow iterations in the loop. A given
+viewport in a given theme passes far more often than it fails, exactly as 201 says. 201's practical
+advice follows from the same number and is worth keeping verbatim: prioritise capturing a crash log
+over bisecting, and treat a clean local loop as uninformative rather than as evidence there is
+nothing there. Quantified: fifty loop iterations carry roughly a one-in-five chance of firing, so a
+clean fifty-loop run is close to meaningless.
+
+That advice was followed and it was the right call. The crash log settled the cause in one step;
+every bisect-shaped line of attack in this entry produced a wrong answer.
+
+**Two points in 201's evidence are superseded by primary evidence gathered afterwards**, both read
+from job logs rather than inferred, and both recorded above:
+
+- **Not every sighting is dark.** Run 62's _second attempt_ (`34314303037`, job `102354990849`)
+  failed one check of 5990: `FAIL: webkit-1536x960-light profile owner flow WEB PROCESS CRASHED`.
+  Ruling 200's table records run 62 as `webkit-820x1180-dark`, which was attempt 1. Both are run 62.
+- **Not every sighting is the owner flow.** A `profile visitor stranger` flow crashed on plain
+  `page.goto` (`34321583032`, job `102369208850`), in a view that mounts no form controls at all.
+
+So the envelope 201 describes — WebKit, dark, Profile owner flow — is narrower than the defect. The
+envelope that survives all sampling is **WebKit, and the Profile surface**. This matters for method
+rather than priority: an investigator who restricts sampling to dark and to the owner flow halves
+the at-risk population per run for no reason, and may read a clean light or visitor run as
+exonerating when it is not.
+
+**On 201's reading that intermittency within a narrow envelope means a race inside that envelope.**
+The captured stack says otherwise, and says something more specific. The fault is a SIGSEGV on
+WebKit's compositing thread while it services a _scheduled_ update dispatched from
+`g_main_context_dispatch`. That is asynchronous with respect to whatever the flow is doing, which is
+why the crash lands at a section save in one sighting, at `edit-done` in another and at `page.goto`
+in a third, and why it looks like a race against the flow when it is not one. Ruling 152 called it a
+navigation-timing race and offered the moving viewport as evidence; 201 is right that the viewport
+is the only thing that varies and so evidences nothing. Both readings are superseded by the stack:
+the timing that matters is the compositor's own scheduling, not the navigation's.
+
 ### How this was reached, in order
 
 The sections below are the working record, kept in the order it happened, including the two wrong
