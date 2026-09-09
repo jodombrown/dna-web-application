@@ -224,6 +224,7 @@ async function runConnect(browserType, bname, vp, theme) {
         (await kwame.getByRole("button", { name: "Decline" }).count()) === 1,
     );
     const yusuf = await relOf("Yusuf Diallo");
+    const pendingActions = (await yusuf.locator('[data-testid="card-actions"]').innerText()).trim();
     record(
       tag + ": sent reads Pending, never declined",
       (await yusuf.getByText("Pending", { exact: true }).count()) === 1 &&
@@ -235,12 +236,25 @@ async function runConnect(browserType, bname, vp, theme) {
       (await lerato.getByText("Connected", { exact: true }).count()) === 1 &&
         (await lerato.locator('[data-testid="mutuals"]').count()) === 0,
     );
+    // Ruling 214, amending 168: a decline inside the window and a request still waiting are the
+    // same card. The sender compares the two and learns nothing, which is what ruling 157 asks for.
+    // Follow and Following are the viewer's own follow state, not the relationship, so the two
+    // cards are compared with that one label removed and everything else has to match.
+    const relationshipOnly = (t) =>
+      t
+        .split("\n")
+        .map((l) => l.trim())
+        .filter((l) => l && l !== "Follow" && l !== "Following")
+        .join("|");
     const thandiwe = await relOf("Thandiwe Dube");
-    const windowText = await thandiwe.locator('[data-testid="card-actions"]').innerText();
+    const windowText = (await thandiwe.locator('[data-testid="card-actions"]').innerText()).trim();
     record(
-      tag + ": window carries only Follow (rulings 157, 161, 168)",
-      windowText.trim() === "Follow",
-      windowText,
+      tag + ": window renders identically to sent (ruling 214)",
+      relationshipOnly(windowText) === relationshipOnly(pendingActions) &&
+        /Pending/.test(windowText) &&
+        !/declin/i.test(windowText) &&
+        !/Connect/.test(windowText),
+      relationshipOnly(windowText) + " vs " + relationshipOnly(pendingActions),
     );
     const adaeze = await relOf("Adaeze Nwosu");
     record(

@@ -3,6 +3,11 @@
 Session 13, 9 September 2026. Audit, not a build. Run before Brief 5, against `main` at 11d1819 and
 against the canonical Supabase project `dgspjevjoblujcoljvkn`.
 
+> **Amended in place, 9 September 2026, after Fix PR 01** (rulings 212 to 218, migration
+> `20260909160000_fix_pr_01_rulings_212_216.sql`). The body below is the pass as written and is not
+> rewritten; **Status after Fix PR 01** at the end of section 4 carries one line per finding, and
+> two of this report's own statements are corrected there.
+
 ## Nothing was changed
 
 No fix, no policy change, no migration, no schema change. Two candidate fixes were obvious while
@@ -369,6 +374,57 @@ still off, confirmed by the Supabase security advisor in this pass) and Resend A
 | **F15** | `private.third_party_label` is `EXECUTE`-granted to `anon` and takes `p_public` as a **caller-supplied** argument: `third_party_label(<uuid>, '', false)` returns any member's real name. It is not reachable today because schema `private` is not in PostgREST's exposed schema set, so this is defence in depth, not an open path. A safety switch that the caller supplies is the wrong shape for a function granted to `anon` | **Low** | — |
 | **F16** | Two writers insert into `connection_requests`: `send_introduction` and `publish_post`'s Connect branch. Only the first enforces `is_blocked` and `relationship_state = 'none'`, so the composer's Connect verb can create a pending request to a member who has blocked the author or who is inside the decline window. CLAUDE.md names five write paths for the graph; this is a sixth entry point into the same table | **Medium** | IB-10 |
 | **F17** | Two stores answer "is following": `profile_view` reads `member_follows`, `connect_card` reads `edges`. They agree today because a trigger mirrors one into the other, and `set_follow` is the only writer. Recorded so the mirror is not mistaken for a second source of truth, and so a future writer of `edges` that bypasses the trigger is caught | **Low** | — |
+
+### Status after Fix PR 01
+
+One line per finding. Every closed line was re-tested live with this report's own probe, as a member
+or as `anon` inside `BEGIN … ROLLBACK`, and the counter list under **Live method** was reproduced
+before and after and is unchanged.
+
+| # | Status | What was done, and what the probe returned |
+| --- | --- | --- |
+| **F1** | **Closed** (IB-1) | `members_member_select` is now `private.can_see_core(id)`, ruling 213's rule, and the `authenticated` grant is `id, handle, name, headline, avatar_path, cover_path, cover_focus, pattern`. `anon` is narrowed to the same eight, because an anonymous read of `members.origin_country` is F2a one step back. Live as an isolated member: the identity columns return 6 rows; `profile_private, profile_shared, identified_at, updated_at` and the five section-gated columns are refused, `42501 permission denied for table members` |
+| **F2a** | **Closed** (IB-2) | `profile_view` admits or omits `origin_country`, `current_place`, `current_country`, `local_tz`, `segment` and `segment_label` per `admit_section` with the explicit viewer, anonymous callers included. Live as `anon` against the same fixture: the `member` object carried `id, handle, name, headline, cover_focus, pattern, tier` and none of the six |
+| **F2b** | **Closed** (IB-2) | Ruling 212 settled the collision the report could not: the five are section-gated on every path. Same fixture, viewer Yusuf, live: `profile_view.member` as above; the Connect card returned `name, handle, headline, chips, badges, mutuals, rel, following` and no `place`, `origin` or `segment_label`. The section guard and the attribute now read the same three booleans, so they cannot disagree again |
+| **F3** | **Closed** (IB-3) | Ruling 213. `private.admit_member` is the single row rule, called by the `members` policies, `profile_view`, the Members and Suggested lenses, `connect_where` and `send_introduction`. Live with `profile_private = true`: for a non-connection `profile_view` returned `NULL` (identical to an unknown handle), the member was absent from Members and Suggested, `connect_where` returned `{"continent":[],"diaspora":[]}`, the row was gone from `members`, and `send_introduction` refused with `send_introduction: not available`. For an existing connection: card, row and profile unchanged, `sections {}`, `private true`, exactly as before |
+| **F4** | **Closed** (IB-4) | The block predicate is on `posts_member_select` and on `posts_event_host_select`, which is OR-ed with it and could otherwise readmit a member-authored post anchored to an event the caller hosts. Live with the report's own block in place: `feed` 6 → **0**, `posts` 6 → 0, `post_media` 6 → 0, `post_links` 1 → 0, `events` 2 → 0, `stories` 1 → 0. The one Space and one opportunity the blocker still reads are a third member's, reached through her own active Space role, not through a blocked member's post. Symmetric: the blocked member reads 0 of the blocker's posts |
+| **F5** | **Closed** (IB-5) | The `location`, `origin` and `segment` axes now check `admit_section` like the other seven. Same fixture, live: `{"origin":"South Africa"}` returned nothing where it had returned the member, `{"segment":"returnee"}` returned only the member who had not withheld Segment, `{"location":"United States"}` the same. `connect_filter_options()` needed no change; see the correction below |
+| **F6** | **Closed** (IB-6) | Ruling 214. `private.relationship_display` maps `window` to `sent` at the projection boundary; `private.relationship_state` keeps the distinction, where it governs whether a new introduction is accepted. Live, sender Yusuf with one pending request and one decline three days old: the two Members cards were byte-identical apart from identity (`{"rel": "sent", "chips": [], "badges": [], "mutuals": [], "following": false, "identified": false}` each), both Sent rows read `sent`, both `profile_view.relationship` objects read `{"state": "sent", "following": false}`, and the sender still read 0 rows from `connection_requests`. `MEMBER_REL` and `RelationshipState` lost the fourth state |
+| **F7** | Open, Medium (IB-7) | Not in this PR |
+| **F8** | **No fix; record corrected** | Ruling 216. `docs/GAPS.md` G1 no longer says the table can only hold rows placed by hand. The irreversibility is intended and ruling 211 says so; the audit did not have 211 when it wrote the finding |
+| **F9 to F15, F17** | Open, at their severities | Not in this PR. F9 lands on Brief 5; F10 is not worth a migration in a PR this security-sensitive; F15 is defence in depth behind a schema that is not exposed, and the next pass proves that over real HTTP |
+| **F16** | **Closed** (IB-10) | Ruling 215. `publish_post`'s Connect branch calls `send_introduction` or writes nothing. Live: a recipient inside the window and a recipient who had blocked the author were both refused with `send_introduction: not available`; a valid recipient wrote exactly one row, `pending`, with `to_name` taken from the members row rather than the composer's free text. CLAUDE.md's five named write paths are true again |
+
+### Two corrections to this report, and one residual it did not have
+
+**F16's second writer was already broken, and the fix repairs it.** The pass read the code and
+recorded a second writer; the path had not been exercised. Live, `publish_post`'s Connect branch
+raised `42501 new row violates row-level security policy for table "connection_requests"` on every
+call, because the B4 migration dropped the sender's `SELECT` (ruling 157) and the branch's
+`INSERT … RETURNING id` needs a row it is allowed to read back — a `SECURITY INVOKER` function
+cannot write to a table its caller may not read. So the composer's Connect verb had been failing
+since Brief 4, and F16's severity was right for a different reason than the one given.
+`send_introduction` is `SECURITY DEFINER` and returns the id, so routing through it closes the
+finding and repairs the verb in the same change.
+
+**`connect_filter_options()` builds no axis from members.** Fix PR 01's handoff says an option list
+built from members who have hidden the attribute is the same disclosure one step back. That premise
+does not hold against this codebase, and this report's own section 2 says so: every axis is a
+reference vocabulary (`world_countries`, `countries`, the two enums, `focus_areas`, `industries`,
+`skills`, `regional_expertise`, `member_segments`), so no member contributes a value to any list and
+a Private member is absent from all ten by construction. Deriving the lists from admitted members
+instead would have changed what the filter sheet offers, which is a visual change no ruling asked
+for. No change made; recorded here because the difference is between the handoff and the code, not
+between two readings of a finding.
+
+**Residual, new, Low, not in F6.** On Profile a `sent` relationship renders a **Request sent** button
+wired to `withdraw_request`. After ruling 214 a decline inside the window renders as `sent` too, and
+the two diverge under the action rather than in the payload: withdrawing a pending request moves the
+sender to `none` and the Connect action returns, while withdrawing inside the window is a silent
+no-op and the button stays. The payloads are byte-identical, which is what ruling 214 and Done Means
+item 5 ask for; the state transition is not. Closing it needs a ruling this PR was not given — a
+window that withdraw appears to accept, or a Profile that renders `sent` without an action — so it
+is reported rather than chosen. Logged as G6 in `docs/GAPS.md`.
 
 ### What passed, stated as results
 

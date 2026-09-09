@@ -102,8 +102,12 @@ export type ProfileMember = {
   tier: "account" | "identified" | "attested";
 };
 
-/** window (rulings 157, 161, 168): the sender-side state after a decline; the card carries no Connect. */
-export type RelationshipState = "none" | "sent" | "received" | "connected" | "window";
+/**
+ * Ruling 214, amending 168: the window is server-side only. A decline inside the window arrives as
+ * "sent" from every projection, so no surface can render it as anything else and no sender can
+ * construct a probe that separates the two states.
+ */
+export type RelationshipState = "none" | "sent" | "received" | "connected";
 
 export type ProfileView = {
   viewer: "owner" | "member" | "anon";

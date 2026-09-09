@@ -29,11 +29,25 @@ What exists:
 
 What is missing:
 
-- Any writer. No Block action on a member card, a profile, a post, a thread or a sheet, so in the
-  running app the table can only ever hold rows put there by hand.
+- Any **surface**. No Block action on a member card, a profile, a post, a thread or a sheet, so in
+  the running app nothing offers a member the action.
 - Report entirely: no report object, no reason vocabulary, no queue, no admin surface. Ruling 115's
   human review queue has no inbox.
 - An unblock surface, which the delete policy already permits but nothing calls.
+
+**Correction, ruling 216.** This entry used to say the table "can only ever hold rows put there by
+hand". That is true of the app and false of the API, and PASS-01's F8 proved it live: the
+`authenticated` grant carries `INSERT` and `DELETE` on `member_blocks` and an ordinary member
+inserted a block row over PostgREST. The gap is the missing surface, not a missing writer, and the
+distinction matters because the ruling-198 trigger fires on that insert whoever wrote it. The
+security pass's own re-test of F4 uses that path, and so does the standing block arm in
+`tests/live-checks.cjs` (ruling 218).
+
+F8 also flagged the irreversibility that follows: deleting the block row does not restore the
+connection or the follow, because the trigger **revokes** edges rather than deleting them. That is
+intended and ruling 211 says so — unblocking restores nothing and a revoked edge is re-made
+deliberately. F8 was written before 211 existed. Nothing to fix; the block surface's brief inherits
+it.
 
 Where it belongs: the chassis, not an engine. Convene, Collaborate, Contribute and Messaging all
 filter on the same table (ruling 186), so the surface is written once and every engine inherits it.
@@ -712,3 +726,36 @@ control arm run at the same time on the same head.
 Recorded because the claim was made one message before the sample that broke it, which is the third
 time in this investigation an over-strong reading has been corrected by the next observation — after
 `color-scheme` and after native form controls.
+
+## G6. Withdraw separates the two states ruling 214 joined
+
+**Severity: low at the invite boundary. Not a merge blocker (ruling 140). Opened 9 September 2026 by
+Fix PR 01, which found it and did not choose an answer for it.**
+
+Ruling 214 joined `window` to `sent`: a decline inside the window and a request still waiting return
+byte-identical payloads from every projection, so the sender cannot tell them apart by reading.
+Verified live in that PR, on the Members card, on the Sent row and on `profile_view.relationship`.
+
+The action is not joined. On Profile a `sent` relationship renders a **Request sent** button wired to
+`withdraw_request`. `withdraw_request` updates a `pending` row and nothing else, so:
+
+| The sender's state | What Request sent does | What the surface then shows |
+| --- | --- | --- |
+| Pending request | the row becomes `withdrawn`, the pair returns to `none` | the Connect action comes back |
+| Declined, inside the window | nothing; the update matches no row | the button stays |
+
+One click separates the two, which is the thing ruling 157 exists to prevent. The payload half of
+ruling 214 holds; the transition half was never stated.
+
+Two answers are defensible and this is recorded rather than guessed, in the shape G2 had before
+ruling 198:
+
+- **A window that withdraw appears to accept.** `withdraw_request` returns silently either way and
+  the projection moves the sender to `none` once the window row is acknowledged, which costs the
+  window its purpose unless the state is kept somewhere the sender cannot reach.
+- **A Profile that renders `sent` without an action**, matching the Members card, which already has
+  no primary action for either state. Cheaper, and it removes a real affordance from a member who
+  simply changed their mind about a pending request.
+
+Nothing is enforced against it today beyond the payload identity. Ruling 157 is the constraint any
+answer has to satisfy.
