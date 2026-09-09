@@ -1172,6 +1172,11 @@ async function launch(browserType) {
     browserType === chromium && process.env.CHROME_PATH
       ? { executablePath: process.env.CHROME_PATH }
       : {};
+  // `compositing` is not a stylesheet: the core from run 17 (34322686504) is a SIGSEGV in the
+  // WPEWebProcess thread named ThreadedCompositor, so the probe that matches the evidence turns
+  // accelerated compositing off in the engine rather than restyling the page.
+  if (process.env.RULING200_PROBE === "compositing")
+    opts.env = { ...process.env, WEBKIT_DISABLE_COMPOSITING_MODE: "1" };
   const browser = await browserType.launch(opts);
   const css = PROBE_CSS[process.env.RULING200_PROBE];
   if (!css) return browser;

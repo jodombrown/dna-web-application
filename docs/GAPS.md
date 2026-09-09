@@ -369,3 +369,66 @@ The disambiguating step, and it is a fork rather than a single instruction:
 
 Both are running. Neither has enough samples yet, and this entry will not call it until one of them
 does.
+
+### Update, 07:36: the core, and the cause class
+
+The core capture worked on its first crash. Run 17 (`34322686504`, job `102372710843`), a **control**
+run:
+
+```
+=== core.eadedCompositor.15835.sig11 ===
+ELF 64-bit LSB core file, x86-64, version 1 (SYSV), SVR4-style,
+from '/home/runner/.cache/ms-playwright/webkit-2359/minibrowser-wpe/bin/WPEWebProcess'
+execfn: '/home/runner/.cache/ms-playwright/webkit-2359/minibrowser-wpe/bin/WPEWebProcess'
+```
+
+Three facts, none of them inferred:
+
+1. **Signal 11, SIGSEGV.** A segmentation fault, not an abort, not an OOM kill.
+2. **The faulting thread is `ThreadedCompositor`.** The core pattern's `%e` records the crashing
+   thread's comm, which the kernel truncates to 15 characters: `eadedCompositor` is
+   `ThreadedCompositor`. This is WebKit's compositing thread.
+3. **The process is `WPEWebProcess`.** Playwright's Linux WebKit is the **WPE** port. Earlier
+   revisions of this entry said the Linux port paints through `RenderThemeAdwaita`, which is the GTK
+   port; that was wrong and is corrected here.
+
+This is the outcome ruling 200's method predicted: "A stack naming a compositor, a rasteriser, a
+font or an image decoder tells you the class of cause in one step and saves the entire bisect." The
+class is **compositing**, and ruling 200's own first sentence under "Where to look first" — that a
+web-process crash in one engine is usually compositing, rasterisation or memory rather than
+JavaScript — is the part of that ruling the evidence has now confirmed rather than broken.
+
+It also settles, without needing more sampling, why the constants kept falling. Compositing runs on
+every view, in every theme, at every viewport. A fault in the compositor thread has no reason to
+respect the owner flow, dark theme, or 820x1180, and it did not: it merely appeared there first
+because the owner flow is the longest and busiest case in the matrix and therefore the most
+compositing the run does in one page.
+
+Consequences for the two suspects this entry has already withdrawn: both were surface styling, and
+neither is where the fault is. `color-scheme` was refuted by the light sighting; native form
+controls are refuted twice over, by the visitor crash and now by the faulting thread being the
+compositor rather than a form-control paint path.
+
+**The probe that matches the evidence** is therefore neither of the stylesheets. `RULING200_PROBE`
+now accepts `compositing`, which launches the engine with `WEBKIT_DISABLE_COMPOSITING_MODE=1` rather
+than injecting CSS. If the crash stops with accelerated compositing off and the control keeps
+producing it, the cause is in WebKit's threaded compositor, and the question for DNA becomes which
+composited layer the Profile surface creates that trips it, not which component is at fault.
+
+**The stack is still missing, and the reason is my own extraction bug, not the capture.** `gdb` was
+handed the core with no executable, because the exe was resolved from `eu-readelf` looking for
+`WebKitWebProcess` — the GTK port's binary name, which the WPE build does not have. gdb then read
+the core as an executable and reported "not in executable format". `file` names the binary in
+`execfn`, so the step now parses that and calls `gdb <exe> --core <core>`. Fixed here; the next
+control-arm crash should produce the frames.
+
+Sampling at this point, all read from job logs:
+
+| Arm                | Runs | Owner cases | Owner crashes | Visitor/public crashes |
+| ------------------ | ---- | ----------- | ------------- | ---------------------- |
+| Control            | 11   | 162         | 3             | 0                      |
+| Probe `appearance` | 5    | 90          | 0             | 1                      |
+
+The `appearance` arm's numbers are no longer the interesting comparison, since the faulting thread
+tells us it was testing the wrong thing. They are kept because a null result against a wrong
+hypothesis is still a record of what was tried.

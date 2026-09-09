@@ -22,7 +22,7 @@ on:
         required: false
         default: ""
       probe:
-        description: Ruling 200 diagnostic; appearance or color-scheme. Empty runs the control.
+        description: Ruling 200 diagnostic; compositing, appearance or color-scheme. Empty runs the control.
         required: false
         default: ""
 
@@ -104,10 +104,21 @@ jobs:
             name=$(basename "$c")
             echo "=== $name ===" | tee -a "$OUT/cores/stacks.txt"
             file "$c" | tee -a "$OUT/cores/stacks.txt"
-            exe=$(eu-readelf -n "$c" 2>/dev/null | grep -o '/[^ ]*WebKitWebProcess[^ ]*' | head -1 || true)
+            # `file` names the binary in execfn; that is the only reliable source here, because the
+            # crashing thread's comm (ThreadedCompositor, truncated to 15 chars) is what %e records,
+            # not the executable. Passing the core with no executable makes gdb read it as one.
+            exe=$(file "$c" | grep -o "execfn: '[^']*'" | head -1 | sed "s/execfn: '//; s/'$//")
+            [ -n "$exe" ] || exe=$(file "$c" | grep -o "from '[^']*'" | head -1 | sed "s/from '//; s/'$//" | awk '{print $1}')
             echo "exe: ${exe:-unknown}" | tee -a "$OUT/cores/stacks.txt"
-            gdb -batch -q -ex "set pagination off" -ex "thread apply all bt 40" \
-              ${exe:+"$exe"} "$c" 2>&1 | head -400 | tee -a "$OUT/cores/stacks.txt"
+            if [ -n "$exe" ] && [ -e "$exe" ]; then
+              gdb -batch -q -ex "set pagination off" -ex "info registers rip" \
+                -ex "thread apply all bt 40" "$exe" --core "$c" 2>&1 |
+                head -500 | tee -a "$OUT/cores/stacks.txt"
+            else
+              echo "executable not resolvable; core kept for offline analysis" | tee -a "$OUT/cores/stacks.txt"
+            fi
+            # The core itself is large; keep it only when a stack could not be produced.
+            cp "$c" "$OUT/cores/" 2>/dev/null || true
           done
         env:
           OUT: ${{ github.workspace }}/matrix-out
