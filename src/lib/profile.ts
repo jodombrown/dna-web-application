@@ -95,7 +95,7 @@ export type ProfileMember = {
   /**
    * Ruling 187: the segment's display label, resolved by profile_view from public.member_segments,
    * the one label source. It rides on the member object so the Public (signed-out) view has it too,
-   * where profile_vocabularies is revoked from anon. The client keeps no map of its own.
+   * where public.vocabularies is revoked from anon. The client keeps no map of its own.
    */
   segment_label?: string | undefined;
   pattern: MastheadPattern;
@@ -127,23 +127,8 @@ export type ProfileView = {
   coverUrl?: string | undefined;
 };
 
-export type Vocabularies = {
-  focus: string[];
-  industries: string[];
-  regions: string[];
-  skills: string[];
-  languages: string[];
-  intent: string[];
-  interests: string[];
-  countries: string[];
-  /** Current location list (ruling 142): the world; countries is the African list. */
-  world: string[];
-  /** Ruling 187: the segment vocabulary from public.member_segments, in its own position order. */
-  segments: { value: Segment; label: string }[];
-  heritage: string[];
-  pathway: string[];
-  timeline: string[];
-};
+// Ruling 193: the vocabulary projection is no longer Profile's. Its type and its one read moved to
+// src/lib/vocabularies.ts, which the Composer and the Feed read through the same path.
 
 const BUCKET = "profile-media";
 
@@ -175,14 +160,6 @@ export async function loadProfile(handle: string, asPublic = false): Promise<Pro
   view.avatarUrl = avatarUrl;
   view.coverUrl = coverUrl;
   return view;
-}
-
-export async function loadVocabularies(): Promise<Vocabularies | null> {
-  const sb = getSupabase();
-  if (!sb) return null;
-  const { data, error } = await sb.rpc("profile_vocabularies");
-  if (error) throw error;
-  return (data as unknown as Vocabularies) ?? null;
 }
 
 /** One section save; the server validates caps and vocabulary membership and writes under the owner's RLS. */

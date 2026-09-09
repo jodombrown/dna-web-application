@@ -11,6 +11,7 @@ import { loadDraft, saveDraft } from "@/lib/drafts";
 import { loadMemberSpaces } from "@/lib/feed";
 import { publishPost } from "@/lib/publish";
 import { useMode, useTier } from "@/lib/tier";
+import { loadVocabularies } from "@/lib/vocabularies";
 
 export const PUBLISHED_EVENT = "dna:published";
 
@@ -26,6 +27,10 @@ export function ComposerShell() {
   const [draft, setDraft] = useState<ComposerSeed | null>(null);
   const [postId, setPostId] = useState<string>("");
   const [spaces, setSpaces] = useState<{ id: string; name: string }[]>([]);
+  // Ruling 193: Contribute's instrument options are the contribute_instrument vocabulary, read at
+  // runtime through the one vocabulary path. Ruling 194: a read that fails leaves this empty and the
+  // control renders no options; nothing here substitutes a default.
+  const [instrument, setInstrument] = useState<string[]>([]);
 
   const hostContext = request ? hostContextOf(request) : "feed";
 
@@ -45,16 +50,18 @@ export function ComposerShell() {
     if (!open || !member || !request) return;
     let active = true;
     void (async () => {
-      const [restored, memberSpaces] = await Promise.all([
+      const [restored, memberSpaces, vocab] = await Promise.all([
         request.initialVerb || request.initial
           ? Promise.resolve(null)
           : loadDraft(member.id, hostContext),
         loadMemberSpaces(member.id),
+        loadVocabularies().catch(() => null),
       ]);
       if (!active) return;
       setDraft(restored?.seed ?? null);
       setPostId(restored?.postId ?? crypto.randomUUID());
       setSpaces(memberSpaces);
+      setInstrument((vocab?.instrument ?? []).map((i) => i.label));
       setLoadedSeed(seed);
     })();
     return () => {
@@ -101,6 +108,7 @@ export function ComposerShell() {
       initial={request.initial ?? null}
       draft={draft}
       onDraft={onDraft}
+      fieldOptions={{ instrument }}
       maxImages={4}
     />
   );

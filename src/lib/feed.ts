@@ -10,16 +10,11 @@ import { signedMediaUrl } from "./dia";
 import type { LensId } from "./lens";
 import { domainOf, type PostView } from "./post-view";
 import { getSupabase, type Supabase } from "./supabase";
+import { instrumentLabels } from "./vocabularies";
 import { whenLabel } from "./when";
 
 type FeedRow = Views<"feed">;
 type PostRow = Tables<"posts">;
-
-const INSTRUMENT_LABEL: Record<Tables<"opportunities">["instrument"], string> = {
-  time: "Time",
-  skills: "Skills",
-  in_kind: "In-kind",
-};
 
 function verbOf(kind: PostRow["created_object_kind"]): C | null {
   switch (kind) {
@@ -86,7 +81,7 @@ export async function hydratePosts(
     ...posts.filter((p) => p.anchor_kind === "event").map((p) => p.anchor_id as string),
   ]);
 
-  const [media, links, events, spaces, opps, reqs, stories] = await Promise.all([
+  const [media, links, events, spaces, opps, reqs, stories, instruments] = await Promise.all([
     sb.from("post_media").select("*").in("post_id", ids).order("position"),
     sb.from("post_links").select("*").in("post_id", ids),
     eventIds.size
@@ -111,6 +106,10 @@ export async function hydratePosts(
     by("story").length
       ? sb.from("stories").select("*").in("id", by("story"))
       : Promise.resolve({ data: [] as Tables<"stories">[] }),
+    // Ruling 193: the instrument labels are the contribute_instrument vocabulary, read at runtime
+    // through the one vocabulary path rather than mapped from a literal in this file. Ruling 194: a
+    // read that fails returns nothing, and the Need's instrument row is absent rather than guessed.
+    by("opportunity").length ? instrumentLabels(sb) : Promise.resolve({} as Record<string, string>),
   ]);
 
   const eventMap = new Map((events.data ?? []).map((e) => [e.id, e]));
@@ -167,7 +166,7 @@ export async function hydratePosts(
       if (o)
         Object.assign(fields, {
           title: mine(o.title),
-          instrument: mine(INSTRUMENT_LABEL[o.instrument]),
+          instrument: mine(instruments[o.instrument]),
           need: mine(o.need),
           by: mine(o.by_text),
         });

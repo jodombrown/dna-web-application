@@ -121,6 +121,12 @@ export type ComposerProps = {
   onDraft?: ((state: ComposerState | null) => void) | undefined;
   contained?: boolean | undefined;
   maxImages?: number;
+  /**
+   * Ruling 193: option lists a field reads from a vocabulary at runtime, keyed by field. The schema
+   * carries no literal for these, so a key that is absent leaves the control with no options
+   * (ruling 194), which is what a vocabulary that failed to load has to render.
+   */
+  fieldOptions?: Partial<Record<FieldKey, string[]>> | undefined;
 };
 
 /** Software keyboard height on touch devices, from visualViewport. 0 when no keyboard or API. */
@@ -174,6 +180,7 @@ export function Composer({
   onDraft,
   contained,
   maxImages = 4,
+  fieldOptions,
 }: ComposerProps) {
   const touch = (mode || (tier === "expanded" ? "pointer" : "touch")) === "touch";
   /** Compact and medium share the stacked layout (ruling 58); only the container differs. */
@@ -534,7 +541,7 @@ export function Composer({
             aria-label={f.label}
             style={{ display: "flex", gap: 8, flexWrap: "wrap" }}
           >
-            {(f.options || []).map((o) => {
+            {(fieldOptions?.[f.key] ?? f.options ?? []).map((o) => {
               const on = v.value === o;
               return (
                 <button

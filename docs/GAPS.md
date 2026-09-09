@@ -75,44 +75,44 @@ area and industry was logged rather than built, because it turns the chip row, t
 the empty-state copy into their own design problem. `docs/connect/SPEC.md` §13 refers to this as the
 "logged gap"; this is where it is logged.
 
-## G4. Hardcoded vocabularies still in merged surfaces
+## G4. Hardcoded vocabularies in merged surfaces — closed (rulings 193, 194)
 
-**Severity: moderate. Not fixed here by instruction: reported, not repaired.**
+**Closed 9 September 2026. Recorded rather than deleted, because the shape is worth remembering.**
 
 Ruling 187's work turned up that Profile had been reading segment labels from two hardcoded maps in
 `SegmentBlock.tsx` since Brief 3 merged (ruling 145), against the standing rule that fixed
-vocabularies are database tables read at runtime. Those two are gone. This gap records the sweep of
-the other merged surfaces for the same pattern.
-
-Same class, a vocabulary the database already serves duplicated in a component:
+vocabularies are database tables read at runtime. Those went with ruling 187. The sweep of the other
+merged surfaces found three more, and rulings 193 and 194 closed all three:
 
 - `src/components/strand/SegmentBlock.tsx`, `SEG.returnee.fields[0].options` — the four
-  `return_timeline` values. The live source is `profile_vocabularies().timeline`, passed in as
-  `timelineOptions`; the literal is the fallback used when the prop is absent, so it shadows the
-  runtime source rather than replacing it. Surface: Profile (Brief 3). The values happen to match
-  the enum today, which is what makes this the dangerous shape: it stays correct until it silently
-  does not.
-
-Adjacent, and a weaker case worth a ruling rather than an assumption:
-
+  `return_timeline` values, sitting beside `timelineOptions` as its fallback, so the literal shadowed
+  the live source rather than being replaced by it. Surface: Profile (Brief 3). Removed; the select
+  reads `vocabularies().timeline` or renders no options.
 - `src/components/strand/verb-schema.ts`, the Contribute verb's `instrument` options
-  (`["Time", "Skills", "In-kind"]`). Surface: Composer (Brief 1). Backed by the
-  `public.contribute_instrument` enum, which no projection serves to the client at all;
-  `publish_post` maps the display strings back to enum values server-side.
-- `src/lib/feed.ts`, `INSTRUMENT_LABEL` — display labels for that same enum. Surface: Feed
-  (Brief 2).
+  (`["Time", "Skills", "In-kind"]`). Surface: Composer (Brief 1). Removed; the options arrive as
+  `fieldOptions.instrument` from the same projection.
+- `src/lib/feed.ts`, `INSTRUMENT_LABEL`. Surface: Feed (Brief 2). Removed; the labels come from the
+  projection, and a Need whose vocabulary did not load renders no instrument row.
 
-The open question on those two is whether an enum counts. CLAUDE.md's absolute names tables, and
-these are enums. But `heritage_kind`, `return_pathway` and `return_timeline` are also enums and are
-already served at runtime through `profile_vocabularies` via `enum_range`, so the precedent is that
-an enum is served, not hardcoded. On that precedent both are the same mistake.
+The open question the earlier entry left — whether an enum counts, when CLAUDE.md's absolute names
+tables — was answered by ruling 193 on the precedent already in the code: `heritage_kind`,
+`return_pathway` and `return_timeline` are enums and were already served at runtime through
+`enum_range`. `contribute_instrument` now goes the same way. Its labels are derived from its values
+in the projection rather than listed, because a list in SQL is the same anti-pattern relocated.
 
-Deliberately not findings, listed so the sweep is not re-run over them: the five Cs and their
-labels, glyphs and copy (`cmeta.ts`, `cinfo.ts`, `VerbChip`, `BadgeRow`, `Composer`'s DIA lines),
-audience labels and section titles (`ProfileSurface`), notification kinds
-(`NotificationListItem`), lens ids (`lens.ts`, `connect.ts`), relationship states (`MemberCard`),
-and the generated enum constants in `src/lib/database.types.ts`. These are structure, doctrine or
-UI copy, not vocabularies members choose values from.
+`public.profile_vocabularies()` is now `public.vocabularies()`: the projection serves three surfaces,
+so it is no longer Profile's, and ruling 193 says rename the path rather than add a second one. The
+old name was dropped in the same migration, not kept as an alias.
+
+Deliberately not findings, listed so the sweep is not re-run over them (the G4 exclusions, ratified
+by ruling 193): the five Cs and their labels, glyphs and copy (`cmeta.ts`, `cinfo.ts`, `VerbChip`,
+`BadgeRow`, `Composer`'s DIA lines), audience labels and section titles (`ProfileSurface`),
+notification kinds (`NotificationListItem`), lens ids (`lens.ts`, `connect.ts`), relationship states
+(`MemberCard`), and the generated enum constants in `src/lib/database.types.ts`. These are structure,
+doctrine or UI copy, not vocabularies members choose values from, and none can drift from the
+database because the database does not own them. Convene's `ticket_kind` (`["Free", "Paid"]` in
+`verb-schema.ts`) is the one adjacent case this PR left alone: it is a Brief 5 surface's vocabulary,
+not one of the three sites the audit found, and widening the sweep into it was ruled out.
 
 ## Audit: `member_blocks` as an absolute filter (ruling 186, item 4)
 

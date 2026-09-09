@@ -47,7 +47,6 @@ import type { Json } from "@/lib/database.types";
 import {
   loadProfile,
   loadPublicAttestations,
-  loadVocabularies,
   respondRequest,
   saveSection,
   setFollow,
@@ -59,10 +58,10 @@ import {
   type ProfileView,
   type SectionKey,
   type SegmentFields,
-  type Vocabularies,
 } from "@/lib/profile";
 import { setRail } from "@/lib/rail-store";
 import { useTier } from "@/lib/tier";
+import { loadVocabularies, type Vocabularies } from "@/lib/vocabularies";
 
 const CONDENSE_PX = 120;
 // Once condensed, the masthead expands again only near the top. The condensed row is some 250px

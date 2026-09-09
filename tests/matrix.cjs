@@ -4,7 +4,7 @@
 // layer, so the real client code paths run against a deterministic backend. Backend behaviour
 // (RLS, the feed view) is verified separately in SQL against the live project.
 // Usage: BASE=https://b2-shell-feed.dna-web-application.pages.dev WEBKIT=1 node tests/matrix.cjs
-// Env: ONLY='[390,844]' runs one viewport; SPECIAL=publish,keyboard,silence,shell,targeted,profile,connect runs flows only.
+// Env: ONLY='[390,844]' runs one viewport; SPECIAL=publish,keyboard,silence,shell,targeted,profile,connect,vocab runs flows only.
 // Brief 3 profile flows live in tests/profile.cjs and Brief 4 Connect flows in tests/connect.cjs; both share this mock.
 const { chromium, webkit } = require("playwright");
 const fs = require("fs");
@@ -260,6 +260,12 @@ const VOCAB = {
   heritage: ["Continental", "First generation", "Second generation"],
   pathway: ["Already returned", "Planning to return", "Not returning"],
   timeline: ["Already back", "Within a year", "One to three years", "Someday"],
+  // Ruling 193: contribute_instrument, value and derived label, as public.vocabularies() serves it.
+  instrument: [
+    { value: "time", label: "Time" },
+    { value: "skills", label: "Skills" },
+    { value: "in_kind", label: "In-kind" },
+  ],
 };
 const ATTESTATIONS = {
   convene: [
@@ -604,6 +610,9 @@ function makeMockDb() {
     drafts: new Map(),
     rpcPayloads: [],
     inferCalls: 0,
+    // Rulings 193, 194: set to fail the one vocabulary read, so a flow can check that the controls
+    // reading it render empty rather than falling back to a literal that no longer exists.
+    failVocab: false,
     reads: [],
     // Brief 3: which persona is signed in relative to thandiwe-dube, and the owner's switches.
     profile: {
@@ -958,7 +967,15 @@ async function mockSupabase(page, db, opts = {}) {
       await new Promise((r) => setTimeout(r, 120));
       return json(profileProjection(db, anon));
     }
-    if (p === "/rest/v1/rpc/profile_vocabularies") return json(VOCAB);
+    // Ruling 193: one vocabulary path, read by Profile, the Composer and the Feed. FAIL_VOCAB
+    // forces the read to fail, which is how the empty-control behaviour of ruling 194 is checked.
+    if (p === "/rest/v1/rpc/vocabularies")
+      return db.failVocab
+        ? json(
+            { code: "PGRST", message: "forced vocabulary failure", details: null, hint: null },
+            500,
+          )
+        : json(VOCAB);
     if (p === "/rest/v1/rpc/public_attestations") return json(ATTESTATIONS);
     if (p === "/rest/v1/rpc/save_profile_section") {
       const body = req.postDataJSON() || {};
@@ -2668,6 +2685,18 @@ if (require.main === module)
           for (const vp of process.env.ONLY ? [JSON.parse(process.env.ONLY)] : VIEWPORTS)
             for (const theme of process.env.THEME ? [process.env.THEME] : THEMES)
               await runProfile(bt, bname, vp, theme);
+        }
+        // Rulings 193, 194: the vocabulary read served, then forced to fail, on both layouts.
+        if (process.env.SPECIAL.includes("vocab")) {
+          const { runVocabulary } = require("./vocabulary.cjs");
+          for (const vp of process.env.ONLY
+            ? [JSON.parse(process.env.ONLY)]
+            : [
+                [390, 844],
+                [1280, 800],
+              ])
+            for (const theme of process.env.THEME ? [process.env.THEME] : THEMES)
+              for (const fail of [false, true]) await runVocabulary(bt, bname, vp, theme, fail);
         }
         if (process.env.SPECIAL.includes("connect")) {
           const { runConnect } = require("./connect.cjs");
