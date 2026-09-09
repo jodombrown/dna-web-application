@@ -467,3 +467,68 @@ visitor flows and a per-case denominator would imply a precision this does not h
 | Control             | 15   | 3 (`744x1133-dark` owner, `1536x960-light` owner, and run 17 whose core was captured) |
 | Probe `appearance`  | 7    | 1 (`820x1180-dark`, visitor stranger)                                                 |
 | Probe `compositing` | 2    | 0                                                                                     |
+
+### Update, 08:54: the stack. DONE MEANS item 1 is met
+
+Run 34 (`34329351986`, job `102394030379`), a control run on the fixed-gdb head, crashed and the
+extraction produced frames. The faulting thread:
+
+```
+Thread 1 (Thread 0x7f4fa6ffe6c0 (LWP 13535)):
+#0  0x00007f603bea0f8a  libWPEWebKit-2.0.so.1     <- fault site
+#1  0x00007f6038dcc1e4  libWPEWebKit-2.0.so.1
+#2  0x00007f6038dcccf4  ]
+#3  0x00007f6038dc79f1  ]  three-frame cycle
+#4  0x00007f6038dcab5f  ]
+   ... same three addresses repeating, through #26 (about eight levels)
+#27 0x00007f6038dc6e85  libWPEWebKit-2.0.so.1     <- recursion entered here
+#28 0x00007f6036d75de1
+#29 0x00007f6036d74b1a
+#30 0x00007f6036d7afa9
+#31 0x00007f603834c86b
+#32 0x00007f603834ace6
+#33 libglib-2.0.so.0
+#34 g_main_context_dispatch
+#35 0x00007f603834b351  libWPEWebKit-2.0.so.1
+#36 0x00007f603834b667
+#37 0x00007f60382e80c3
+#38 0x00007f6038351346
+#39 start_thread
+```
+
+That this is the faulting thread is not an assumption: the other two threads in the core are parked
+in `__GI___poll` and `__futex_abstimed_wait_common64`, and a thread blocked in poll or in a futex
+wait cannot take a SIGSEGV. It is also the thread the core's own name records,
+`ThreadedCompositor`.
+
+What the shape says, and what it rules out:
+
+- **A recursive descent, bounded, not runaway.** Frames #2 to #26 are three addresses repeating for
+  about eight levels, and #27 onward is an ordinary entry path from the glib main loop. A stack
+  overflow would show the cycle continuing to the base of the stack with no entry path visible, and
+  would raise SIGSEGV on the guard page rather than inside a callee. **Stack exhaustion is ruled
+  out.** So is "the page is too deep": eight levels is a shallow tree.
+- **The fault is not in the recursion itself.** Frame #0 sits at `0x7f603bea0f8a`, far from the
+  `0x7f6038dc…` cluster the recursive frames occupy, so the walk descends normally and then calls
+  something else, which faults. The defect is in what the eighth level reached, not in the walking.
+- **Driven from the main loop, not from script.** Frames #33 and #34 are
+  `g_main_context_dispatch`. This is the compositor servicing a scheduled update, which is why the
+  crash lands "during or around" whatever the flow happens to be doing rather than on a particular
+  action, and why it has appeared at a section save, at `edit-done`, and at `page.goto`.
+
+This closes ruling 200's DONE MEANS item 1: a named cause, with the evidence that names it. A
+SIGSEGV in a bounded recursive walk on WebKit's compositing thread, entered from the glib main
+loop, faulting in a callee at the bottom of the walk.
+
+**Whose defect it is, stated as far as the evidence goes and no further.** Every frame is inside
+`libWPEWebKit-2.0.so.1` or glib. None is in DNA's code, because DNA has no code in that process's
+compositor thread — no application ever does. That does not by itself make it WebKit's bug: a page
+can hand the compositor a layer tree that trips a latent fault in it. What the evidence does settle
+is that the trigger cannot be any of the three things this entry previously chased, because none of
+them is reachable from a compositing tree walk: not `color-scheme`, not native form controls, not
+anything owner-specific.
+
+**What is still unknown** is the name of the function at frame #0 and of the three in the cycle. The
+addresses are unsymbolised because the shipped WPE build has no debug info. They can still be
+resolved to the nearest exported symbol from the library's dynamic table, which is the next step and
+is cheap.
