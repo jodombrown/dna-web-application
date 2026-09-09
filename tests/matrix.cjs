@@ -2757,6 +2757,21 @@ if (require.main === module)
       const { runConnect } = require("./connect.cjs");
       for (const vp of VIEWPORTS)
         for (const theme of THEMES) await runConnect(bt, bname, vp, theme);
+      // Rulings 193, 194: the vocabulary read served and then failing, on both layouts.
+      const { runVocabulary } = require("./vocabulary.cjs");
+      for (const vp of [
+        [390, 844],
+        [1280, 800],
+      ])
+        for (const theme of THEMES)
+          for (const fail of [false, true]) await runVocabulary(bt, bname, vp, theme, fail);
+      // Ruling 198: the blocked viewer's profile.
+      const { runBlock } = require("./block.cjs");
+      for (const vp of [
+        [390, 844],
+        [1280, 800],
+      ])
+        for (const theme of THEMES) await runBlock(bt, bname, vp, theme);
     }
     const fails = results.filter((r) => !r.ok);
     fs.writeFileSync(path.join(OUT, "results.json"), JSON.stringify(results, null, 2));
