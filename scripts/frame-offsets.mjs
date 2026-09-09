@@ -29,21 +29,40 @@ function libraries(src) {
   return out;
 }
 
-/** Backtrace frames, grouped by the thread header that precedes them. */
+/**
+ * Backtrace frames, grouped by whatever header precedes them.
+ *
+ * gdb's `bt` on the current thread — which in a core is the thread that faulted, and so the only
+ * one worth reading — emits frames with NO `Thread N` header at all. Grouping strictly by that
+ * header silently drops exactly those frames, which is what happened to run 40. Frames are
+ * therefore attached to the most recent header of either kind, and frames that appear before any
+ * header open an implicit group rather than being discarded.
+ */
 function threads(src) {
   const out = [];
   let cur = null;
+  const open = (name) => {
+    cur = { name, frames: [] };
+    out.push(cur);
+    return cur;
+  };
   for (const line of src.split("\n")) {
+    const marker = line.match(/^===\s*(.+?)\s*===$/);
+    if (marker) {
+      open(marker[1]);
+      continue;
+    }
     const t = line.match(/^Thread\s+(\d+)\s+\(([^)]*)\)/);
     if (t) {
-      cur = { name: `Thread ${t[1]} (${t[2]})`, frames: [] };
-      out.push(cur);
+      open(`Thread ${t[1]} (${t[2]})`);
       continue;
     }
     const f = line.match(/^#(\d+)\s+(0x[0-9a-f]+)\s+in\s+(.*)$/i);
-    if (f && cur) cur.frames.push({ n: Number(f[1]), addr: BigInt(f[2]), what: f[3].trim() });
+    if (!f) continue;
+    if (!cur) open("current thread (no header; gdb bt)");
+    cur.frames.push({ n: Number(f[1]), addr: BigInt(f[2]), what: f[3].trim() });
   }
-  return out;
+  return out.filter((g) => g.frames.length);
 }
 
 const libs = libraries(text);

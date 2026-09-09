@@ -610,3 +610,28 @@ Recorded rate, by run, at this point:
 | Control, loop       | 5    | 2 (runs 38 and 39; runs 35 to 37 were the `tee` defect and their loops ran clean) |
 | Probe `appearance`  | 7    | 1, a visitor flow                                                                 |
 | Probe `compositing` | 2    | 0, uninformative: effect unverified, pass-count test withdrawn                    |
+
+### Update, 10:12: run 40 crashed; the resolver was dropping the frames it existed to resolve
+
+Run 40 (`34336015250`), a 170-iteration loop on the faulting-thread-first head, crashed:
+`frames extracted; core not retained (260M)`. Three loop runs, three crashes.
+
+The gdb change worked — the faulting thread's frames are in the raw output and the artifact. The
+**resolver** then dropped them. It grouped frames under `Thread N` headers, and gdb's `bt` on the
+current thread emits frames with no such header, so the one backtrace worth resolving was the one
+discarded. Its printed output began at the all-threads sweep instead, which for this core meant
+threads 32 down to 28, every one of them parked in a futex or a semaphore wait.
+
+Fixed: frames now attach to the most recent header of either kind, the `=== FAULTING THREAD ===`
+marker opens a group, and frames appearing before any header open an implicit one rather than
+vanishing. Verified against a fixture before dispatch.
+
+That is the fourth defect in this investigation's own instrumentation, after the `WebKitWebProcess`
+exe lookup, the `tee` ordering, and the `head -600` truncation. This one was predicted before the
+log was read — the parser groups by a header the new gdb output does not emit — which is the only
+reason it was caught on the first crash rather than the third.
+
+Worth recording about the core itself: this process had **32 or more threads**, against three in run
+34's. Every thread visible in the sweep was idle in a futex, a semaphore, `poll` or `g_cond_wait`.
+Thread count is a property of the run, not of the crash, and it does not change the finding; it does
+mean a truncating `head` is even less forgiving here than it was at run 38.
