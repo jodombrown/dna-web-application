@@ -373,6 +373,50 @@ still off, confirmed by the Supabase security advisor in this pass) and Resend A
 | **F16** | Two writers insert into `connection_requests`: `send_introduction` and `publish_post`'s Connect branch. Only the first enforces `is_blocked` and `relationship_state = 'none'`, so the composer's Connect verb can create a pending request to a member who has blocked the author or who is inside the decline window. CLAUDE.md names five write paths for the graph; this is a sixth entry point into the same table | **Medium** | IB-10 |
 | **F17** | Two stores answer "is following": `profile_view` reads `member_follows`, `connect_card` reads `edges`. They agree today because a trigger mirrors one into the other, and `set_follow` is the only writer. Recorded so the mirror is not mistaken for a second source of truth, and so a future writer of `edges` that bypasses the trigger is caught | **Low** | — |
 
+### Addendum, 9 September 18:30: the grants moved under this report, and it is half a fix
+
+Between this pass's live checks (16:55 to 17:02) and 18:30, the column grants on `public.members`
+changed on the canonical project. Verified live, not inferred:
+
+| Role | `SELECT` columns during the audit | `SELECT` columns at 18:30 |
+| --- | --- | --- |
+| `anon` | 13 | **8**: `id, handle, name, headline, avatar_path, cover_path, cover_focus, pattern` |
+| `authenticated` | all 18 | **8**, the same list |
+
+Revoked from both: `origin_country`, `current_place`, `current_country`, `local_tz`, `segment`;
+and from `authenticated` additionally `profile_private`, `profile_shared`, `identified_at`,
+`updated_at`. The `UPDATE` grant is untouched at 14 columns, so `save_profile_section` still writes.
+
+**No migration in this repository accounts for it.** The newest migration on `main` is
+`20260909150000_r198_block_semantics.sql`, which this pass audited; the repo's migrations still
+grant the wide set. The change was applied to the live project directly, so the tree and the
+canonical database now disagree, and a fresh `db reset` would restore the wide grants. That drift is
+worth a finding of its own and is recorded here rather than fixed.
+
+**It does not close F2a or F2b.** `profile_view` and `private.connect_card` are `SECURITY DEFINER`;
+column grants do not apply to them, and the app renders from those projections rather than from the
+table. Verified live at 18:30 with the revoke in place:
+
+- `profile_view('thandiwe-dube')` as `anon` still returns `current_place`, `origin_country`,
+  `local_tz`, `segment` and `segment_label` in its `member` object.
+- `connect_cards('members')` as a signed-in stranger still returns `place`, `origin`, `heritage` and
+  `segment_label` on the card.
+
+So the public profile page and the Connect card are unchanged. What the revoke closed is the raw
+`/rest/v1/members` path, which is the F1 half of the problem, not the F2 half.
+
+**F1 is narrowed, not closed.** `members_member_select` is still `USING (true)`, so any signed-in
+member still enumerates every member row; the row now carries eight identity columns instead of
+eighteen. The flags, location and segment are gone from that path, which is the substance of the
+severity. Read F1 as Medium against the live database and High against the migrations, until the two
+agree.
+
+**Consequence for CI, and it is the reason `main` is red.** `tests/live-checks.cjs` hardcodes
+`CORE_COLS` including four of the revoked columns, so `check 1: anon reads the shared profile's core
+row` now returns 401 and the suite scores 35 of 40 on `main` (run 92). The test and the database
+disagree, and which one is wrong depends on whether the revoke was intended. That decision is not
+this report's to make.
+
 ### What passed, stated as results
 
 Worth recording because these were the things most likely to have gone wrong and did not.
