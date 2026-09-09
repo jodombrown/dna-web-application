@@ -755,8 +755,9 @@ Profile, and this entry's own framing would be the thing that was too narrow.
 There is already a candidate. The same run failed a second WebKit check, `webkit-430x932-light
 flow`, on the composer rather than on Profile: `page.waitForSelector` timed out after 30s waiting
 for `section[role="dialog"][aria-label="Compose"]` to detach, with the locator resolving visible 64
-times. It is a hang, not a crash, so it is **not** recorded here as a G5 sighting and must not be
-counted as one. Two things narrow it and are worth keeping:
+times. It read as a hang rather than a crash on that first sighting, and on that basis it was **not**
+recorded as a G5 sighting. The update below corrects that. Two things narrowed it at the time, and
+one of them still holds:
 
 - `Sheet` unmounts on a plain `setTimeout(SHEET_DUR)`, 300ms, not on `transitionend`. A dropped
   animation event therefore cannot produce a 30-second hang, and that hypothesis is out.
@@ -771,12 +772,57 @@ than after seeing it: if the composer hang recurs on a head that still touches n
 is systematic and gets a root cause, and if it does not it stays recorded as a single unproven
 anomaly, called neither passing nor a flake (ruling 228).
 
-**Outcome, 20:38: it did not recur.** The next run, on `3213f77`
-([34398547302](https://github.com/jodombrown/dna-web-application/actions/runs/34398547302), job
-`102624597019`), passed **5996 of 5996** with both engines and every tier green — no composer hang
-and no G5 crash. `3213f77` is docs and test-reporting only and touches no composer code, so it is
-the second sample the rule asked for. Per the rule, the hang stays a single unproven anomaly and no
-speculative fix was made to the Escape step.
+**Outcome across two further runs: it recurred, and the reading above is wrong.**
+
+The next run, on `3213f77`
+([34398547302](https://github.com/jodombrown/dna-web-application/actions/runs/34398547302)), passed
+**5996 of 5996**, both engines, every tier. On that sample alone the rule said the anomaly stays
+unproven, and that is what was reported at 20:38.
+
+The run after it, on `85ef492`
+([34402440306](https://github.com/jodombrown/dna-web-application/actions/runs/34402440306), job
+`102637543541`), failed **1 of 5997** on the same wait:
+
+```
+FAIL: webkit-360x800-dark flow Error: page.waitForSelector: Target page, context or browser has been closed
+  - waiting for locator('section[role="dialog"][aria-label="Compose"]') to be detached
+    3 x locator resolved to visible <section role="dialog" aria-modal="true" aria-label="Compose">
+```
+
+`85ef492` is documentation only. It touches no composer code, no component and no runtime source at
+all, so under the rule fixed in advance this is systematic and gets a root cause rather than a flake
+label.
+
+**Two things above are corrected by it.**
+
+**It is not a hang.** The first sighting timed out after 30s with the locator resolving 64 times.
+This one resolved 3 times and then reported `Target page, context or browser has been closed`. The
+page did not stay up and refuse to unmount; it went away. That is the same string G5's own crash
+line carries — `WEB PROCESS CRASHED | Error: locator.inputValue: Target page, context or browser has
+been closed` — minus the prefix.
+
+**The prefix is the whole reason this looked like a different defect.** `WEB PROCESS CRASHED` is
+written by `tests/profile.cjs`, which registers `page.on("crash")` and sets a flag. **No flow in
+`tests/matrix.cjs` registers a crash listener** — they register `pageerror` and `console` only. So a
+WebKit web-process crash in the composer flow *cannot* be labelled as one. It surfaces as whichever
+Playwright call happened to be in flight when the process died: a closed target if the crash lands
+during a call, a 30-second timeout if it lands between them.
+
+**So the envelope is WebKit, not WebKit plus Profile.** The "plus Profile" half was an artifact of
+where the instrumentation is, not of where the defect is. That is exactly the reverse of the mistake
+ruling 205 caught, and this entry predicted it one update earlier: if a WebKit failure turns up in a
+third flow, the honest reading may be that the envelope is WebKit. It turned up, in the composer
+flow, twice.
+
+Sightings restated: four labelled crashes on the Profile surface, plus two unlabelled ones on the
+composer flow (`webkit-430x932-light` and `webkit-360x800-dark`), across three of the last four full
+runs. The Profile surface is where the defect is most *visible*, not where it lives.
+
+**Follow-up, not done here** (this PR is a security fix and CLAUDE.md's scope rule keeps it out):
+register `page.on("crash")` in `tests/matrix.cjs` the way `tests/profile.cjs` already does, so a
+crashed web process is reported as a crash in every flow rather than as whatever call it interrupted.
+Two lines per flow, and until it exists every non-Profile WebKit crash will be mis-read the way this
+one was.
 
 **On the two totals, because they differ and the difference is not the suite growing.** The failing
 run recorded 5990 checks and the green one 5996. Nothing was added to `tests/matrix.cjs` between
