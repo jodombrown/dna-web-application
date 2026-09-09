@@ -576,3 +576,37 @@ the loop reproduces it. Sampling, by run:
 | Control, loop       | 4    | 1 (run 38; runs 35 to 37 were the `tee` defect, and their loops ran clean) |
 | Probe `appearance`  | 7    | 1 (visitor)                                                                |
 | Probe `compositing` | 2    | 0, uninformative                                                           |
+
+### Update, 09:40: the loop makes it reproducible on demand
+
+Run 39 (`34332764279`) crashed as well, reporting `frames extracted; core not retained (262M)`. So
+both 170-iteration loop runs crashed, and both lost their faulting thread to the `head -600`
+truncation described above, which the following runs correct.
+
+The rate is the point of this entry, and it changes what this defect costs to investigate:
+
+| Instrument                            | Owner cases per run      | Crash rate                  |
+| ------------------------------------- | ------------------------ | --------------------------- |
+| Profile matrix run, `special=profile` | 18, in about 24 minutes  | about 1 run in 6            |
+| Owner-flow loop, 170 iterations       | 170, in about 35 minutes | 1 per run, twice out of two |
+
+Two crashes in roughly 340 iterations is about one per 170, consistent with the matrix arm's rate
+per owner case rather than better than it. What changed is not the defect's frequency but the
+sampling: a single loop run now contains enough owner cases to fire, so the crash reproduces
+**within one run** instead of once per six. Ruling 200's method asked for exactly this — "looping
+the owner flow until it fires" — and it is now available to anyone dispatching `matrix.yml` with a
+`loop` input.
+
+That matters for what comes next rather than for the finding, which run 34's stack already settled.
+A hypothesis about this crash can now be tested in one runner, against a control arm of the same
+shape, instead of waiting on a one-in-six sighting. Whoever picks this up should use the loop and
+not the matrix for that.
+
+Recorded rate, by run, at this point:
+
+| Arm                 | Runs | Crashed                                                                           |
+| ------------------- | ---- | --------------------------------------------------------------------------------- |
+| Control, matrix     | 23   | 3                                                                                 |
+| Control, loop       | 5    | 2 (runs 38 and 39; runs 35 to 37 were the `tee` defect and their loops ran clean) |
+| Probe `appearance`  | 7    | 1, a visitor flow                                                                 |
+| Probe `compositing` | 2    | 0, uninformative: effect unverified, pass-count test withdrawn                    |
