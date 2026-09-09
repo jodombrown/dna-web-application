@@ -110,15 +110,25 @@ jobs:
             exe=$(file "$c" | grep -o "execfn: '[^']*'" | head -1 | sed "s/execfn: '//; s/'$//")
             [ -n "$exe" ] || exe=$(file "$c" | grep -o "from '[^']*'" | head -1 | sed "s/from '//; s/'$//" | awk '{print $1}')
             echo "exe: ${exe:-unknown}" | tee -a "$OUT/cores/stacks.txt"
+            frames=0
             if [ -n "$exe" ] && [ -e "$exe" ]; then
               gdb -batch -q -ex "set pagination off" -ex "info registers rip" \
                 -ex "thread apply all bt 40" "$exe" --core "$c" 2>&1 |
-                head -500 | tee -a "$OUT/cores/stacks.txt"
+                head -500 | tee -a "$OUT/cores/gdb-$name.txt"
+              cat "$OUT/cores/gdb-$name.txt" >> "$OUT/cores/stacks.txt"
+              grep -qE '^#[0-9]+ ' "$OUT/cores/gdb-$name.txt" && frames=1
             else
-              echo "executable not resolvable; core kept for offline analysis" | tee -a "$OUT/cores/stacks.txt"
+              echo "executable not resolvable" | tee -a "$OUT/cores/stacks.txt"
             fi
-            # The core itself is large; keep it only when a stack could not be produced.
-            cp "$c" "$OUT/cores/" 2>/dev/null || true
+            # A web-process core runs to hundreds of megabytes or more, and an artifact that fails
+            # to upload takes the stack down with it. Keep the core only when no frames came back,
+            # which is the only case where it is still worth analysing offline.
+            if [ "$frames" -eq 1 ]; then
+              echo "frames extracted; core not retained ($(du -h "$c" | cut -f1))" | tee -a "$OUT/cores/stacks.txt"
+            else
+              echo "no frames; retaining core ($(du -h "$c" | cut -f1))" | tee -a "$OUT/cores/stacks.txt"
+              cp "$c" "$OUT/cores/" 2>/dev/null || echo "core copy failed (size?)" | tee -a "$OUT/cores/stacks.txt"
+            fi
           done
         env:
           OUT: ${{ github.workspace }}/matrix-out
