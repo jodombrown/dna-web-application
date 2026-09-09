@@ -150,66 +150,61 @@ dropping `where_floor` to 1 for the two calls and restoring it to 5 immediately 
 
 ## G5. The WebKit web-process crash in the Profile owner flow (ruling 200)
 
-**Severity: medium. Open, narrowed to one property and one element class, not fixed. The cause sits
-in Strand and in a ruled style, so this file reports it rather than changing it.**
+**Severity: medium. Open, narrowed to one element class, not fixed. Ruling 200's premise that every
+sighting is dark is false, and the named suspect this entry first carried is refuted.**
 
-Ruling 200 asked for a cause that explains three facts, not one: why all sightings were dark, why
-all were the Profile owner flow, and why Chromium has never produced it. This entry answers the
-first three by elimination with measured evidence, and stops short of a crash log, for the reason in
-"What could not be done" below.
+Ruling 200 asked for a cause explaining three facts: why every sighting was dark, why every sighting
+was the owner flow, and why Chromium has never produced it. One of those three facts did not
+survive.
 
-### What could not be done, and why
+### The light sighting, which changes the question
 
-The method ruling 200 sets out is to reproduce locally in WebKit and capture the crash. That was not
-possible in this session and the block is environmental, not a judgement call: this session's egress
-policy refuses the WebKit binary. `playwright install webkit` and `npm i @playwright/browser-webkit`
-both fail with
+Run 62's **second attempt** (`34314303037`, job `102354990849`, finished 06:34 on 9 September 2026,
+after this investigation opened) failed one check out of 5990:
 
 ```
-403 request blocked: no rule or allowlist entry allows host "playwright.download.prss.microsoft.com"
-403 ... host "cdn.playwright.dev"
+5989/5990 checks passed
+FAIL: webkit-1536x960-light profile owner flow WEB PROCESS CRASHED
+  | Error: locator.evaluate: Target page, context or browser has been closed
+  | Call log: - waiting for locator('[data-testid="edit-done"]').first()
+  | state unavailable: Error: page.evaluate: Target crashed
+  | DOM before the section saves {"nodes":598,"options":71,"selects":20,"fields":14,"sections":15}
 ```
 
-and no system WebKit (`WebKitWebDriver`, `MiniBrowser`, webkit2gtk) is present. Chromium is
-pre-installed and was used instead. So there is **no crash log, no signal and no stack in this
-entry**, and no flow bisect either, since a bisect also needs the engine that crashes. What follows
-is an elimination performed in Chromium against the same DOM the crashing runs sampled, which is
-sound for deciding _what differs_ between the crashing and non-crashing cases, and silent on the
-crash itself.
+`webkit-1536x960-**light**`. Read from the job log, not inferred. Ruling 200's table records run 62
+as `webkit-820x1180-dark`, which was attempt 1; attempt 2 of the same run number crashed in light,
+at a different viewport, in the same flow.
 
-### The measurement
+So the constants are two, not three: **WebKit, and the Profile owner flow.** Theme is not one, and
+neither is viewport. Both are labels on whichever at-risk case happened to be running.
 
-The Profile owner flow was driven to the point run 62 sampled — edit mode, immediately before the
-section saves — under `tests/matrix.cjs`'s mock, and every element's compositing-relevant computed
-style was recorded: `opacity`, `transform`, `filter`, `backdrop-filter`, `mix-blend-mode`,
-`mask-image`, `will-change`, `box-shadow`, `background-image`, `appearance`, `color-scheme`,
-`isolation`, `contain`, `animation`. Four cells were compared: light against dark, owner against
-visitor, read against edit, and before a section save against after.
+### What that refutes, including this entry's own first answer
 
-The DOM matches the crashing runs. At 820x1180 (run 62's viewport) the flow reports 535 nodes, 71
-options and 20 selects against run 62's 546, 71 and 20; options and selects match exactly and the
-11-node delta is the dev server against the deployed build. Node counts are identical in light and
-dark at every viewport, which confirms ruling 200's reading that this is not a DOM-size cliff and
-adds that it is not a DOM-shape difference between the themes either.
+This entry originally named `color-scheme: dark` on native form controls as the cause. **That is
+refuted.** In light theme `color-scheme` resolves to `normal`, so the dark form-control path is
+never taken, and the crash happened anyway. A cause that is absent from a sighting is not the cause.
 
-**Finding 1, the dark discriminator.** Across the whole owner flow, in both read and edit mode, the
-only computed-style difference between light and dark on any of those properties is
-`color-scheme: normal` becoming `color-scheme: dark`. After removing `color-scheme` from the
-comparison, the residual is **zero differing signatures**. Nothing else about the surface is
-dark-specific.
+The measurement that named it is still correct, and now says something better. Across the whole
+owner flow, in both read and edit mode, the only computed-style difference between light and dark on
+any compositing-relevant property is `color-scheme`; after removing it the residual is **zero
+differing signatures**. Read forward rather than backward, that predicts the light sighting: if the
+two themes are identical in every compositing respect, whatever kills the process in dark can kill
+it in light. The "every sighting is dark" run of four was a coin landing the same way four times
+across a population of nine dark and nine light owner cases per run, and then landing the other way.
 
-That rules out, with evidence rather than by inspection, four of the five suspects ruling 200
-listed. Pattern assets and the Adinkra badge set render through identical `mask-image` in both
-themes (69 masked elements in each). `backdrop-filter` is `none` on every element in the surface,
-`mix-blend-mode` is `normal` on every element, and the only `filter` is a hover `brightness()` on
-`Button` and `PlaceTile`, in both themes. No dark-only token uses `color-mix`, `oklch` or relative
-colour syntax: the `[data-theme="dark"]` block in `src/styles/strand.css` is plain hex, and the
-`oklch` values in `src/styles.css` are defined in both `:root` and `.dark`, so they are live in
-light too. Layer-inducing properties are identical across the themes (16 elements below opacity 1 in
-each).
+That same measurement still rules out, by measurement rather than inspection, four of ruling 200's
+five listed suspects — pattern and Adinkra masks (69 masked elements in each theme),
+`backdrop-filter` (`none` on every element), `mix-blend-mode` (`normal` on every element), and
+dark-only `color-mix` / `oklch` / relative colour (the `[data-theme="dark"]` block is plain hex, and
+`styles.css`'s `oklch` is defined in both `:root` and `.dark`). It rules them out as _theme_
+discriminators. Since theme is no longer a discriminator at all, they are ruled out of that role and
+back into the general population — but none of them is owner-specific, and the owner constant is the
+one that held.
 
-**Finding 2, the owner discriminator.** Native-appearance form controls exist only in the owner
-view. Visitor and public mount **zero**; the owner read view mounts 16 and edit mode 26:
+### What survives
+
+The owner discriminator, which is now the only structural one left, and is unaffected by the light
+sighting. Native-appearance form controls exist in the owner view and in no other view:
 
 |                                | selects | options | inputs | textareas | native-appearance controls |
 | ------------------------------ | ------- | ------- | ------ | --------- | -------------------------- |
@@ -217,119 +212,101 @@ view. Visitor and public mount **zero**; the owner read view mounts 16 and edit 
 | owner read, either theme       | 14      | 42      | 2      | 0         | **16**                     |
 | owner edit, either theme       | 20      | 71      | 9      | 3         | **26**                     |
 
-Of the 26 in edit mode, 16 are painted by the engine's own form-control theme while being invisible:
-14 `VisibilitySelect` overlays (`appearance: auto`, `opacity: 0`, `position: absolute`, boxes of
-174x34, 161x34 and 122x34) and 2 `Switch` checkboxes (`appearance: auto`, `opacity: 0`, and a
-**0x0** box). The remaining 10 are the visible text inputs and textareas, also `appearance: auto`.
-The six `Select` controls set `appearance: none` and are author-painted.
+Visitor and public never crash and mount none of them. The crashing run's own DOM sample —
+71 options, 20 selects, 14 fields, 15 sections — matches this census exactly, at every viewport
+measured (430, 820, 1280, 1366, 1536) and in both themes, which is also why viewport cannot be the
+variable: the at-risk population is identical at every one of them.
 
-**Finding 3, the crash window is not an event.** A section save remounts nothing: across the `where`
-save, all 26 native controls survived, 0 were newly mounted and 0 unmounted. So the "a save promotes
-or animates many elements at once" reading in ruling 200's suspect 4 does not hold, and neither does
-any remount-storm reading. The condition is standing, present from the moment the owner view paints,
-not created by the saves.
+Of the 26 in edit mode, 16 are painted by the engine's own form-control theme while invisible: 14
+`VisibilitySelect` overlays (`appearance: auto`, `opacity: 0`, `position: absolute`) and 2 `Switch`
+checkboxes (`appearance: auto`, `opacity: 0`, and a **0x0** box). The other 10 are the visible text
+inputs and textareas, also `appearance: auto`. The six `Select` controls set `appearance: none` and
+are author-painted.
 
-### The named suspect
+**The surviving suspect** is therefore native-appearance form controls on WebKit's form-control
+paint path, theme-independent — not the dark branch of that path. It still explains owner (nothing
+else in the surface is owner-only) and Chromium-never (Blink paints controls itself in Skia; WebKit's
+Linux port paints through a separate native theme). It no longer has to explain dark, because dark
+is not a fact about this crash.
 
-The intersection of finding 1 and finding 2 contains exactly one thing, and nothing else in the
-surface is in it:
+It is a suspect narrowed by elimination, not a proven cause, and this entry has now been wrong once
+about a suspect reached the same way. The confirming experiment is below.
 
-> **Native-appearance form controls painted through WebKit's form-control theme under
-> `color-scheme: dark`** — 26 of them in edit mode, 16 of which are painted while invisible, two of
-> those at a zero-area box.
+### Where the crash sits in the flow
 
-It is the only candidate that explains all three facts at once. Dark, because `color-scheme: dark`
-is the sole dark-specific property in the surface and it is precisely the property that switches a
-native control onto the theme's dark branch. Owner, because the owner view is the only view that
-mounts a native control at all, so visitor and public have nothing on that path to crash. Chromium
-never, because Blink paints form controls itself in Skia and treats `color-scheme` as a colour-token
-switch inside that same painting code, whereas WebKit's Linux port paints controls through a
-separate native theme (`RenderThemeAdwaita`) with a distinct dark branch — a different code path,
-reached only by the engine that crashes.
-
-This is a suspect named by elimination, not a proven cause. The elimination is strong — the residual
-after `color-scheme` is zero, and the owner/visitor split is 26 against 0 — but it establishes what
-differs, not what faults. The confirming experiment is below and has not been run.
+At `[data-testid="edit-done"]`, which the flow clicks after the section saves. A section save
+remounts nothing — across the `where` save all 26 native controls survived, 0 newly mounted, 0
+unmounted — so the crash window is a standing condition being exercised, not an event that creates
+one.
 
 ### Why nothing was changed
 
-Ruling 200's guardrails both apply, and they point the same way.
+Every artefact in the suspect set is Strand's, ported verbatim, and ruled:
 
-Every element of the suspect set is Strand's, ported verbatim, and carries a ruling:
+| Artefact                                                   | Provenance                                                             | Ruling   |
+| ---------------------------------------------------------- | ---------------------------------------------------------------------- | -------- |
+| `Switch.tsx`, the 0x0 `opacity: 0` native checkbox         | "Ported from Strand `components/core/Switch.jsx`. Behavior unchanged." | 98       |
+| `Select.tsx`                                               | "Ported from Strand `components/core/Select.jsx`. Behavior unchanged." | 98       |
+| `VisibilitySelect.tsx`, the 14 `opacity: 0` native selects | "Ported from `profile/strand-patch/Profile.jsx`. Behavior unchanged."  | 124, 136 |
 
-| Artefact                                                               | Provenance                                                                                   | Ruling   |
-| ---------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- | -------- |
-| `color-scheme: dark` on `[data-theme="dark"]`, `src/styles/strand.css` | ported verbatim from the extraction; the file header records that values are not edited here | 57, 98   |
-| `Switch.tsx`, the 0x0 `opacity: 0` native checkbox                     | "Ported from Strand `components/core/Switch.jsx`. Behavior unchanged."                       | 98       |
-| `Select.tsx`                                                           | "Ported from Strand `components/core/Select.jsx` (extraction 3654dd17). Behavior unchanged." | 98       |
-| `VisibilitySelect.tsx`, the 14 `opacity: 0` native selects             | "Ported from `profile/strand-patch/Profile.jsx` (B3-Profile-v3). Behavior unchanged."        | 124, 136 |
+`color-scheme: dark` in `src/styles/strand.css` (rulings 57, 98) was in this table while it was the
+suspect and is out of it now, but the conclusion is unchanged for the rest: if the surviving suspect
+is confirmed, the fix is a Strand change under a reopened ruling 98, not an edit to this repo's
+copy. Ruling 200 says a ruled style gets its ruling reopened rather than quietly changed, and a
+cause in Strand is reported as a Strand request. Nothing in `src/` was touched, and the case was not
+weakened, skipped, retried or quarantined.
 
-So the fix, if the suspect is confirmed, is a Strand change and a reopened ruling 57 or 98, not an
-edit to this repo's copy. Ruling 200 says so directly: a ruled style gets its ruling reopened rather
-than being quietly changed, and a cause in Strand is reported as a Strand request. Nothing in
-`src/` was touched by this investigation, and the case was not weakened, skipped, retried or
-quarantined.
+### Ruling 152, and ruling 200's own premise
 
-### Ruling 152 is corrected, not confirmed
+Ruling 152 called this a moving navigation-timing race. Corrected: the condition that separates
+crashing from passing cases is static, present from the first paint of the owner view, unchanged by
+navigation and unchanged by the saves. What 152 read as movement is sampling across identical
+at-risk cases.
 
-Ruling 152 characterised this as a navigation-timing race that moves each run. The evidence does not
-support it. The condition that separates the crashing cases from the passing ones is **static**: it
-is present from the first paint of the owner view in dark, it is unchanged by navigation, and
-finding 3 shows it is unchanged by the saves the crash sits on. There is nothing timing-shaped about
-it.
+Ruling 200 replaced 152's one moving variable with three constants. Corrected too: there are two.
+The theme constant broke on its own evidence within hours of the ruling being written, which is what
+a constant asserted from four samples does. The correct statement is that the crash is
+**WebKit-only and owner-flow-only**, and that every other axis so far — theme, viewport — is a label
+on the sample, not a property of the defect.
 
-What ruling 152 read as movement is sampling. The matrix varies viewport and theme; of the eighteen
-Profile owner cases in a full run, the nine dark ones all carry the identical condition, in the
-identical quantity — the DOM stats above are the same at 430, 820, 1280 and 1366 — and roughly one
-gives out per run. A fault that fires on about one in nine identical at-risk cases lands on a
-different viewport each time by construction. The viewport is not a variable; it is the label on
-whichever at-risk case happened to be running. Ruling 152's own note that the crash appeared at
-430x932, "the narrowest viewport, which a resource ceiling would not produce", is consistent with
-this: viewport does not predict it because viewport has nothing to do with it.
-
-The framing ruling 152 withdrew — cumulative resource — is not reinstated here either. Finding 3
-rules out accumulation across the saves.
-
-### The single next step, and the instrument that runs it
-
-The step is: run the Profile owner flow in **WebKit, dark, at 820x1180**, looping until it fires, in
-an environment that can obtain the WebKit binary. CI is that environment — `pages.yml` and
-`matrix.yml` both `playwright install ... webkit` and run the matrix with `WEBKIT: "1"` — so the
-experiment is built here rather than left as an instruction for someone else to build.
+### The instrument, and the next step
 
 `tests/webkit-crash-loop.cjs` loops `tests/profile.cjs`'s own `runOwner`, so the flow under test is
-the flow the matrix runs rather than a reimplementation that could diverge from it.
-`.github/workflows/webkit-crash.yml` runs it on a runner with core dumps enabled and pulls the
-signal and stack out of any core with gdb. It is `workflow_dispatch` only: not the matrix, not a
-merge gate, and it changes no pass criterion. Two arms:
+the flow the matrix runs. `.github/workflows/webkit-crash.yml` runs it with core dumps enabled and
+extracts the signal and stack from any core with gdb. It is `workflow_dispatch` only: not the
+matrix, not a merge gate, no pass criterion changed. Themes alternate per iteration, because theme
+is not a variable and pinning one halves the at-risk population.
 
-1. **Control.** The flow unmodified. Supplies the crash log, signal and stack this entry lacks, and
-   the iteration count the probe is measured against.
-2. **Probe.** The same flow with `color-scheme: light` forced on every element and nothing else
-   changed. It is injected into the running page through a drop-in engine object that wraps
-   `newContext`, so `profile.cjs` is untouched; it is a probe, not a fix, not a repo style change,
-   and not a quarantine.
+- **Control.** The flow unmodified. Supplies the crash log, signal and stack this entry still lacks.
+- **Probe.** The same flow with `appearance: none` forced on every form control, taking them off the
+  engine's native form-control paint path. Validated in Chromium before use: native-appearance
+  controls go from 16 to 0, and the flow records the same 29 checks with the same single
+  dev-server-only warning, so the probe moves the variable without perturbing the flow.
+- **`PROBE=color-scheme`** is kept only because it is cheap. The light sighting predicts it makes no
+  difference; a run where it does would mean the light sighting has a second cause.
 
-The probe was validated in Chromium before being committed, because a probe that does not move the
-variable would make a null result meaningless. Under injection all 26 native-appearance controls go
-from `color-scheme: dark` to `color-scheme: light`, while `data-theme="dark"`, `--ink` (`#f2ede5`)
-and `--bg` (`#141412`) are byte-identical to the control. Exactly one variable moves.
+Reading the result: crash in control and none in probe across at least three times the control's
+mean iteration count confirms the surviving suspect, and the change then belongs in Strand under a
+reopened ruling 98. Crash in both refutes it, and the next place to look is what else is owner-only
+— the edit bar, the audience machinery, and the write path itself, which is the one thing the owner
+flow does that no other view does. No crash in fifty control loops is the finding ruling 200
+anticipated, and the step becomes running the full at-risk population in one browser process, in
+order, as the matrix does, since the matrix produces this crash roughly once per run and a tight
+loop over a single case may not reproduce the conditions that matter.
 
-Reading the result:
+### Sampling so far
 
-- Crash in control, none in probe across at least three times the control's mean iteration count →
-  the suspect is confirmed. The change then belongs in **Strand**, under a reopened ruling 57 or 98,
-  not in this repo.
-- Crash in both → the elimination in this entry is wrong. `color-scheme` is excluded as the
-  discriminator and the next place to look is the six `appearance: none` controls and the
-  author-painted surface.
-- No crash in fifty loops of the control → the finding ruling 200 anticipated. The condition is
-  standing rather than event-driven, so a crash that will not reproduce under a tight loop points at
-  the run's cumulative state across cases rather than at the flow. The step then becomes running the
-  nine dark owner cases in one browser process, in order, as the matrix does.
+| Run                                                      | Population                                         | Result                                        |
+| -------------------------------------------------------- | -------------------------------------------------- | --------------------------------------------- |
+| `34314303037` (run 62, attempt 2)                        | full matrix, both themes, both engines             | **crash**, `webkit-1536x960-light`, 5989/5990 |
+| `34319186149` (dispatched, `special=profile theme=dark`) | 9 dark WebKit owner cases + visitors, both engines | no crash, 1770/1770                           |
 
-One constraint on running it: GitHub only dispatches a `workflow_dispatch` workflow that exists on
-the default branch, so `webkit-crash.yml` is dispatchable once this branch merges and not before.
-Until then the same arm-1 sample is obtained by dispatching the existing `matrix.yml` with
-`special=profile`, `only=[820,1180]`, `theme=dark`, which runs the identical owner flow in WebKit
-against the branch's deployment, one owner iteration per dispatch.
+One clean run of the nine dark owner cases is consistent with the historical rate of about one
+crash per full run and refutes nothing on its own. Three further dispatched runs of the same shape
+were queued; they were aimed at dark before the light sighting was found, which halves their
+coverage but does not invalidate them.
+
+One constraint on running the instrument: GitHub dispatches a `workflow_dispatch` workflow only from
+the default branch, so `webkit-crash.yml` becomes dispatchable when this branch merges. Until then
+the control arm is sampled by dispatching the existing `matrix.yml` with `special=profile` and no
+theme filter.

@@ -4,8 +4,10 @@
 #
 # Two arms run in the same job so one runner's conditions cover both:
 #   control  the flow as the matrix runs it, which supplies the crash and its stack.
-#   probe    the same flow with color-scheme forced to light and nothing else changed, which is the
-#            single-variable test of G5's named suspect.
+#   probe    the same flow with every form control taken off the engine's native form-control paint
+#            path (appearance: none), which is the single-variable test of G5's surviving suspect.
+#            Theme is not one of the arms: run 62's second attempt crashed in light, so the two
+#            themes are both at risk and the loop alternates them.
 name: Ruling 200 WebKit crash loop
 
 on:
@@ -22,11 +24,15 @@ on:
       viewport:
         description: One viewport as JSON, e.g. [820,1180]
         required: false
-        default: "[820,1180]"
+        default: "[1536,960]"
       theme:
-        description: Theme to loop in
+        description: Theme to loop in (both alternates per iteration; theme is not a variable)
         required: false
-        default: dark
+        default: both
+      probe:
+        description: What the probe arm neutralises (appearance or color-scheme)
+        required: false
+        default: appearance
       arms:
         description: Which arms to run (control, probe, or both)
         required: false
@@ -89,11 +95,12 @@ jobs:
           ulimit -c unlimited
           ulimit -c
           node tests/webkit-crash-loop.cjs 2>&1 | tee "$OUT/loop.log"
-      - name: Probe arm (color-scheme forced to light, nothing else changed)
+      - name: Probe arm (the suspect neutralised, nothing else changed)
         if: ${{ inputs.arms != 'control' }}
         env:
           BASE: ${{ steps.target.outputs.url }}
           ARM: probe
+          PROBE: ${{ inputs.probe }}
           LOOPS: ${{ inputs.loops }}
           ONLY: ${{ inputs.viewport }}
           THEME: ${{ inputs.theme }}
