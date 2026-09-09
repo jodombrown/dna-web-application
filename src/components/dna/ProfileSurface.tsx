@@ -32,12 +32,7 @@ import { PatternPicker } from "@/components/strand/PatternPicker";
 import { ProfileHeader, type MastheadPattern } from "@/components/strand/ProfileHeader";
 import { RailWidget } from "@/components/strand/RailWidget";
 import { SectionCard } from "@/components/strand/SectionCard";
-import {
-  SegmentBlock,
-  SEGMENT_LABEL,
-  type Segment,
-  type SegmentData,
-} from "@/components/strand/SegmentBlock";
+import { SegmentBlock, type Segment, type SegmentData } from "@/components/strand/SegmentBlock";
 import { Select } from "@/components/strand/Select";
 import { Sheet } from "@/components/strand/Sheet";
 import { Switch } from "@/components/strand/Switch";
@@ -614,8 +609,8 @@ export function ProfileSurface({ handle, edit, asPublic }: ProfileSurfaceProps) 
                 }}
               >
                 <span style={{ fontWeight: 500 }}>
-                  {k === "segment" && profile.member.segment
-                    ? SEGMENT_LABEL[profile.member.segment]
+                  {k === "segment" && profile.member.segment_label
+                    ? profile.member.segment_label
                     : TITLES[k]}
                 </span>
                 <span style={{ color: "var(--ink-3)", fontSize: 13 }}>
@@ -1128,7 +1123,8 @@ function ProfileBody(p: BodyProps) {
   const split = expanded && publicView;
   const coverH = compact ? 150 : expanded ? (publicView ? 300 : 220) : 200;
   const avatarSize = compact ? 80 : expanded ? (publicView ? 128 : 104) : 96;
-  const segmentLabel = m.segment ? SEGMENT_LABEL[m.segment] : null;
+  // Ruling 187: the label arrives resolved on the member object; the client keeps no map.
+  const segmentLabel = m.segment_label ?? null;
   const setDraft = (id: FieldId, patch: Draft) =>
     p.setDrafts((st) => ({ ...st, [id]: { ...((st[id] as Draft | undefined) ?? {}), ...patch } }));
 
@@ -1477,6 +1473,12 @@ function ProfileBody(p: BodyProps) {
     const fields: SegmentFields = segEditing
       ? (sd?.variants[sd.segment] ?? {})
       : (s.segment?.fields ?? {});
+    // Ruling 187: the heading follows the segment being edited, so it reads the vocabulary rather
+    // than member.segment_label, which is the saved one. Both resolve to public.member_segments.
+    const segLabel = segId
+      ? (p.vocab?.segments?.find((o) => o.value === segId)?.label ??
+        (segId === m.segment ? (m.segment_label ?? null) : null))
+      : null;
     const segEmpty = !Object.values(fields).some((v) => (Array.isArray(v) ? v.length : !!v));
     const present = owner || (!!s.segment && !segEmpty);
     if (present) {
@@ -1485,7 +1487,7 @@ function ProfileBody(p: BodyProps) {
         <SectionCard
           key="segment"
           testId="section-segment"
-          title={segId ? SEGMENT_LABEL[segId] : "Segment"}
+          title={segLabel ?? "Segment"}
           owner={owner}
           editing={segEditing}
           keepVisibility={editMode}
@@ -1509,6 +1511,7 @@ function ProfileBody(p: BodyProps) {
             editing={segEditing}
             interestOptions={p.vocab?.interests ?? []}
             timelineOptions={p.vocab?.timeline}
+            segmentOptions={p.vocab?.segments}
             onChange={(d) =>
               p.setDrafts((st) => {
                 const prev = st.segment ?? { segment: segId ?? "returnee", variants: {} };

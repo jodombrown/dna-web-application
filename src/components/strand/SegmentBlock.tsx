@@ -14,9 +14,12 @@ export type SegmentField =
   | { k: "base"; label: string; kind: "text"; short: true }
   | { k: "interests"; label: string; kind: "vocab" };
 
-export const SEG: Record<Segment, { label: string; fields: SegmentField[] }> = {
+// Ruling 187: the labels are not here. public.member_segments is the one label source, reaching
+// this component as profile_vocabularies().segments (the chooser) and profile_view's
+// member.segment_label (the heading). SEG carries only the per-variant field sets, which are
+// structure, not vocabulary.
+export const SEG: Record<Segment, { fields: SegmentField[] }> = {
   returnee: {
-    label: "Returnee",
     fields: [
       {
         k: "timeline",
@@ -28,24 +31,15 @@ export const SEG: Record<Segment, { label: string; fields: SegmentField[] }> = {
     ],
   },
   anchor: {
-    label: "Anchor",
     fields: [
       { k: "base", label: "Continental base", kind: "text", short: true },
       { k: "offer", label: "What I can host or offer", kind: "text" },
     ],
   },
-  ally: { label: "Ally", fields: [{ k: "support", label: "How I support", kind: "text" }] },
+  ally: { fields: [{ k: "support", label: "How I support", kind: "text" }] },
   exploring: {
-    label: "Still Exploring",
     fields: [{ k: "interests", label: "Interests", kind: "vocab" }],
   },
-};
-
-export const SEGMENT_LABEL: Record<Segment, string> = {
-  returnee: "Returnee",
-  anchor: "Anchor",
-  ally: "Ally",
-  exploring: "Still Exploring",
 };
 
 export type SegmentData = {
@@ -65,6 +59,8 @@ export type SegmentBlockProps = {
   onChange?: ((data: SegmentData) => void) | undefined;
   interestOptions?: string[];
   timelineOptions?: string[] | undefined;
+  /** Ruling 187: the chooser's values and labels, from profile_vocabularies().segments. */
+  segmentOptions?: { value: Segment; label: string }[] | undefined;
   style?: CSSProperties | undefined;
 };
 
@@ -75,6 +71,7 @@ export function SegmentBlock({
   onChange,
   interestOptions = [],
   timelineOptions,
+  segmentOptions = [],
   style,
 }: SegmentBlockProps) {
   const def = SEG[segment] || SEG.exploring;
@@ -94,7 +91,7 @@ export function SegmentBlock({
         <Select
           label="Segment"
           value={segment}
-          options={(Object.keys(SEG) as Segment[]).map((k) => ({ value: k, label: SEG[k].label }))}
+          options={segmentOptions}
           onChange={(e) => onChange && onChange({ ...data, segment: e.target.value as Segment })}
         />
       )}

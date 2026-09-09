@@ -95,7 +95,11 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         href: appCss,
       },
       { rel: "manifest", href: "/manifest.webmanifest" },
+      // Ruling 184's asset contract: every icon resolves by path from public/, so the redesign is
+      // a file overwrite in one directory. The favicon.png line is the founder's own 9 September
+      // edit and is left exactly as they set it.
       { rel: "icon", href: "/favicon.png", type: "image/png" },
+      { rel: "apple-touch-icon", href: "/apple-touch-icon.png", sizes: "180x180" },
     ],
   }),
   shellComponent: RootShell,

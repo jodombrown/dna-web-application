@@ -141,6 +141,8 @@ const PROFILE_MEMBER = {
   handle: "thandiwe-dube",
   pattern: "kente",
   segment: "returnee",
+  // Ruling 187: profile_view resolves the label from public.member_segments.
+  segment_label: "Returnee",
   headline: "Solar engineer, mini-grids for rural clinics",
   local_tz: "Africa/Johannesburg",
   cover_focus: "center 35%",
@@ -248,6 +250,13 @@ const VOCAB = {
   interests: ["Energy", "Health", "Farming"],
   countries: ["South Africa", "Ghana", "Nigeria", "Kenya"],
   world: ["Germany", "Ghana", "Kenya", "South Africa", "United Kingdom", "United States"],
+  // Ruling 187: the segment chooser reads the vocabulary, not a map in the component.
+  segments: [
+    { value: "returnee", label: "Returnee" },
+    { value: "anchor", label: "Anchor" },
+    { value: "ally", label: "Ally" },
+    { value: "exploring", label: "Still Exploring" },
+  ],
   heritage: ["Continental", "First generation", "Second generation"],
   pathway: ["Already returned", "Planning to return", "Not returning"],
   timeline: ["Already back", "Within a year", "One to three years", "Someday"],
