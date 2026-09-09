@@ -25,6 +25,10 @@ on:
         description: Ruling 200 diagnostic; compositing, appearance or color-scheme. Empty runs the control.
         required: false
         default: ""
+      loop:
+        description: Ruling 200; iterations of the owner-flow crash loop instead of the matrix. Empty runs the matrix.
+        required: false
+        default: ""
 
 jobs:
   matrix:
@@ -77,7 +81,29 @@ jobs:
           sudo sysctl -w kernel.core_uses_pid=0 || true
           sudo sysctl -w fs.suid_dumpable=1 || true
           cat /proc/sys/kernel/core_pattern
+      # Ruling 200: the crash lands about once in six full profile runs, so waiting for one is a poor
+      # use of a runner. tests/webkit-crash-loop.cjs drives tests/profile.cjs's own runOwner in a
+      # tight loop instead, concentrating on the flow that has produced most sightings, and always
+      # exits 0 because a crash is the observation rather than a failure. Diagnostic only.
+      - name: Run the owner-flow crash loop (ruling 200)
+        if: ${{ inputs.loop != '' }}
+        env:
+          BASE: ${{ steps.target.outputs.url }}
+          OUT: ${{ github.workspace }}/matrix-out
+          LOOPS: ${{ inputs.loop }}
+          ONLY: ${{ inputs.only }}
+          THEME: ${{ inputs.theme || 'both' }}
+          ARM: ${{ inputs.probe != '' && 'probe' || 'control' }}
+          PROBE: ${{ inputs.probe }}
+        run: |
+          ulimit -c unlimited
+          node tests/webkit-crash-loop.cjs 2>&1 | tee "$OUT/loop.log"
+          echo "### ruling 200 loop" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          grep -E '^(ruling 200 loop|RESULT|LOOP .*CRASHED)' "$OUT/loop.log" >> "$GITHUB_STEP_SUMMARY" || true
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
       - name: Run matrix (Chromium and WebKit)
+        if: ${{ inputs.loop == '' }}
         env:
           BASE: ${{ steps.target.outputs.url }}
           WEBKIT: "1"
