@@ -105,8 +105,9 @@ export async function hydratePosts(
       ? sb.from("opportunities").select("*").in("id", by("opportunity"))
       : Promise.resolve({ data: [] as Tables<"opportunities">[] }),
     by("connection_request").length
-      ? sb.from("connection_requests").select("*").in("id", by("connection_request"))
-      : Promise.resolve({ data: [] as Tables<"connection_requests">[] }),
+      ? // The intros projection (Brief 4, ruling 157): who and why for either party, never a status.
+        sb.rpc("connection_request_intros", { p_ids: by("connection_request") })
+      : Promise.resolve({ data: [] as { id: string; to_name: string; why: string | null }[] }),
     by("story").length
       ? sb.from("stories").select("*").in("id", by("story"))
       : Promise.resolve({ data: [] as Tables<"stories">[] }),
@@ -219,21 +220,14 @@ export async function hydratePosts(
   });
 }
 
-/** Ids of members with an accepted connection to this member, and Spaces where they hold an active role. */
+/** Ids of members with an accepted connection to this member (the adjacency projection, Brief 4), and Spaces where they hold an active role. */
 async function networkIds(sb: Supabase, memberId: string) {
   const [{ data: conns }, { data: roles }] = await Promise.all([
-    sb
-      .from("connection_requests")
-      .select("from_member_id,to_member_id")
-      .eq("status", "accepted")
-      .or(`from_member_id.eq.${memberId},to_member_id.eq.${memberId}`),
+    sb.from("member_connections").select("other_id").eq("member_id", memberId),
     sb.from("space_roles").select("space_id").eq("member_id", memberId).eq("status", "active"),
   ]);
   const members = new Set<string>();
-  for (const c of conns ?? []) {
-    const other = c.from_member_id === memberId ? c.to_member_id : c.from_member_id;
-    if (other) members.add(other);
-  }
+  for (const c of conns ?? []) if (c.other_id) members.add(c.other_id);
   return { members: [...members], spaces: (roles ?? []).map((r) => r.space_id) };
 }
 

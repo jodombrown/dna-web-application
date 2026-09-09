@@ -32,7 +32,10 @@ export async function loadNotifications(memberId: string, limit = 50): Promise<N
     ...ids("space"),
     ...rows.filter((r) => r.actor_kind === "space").map((r) => r.actor_id as string),
   ];
-  const [spaces, events, opps, reqs, roles] = await Promise.all([
+  const memberActorIds = rows
+    .filter((r) => r.actor_kind === "member" && r.actor_id)
+    .map((r) => r.actor_id as string);
+  const [spaces, events, opps, actors, roles] = await Promise.all([
     spaceIds.length
       ? sb.from("spaces").select("id,title").in("id", spaceIds)
       : Promise.resolve({ data: [] as { id: string; title: string }[] }),
@@ -42,9 +45,9 @@ export async function loadNotifications(memberId: string, limit = 50): Promise<N
     ids("opportunity").length
       ? sb.from("opportunities").select("id,title").in("id", ids("opportunity"))
       : Promise.resolve({ data: [] as { id: string; title: string }[] }),
-    ids("connection_request").length
-      ? sb.from("connection_requests").select("id,to_name").in("id", ids("connection_request"))
-      : Promise.resolve({ data: [] as { id: string; to_name: string }[] }),
+    memberActorIds.length
+      ? sb.from("members").select("id,name").in("id", memberActorIds)
+      : Promise.resolve({ data: [] as { id: string; name: string }[] }),
     ids("space").length
       ? sb
           .from("space_roles")
@@ -56,7 +59,7 @@ export async function loadNotifications(memberId: string, limit = 50): Promise<N
   const space = new Map((spaces.data ?? []).map((s) => [s.id, s.title]));
   const event = new Map((events.data ?? []).map((e) => [e.id, e]));
   const opp = new Map((opps.data ?? []).map((o) => [o.id, o.title]));
-  const req = new Map((reqs.data ?? []).map((r) => [r.id, r.to_name]));
+  const actorName = new Map((actors.data ?? []).map((a) => [a.id, a.name]));
   const role = new Map((roles.data ?? []).map((r) => [r.space_id, r.role]));
 
   return rows.map((r): NotificationView => {
@@ -69,14 +72,10 @@ export async function loadNotifications(memberId: string, limit = 50): Promise<N
           : r.object_kind === "opportunity"
             ? opp.get(oid)
             : undefined;
-    // Member display names live in auth metadata, which no table exposes yet; a Space actor has a
-    // title, a member actor on an accepted intro is the name the member typed on the request.
-    const actorName =
-      r.actor_kind === "space"
-        ? space.get(r.actor_id ?? "")
-        : r.kind === "connection_accepted" && r.object_kind === "connection_request"
-          ? req.get(oid)
-          : undefined;
+    // A Space actor has a title; a member actor is named from the members core row (Brief 3), which
+    // every signed-in member may read. The request row itself is never read by the sender (ruling 157).
+    const actor =
+      r.actor_kind === "space" ? space.get(r.actor_id ?? "") : actorName.get(r.actor_id ?? "");
     let detail: string | undefined;
     if (r.kind === "space_role_approved") {
       const rl = role.get(oid);
@@ -86,7 +85,7 @@ export async function loadNotifications(memberId: string, limit = 50): Promise<N
     }
     return {
       ...r,
-      actor: actorName || "A member",
+      actor: actor || "A member",
       object: objectName || undefined,
       detail,
     };

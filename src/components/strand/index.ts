@@ -40,3 +40,7 @@ export * from "./cinfo";
 export * from "./CCard";
 export * from "./AttestationRail";
 export * from "./CSheetBody";
+// Brief 4 (B4-Connect-v4): the Connect card, its skeleton and the Where tile, ported from
+// connect/strand-patch/Connect.jsx.
+export * from "./MemberCard";
+export * from "./PlaceTile";

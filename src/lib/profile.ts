@@ -4,7 +4,8 @@
 // see (owner, member or anonymous), using the same audience predicate as the table policies, so
 // nothing here filters. This module is the only profile read in the app (no second projection).
 // Writes: save_profile_section(section, payload), one section per call, under the owner's own RLS.
-// Relationship actions write connection_requests and member_follows under their own policies.
+// Relationship actions go through Connect's write paths (Brief 4): set_follow, withdraw_request,
+// respond_to_request.
 import { format } from "date-fns";
 import type { Audience } from "@/components/strand/AudienceSelect";
 import type { AttestationItem } from "@/components/strand/AttestationRail";
@@ -95,7 +96,8 @@ export type ProfileMember = {
   tier: "account" | "identified" | "attested";
 };
 
-export type RelationshipState = "none" | "sent" | "received" | "connected";
+/** window (rulings 157, 161, 168): the sender-side state after a decline; the card carries no Connect. */
+export type RelationshipState = "none" | "sent" | "received" | "connected" | "window";
 
 export type ProfileView = {
   viewer: "owner" | "member" | "anon";
@@ -227,68 +229,34 @@ export async function uploadProfileImage(
 }
 
 // ---------------------------------------------------------------------------
-// Relationship (rulings 117 to 120). Follow is independent of the connection state. Withdraw,
-// accept and decline update the pending request under connection_requests' two-party policies.
+// Relationship (rulings 117 to 120, 157). Follow is independent of the connection state. Since
+// Brief 4 every relationship write goes through Connect's SECURITY DEFINER write paths (set_follow,
+// withdraw_request, respond_to_request): the sender has no direct read or write on
+// connection_requests, so a declined status can never reach them (ruling 157).
 // ---------------------------------------------------------------------------
 
-export async function setFollow(viewerId: string, memberId: string, on: boolean): Promise<void> {
+export async function setFollow(_viewerId: string, memberId: string, on: boolean): Promise<void> {
   const sb = getSupabase();
   if (!sb) return;
-  if (on) {
-    const { error } = await sb
-      .from("member_follows")
-      .insert({ follower_id: viewerId, member_id: memberId });
-    if (error && error.code !== "23505") throw error;
-  } else {
-    const { error } = await sb
-      .from("member_follows")
-      .delete()
-      .eq("follower_id", viewerId)
-      .eq("member_id", memberId);
-    if (error) throw error;
-  }
+  const { error } = await sb.rpc("set_follow", { p_target: memberId, p_on: on });
+  if (error) throw error;
 }
 
-async function pendingRequest(viewerId: string, memberId: string, direction: "sent" | "received") {
+export async function withdrawRequest(_viewerId: string, memberId: string): Promise<void> {
   const sb = getSupabase();
-  if (!sb) return null;
-  const from = direction === "sent" ? viewerId : memberId;
-  const to = direction === "sent" ? memberId : viewerId;
-  const { data } = await sb
-    .from("connection_requests")
-    .select("id")
-    .eq("from_member_id", from)
-    .eq("to_member_id", to)
-    .eq("status", "pending")
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  return data?.id ?? null;
-}
-
-export async function withdrawRequest(viewerId: string, memberId: string): Promise<void> {
-  const sb = getSupabase();
-  const id = await pendingRequest(viewerId, memberId, "sent");
-  if (!sb || !id) return;
-  const { error } = await sb
-    .from("connection_requests")
-    .update({ status: "withdrawn" })
-    .eq("id", id);
+  if (!sb) return;
+  const { error } = await sb.rpc("withdraw_request", { p_recipient: memberId });
   if (error) throw error;
 }
 
 export async function respondRequest(
-  viewerId: string,
+  _viewerId: string,
   memberId: string,
   accept: boolean,
 ): Promise<void> {
   const sb = getSupabase();
-  const id = await pendingRequest(viewerId, memberId, "received");
-  if (!sb || !id) return;
-  const { error } = await sb
-    .from("connection_requests")
-    .update({ status: accept ? "accepted" : "declined" })
-    .eq("id", id);
+  if (!sb) return;
+  const { error } = await sb.rpc("respond_to_request", { p_sender: memberId, p_accept: accept });
   if (error) throw error;
 }
 
