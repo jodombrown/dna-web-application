@@ -74,7 +74,7 @@ function SignIn() {
         <img
           src={assetBase() + "logo.png"}
           alt="DNA"
-          style={{ height: 80, width: "auto", alignSelf: "center", display: "block" }}
+          style={{ height: 80, width: "auto", alignSelf: "center", display: "block", marginTop: -88 }}
         />
         {mode === "up" && (
           <Input
