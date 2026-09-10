@@ -4,7 +4,7 @@
 // layer, so the real client code paths run against a deterministic backend. Backend behaviour
 // (RLS, the feed view) is verified separately in SQL against the live project.
 // Usage: BASE=https://b2-shell-feed.dna-web-application.pages.dev WEBKIT=1 node tests/matrix.cjs
-// Env: ONLY='[390,844]' runs one viewport; SPECIAL=publish,keyboard,silence,shell,targeted,profile,connect,vocab,block,auth runs flows only.
+// Env: ONLY='[390,844]' runs one viewport; SPECIAL=publish,guards,keyboard,silence,shell,targeted,profile,connect,vocab,block,auth runs flows only.
 // Brief 3 profile flows live in tests/profile.cjs and Brief 4 Connect flows in tests/connect.cjs; both share this mock.
 const { chromium, webkit } = require("playwright");
 const fs = require("fs");
@@ -26,6 +26,8 @@ const VIEWPORTS = [
   [1536, 960],
 ];
 const FULL_PREVIEW_AT = new Set([390, 820, 1280]);
+// Mirrors DRAFT_DEBOUNCE in src/components/strand/Composer.tsx.
+const DRAFT_DEBOUNCE_MS = 800;
 const THEMES = ["light", "dark"];
 const UID = "00000000-0000-4000-8000-0000000000e1";
 const KENTE = fs.readFileSync(path.join(__dirname, "../public/strand/patterns/kente-pattern.svg"));
@@ -624,6 +626,11 @@ function makeMockDb() {
     // Rulings 193, 194: set to fail the one vocabulary read, so a flow can check that the controls
     // reading it render empty rather than falling back to a literal that no longer exists.
     failVocab: false,
+    // Ruling 287: publish_post answers instantly by default, so the composer unmounts before an
+    // autosave timer in flight can fire and React clears it. Set this to hold the response open
+    // past DRAFT_DEBOUNCE, after the draft has been cleared, and the timer fires with the composer
+    // still mounted and the publish still in flight, which is the live shape of the defect.
+    publishDelayMs: 0,
     reads: [],
     // Brief 3: which persona is signed in relative to thandiwe-dube, and the owner's switches.
     profile: {
@@ -969,6 +976,11 @@ async function mockSupabase(page, db, opts = {}) {
           created_at: new Date().toISOString(),
         });
       db.drafts.clear();
+      // Ruling 287: the draft is deleted inside the publish transaction, and the response is what
+      // the client is still waiting on. Holding it here, after the clear, is the live ordering:
+      // on the founder's account the resurrected draft row landed 132ms after the transaction that
+      // deleted it, with the composer still mounted and the publish still in flight.
+      if (db.publishDelayMs) await new Promise((r) => setTimeout(r, db.publishDelayMs));
       return json(id);
     }
     if (p === "/rest/v1/rpc/profile_view") {
@@ -1766,6 +1778,112 @@ async function runPublish(browserType, bname, [w, h], theme) {
         db.posts[0].created_object_kind === null,
     );
     await page.locator("main article[data-c='convey']").first().waitFor({ timeout: 10000 });
+  } catch (e) {
+    record(tag + " flow", false, String(e).slice(0, 300));
+    await page.screenshot({ path: path.join(OUT, `${tag}-ERROR.png`) }).catch(() => {});
+  }
+  record(tag + " no page errors", errors.length === 0, errors.slice(0, 3).join(" | "));
+  await browser.close();
+}
+
+// Ruling 287: the draft autosave never writes after a publish has been initiated.
+//
+// The live shape of the defect: DRAFT_DEBOUNCE is 800ms, so a member who edits and presses Publish
+// inside that window leaves a timer armed. publish_post takes long enough that the timer fires while
+// the composer is still mounted and the RPC still in flight, and the callback upserts the draft back
+// into post_drafts carrying the post id the RPC has just consumed. On the founder's account the
+// draft row landed 132ms after the transaction that deleted it. The reopen then restored that draft,
+// the next publish reused the consumed id, and every retry collided on posts_pkey.
+//
+// publishDelayMs is what makes it reproducible here: with an instant RPC the composer unmounts
+// before the timer can fire and React clears it, so the defect is invisible. Two arms follow the
+// chain: no draft survives the publish, and the reopen therefore comes up empty and mints an id that
+// is not already a post.
+async function runPublishGuards(browserType, bname, [w, h], theme) {
+  const tag = `${bname}-${w}x${h}-${theme}-guards`;
+  const browser = await launch(browserType);
+  const ctx = await browser.newContext({
+    viewport: { width: w, height: h },
+    hasTouch: w < 1024,
+    isMobile: w < 1024,
+    colorScheme: theme,
+  });
+  const page = await ctx.newPage();
+  const db = makeMockDb();
+  // Long enough that a timer armed just before Publish fires mid-RPC, with the composer mounted.
+  db.publishDelayMs = 900;
+  await page.addInitScript(
+    ({ theme }) => {
+      try {
+        localStorage.setItem("dna.theme", theme);
+      } catch {}
+    },
+    { theme },
+  );
+  await mockSupabase(page, db);
+  const errors = [];
+  page.on("pageerror", (e) => errors.push(String(e)));
+  const dialog = page.locator('section[role="dialog"][aria-label="Compose"]');
+  const textarea = () => dialog.locator('textarea[aria-label="What is going on with you"]');
+  try {
+    await signIn(page);
+
+    await page.click('[data-testid="compose"]');
+    await dialog.waitFor();
+    await textarea().fill("A draft with an autosave timer still in flight.");
+    // Inside DRAFT_DEBOUNCE: the timer is armed and has not fired, so nothing is saved yet.
+    await page.waitForTimeout(DRAFT_DEBOUNCE_MS - 200);
+    record(tag + " autosave has not fired when Publish is pressed", db.drafts.size === 0);
+    await dialog.getByRole("button", { name: "Publish" }).click();
+    await page.waitForSelector('section[role="dialog"][aria-label="Compose"]', {
+      state: "detached",
+      timeout: 15000,
+    });
+    // Past the debounce, the held-open RPC and anything the unmount flush could still run.
+    await page.waitForTimeout(DRAFT_DEBOUNCE_MS + 1500);
+    record(
+      tag + " no draft survives a publish with a timer in flight",
+      db.drafts.size === 0,
+      `drafts=${db.drafts.size} payload=${JSON.stringify([...db.drafts.values()][0] || null).slice(0, 160)}`,
+    );
+    const firstId = db.rpcPayloads[0] && db.rpcPayloads[0].id;
+    record(tag + " the first publish carried a post id", !!firstId, String(firstId));
+
+    // The consequence of the resurrection: the reopen restored the dead draft and the next publish
+    // reused the consumed id. With no draft to restore, the composer opens empty and mints a fresh
+    // one. ComposerShell also clears postId on publish, so nothing stale is left in memory either.
+    const idsBefore = db.posts.map((r) => r.id);
+    await page.click('[data-testid="compose"]');
+    await dialog.waitFor();
+    record(
+      tag + " the composer reopens empty after a publish",
+      (await textarea().inputValue()) === "",
+      (await textarea().inputValue()).slice(0, 80),
+    );
+    await textarea().fill("A second post from the same session.");
+    await page.waitForTimeout(DRAFT_DEBOUNCE_MS + 400);
+    await dialog.getByRole("button", { name: "Publish" }).click();
+    await page.waitForSelector('section[role="dialog"][aria-label="Compose"]', {
+      state: "detached",
+      timeout: 15000,
+    });
+    const secondId = db.rpcPayloads[1] && db.rpcPayloads[1].id;
+    record(
+      tag + " reopening after a publish mints a fresh post id",
+      !!secondId && secondId !== firstId,
+      `${firstId} -> ${secondId}`,
+    );
+    record(
+      tag + " the minted id was not already a published post",
+      !!secondId && !idsBefore.includes(secondId),
+      String(secondId),
+    );
+    await page.waitForTimeout(DRAFT_DEBOUNCE_MS + 1500);
+    record(
+      tag + " no draft survives the second publish either",
+      db.drafts.size === 0,
+      `drafts=${db.drafts.size}`,
+    );
   } catch (e) {
     record(tag + " flow", false, String(e).slice(0, 300));
     await page.screenshot({ path: path.join(OUT, `${tag}-ERROR.png`) }).catch(() => {});
@@ -2719,6 +2837,10 @@ if (require.main === module)
       for (const [bname, bt] of specialEngines) {
         if (process.env.SPECIAL.includes("publish"))
           await runPublish(bt, bname, [390, 844], "light");
+        if (process.env.SPECIAL.includes("guards")) {
+          await runPublishGuards(bt, bname, [390, 844], "light");
+          await runPublishGuards(bt, bname, [1280, 800], "dark");
+        }
         if (process.env.SPECIAL.includes("keyboard")) await runKeyboard(bt, bname);
         if (process.env.SPECIAL.includes("silence")) await runSilence(bt, bname);
         if (process.env.SPECIAL.includes("shell"))
@@ -2802,6 +2924,8 @@ if (require.main === module)
       }
       await runPublish(bt, bname, [390, 844], "light");
       await runPublish(bt, bname, [1280, 800], "dark");
+      await runPublishGuards(bt, bname, [390, 844], "light");
+      await runPublishGuards(bt, bname, [1280, 800], "dark");
       await runSilence(bt, bname);
       await runKeyboard(bt, bname);
       for (const vp of TARGETED_VIEWPORTS) await runTargeted(bt, bname, vp);
