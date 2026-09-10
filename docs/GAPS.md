@@ -1035,3 +1035,28 @@ The arms need `SUPABASE_SERVICE_ROLE_KEY` and an `IDENTITY_EMAIL` that a human h
 both providers at least once. Neither is available to a CI run today, so all three arms report
 UNPROVEN and are counted apart from the passes. They close when a human does the two sign-ins once
 against the canonical project and the key is added as a repository secret.
+
+## G12. The manual publish unblock left one image filed under a consumed post id
+
+**Severity: low at the invite boundary. Not a merge blocker (ruling 140). Opened 10 September 2026
+closing the publish path defects (rulings 266 to 268).**
+
+Founder account `5099248b-7c3e-4d50-ab61-3a13b9826bca` was wedged by D2: a draft carrying an already
+consumed `post_id` failed `posts_pkey` on every retry, and the rollback restored the draft each time.
+The unblock, done out of band on 10 September and before this fix, rewrote that draft's `post_id`
+from `5425de85-e25b-4634-be8d-2fad7a62b751` to `35c0b123-2228-49cc-b76e-bc71d8df8a90`. The attached
+image was already uploaded and stays at
+`5099248b-…/5425de85-…/7d73ea0d-….jpg`, under the previous post's folder, because storage paths are
+written at upload time and the rewrite touched only the draft row.
+
+The consequence is one object whose read is gated on the wrong post id:
+`post_media_objects_member_select` resolves the folder segment to
+`5425de85-e25b-4634-be8d-2fad7a62b751`, which is a different published post from the one the image
+now belongs to.
+
+Accepted risk, low: both posts are `audience = 'everyone'`, so the mismatched gate admits exactly the
+audience the correct gate would have admitted and nothing is withheld from or disclosed to anyone.
+
+It closes by moving the object to the folder for the post that now owns it, or by leaving it and
+letting the member re-attach; either is a data touch on one row, not a code change. The guard shipped
+in `20260910065849_publish_path_defects.sql` means no further draft can reach this state.
