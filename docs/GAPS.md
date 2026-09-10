@@ -944,6 +944,36 @@ enough to need a hit test and a retry loop before clicking.
 timeout with no crash is something else. Today the suite cannot tell those apart outside
 `tests/profile.cjs`.
 
+### Update, 10 September 11:47: the same commit run twice, disjoint failure sets
+
+Brief 4A's PR #20, head `79db1b1`, run 115
+([34465444602](https://github.com/jodombrown/dna-web-application/actions/runs/34465444602)). The
+matrix job was re-run once on the **same commit and the same tree**, and the two attempts share not
+one failure. Chromium was clean at every width, both orientations and both themes in both attempts.
+
+| Attempt | WebKit failures |
+| --- | --- |
+| 1 (job 102831943218) | `webkit 360x800 light connect: no page errors`, two REST requests to `post_saves` and `post_reactions` aborted "due to access control checks" |
+| 2 (job 102845377529) | `webkit-390x844-light profile owner flow` **WEB PROCESS CRASHED** at `section-where`'s input; `webkit-1280x800-dark profile owner flow` **WEB PROCESS CRASHED** at the same input; `webkit-820x1180-dark profile visitor connected flow`, `page.waitForURL` to `**/feed` timed out at sign-in; `webkit-390x844-dark-auth: recovery landing flow` |
+
+**Two of attempt 2's four are this signature**, and they are counted: `WEB PROCESS CRASHED` on the
+Profile owner flow at the `where` section's input is what this entry has been tracking since ruling
+200, and `tests/profile.cjs`'s own `page.on("crash")` is what labels them. They add
+`webkit-390x844-light` and `webkit-1280x800-dark` to the sampled population, so the envelope widens
+again rather than narrowing, exactly as this entry has warned every time.
+
+**Attempt 1's failure is recorded without being counted**, on the same reasoning as run 103's: it is
+the Connect flow, it is not a crash, and it is a third distinct symptom (aborted requests rather
+than a timeout or a crash). `tests/connect.cjs` registers no crash listener, so the suite cannot say
+whether a web process died under it. That is the same blind spot, and the same follow-up closes it.
+
+**What this pair establishes that a single sighting could not.** Ruling 265 put the rate at roughly
+one green run in two and made that the merge policy rather than an observation. Two attempts on a
+byte-identical tree producing four failures and one failure, with **zero overlap**, is the strongest
+evidence yet for that rate: the failing set on this engine is not a property of the code under test.
+It also means a re-run cannot be used to confirm a WebKit failure by identical reproduction, which
+is the test the babysit rules ask for. On this engine, the absence of reproduction is the finding.
+
 ## G6. Withdraw separated the two states ruling 214 joined — closed (ruling 229)
 
 **Opened and closed 9 September 2026, both inside Fix PR 01. Ruling 227 stated the requirement,
