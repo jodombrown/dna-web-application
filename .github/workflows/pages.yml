@@ -117,6 +117,12 @@ jobs:
           done
           echo "GET /connect -> $code"
           test "$code" = "200"
+          # Brief 4B's new routes serve from the deployment before the browser matrix opens them.
+          for p in /reset /reset/new /password; do
+            code=$(curl -sS -o /dev/null -w '%{http_code}' "$BASE$p" || true)
+            echo "GET $p -> $code"
+            test "$code" = "200"
+          done
           code=$(curl -sS -o /dev/null -w '%{http_code}' "$BASE/strand/adinkra/mate-masie.svg")
           echo "GET /strand/adinkra/mate-masie.svg -> $code"
           test "$code" = "200"

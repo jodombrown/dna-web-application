@@ -535,6 +535,28 @@ export function AppShell({
                     </button>
                   </div>
                 )}
+                {/* Ruling 230: the signed-in change-password path. /password is the whole of it;
+                    there is no settings surface, so this row is its entry point. */}
+                <button
+                  type="button"
+                  data-testid="change-password"
+                  onClick={() => {
+                    setAccount(false);
+                    void navigate({ to: "/password" });
+                  }}
+                  style={{
+                    all: "unset",
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    minHeight: 44,
+                    margin: "-4px 0",
+                    fontSize: 15,
+                    fontWeight: 500,
+                  }}
+                >
+                  Change password
+                </button>
                 <Switch
                   label="Dark theme"
                   checked={theme === "dark"}

@@ -11,10 +11,13 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ShellRouteImport } from './routes/_shell'
+import { Route as ResetRouteImport } from './routes/reset'
 import { Route as SignInRouteImport } from './routes/sign-in'
 import { Route as ShellCRouteImport } from './routes/_shell/$c'
 import { Route as ShellConnectRouteImport } from './routes/_shell/connect'
 import { Route as ShellFeedRouteImport } from './routes/_shell/feed'
+import { Route as ShellPasswordRouteImport } from './routes/_shell/password'
+import { Route as ResetNewRouteImport } from './routes/reset_.new'
 import { Route as ShellMHandleRouteImport } from './routes/_shell/m.$handle'
 import { Route as ShellPostsIdRouteImport } from './routes/_shell/posts.$id'
 
@@ -25,6 +28,11 @@ const IndexRoute = IndexRouteImport.update({
 } as any)
 const ShellRoute = ShellRouteImport.update({
   id: '/_shell',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ResetRoute = ResetRouteImport.update({
+  id: '/reset',
+  path: '/reset',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SignInRoute = SignInRouteImport.update({
@@ -47,6 +55,16 @@ const ShellFeedRoute = ShellFeedRouteImport.update({
   path: '/feed',
   getParentRoute: () => ShellRoute,
 } as any)
+const ShellPasswordRoute = ShellPasswordRouteImport.update({
+  id: '/password',
+  path: '/password',
+  getParentRoute: () => ShellRoute,
+} as any)
+const ResetNewRoute = ResetNewRouteImport.update({
+  id: '/reset_/new',
+  path: '/reset/new',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ShellMHandleRoute = ShellMHandleRouteImport.update({
   id: '/m/$handle',
   path: '/m/$handle',
@@ -60,19 +78,25 @@ const ShellPostsIdRoute = ShellPostsIdRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/reset': typeof ResetRoute
   '/sign-in': typeof SignInRoute
   '/$c': typeof ShellCRoute
   '/connect': typeof ShellConnectRoute
   '/feed': typeof ShellFeedRoute
+  '/password': typeof ShellPasswordRoute
+  '/reset/new': typeof ResetNewRoute
   '/m/$handle': typeof ShellMHandleRoute
   '/posts/$id': typeof ShellPostsIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/reset': typeof ResetRoute
   '/sign-in': typeof SignInRoute
   '/$c': typeof ShellCRoute
   '/connect': typeof ShellConnectRoute
   '/feed': typeof ShellFeedRoute
+  '/password': typeof ShellPasswordRoute
+  '/reset/new': typeof ResetNewRoute
   '/m/$handle': typeof ShellMHandleRoute
   '/posts/$id': typeof ShellPostsIdRoute
 }
@@ -80,10 +104,13 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/_shell': typeof ShellRouteWithChildren
+  '/reset': typeof ResetRoute
   '/sign-in': typeof SignInRoute
   '/_shell/$c': typeof ShellCRoute
   '/_shell/connect': typeof ShellConnectRoute
   '/_shell/feed': typeof ShellFeedRoute
+  '/_shell/password': typeof ShellPasswordRoute
+  '/reset_/new': typeof ResetNewRoute
   '/_shell/m/$handle': typeof ShellMHandleRoute
   '/_shell/posts/$id': typeof ShellPostsIdRoute
 }
@@ -91,29 +118,38 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/reset'
     | '/sign-in'
     | '/$c'
     | '/connect'
     | '/feed'
+    | '/password'
+    | '/reset/new'
     | '/m/$handle'
     | '/posts/$id'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/reset'
     | '/sign-in'
     | '/$c'
     | '/connect'
     | '/feed'
+    | '/password'
+    | '/reset/new'
     | '/m/$handle'
     | '/posts/$id'
   id:
     | '__root__'
     | '/'
     | '/_shell'
+    | '/reset'
     | '/sign-in'
     | '/_shell/$c'
     | '/_shell/connect'
     | '/_shell/feed'
+    | '/_shell/password'
+    | '/reset_/new'
     | '/_shell/m/$handle'
     | '/_shell/posts/$id'
   fileRoutesById: FileRoutesById
@@ -121,7 +157,9 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   ShellRoute: typeof ShellRouteWithChildren
+  ResetRoute: typeof ResetRoute
   SignInRoute: typeof SignInRoute
+  ResetNewRoute: typeof ResetNewRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -138,6 +176,13 @@ declare module '@tanstack/react-router' {
       path: ''
       fullPath: '/'
       preLoaderRoute: typeof ShellRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reset': {
+      id: '/reset'
+      path: '/reset'
+      fullPath: '/reset'
+      preLoaderRoute: typeof ResetRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/sign-in': {
@@ -168,6 +213,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ShellFeedRouteImport
       parentRoute: typeof ShellRoute
     }
+    '/_shell/password': {
+      id: '/_shell/password'
+      path: '/password'
+      fullPath: '/password'
+      preLoaderRoute: typeof ShellPasswordRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/reset_/new': {
+      id: '/reset_/new'
+      path: '/reset/new'
+      fullPath: '/reset/new'
+      preLoaderRoute: typeof ResetNewRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_shell/m/$handle': {
       id: '/_shell/m/$handle'
       path: '/m/$handle'
@@ -189,6 +248,7 @@ interface ShellRouteChildren {
   ShellCRoute: typeof ShellCRoute
   ShellConnectRoute: typeof ShellConnectRoute
   ShellFeedRoute: typeof ShellFeedRoute
+  ShellPasswordRoute: typeof ShellPasswordRoute
   ShellMHandleRoute: typeof ShellMHandleRoute
   ShellPostsIdRoute: typeof ShellPostsIdRoute
 }
@@ -197,6 +257,7 @@ const ShellRouteChildren: ShellRouteChildren = {
   ShellCRoute: ShellCRoute,
   ShellConnectRoute: ShellConnectRoute,
   ShellFeedRoute: ShellFeedRoute,
+  ShellPasswordRoute: ShellPasswordRoute,
   ShellMHandleRoute: ShellMHandleRoute,
   ShellPostsIdRoute: ShellPostsIdRoute,
 }
@@ -206,7 +267,9 @@ const ShellRouteWithChildren = ShellRoute._addFileChildren(ShellRouteChildren)
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ShellRoute: ShellRouteWithChildren,
+  ResetRoute: ResetRoute,
   SignInRoute: SignInRoute,
+  ResetNewRoute: ResetNewRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

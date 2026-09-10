@@ -978,3 +978,60 @@ pending, inside the window, or withdrawn inside the window, so an affordance add
 the rule rather than restating it. What the increment has to decide is only what the control looks
 like on a card that has no primary action slot, which is a Connect surface question and belongs to a
 Connect brief.
+
+## G9. Strand has no show-password affordance, no eye icon and no loading button (Brief 4B)
+
+**Severity: low. Not a merge blocker. Opened 10 September 2026 building Brief 4B, and recorded in
+the handoff (section 4) as gaps to be raised in Strand rather than patched locally.**
+
+Three parts the auth surfaces needed and Strand does not carry. All three are worked around at page
+level in this build, and the workaround is what the handoff says to keep in Code:
+
+- `Input` has no show-password affordance, and no `eye` icon exists in `public/strand/icons/`.
+  `/reset/new` and `/password` use a Strand `Checkbox` labelled "Show passwords" and swap the input
+  `type` themselves.
+- `Button` has no `loading` prop. Every auth submit uses `disabled` plus a label swap ("Sign in" to
+  "Signing in", "Send reset link" to "Sending", and so on).
+- The "or" separator, the provider-button pattern and the focusable alert block are page-level
+  compositions of Strand parts, in `src/components/dna/AuthSurface.tsx`. They are staged in Strand's
+  own `STRAND-HANDOFF.md` if Strand wants them as components.
+
+A fourth part was missing from the repo rather than from Strand: `Checkbox` is shipped in Strand but
+had never been ported here, so `src/components/strand/Checkbox.tsx` is a port in the same idiom as
+`Switch`, not a new component. Nothing reads shadcn's checkbox (rulings 70, 72).
+
+## G10. The provider marks are placeholders, and LinkedIn's wording is unconfirmed (ruling 233)
+
+**Severity: medium at the invite boundary. Not a merge blocker (ruling 140). Opened 10 September
+2026 building Brief 4B.**
+
+`public/strand/marks/google.svg` and `public/strand/marks/linkedin.svg` are neutral grey glyphs
+drawn as placeholders. They are deliberately not imitations of either trademark. Before the first
+real member invite:
+
+- Replace `google.svg` with the official "G" from the Sign in with Google branding guidelines.
+- Replace `linkedin.svg` with the official "in" logo from the LinkedIn brand downloads.
+- Confirm the button wording against LinkedIn's terms. The build ships "Continue with Google", which
+  Google permits, and "Sign in with LinkedIn" on both the sign-in and the sign-up surface, because
+  LinkedIn's terms favour that wording and offer no sign-up variant. If LinkedIn's current terms
+  permit "Continue with LinkedIn", the label is one string in
+  `PROVIDER_BUTTON_LABEL` (`src/lib/auth-flow.ts`).
+
+Both marks resolve by path and are never imported as a module, so the swap is a file overwrite in
+one directory with no component edited. Ruling 232 holds either way: a provider mark appears on its
+own button and nowhere else.
+
+## G11. Ruling 234's identity-linking arms cannot run unattended
+
+**Severity: medium at the invite boundary. Not a merge blocker (ruling 140). Opened 10 September
+2026 building Brief 4B. Reported UNPROVEN, never as passing (ruling 228).**
+
+Ruling 234 asks that one address arriving by two providers be tested rather than assumed. No browser
+can drive a real Google or LinkedIn consent screen, so `tests/auth-identity.cjs` checks the state the
+round trip leaves behind instead: exactly one `auth.users` row for the address, every provider
+identity on that one user id, and exactly one `public.members` row for it.
+
+The arms need `SUPABASE_SERVICE_ROLE_KEY` and an `IDENTITY_EMAIL` that a human has signed in to by
+both providers at least once. Neither is available to a CI run today, so all three arms report
+UNPROVEN and are counted apart from the passes. They close when a human does the two sign-ins once
+against the canonical project and the key is added as a repository secret.
