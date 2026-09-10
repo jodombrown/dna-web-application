@@ -705,17 +705,28 @@ async function get(url, headers = {}) {
                   blockedSees.body.viewer === "member",
                 "status " + blockedSees.status + " " + blockedSees.text.slice(0, 80),
               );
+              // Every key naming a block state must be present and false, which is what an
+              // unblocked stranger reads. Checked over the parsed keys rather than by matching the
+              // serialised payload: run 114 failed this arm on a regex whose \\s* backtracked to
+              // zero width, so the negative lookahead landed on the space before "false" and
+              // reported a disclosure that the projection did not make.
+              const blockedBody = blockedSees.body || {};
+              const blockKeys = Object.keys(blockedBody).filter((k) => /block/i.test(k));
+              const failed = [];
+              if (blockedBody.viewer_blocked !== false) failed.push("viewer_blocked");
+              if (blockedBody.relationship !== undefined) failed.push("relationship present");
+              if ((blockedBody.mutuals || []).length !== 0) failed.push("mutuals");
+              if ((blockedBody.shared_spaces || []).length !== 0) failed.push("shared_spaces");
+              if (blockedBody.anchored === true) failed.push("anchored");
+              if (blockedBody.dia_line !== undefined) failed.push("dia_line");
+              const disclosing = blockKeys.filter((k) => blockedBody[k] !== false);
+              if (disclosing.length) failed.push("keys " + disclosing.join(","));
               record(
                 "B4A section 7: nothing in the blocked party's projection discloses the block",
-                !!blockedSees.body &&
-                  blockedSees.body.viewer_blocked === false &&
-                  blockedSees.body.relationship === undefined &&
-                  (blockedSees.body.mutuals || []).length === 0 &&
-                  (blockedSees.body.shared_spaces || []).length === 0 &&
-                  blockedSees.body.anchored !== true &&
-                  blockedSees.body.dia_line === undefined &&
-                  !/"[a-z_]*block[a-z_]*"\s*:\s*(?!false)/i.test(blockedSees.text),
-                blockedSees.text.slice(0, 200),
+                !!blockedSees.body && failed.length === 0,
+                failed.length
+                  ? failed.join("; ")
+                  : "keys naming a block: " + (blockKeys.join(",") || "none"),
               );
             }
             const blockOut = await memberRest(
