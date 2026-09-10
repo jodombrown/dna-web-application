@@ -944,7 +944,7 @@ enough to need a hit test and a retry loop before clicking.
 timeout with no crash is something else. Today the suite cannot tell those apart outside
 `tests/profile.cjs`.
 
-### Update, 10 September 11:47: the same commit run twice, disjoint failure sets
+### Update, 10 September 11:47: the same commit run twice, disjoint failure sets (ruling 304)
 
 Brief 4A's PR #20, head `79db1b1`, run 115
 ([34465444602](https://github.com/jodombrown/dna-web-application/actions/runs/34465444602)). The
@@ -967,12 +967,26 @@ the Connect flow, it is not a crash, and it is a third distinct symptom (aborted
 than a timeout or a crash). `tests/connect.cjs` registers no crash listener, so the suite cannot say
 whether a web process died under it. That is the same blind spot, and the same follow-up closes it.
 
-**What this pair establishes that a single sighting could not.** Ruling 265 put the rate at roughly
-one green run in two and made that the merge policy rather than an observation. Two attempts on a
-byte-identical tree producing four failures and one failure, with **zero overlap**, is the strongest
-evidence yet for that rate: the failing set on this engine is not a property of the code under test.
-It also means a re-run cannot be used to confirm a WebKit failure by identical reproduction, which
-is the test the babysit rules ask for. On this engine, the absence of reproduction is the finding.
+**What this pair establishes that a single sighting could not, now ruling 304.** Ruling 265 put the
+rate at roughly one green run in two and made that the merge policy rather than an observation. Two
+attempts on a byte-identical tree producing four failures and one failure, with **zero overlap**, is
+the strongest evidence yet for that rate: the failing set on this engine is not a property of the
+code under test. It also means a re-run cannot be used to confirm a WebKit failure by identical
+reproduction, which is the test the babysit rules ask for. On this engine, the absence of
+reproduction is the finding. Ruling 304 records it: runs of one materially unchanged tree produced
+different WebKit failure sets each time, with zero overlap between two attempts on a byte-identical
+head; this is 265's rate demonstrated rather than asserted, it establishes that a re-run cannot
+confirm a WebKit failure by reproduction here, and it makes ruling 274's crash flag the item that
+would end the ambiguity permanently.
+
+**Run 117, 16:33, makes it four sets.** Head `e170b36`
+([34498061216](https://github.com/jodombrown/dna-web-application/actions/runs/34498061216)) differs
+from run 116's `542b245` by one markdown file the matrix never loads. Chromium green at every width,
+both orientations and both themes; step 6 green. Three WebKit failures, none shared with runs 115 or
+116 except the auth arm's class: `webkit-1366x1024-dark flow`, the Compose dialog never detaching
+across 64 locator resolutions over 30 seconds, which is this entry's composer symptom and its
+fourth sighting; and `webkit-390x844-light-auth` and `webkit-390x844-dark-auth` on the recovery
+landing flow. Recorded, not re-run: under 304 a fifth run would sample the same distribution.
 
 ## G6. Withdraw separated the two states ruling 214 joined — closed (ruling 229)
 
