@@ -626,7 +626,7 @@ function makeMockDb() {
     // Rulings 193, 194: set to fail the one vocabulary read, so a flow can check that the controls
     // reading it render empty rather than falling back to a literal that no longer exists.
     failVocab: false,
-    // Ruling 266: publish_post answers instantly by default, so the composer unmounts before an
+    // Ruling 287: publish_post answers instantly by default, so the composer unmounts before an
     // autosave timer in flight can fire and React clears it. Set this to hold the response open
     // past DRAFT_DEBOUNCE, after the draft has been cleared, and the timer fires with the composer
     // still mounted and the publish still in flight, which is the live shape of the defect.
@@ -976,7 +976,7 @@ async function mockSupabase(page, db, opts = {}) {
           created_at: new Date().toISOString(),
         });
       db.drafts.clear();
-      // Ruling 266: the draft is deleted inside the publish transaction, and the response is what
+      // Ruling 287: the draft is deleted inside the publish transaction, and the response is what
       // the client is still waiting on. Holding it here, after the clear, is the live ordering:
       // on the founder's account the resurrected draft row landed 132ms after the transaction that
       // deleted it, with the composer still mounted and the publish still in flight.
@@ -1786,7 +1786,7 @@ async function runPublish(browserType, bname, [w, h], theme) {
   await browser.close();
 }
 
-// Ruling 266: the draft autosave never writes after a publish has been initiated.
+// Ruling 287: the draft autosave never writes after a publish has been initiated.
 //
 // The live shape of the defect: DRAFT_DEBOUNCE is 800ms, so a member who edits and presses Publish
 // inside that window leaves a timer armed. publish_post takes long enough that the timer fires while

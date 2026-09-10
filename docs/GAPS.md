@@ -1039,7 +1039,7 @@ against the canonical project and the key is added as a repository secret.
 ## G12. The manual publish unblock left one image filed under a consumed post id
 
 **Severity: low at the invite boundary. Not a merge blocker (ruling 140). Opened 10 September 2026
-closing the publish path defects (rulings 266 to 268).**
+closing the publish path defects (rulings 287 and 288).**
 
 Founder account `5099248b-7c3e-4d50-ab61-3a13b9826bca` was wedged by D2: a draft carrying an already
 consumed `post_id` failed `posts_pkey` on every retry, and the rollback restored the draft each time.

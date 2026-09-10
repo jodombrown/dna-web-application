@@ -299,7 +299,7 @@ export function Composer({
     if (!open || !onDraft) return;
     latest.current.dirty = true;
     const h = setTimeout(() => {
-      // Ruling 266: no draft writer runs once a publish has been initiated. A timer already in
+      // Ruling 287: no draft writer runs once a publish has been initiated. A timer already in
       // flight when Publish is pressed would otherwise fire during or just after the RPC and upsert
       // the draft back with the post id the RPC has just consumed. `dirty` is left as it is, so the
       // unmount flush, which refuses on the same flag, still agrees with this one.

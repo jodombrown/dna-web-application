@@ -86,7 +86,7 @@ export function ComposerShell() {
       hostContext,
       anchor: request.anchor,
     });
-    // Ruling 266: the consumed id does not survive in memory. `postId` is state on a shell mounted
+    // Ruling 287: the consumed id does not survive in memory. `postId` is state on a shell mounted
     // once for the session; openComposer's load effect mints a fresh uuid only when the draft load
     // returns null, so a successful publish clears it here instead of relying on that path. `upload`
     // is memoised off `postId` and yields undefined on an empty string.

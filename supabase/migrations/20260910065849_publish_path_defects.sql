@@ -1,5 +1,5 @@
 -- ---------------------------------------------------------------------------
--- Publish path defects, D2. Ruling 267.
+-- Publish path defects, D2. Ruling 288.
 --
 -- `public.publish_post(jsonb)` took `payload ->> 'id'` unchecked. A client-minted id that had
 -- already been consumed raised 23505 on `posts_pkey` out of the bare insert, the whole transaction
@@ -155,7 +155,7 @@ begin
     v_obj_kind := 'story';
   end if;
 
-  -- Ruling 267: a client-minted post id is a proposal, not an authority. The nested block opens a
+  -- Ruling 288: a client-minted post id is a proposal, not an authority. The nested block opens a
   -- subtransaction, so a collision is caught here and re-raised as a named refusal instead of
   -- reaching the caller as `duplicate key value violates unique constraint "posts_pkey"`. It reads
   -- no row and needs no new grant, so nothing here answers "does post <uuid> exist" for
