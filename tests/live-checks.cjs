@@ -363,6 +363,8 @@ async function get(url, headers = {}) {
         );
         const memberSelf = await memberRpc(memberToken, "profile_view", {});
         const memberId = memberSelf.body && memberSelf.body.member && memberSelf.body.member.id;
+        const memberHandle =
+          memberSelf.body && memberSelf.body.member && memberSelf.body.member.handle;
         record(
           "ruling 218: the fixture owner and the viewer are two different members",
           !!ownerId && !!memberId && ownerId !== memberId,
@@ -665,6 +667,57 @@ async function get(url, headers = {}) {
               ),
               "media " + (media.body || []).length + " links " + (links.body || []).length,
             );
+
+            // Brief 4A, section 7's acceptance test, live and as a real member, with the block
+            // above in place. The blocker is MEMBER_EMAIL and the blocked party is OWNER_EMAIL.
+            //
+            // The one thing that must never differ between a blocked party and a stranger is
+            // anything naming the block. `viewer_blocked` is the caller's own row, so it is true
+            // for the blocker and false for the blocked party, which is what an unblocked stranger
+            // reads too. The relationship object is absent for both, per ruling 198.
+            if (!ownerHandle || !memberHandle) {
+              skip(
+                "B4A section 7: the blocked party's projection, live",
+                "one of the two handles did not resolve, so there is nothing to read",
+              );
+            } else {
+              const blockerSees = await memberRpc(memberToken, "profile_view", {
+                p_handle: ownerHandle,
+              });
+              record(
+                "B4A section 4: the blocker's own block reaches them as viewer_blocked",
+                blockerSees.status === 200 &&
+                  !!blockerSees.body &&
+                  blockerSees.body.viewer_blocked === true &&
+                  blockerSees.body.relationship === undefined,
+                "viewer_blocked " +
+                  JSON.stringify(blockerSees.body && blockerSees.body.viewer_blocked) +
+                  " relationship " +
+                  JSON.stringify(blockerSees.body && blockerSees.body.relationship),
+              );
+              const blockedSees = await memberRpc(ownerToken, "profile_view", {
+                p_handle: memberHandle,
+              });
+              record(
+                "B4A section 7: the blocked party's page still loads (ruling 198 item 4)",
+                blockedSees.status === 200 &&
+                  !!blockedSees.body &&
+                  blockedSees.body.viewer === "member",
+                "status " + blockedSees.status + " " + blockedSees.text.slice(0, 80),
+              );
+              record(
+                "B4A section 7: nothing in the blocked party's projection discloses the block",
+                !!blockedSees.body &&
+                  blockedSees.body.viewer_blocked === false &&
+                  blockedSees.body.relationship === undefined &&
+                  (blockedSees.body.mutuals || []).length === 0 &&
+                  (blockedSees.body.shared_spaces || []).length === 0 &&
+                  blockedSees.body.anchored !== true &&
+                  blockedSees.body.dia_line === undefined &&
+                  !/"[a-z_]*block[a-z_]*"\s*:\s*(?!false)/i.test(blockedSees.text),
+                blockedSees.text.slice(0, 200),
+              );
+            }
             const blockOut = await memberRest(
               memberToken,
               "member_blocks?blocker_id=eq." + memberId + "&blocked_id=eq." + ownerId,
