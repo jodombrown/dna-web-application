@@ -6,7 +6,19 @@
 // Usage: BASE=https://<preview>.dna-web-application.pages.dev SPECIAL=auth node tests/matrix.cjs
 const M = require("./matrix.cjs");
 
-const { launch, makeMockDb, seedPosts, mockSupabase, record, noOverflow, BASE, SB, JWT, UID } = M;
+const {
+  launch,
+  makeMockDb,
+  seedPosts,
+  mockSupabase,
+  signIn,
+  record,
+  noOverflow,
+  BASE,
+  SB,
+  JWT,
+  UID,
+} = M;
 
 const RECOVERY_USER = {
   id: UID,
@@ -39,91 +51,106 @@ const EXPIRED_HASH =
  */
 async function mockAuth(page, auth) {
   await page.route(`**/${SB}/auth/v1/**`, async (route) => {
-    const req = route.request();
-    const url = new URL(req.url());
-    const p = url.pathname;
-    const method = req.method();
-    const json = (body, status = 200) =>
-      route.fulfill({
-        status,
-        contentType: "application/json",
-        headers: { "access-control-allow-origin": "*" },
-        body: JSON.stringify(body),
-      });
-    if (method === "OPTIONS")
-      return route.fulfill({
-        status: 200,
-        headers: {
-          "access-control-allow-origin": "*",
-          "access-control-allow-headers": "*",
-          "access-control-allow-methods": "*",
-        },
-      });
-    if (p === "/auth/v1/recover") {
-      auth.recoverCalls.push({ body: req.postDataJSON(), at: Date.now() });
-      if (auth.recoverDelay) await new Promise((r) => setTimeout(r, auth.recoverDelay));
-      // The two answers a known and an unknown address could plausibly produce. Neither may reach
-      // the surface (ruling 156 applied to auth).
-      return auth.recoverFails
-        ? json({ code: 400, error_code: "validation_failed", msg: "no such user" }, 400)
-        : json({});
+    try {
+      await handleAuth(route, auth);
+    } catch (e) {
+      // Never let a handler failure escape as an uncaught rejection: that ends the process and the
+      // run reports nothing at all rather than one failed check.
+      console.log("AUTH MOCK ERROR", String(e).slice(0, 160));
+      await route.abort().catch(() => undefined);
     }
-    if (p === "/auth/v1/signup") {
-      auth.signupCalls.push(req.postDataJSON());
-      if (auth.signupWeak)
-        return json(
-          {
-            code: 422,
-            error_code: "weak_password",
-            msg: "Password is known to be weak and easy to guess, please choose a different one.",
-            weak_password: { reasons: ["pwned"] },
-          },
-          422,
-        );
-      // Confirm-email on: no session either way, and for an address that already exists GoTrue
-      // returns an obfuscated user rather than an error.
-      return json({ ...RECOVERY_USER, identities: auth.signupExisting ? [] : [{ id: "i1" }] });
-    }
-    if (p === "/auth/v1/token") {
-      const body = req.postDataJSON() || {};
-      auth.tokenCalls.push(body);
-      if (auth.wrongCurrent && body.password === auth.wrongCurrent)
-        return json({ code: 400, error_code: "invalid_credentials", msg: "Invalid login" }, 400);
-      return json(RECOVERY_SESSION);
-    }
-    if (p === "/auth/v1/user" && method === "PUT") {
-      auth.updateCalls.push(req.postDataJSON());
-      if (auth.updateWeak)
-        return json(
-          {
-            code: 422,
-            error_code: "weak_password",
-            msg: "Password is known to be weak and easy to guess, please choose a different one.",
-            weak_password: { reasons: ["pwned"] },
-          },
-          422,
-        );
-      return json(RECOVERY_USER);
-    }
-    if (p === "/auth/v1/user") return json(RECOVERY_USER);
-    if (p === "/auth/v1/logout") {
-      auth.logoutScopes.push(url.searchParams.get("scope") || "global");
-      return route.fulfill({ status: 204, headers: { "access-control-allow-origin": "*" } });
-    }
-    if (p === "/auth/v1/authorize") {
-      // The provider round trip, cancelled: the member closes the window and the provider sends
-      // them back to redirect_to with an access_denied fragment.
-      const back = url.searchParams.get("redirect_to") || BASE + "/sign-in";
-      return route.fulfill({
-        status: 302,
-        headers: {
-          location: back + "#error=access_denied&error_description=The+user+cancelled",
-          "access-control-allow-origin": "*",
-        },
-      });
-    }
-    return json({});
   });
+}
+
+async function handleAuth(route, auth) {
+  const req = route.request();
+  const url = new URL(req.url());
+  const p = url.pathname;
+  const method = req.method();
+  const json = (body, status = 200) =>
+    route.fulfill({
+      status,
+      contentType: "application/json",
+      headers: { "access-control-allow-origin": "*" },
+      body: JSON.stringify(body),
+    });
+  if (method === "OPTIONS")
+    return route.fulfill({
+      status: 200,
+      headers: {
+        "access-control-allow-origin": "*",
+        "access-control-allow-headers": "*",
+        "access-control-allow-methods": "*",
+      },
+    });
+  if (p === "/auth/v1/recover") {
+    auth.recoverCalls.push({ body: req.postDataJSON(), at: Date.now() });
+    if (auth.recoverDelay) await new Promise((r) => setTimeout(r, auth.recoverDelay));
+    // The two answers a known and an unknown address could plausibly produce. Neither may reach
+    // the surface (ruling 156 applied to auth).
+    return auth.recoverFails
+      ? json({ code: 400, error_code: "validation_failed", msg: "no such user" }, 400)
+      : json({});
+  }
+  if (p === "/auth/v1/signup") {
+    auth.signupCalls.push(req.postDataJSON());
+    if (auth.signupWeak)
+      return json(
+        {
+          code: 422,
+          error_code: "weak_password",
+          msg: "Password is known to be weak and easy to guess, please choose a different one.",
+          weak_password: { reasons: ["pwned"] },
+        },
+        422,
+      );
+    // Confirm-email on: no session either way, and for an address that already exists GoTrue
+    // returns an obfuscated user rather than an error.
+    return json({ ...RECOVERY_USER, identities: auth.signupExisting ? [] : [{ id: "i1" }] });
+  }
+  if (p === "/auth/v1/token") {
+    const body = req.postDataJSON() || {};
+    auth.tokenCalls.push(body);
+    if (auth.wrongCurrent && body.password === auth.wrongCurrent)
+      return json({ code: 400, error_code: "invalid_credentials", msg: "Invalid login" }, 400);
+    return json(RECOVERY_SESSION);
+  }
+  if (p === "/auth/v1/user" && method === "PUT") {
+    auth.updateCalls.push(req.postDataJSON());
+    if (auth.updateWeak)
+      return json(
+        {
+          code: 422,
+          error_code: "weak_password",
+          msg: "Password is known to be weak and easy to guess, please choose a different one.",
+          weak_password: { reasons: ["pwned"] },
+        },
+        422,
+      );
+    return json(RECOVERY_USER);
+  }
+  if (p === "/auth/v1/user") return json(RECOVERY_USER);
+  if (p === "/auth/v1/logout") {
+    auth.logoutScopes.push(url.searchParams.get("scope") || "global");
+    return route.fulfill({ status: 204, headers: { "access-control-allow-origin": "*" } });
+  }
+  if (p === "/auth/v1/authorize") {
+    // The provider round trip, cancelled: the member closes the window and the provider sends
+    // them back to redirect_to with an access_denied fragment. Served as a document that
+    // redirects itself rather than a 302, because route.fulfill refuses a redirect status in
+    // WebKit and the refusal escapes the handler as an uncaught exception.
+    const back = url.searchParams.get("redirect_to") || BASE + "/sign-in";
+    const to = back + "#error=access_denied&error_description=The+user+cancelled";
+    return route.fulfill({
+      status: 200,
+      contentType: "text/html",
+      headers: { "access-control-allow-origin": "*" },
+      body: `<!doctype html><meta charset="utf-8"><title>provider</title><script>location.replace(${JSON.stringify(
+        to,
+      )})</script>`,
+    });
+  }
+  return json({});
 }
 
 function makeAuth() {
@@ -277,13 +304,10 @@ async function runAuthLayout(browserType, bname, [w, h], theme) {
       await hydrated(page);
       await noOverflow(page, tag + ": reset landing expired");
 
-      // The signed-in change-password surface, inside the shell.
-      await page.goto(BASE + "/sign-in", { waitUntil: "domcontentloaded" });
-      await hydrated(page);
-      await page.fill('input[type="email"]', "member@test.invalid");
-      await page.fill('input[type="password"]', "x");
-      await page.click('button[type="submit"]');
-      await page.waitForURL("**/feed", { timeout: 15000 });
+      // The signed-in change-password surface, inside the shell. The shared signIn waits for the
+      // shell to finish mounting; navigating on the bare waitForURL raced the shell's own
+      // navigation in WebKit and lost the goto.
+      await signIn(page);
       await page.goto(BASE + "/password", { waitUntil: "domcontentloaded" });
       await page.waitForSelector('[data-testid="password"]', { timeout: 15000 });
       await hydrated(page);
@@ -551,12 +575,7 @@ async function runAuthFlows(browserType, bname, [w, h], theme) {
     const { browser, page, auth } = await open(browserType, [w, h], theme);
     try {
       auth.wrongCurrent = "not-my-password";
-      await page.goto(BASE + "/sign-in", { waitUntil: "domcontentloaded" });
-      await hydrated(page);
-      await page.fill('input[type="email"]', "member@test.invalid");
-      await page.fill('input[type="password"]', "x");
-      await page.click('button[type="submit"]');
-      await page.waitForURL("**/feed", { timeout: 15000 });
+      await signIn(page);
       await page.goto(BASE + "/password", { waitUntil: "domcontentloaded" });
       await page.waitForSelector('[data-testid="password"]', { timeout: 15000 });
       await hydrated(page);
