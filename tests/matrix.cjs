@@ -4,7 +4,7 @@
 // layer, so the real client code paths run against a deterministic backend. Backend behaviour
 // (RLS, the feed view) is verified separately in SQL against the live project.
 // Usage: BASE=https://b2-shell-feed.dna-web-application.pages.dev WEBKIT=1 node tests/matrix.cjs
-// Env: ONLY='[390,844]' runs one viewport; SPECIAL=publish,keyboard,silence,shell,targeted,profile,connect,vocab,block runs flows only.
+// Env: ONLY='[390,844]' runs one viewport; SPECIAL=publish,keyboard,silence,shell,targeted,profile,connect,vocab,block,auth runs flows only.
 // Brief 3 profile flows live in tests/profile.cjs and Brief 4 Connect flows in tests/connect.cjs; both share this mock.
 const { chromium, webkit } = require("playwright");
 const fs = require("fs");
@@ -2763,6 +2763,14 @@ if (require.main === module)
             for (const theme of process.env.THEME ? [process.env.THEME] : THEMES)
               await runConnect(bt, bname, vp, theme);
         }
+        // Brief 4B (rulings 230 to 236, 240): sign-in's additions, the two reset routes and the
+        // signed-in change-password path.
+        if (process.env.SPECIAL.includes("auth")) {
+          const { runAuth } = require("./auth.cjs");
+          for (const vp of process.env.ONLY ? [JSON.parse(process.env.ONLY)] : VIEWPORTS)
+            for (const theme of process.env.THEME ? [process.env.THEME] : THEMES)
+              await runAuth(bt, bname, vp, theme);
+        }
       }
       const fails = results.filter((r) => !r.ok);
       console.log(`${results.length - fails.length}/${results.length} checks passed`);
@@ -2804,6 +2812,9 @@ if (require.main === module)
       ])
         for (const theme of THEMES)
           for (const fail of [false, true]) await runVocabulary(bt, bname, vp, theme, fail);
+      // Brief 4B: the auth surfaces, every viewport, both themes.
+      const { runAuth } = require("./auth.cjs");
+      for (const vp of VIEWPORTS) for (const theme of THEMES) await runAuth(bt, bname, vp, theme);
       // Ruling 198: the blocked viewer's profile.
       const { runBlock } = require("./block.cjs");
       for (const vp of [

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" role="img" aria-hidden="true">
+  <title>Provider mark placeholder</title>
+  <!-- PLACEHOLDER, not LinkedIn's mark. Replace this file with the official "in" logo from the
+       LinkedIn brand downloads before shipping, and confirm the button wording against LinkedIn's
+       terms at the same time (handoff section 5). -->
+  <rect x="2.75" y="2.75" width="18.5" height="18.5" rx="4" fill="none" stroke="#8a8a8a" stroke-width="1.5"/>
+  <path d="M7.6 10.2v6.2M7.6 7.4v.1M11.4 16.4v-6.2M11.4 12.6a2.5 2.5 0 0 1 5 0v3.8" fill="none" stroke="#8a8a8a" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" role="img" aria-hidden="true">
+  <title>Provider mark placeholder</title>
+  <!-- PLACEHOLDER, not Google's mark. Replace this file with the official "G" from the Sign in
+       with Google branding guidelines before shipping (handoff section 5). Neutral mid-grey so it
+       reads on both themes and reads as provisional. -->
+  <circle cx="12" cy="12" r="9.25" fill="none" stroke="#8a8a8a" stroke-width="1.5"/>
+  <path d="M16 8.6A5.4 5.4 0 1 0 17.4 13H12" fill="none" stroke="#8a8a8a" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

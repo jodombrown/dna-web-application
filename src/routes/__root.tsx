@@ -3,6 +3,8 @@ import {
   Outlet,
   Link,
   createRootRouteWithContext,
+  useLocation,
+  useNavigate,
   useRouter,
   HeadContent,
   Scripts,
@@ -12,6 +14,7 @@ import { useEffect, type ReactNode } from "react";
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { AuthProvider } from "../lib/auth";
+import { captureRecoveryFromUrl, recoveryPending } from "../lib/recovery";
 
 function NotFoundComponent() {
   return (
@@ -122,12 +125,32 @@ function RootShell({ children }: { children: ReactNode }) {
   );
 }
 
+/**
+ * Ruling 240: the recovery handler renders /reset/new and never the Feed. A recovery token that
+ * lands anywhere in the app — the Site URL included, which is where it lands today — is held here
+ * until a password is set, so the session it created is not usable for anything else. Registering
+ * /reset/new as the recovery redirect in Supabase's URL configuration removes the detour; this
+ * removes the silent sign-in whether or not it is registered.
+ */
+function RecoveryGate() {
+  const navigate = useNavigate();
+  const pathname = useLocation({ select: (l) => l.pathname });
+  useEffect(() => {
+    captureRecoveryFromUrl();
+    if (!recoveryPending()) return;
+    if (pathname.replace(/\/$/, "") === "/reset/new") return;
+    void navigate({ to: "/reset/new", replace: true });
+  }, [pathname, navigate]);
+  return null;
+}
+
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
 
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
+        <RecoveryGate />
         {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
         {/* The composer mounts once inside the shell layout (src/routes/_shell.tsx), not here. */}
         <Outlet />

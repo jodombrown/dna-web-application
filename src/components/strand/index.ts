@@ -7,6 +7,7 @@ export * from "./Button";
 export * from "./IconButton";
 export * from "./Input";
 export * from "./Switch";
+export * from "./Checkbox";
 export * from "./Toast";
 export * from "./Sheet";
 export * from "./CBadge";

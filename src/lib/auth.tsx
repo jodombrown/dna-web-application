@@ -2,6 +2,7 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import type { Session, User } from "@supabase/supabase-js";
 import { getSupabase } from "./supabase";
+import { markRecoveryPending } from "./recovery";
 
 export type Member = {
   id: string;
@@ -52,8 +53,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!active) return;
       setState({ ready: true, session: data.session, member });
     });
-    const { data: sub } = sb.auth.onAuthStateChange((_event, session) => {
+    const { data: sub } = sb.auth.onAuthStateChange((event, session) => {
       if (!active) return;
+      // Ruling 240: the second reading of a recovery, for the case where the fragment was consumed
+      // before this app's own capture could see it. The gate in the root route acts on the flag.
+      if (event === "PASSWORD_RECOVERY") markRecoveryPending();
       setState({ ready: true, session, member: memberFromUser(session?.user) });
       void withProfile(session).then((member) => {
         if (active) setState((s) => (s.session === session ? { ...s, member } : s));

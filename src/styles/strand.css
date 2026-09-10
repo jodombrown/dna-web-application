@@ -293,6 +293,15 @@ a:hover {
   outline: 2px solid var(--focus);
   outline-offset: 2px;
 }
+/* Brief 4B (handoff section 2): a flagged auth field carries the red border and nothing else, so
+   the alert block above the form is the only place the message is announced. Strand's Input draws
+   its border inline, so the flag lands as a rule on aria-invalid rather than through the `error`
+   prop, which would print the message a second time under the field. */
+input[aria-invalid="true"],
+textarea[aria-invalid="true"] {
+  border-color: var(--danger) !important;
+}
+
 /* Hidden native file inputs (the composer triggers them from its own buttons). */
 input[type="file"][hidden] {
   display: none;
