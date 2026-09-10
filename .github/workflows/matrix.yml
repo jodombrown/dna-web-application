@@ -134,29 +134,6 @@ jobs:
           mkdir -p "$OUT"
           ulimit -c unlimited
           node tests/matrix.cjs 2>&1 | tee "$OUT/matrix.log"
-      # Rulings 267, 274 and 292: the per-arm accounting, the result per tier and whether a failure
-      # sat behind a crash, readable in the tail without fetching the log.
-      - name: Arms, tiers and the crash classification, in the tail
-        if: always()
-        env:
-          OUT: ${{ github.workspace }}/matrix-out
-        run: |
-          set -uo pipefail
-          log="$OUT/matrix.log"
-          if [ ! -s "$log" ]; then
-            echo "The matrix step produced no output; it did not reach tests/matrix.cjs."
-            exit 0
-          fi
-          tail=$(sed -n '/=== arms by tier/,$p' "$log")
-          [ -n "$tail" ] || tail=$(tail -80 "$log")
-          echo "=== the matrix summary, re-emitted (ruling 267) ==="
-          printf '%s\n' "$tail"
-          {
-            echo "### matrix (ruling 292: arms, not a total)"
-            echo '```'
-            printf '%s\n' "$tail"
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
       - name: Extract the signal and stack from any core (ruling 200)
         if: always()
         run: |
@@ -226,6 +203,35 @@ jobs:
           exit 0
         env:
           OUT: ${{ github.workspace }}/matrix-out
+      # Rulings 267, 274 and 292: the per-arm accounting, the result per tier and whether a failure
+      # sat behind a crash, readable in the tail without fetching the log.
+      #
+      # Last of the reporting steps on purpose. It used to run before the core extraction above,
+      # and on the one kind of run where the classification matters most, a run that lost a web
+      # process, that step then printed up to 4000 lines of gdb frames after it and buried the
+      # summary again. Run 45 is where that showed: ruling 267's own defect, reintroduced one step
+      # further down the job.
+      - name: Arms, tiers and the crash classification, in the tail
+        if: always()
+        env:
+          OUT: ${{ github.workspace }}/matrix-out
+        run: |
+          set -uo pipefail
+          log="$OUT/matrix.log"
+          if [ ! -s "$log" ]; then
+            echo "The matrix step produced no output; it did not reach tests/matrix.cjs."
+            exit 0
+          fi
+          tail=$(sed -n '/=== arms by tier/,$p' "$log")
+          [ -n "$tail" ] || tail=$(tail -80 "$log")
+          echo "=== the matrix summary, re-emitted (ruling 267) ==="
+          printf '%s\n' "$tail"
+          {
+            echo "### matrix (ruling 292: arms, not a total)"
+            echo '```'
+            printf '%s\n' "$tail"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
       - name: Upload screenshots and results
         if: always()
         uses: actions/upload-artifact@v4
