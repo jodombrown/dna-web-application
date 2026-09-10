@@ -1339,8 +1339,7 @@ function armCrashed() {
   return !!(openArm && openArm.crashed);
 }
 
-function record(name, ok, detail = "") {
-  const crashed = armCrashed();
+function record(name, ok, detail = "", crashed = armCrashed()) {
   results.push({ name, ok, detail, arm: openArm ? openArm.arm : null, crashed });
   // Ruling 274: every failure carries the flag or its absence, in the line a reader sees first.
   if (!ok) console.log("FAIL", crashed ? "[CRASH]" : "[no crash]", name, detail);
@@ -1413,22 +1412,24 @@ function accountForArms({ full, engines }) {
         `ruling 292 | ${arm}: the arm is declared`,
         false,
         `UNDECLARED: emitted ${n} checks and is absent from expected-counts.json; regenerate with EXPECT=write`,
+        crashed,
       );
     } else if (n < want) {
       record(
         label,
         false,
-        `INCOMPLETE: emitted ${n} of ${want}; the ${want - n} checks behind the failure never ran` +
-          (crashed ? " | WEB PROCESS CRASHED" : ""),
+        `INCOMPLETE: emitted ${n} of ${want}; the ${want - n} checks behind the failure never ran`,
+        crashed,
       );
     } else if (n > want) {
       record(
         label,
         false,
         `DRIFT: emitted ${n} against a declared ${want}; the declaration is stale, regenerate with EXPECT=write`,
+        crashed,
       );
     } else {
-      record(label, true);
+      record(label, true, "", crashed);
     }
   }
 
