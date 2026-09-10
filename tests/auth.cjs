@@ -180,6 +180,39 @@ async function hydrated(page) {
   });
 }
 
+/**
+ * Ruling 301: what the recovery arm was looking at when it gave up.
+ *
+ * The arm has failed only in WebKit, and in Chromium never: runs 113, 115 attempt 2, 116, 117 and
+ * 119, at three viewport and theme pairs. Every one of those failures recorded nothing but the
+ * selector it timed out on, which is why the cause is unestablished rather than merely unfixed.
+ * Three different endings present as the same missing element: a stage that never left `form`
+ * because the submit was rejected, a stage that flipped to `expired` because updateUser answered
+ * with an error, and a submit whose promise never settled. This tells them apart when it next fires.
+ *
+ * It records; it does not rescue. The arm stays red (ruling 206).
+ */
+async function recoveryState(page, auth) {
+  const state = { url: "unavailable", rendered: [], alert: "", busy: null };
+  try {
+    state.url = page.url();
+    for (const id of ["reset-new", "reset-done", "reset-expired", "auth-alert", "compose"])
+      if ((await page.locator(`[data-testid="${id}"]`).count()) > 0) state.rendered.push(id);
+    if (state.rendered.includes("auth-alert"))
+      state.alert = (await page.locator('[data-testid="auth-alert"]').innerText()).slice(0, 140);
+    state.busy = await page
+      .getAttribute('[data-testid="reset-new"]', "aria-busy")
+      .catch(() => null);
+  } catch (e) {
+    // A dead web process cannot answer; ruling 274's flag on the record says which case this is.
+    state.url = "state unavailable: " + String(e).slice(0, 140);
+  }
+  return (
+    JSON.stringify(state) +
+    ` | updateUser calls ${auth.updateCalls.length} | logout scopes ${JSON.stringify(auth.logoutScopes)}`
+  );
+}
+
 async function open(browserType, [w, h], theme) {
   const browser = await launch(browserType);
   const ctx = await browser.newContext({
@@ -231,6 +264,7 @@ async function sentState(browserType, vp, theme, tune) {
  */
 async function runAuthLayout(browserType, bname, [w, h], theme) {
   const tag = `${bname}-${w}x${h}-${theme}-auth`;
+  M.armStart(tag + " layout");
   {
     const { browser, page } = await open(browserType, [w, h], theme);
     try {
@@ -330,6 +364,7 @@ async function runAuthLayout(browserType, bname, [w, h], theme) {
  */
 async function runAuthFlows(browserType, bname, [w, h], theme) {
   const tag = `${bname}-${w}x${h}-${theme}-auth`;
+  M.armStart(tag + " flows");
 
   // 2. The alert block takes focus, and the offending fields carry the border and nothing else.
   {
@@ -480,7 +515,12 @@ async function runAuthFlows(browserType, bname, [w, h], theme) {
       );
       await noOverflow(page, tag + ": reset landing");
     } catch (e) {
-      record(tag + ": recovery landing flow completed", false, String(e).slice(0, 200));
+      // Ruling 301, and ruling 206: red, with enough recorded to classify the next firing.
+      record(
+        tag + ": recovery landing flow completed",
+        false,
+        String(e).slice(0, 400) + " | " + (await recoveryState(page, auth)),
+      );
     }
     await browser.close();
   }

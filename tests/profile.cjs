@@ -97,10 +97,6 @@ async function newPage(browserType, [w, h], theme, opts = {}) {
       await page.waitForTimeout(100);
     }
   });
-  const flags = { crashed: false };
-  page.on("crash", () => {
-    flags.crashed = true;
-  });
   const errors = [];
   page.on("pageerror", (e) => {
     const text = String(e);
@@ -109,7 +105,7 @@ async function newPage(browserType, [w, h], theme, opts = {}) {
   page.on("console", (m) => {
     if (m.type() === "error" && !IGNORED_CONSOLE.test(m.text())) errors.push(m.text());
   });
-  return { browser, page, db, errors, flags };
+  return { browser, page, db, errors };
 }
 
 async function openProfile(page, search = "") {
@@ -338,7 +334,8 @@ async function condenseState(page) {
 async function runOwner(browserType, bname, vp, theme) {
   const [w, h] = vp;
   const tag = `${bname}-${w}x${h}-${theme} profile owner`;
-  const { browser, page, db, errors, flags } = await newPage(browserType, vp, theme, {
+  M.armStart(tag);
+  const { browser, page, db, errors } = await newPage(browserType, vp, theme, {
     profile: { mode: "owner" },
   });
   let weight = null;
@@ -588,7 +585,7 @@ async function runOwner(browserType, bname, vp, theme) {
     record(
       tag + " flow",
       false,
-      (flags.crashed ? "WEB PROCESS CRASHED | " : "") +
+      (M.armCrashed() ? "WEB PROCESS CRASHED | " : "") +
         String(e).slice(0, 1200) +
         " | " +
         (await pageState(page)) +
@@ -603,6 +600,7 @@ async function runOwner(browserType, bname, vp, theme) {
 async function runVisitor(browserType, bname, vp, theme, mode) {
   const [w, h] = vp;
   const tag = `${bname}-${w}x${h}-${theme} profile visitor ${mode}`;
+  M.armStart(tag);
   const rel = mode === "connected" ? "connected" : "none";
   const { browser, page, db, errors } = await newPage(browserType, vp, theme, {
     profile: { mode, rel },
@@ -782,6 +780,7 @@ async function runVisitor(browserType, bname, vp, theme, mode) {
 async function runPublic(browserType, bname, vp, theme) {
   const [w, h] = vp;
   const tag = `${bname}-${w}x${h}-${theme} profile public`;
+  M.armStart(tag);
   const compact = w < 744;
   const expanded = w > 1024;
   const { browser, page, errors } = await newPage(browserType, vp, theme, {
@@ -924,6 +923,7 @@ async function runPublic(browserType, bname, vp, theme) {
 async function runGate(browserType, bname, vp, theme) {
   const [w, h] = vp;
   const tag = `${bname}-${w}x${h}-${theme} profile share off`;
+  M.armStart(tag);
   const { browser, page, errors } = await newPage(browserType, vp, theme, {
     profile: { mode: "stranger", switches: { shared: false, private: false } },
   });
