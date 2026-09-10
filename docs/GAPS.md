@@ -9,11 +9,16 @@ Phase posture (ruling 140): the canonical project holds no real member data, so 
 consent findings are recorded with a severity and tracked. None of them blocks a merge. They are
 invite-boundary gates, to close before the first real member invite.
 
-## G1. Block and report have no surface (ruling 186)
+## G1. Report has no surface, and block has one place only (ruling 186)
 
-**Severity: high at the invite boundary. Not a merge blocker (ruling 140).**
+**Severity: high at the invite boundary. Not a merge blocker (ruling 140). Narrowed 10 September
+2026 by Brief 4A, which built the block control on the profile.**
 
-`public.member_blocks` exists and is enforced, but nothing in the app writes to it.
+`public.member_blocks` is written by the app now, from one surface: the overflow on Profile's
+Visitor action row (`src/components/dna/ProfileBlockControl.tsx`, `src/lib/blocks.ts`, B4A-SPEC.md).
+Ruling 208 puts unblock in the same place, and ruling 198 keeps `/m/:handle` loading for both
+parties, so there is no list and no settings dependency to build. Report is untouched and the rest
+of the chassis still has no block affordance.
 
 Ruling 50 places block and report in the chassis, on every surface. The chassis shipped without a
 block store, so `member_blocks` was created inside Brief 4 to give Connect's projections something
@@ -26,14 +31,20 @@ What exists:
   never learns the row exists; admin may select and delete; service role has full access.
 - `private.is_blocked(a, b)`, symmetric, applied as an absolute filter on every projection that
   returns a member (see the audit below).
+- Block and unblock on Profile, from Brief 4A: one overflow item and one confirm sheet in two
+  variants, on the signed-in Visitor view. The writes are a plain insert and delete on
+  `member_blocks` under the blocker's own RLS, so the ruling 198 trigger carries every consequence
+  and there is no second place for the semantics to live.
 
-What is missing:
+What is still missing:
 
-- Any **surface**. No Block action on a member card, a profile, a post, a thread or a sheet, so in
-  the running app nothing offers a member the action.
+- Block anywhere else. No Block action on a member card, a post, a thread, an event or a Space, so
+  a member who meets someone outside `/m/:handle` has to reach their profile to act. Ruling 50 puts
+  block on every surface; Brief 4A gave it one, which is the one that also carries unblock.
 - Report entirely: no report object, no reason vocabulary, no queue, no admin surface. Ruling 115's
-  human review queue has no inbox.
-- An unblock surface, which the delete policy already permits but nothing calls.
+  human review queue has no inbox. Ruling 207 defers it deliberately: a report needs a moderation
+  destination, which is the System Admin brief, and a report that goes nowhere promises someone is
+  reading.
 
 **Correction, ruling 216.** This entry used to say the table "can only ever hold rows put there by
 hand". That is true of the app and false of the API, and PASS-01's F8 proved it live: the
@@ -56,8 +67,23 @@ is a product question no ruling has yet answered.
 
 What that brief no longer has to settle: what a block does to a profile and to the relationship.
 Ruling 198 answered both, and the enforcement sits in `profile_view` and in a trigger on
-`member_blocks`, not in a write path, so the Block action inherits the semantics rather than
-restating them. The gap here is still the whole surface: no Block, no unblock, no report.
+`member_blocks`, not in a write path, so every writer inherits the semantics rather than restating
+them. Brief 4A is the first writer and it inherits them exactly: it writes the row and re-reads.
+
+**Brief 4A, 10 September 2026.** What it settled beyond building the control. B4A section 6 made the
+audience-scope drop directional, which ruling 198 always was in words and the r198 implementation
+was not: `private.is_blocked` stays symmetric because discovery and contact are symmetric, but only
+the party who was blocked falls to the anonymous rule. The blocker keeps their own viewer, so ruling
+220's anchor still admits Anchored sections to them and their mutuals, shared Spaces and DIA line
+survive, while the revoked edge removes Connections sections from both sides. `profile_view` gains
+one key, `viewer_blocked`, which is the caller's own block and never the converse.
+
+One thing Brief 4A leaves open and did not create. A member with the Private switch on returns null
+from `profile_view` to anyone who is not an existing connection (ruling 213), and a block revokes the
+connection, so a blocked party loses the page for a Private member rather than seeing it at the
+lowest scope. That is ruling 213 reaching them first, not a disclosure: ending a connection without
+any block does the same thing. B4A section 7's enumeration assumes a profile that loads, so it does
+not describe this case, and no ruling covers the interaction. It belongs with the chassis brief.
 
 ## G2. What a block means on a profile — closed (ruling 198)
 

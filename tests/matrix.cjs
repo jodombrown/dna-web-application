@@ -302,7 +302,8 @@ const ATTESTATIONS = {
 
 /**
  * What profile_view returns for the mock's persona. mode: owner | connected | anchor | stranger |
- * blocked (ruling 198).
+ * blocked (the viewer is blocked by this member, ruling 198) | blocker (the viewer blocked this
+ * member, B4A section 7's Done Means 5).
  * A signed-out request (or p_as_public) gets the anonymous projection: null when Share is off,
  * otherwise core plus Everyone sections only. Section writes made through save_profile_section
  * are folded in so a refetch reflects them.
@@ -323,6 +324,9 @@ function profileProjection(db, anon) {
     mutuals: [],
     shared_spaces: [],
     private: sw.private,
+    // B4A section 4: the viewer's own block, and never the converse. False for a blocked viewer
+    // exactly as it is for a stranger, which is what keeps the two indistinguishable (section 7).
+    viewer_blocked: pr.mode === "blocker",
   };
   // Ruling 141: attesters who do not share publicly render as a role on a public projection.
   const publicBadges = () => {
@@ -339,13 +343,36 @@ function profileProjection(db, anon) {
   };
   if (anon) {
     if (!sw.shared) return null;
-    return { ...base, badges: publicBadges(), viewer: "anon", anchored: false, sections };
+    return {
+      ...base,
+      viewer_blocked: false,
+      badges: publicBadges(),
+      viewer: "anon",
+      anchored: false,
+      sections,
+    };
   }
   // Ruling 198: a blocked viewer is signed in and gets the public projection, whatever the prior
   // relationship and whether or not the profile is shared. No relationship object at all, so the
   // surface renders no Connect action and no Follow, and no mutual name or DIA line reaches them.
   if (pr.mode === "blocked")
     return { ...base, badges: publicBadges(), viewer: "member", anchored: false, sections };
+  // B4A sections 6 and 7 (Done Means 5): the blocker's own view of the member they blocked. Their
+  // scope is not dropped, so Anchored sections stay (ruling 220) and the mutuals, shared Spaces and
+  // DIA line stay with them; the connection edge is revoked, so Connections sections are gone; and
+  // the relationship object is absent, so the row holds the overflow and nothing else.
+  if (pr.mode === "blocker") {
+    sections.intent = { note: INTENT_NOTE, intent: ["Find collaborators", "Host and convene"] };
+    return {
+      ...base,
+      viewer: "member",
+      anchored: true,
+      sections,
+      mutuals: [{ name: "Lerato Khumalo", handle: "lerato-khumalo" }],
+      shared_spaces: ["Diaspora health workers"],
+      dia_line: "Thandiwe fulfilled a Need in the Space you lead.",
+    };
+  }
   if (pr.mode === "owner") {
     sections.links = LINKS;
     sections.intent = { note: INTENT_NOTE, intent: ["Find collaborators", "Host and convene"] };
@@ -645,6 +672,7 @@ function makeMockDb() {
       saves: [],
       follows: [],
       requests: [],
+      blocks: [],
     },
     // Brief 4: Connect's projection state and the writes the surface made.
     connect: {
@@ -1104,6 +1132,27 @@ async function mockSupabase(page, db, opts = {}) {
       if (table === "members") {
         const row = { handle: "amara-osei", name: "Amara Osei" };
         return single ? json(row) : json([row]);
+      }
+      // Brief 4A: block and unblock are a plain insert and delete on member_blocks under the
+      // blocker's own RLS (src/lib/blocks.ts). The live trigger revokes the relationship; here the
+      // projection mode carries the same consequence, so the surface re-reads the state it will
+      // read live.
+      if (table === "member_blocks") {
+        if (method === "POST") {
+          db.profile.blocks.push("block");
+          db.profile.mode = "blocker";
+          db.profile.rel = "none";
+          return json([], 201);
+        }
+        if (method === "DELETE") {
+          db.profile.blocks.push("unblock");
+          // Ruling 211: unblocking restores nothing. The pair comes back as strangers.
+          db.profile.mode = "stranger";
+          db.profile.rel = "none";
+          db.profile.following = false;
+          return json([], 200);
+        }
+        return json([]);
       }
       if (table === "member_follows") {
         if (method === "POST") {
@@ -2867,17 +2916,21 @@ if (require.main === module)
             for (const theme of process.env.THEME ? [process.env.THEME] : THEMES)
               for (const fail of [false, true]) await runVocabulary(bt, bname, vp, theme, fail);
         }
-        // Ruling 198: the blocked viewer's profile, on both layouts and both themes.
+        // Ruling 198 and Brief 4A: both parties' views, the control end to end, and its focus.
         if (process.env.SPECIAL.includes("block")) {
-          const { runBlock } = require("./block.cjs");
+          const { runBlock, runBlocker, runBlockFlow, runBlockFocus } = require("./block.cjs");
           for (const vp of process.env.ONLY
             ? [JSON.parse(process.env.ONLY)]
             : [
                 [390, 844],
                 [1280, 800],
               ])
-            for (const theme of process.env.THEME ? [process.env.THEME] : THEMES)
+            for (const theme of process.env.THEME ? [process.env.THEME] : THEMES) {
               await runBlock(bt, bname, vp, theme);
+              await runBlocker(bt, bname, vp, theme);
+              await runBlockFlow(bt, bname, vp, theme);
+              await runBlockFocus(bt, bname, vp, theme);
+            }
         }
         if (process.env.SPECIAL.includes("connect")) {
           const { runConnect } = require("./connect.cjs");
@@ -2955,13 +3008,19 @@ if (require.main === module)
         [1280, 800],
       ])
         for (const theme of THEMES) await runAuthFlows(bt, bname, vp, theme);
-      // Ruling 198: the blocked viewer's profile.
-      const { runBlock } = require("./block.cjs");
+      // Ruling 198 and Brief 4A: the blocked party's view, the blocker's own view, the control end
+      // to end and its focus management, on both layouts and both themes.
+      const { runBlock, runBlocker, runBlockFlow, runBlockFocus } = require("./block.cjs");
       for (const vp of [
         [390, 844],
         [1280, 800],
       ])
-        for (const theme of THEMES) await runBlock(bt, bname, vp, theme);
+        for (const theme of THEMES) {
+          await runBlock(bt, bname, vp, theme);
+          await runBlocker(bt, bname, vp, theme);
+          await runBlockFlow(bt, bname, vp, theme);
+          await runBlockFocus(bt, bname, vp, theme);
+        }
     }
     const fails = results.filter((r) => !r.ok);
     fs.writeFileSync(path.join(OUT, "results.json"), JSON.stringify(results, null, 2));

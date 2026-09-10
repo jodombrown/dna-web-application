@@ -4,6 +4,11 @@
 // what arrived. Sections save alone through save_profile_section; drafts are per section, never one
 // profile-wide form (ruling 126). Masthead: one ProfileHeader for every view (ruling 136), locked
 // and condensing past 120px of the column's scroll (ruling 134), exempt in edit mode.
+//
+// Brief 4A adds the block control to the Visitor action row and nothing else: one overflow item and
+// one confirm sheet, in ProfileBlockControl. Ruling 275, under 212: the masthead carries no origin,
+// no current place, no segment label and no local time line, on any view and for any viewer, so
+// ProfileHeader no longer takes those props and nothing here composes them.
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import {
@@ -40,8 +45,10 @@ import { Toast } from "@/components/strand/Toast";
 import { VisibilitySelect } from "@/components/strand/VisibilitySelect";
 import { VocabularyPicker } from "@/components/strand/VocabularyPicker";
 import { assetBase, C_LABEL, C_ORDER, type C } from "@/components/strand/cmeta";
+import { ProfileBlockControl } from "@/components/dna/ProfileBlockControl";
 import { toastStyle } from "@/components/dna/FeedSurface";
 import { useAuth } from "@/lib/auth";
+import { blockMember, unblockMember } from "@/lib/blocks";
 import { openComposer } from "@/lib/composer-store";
 import type { Json } from "@/lib/database.types";
 import {
@@ -50,7 +57,6 @@ import {
   respondRequest,
   saveSection,
   setFollow,
-  timeLine,
   uploadProfileImage,
   whenShort,
   withdrawRequest,
@@ -503,6 +509,26 @@ export function ProfileSurface({ handle, edit, asPublic }: ProfileSurfaceProps) 
     }
   };
 
+  // Brief 4A: the two block writes. member_blocks carries the whole contract (lib/blocks.ts) and the
+  // ruling 198 trigger revokes the relationship, so there is nothing to do here but write and
+  // re-read. Ruling 198: nothing is written to, or shown to, the other party. Ruling 211: unblocking
+  // restores no edge. The confirm sheet is the only caller, and a failed write says the same neutral
+  // thing every other relationship write says, naming no block (B4A sections 8, 9 and 13).
+  const blockWrite = useCallback(
+    async (fn: (viewer: string, member: string) => Promise<void>) => {
+      if (!profile || !me) return;
+      try {
+        await fn(me.id, profile.member.id);
+        await invalidate();
+      } catch {
+        toastMsg("That did not go through. Try again.");
+      }
+    },
+    [profile, me, invalidate, toastMsg],
+  );
+  const block = useCallback(() => blockWrite(blockMember), [blockWrite]);
+  const unblock = useCallback(() => blockWrite(unblockMember), [blockWrite]);
+
   // Condensing (ruling 134): the column's scroller, past 120px; edit mode exempt.
   const columnRef = useRef<HTMLDivElement>(null);
   const [condensed, setCondensed] = useState(false);
@@ -533,16 +559,6 @@ export function ProfileSurface({ handle, edit, asPublic }: ProfileSurfaceProps) 
       ro.disconnect();
     };
   }, [expanded, publicView, profile?.member.id]);
-
-  // Local time (ruling 131): real, re-rendered each minute.
-  const [, tick] = useState(0);
-  useEffect(() => {
-    const t = window.setInterval(() => tick((n) => n + 1), 60_000);
-    return () => window.clearInterval(t);
-  }, []);
-  const time = profile
-    ? timeLine(profile.member.local_tz, profile.member.current_place, owner)
-    : null;
 
   // The C sheet on the public close.
   const [cOpen, setCOpen] = useState<C | null>(null);
@@ -853,7 +869,6 @@ export function ProfileSurface({ handle, edit, asPublic }: ProfileSurfaceProps) 
           tier={tier}
           condensed={condensed && !editMode}
           bleed={bleed}
-          time={time}
           drafts={drafts}
           setDrafts={setDrafts}
           saving={saving}
@@ -874,6 +889,8 @@ export function ProfileSurface({ handle, edit, asPublic }: ProfileSurfaceProps) 
           first={first}
           connectWith={connectWith}
           relAct={relAct}
+          onBlock={block}
+          onUnblock={unblock}
           me={me?.id ?? null}
           onViewAsPublic={() =>
             void navigate({ to: "/m/$handle", params: { handle }, search: { as: "public" } })
@@ -1067,7 +1084,6 @@ type BodyProps = {
   tier: "compact" | "medium" | "expanded";
   condensed: boolean;
   bleed: number;
-  time: string | null;
   drafts: Drafts;
   setDrafts: (fn: (d: Drafts) => Drafts) => void;
   saving: Partial<Record<EditableId, boolean>>;
@@ -1092,6 +1108,8 @@ type BodyProps = {
   first: string;
   connectWith: () => void;
   relAct: (fn: () => Promise<void>, done?: string) => Promise<void>;
+  onBlock: () => Promise<void>;
+  onUnblock: () => Promise<void>;
   me: string | null;
   onViewAsPublic: () => void;
   openC: (c: C) => void;
@@ -1109,7 +1127,6 @@ function ProfileBody(p: BodyProps) {
     tier,
     condensed,
     bleed,
-    time,
     drafts,
     vis,
   } = p;
@@ -1122,8 +1139,6 @@ function ProfileBody(p: BodyProps) {
   const split = expanded && publicView;
   const coverH = compact ? 150 : expanded ? (publicView ? 300 : 220) : 200;
   const avatarSize = compact ? 80 : expanded ? (publicView ? 128 : 104) : 96;
-  // Ruling 187: the label arrives resolved on the member object; the client keeps no map.
-  const segmentLabel = m.segment_label ?? null;
   const setDraft = (id: FieldId, patch: Draft) =>
     p.setDrafts((st) => ({ ...st, [id]: { ...((st[id] as Draft | undefined) ?? {}), ...patch } }));
 
@@ -1137,81 +1152,97 @@ function ProfileBody(p: BodyProps) {
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
       {visitor && (
         <>
-          {/* Ruling 198: no relationship object means the pair is blocked, and a blocked pair gets no
-              Connect action and no Follow, in either direction. Every other visitor has one. */}
-          {p.rel && (
-            <div
-              data-testid="relationship"
-              data-state={p.rel.state}
-              style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}
-            >
-              {p.rel.state === "none" && (
-                <Button c="connect" onClick={p.connectWith} data-testid="connect-with">
-                  Connect with {p.first}
-                </Button>
-              )}
-              {p.rel?.state === "sent" && (
-                <Button
-                  variant="secondary"
-                  c="connect"
-                  onClick={() => void p.relAct(() => withdrawRequest(p.me as string, m.id))}
-                >
-                  Request sent
-                </Button>
-              )}
-              {p.rel?.state === "received" && (
-                <>
-                  <Button
-                    c="connect"
-                    onClick={() =>
-                      void p.relAct(
-                        () => respondRequest(p.me as string, m.id, true),
-                        "You and " + p.first + " are connected.",
-                      )
-                    }
-                  >
-                    Accept
+          {/* B4A section 4: one wrapping row, gap 8, every control 44 tall, the overflow last. The
+              relationship group is display:contents so its controls are items of this row rather
+              than a block that wraps as a unit. Ruling 198: no relationship object means the pair is
+              blocked, and a blocked pair gets no Connect action and no Follow, in either direction;
+              every other visitor has one. The overflow is there for all of them, because blocking is
+              symmetric in availability and the blocked party may block back. */}
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+            {p.rel && (
+              <div
+                data-testid="relationship"
+                data-state={p.rel.state}
+                style={{ display: "contents" }}
+              >
+                {p.rel.state === "none" && (
+                  <Button c="connect" onClick={p.connectWith} data-testid="connect-with">
+                    Connect with {p.first}
                   </Button>
+                )}
+                {p.rel?.state === "sent" && (
                   <Button
                     variant="secondary"
-                    onClick={() => void p.relAct(() => respondRequest(p.me as string, m.id, false))}
+                    c="connect"
+                    onClick={() => void p.relAct(() => withdrawRequest(p.me as string, m.id))}
                   >
-                    Decline
+                    Request sent
                   </Button>
-                </>
-              )}
-              {p.rel?.state === "connected" && (
-                <span
-                  data-testid="connected"
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: 6,
-                    minHeight: 44,
-                    padding: "0 14px",
-                    borderRadius: "var(--radius-m)",
-                    background: "var(--c-connect-tint)",
-                    color: "var(--c-connect-text)",
-                    fontSize: 15,
-                    fontWeight: 500,
-                  }}
+                )}
+                {p.rel?.state === "received" && (
+                  <>
+                    <Button
+                      c="connect"
+                      onClick={() =>
+                        void p.relAct(
+                          () => respondRequest(p.me as string, m.id, true),
+                          "You and " + p.first + " are connected.",
+                        )
+                      }
+                    >
+                      Accept
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      onClick={() =>
+                        void p.relAct(() => respondRequest(p.me as string, m.id, false))
+                      }
+                    >
+                      Decline
+                    </Button>
+                  </>
+                )}
+                {p.rel?.state === "connected" && (
+                  <span
+                    data-testid="connected"
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 6,
+                      minHeight: 44,
+                      padding: "0 14px",
+                      borderRadius: "var(--radius-m)",
+                      background: "var(--c-connect-tint)",
+                      color: "var(--c-connect-text)",
+                      fontSize: 15,
+                      fontWeight: 500,
+                    }}
+                  >
+                    <Icon name="check" size={16} />
+                    Connected
+                  </span>
+                )}
+                <Button
+                  variant="secondary"
+                  aria-pressed={!!p.rel?.following}
+                  onClick={() =>
+                    void p.relAct(() => setFollow(p.me as string, m.id, !p.rel?.following))
+                  }
+                  data-testid="follow"
                 >
-                  <Icon name="check" size={16} />
-                  Connected
-                </span>
-              )}
-              <Button
-                variant="secondary"
-                aria-pressed={!!p.rel?.following}
-                onClick={() =>
-                  void p.relAct(() => setFollow(p.me as string, m.id, !p.rel?.following))
-                }
-                data-testid="follow"
-              >
-                {p.rel?.following ? "Following" : "Follow"}
-              </Button>
-            </div>
-          )}
+                  {p.rel?.following ? "Following" : "Follow"}
+                </Button>
+              </div>
+            )}
+            <ProfileBlockControl
+              first={p.first}
+              name={m.name}
+              blocked={!!profile.viewer_blocked}
+              tier={tier}
+              onBlock={p.onBlock}
+              onUnblock={p.onUnblock}
+            />
+          </div>
           {p.rel?.state === "received" && (
             <p style={{ margin: 0, fontSize: 15, lineHeight: 1.45, color: "var(--ink-2)" }}>
               {p.first} asked to connect with you.
@@ -1648,12 +1679,9 @@ function ProfileBody(p: BodyProps) {
           avatar: profile.avatarUrl,
           cover: profile.coverUrl,
           coverFocus: m.cover_focus,
-          originCountry: m.origin_country,
-          currentPlace: m.current_place ?? m.current_country,
           pattern: m.pattern as MastheadPattern,
         }}
         identified={m.tier !== "account"}
-        segmentLabel={segmentLabel}
         owner={owner}
         onAvatar={() => p.avatarInput.current?.click()}
         onCover={() => p.coverInput.current?.click()}
@@ -1664,7 +1692,6 @@ function ProfileBody(p: BodyProps) {
         condensedAvatar={compact ? 64 : 88}
         bleed={bleed}
         gutter={compact ? 16 : 32}
-        timeLine={time}
         coverHeight={coverH}
         avatarSize={avatarSize}
         actions={pub ? undefined : actions}
