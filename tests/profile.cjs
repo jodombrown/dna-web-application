@@ -288,6 +288,15 @@ async function scrollTo(page, y) {
 }
 
 /** Check 7 at the current scroll position: the masthead state, and the portrait not covered by the app header or the condensed row. */
+/** The masthead's rendered text. Its <header> is display:contents in the hero forms. */
+async function mastheadText(page) {
+  return page.$eval('[data-testid="masthead"]', (el) =>
+    Array.from(el.children)
+      .map((c) => c.innerText || c.textContent || "")
+      .join(" | "),
+  );
+}
+
 async function condenseState(page) {
   return page.evaluate(() => {
     const mast = document.querySelector('[data-testid="masthead"]');
@@ -396,9 +405,26 @@ async function runOwner(browserType, bname, vp, theme) {
       tag + ": no mate masie on Profile",
       (await page.locator('img[src*="mate-masie"], [data-adinkra="mate-masie"]').count()) === 0,
     );
+    // Ruling 275, under 212: the core row is name, handle, avatar, headline, identity tier and
+    // pattern. No meta line, no place-derived local time line, on any view and for any viewer. The
+    // owner is the strictest arm of the three, because the owner is the one viewer every audience
+    // admits, so a value surviving anywhere survives here.
+    // The hero masthead's <header> is display:contents, so innerText on it is empty; read its
+    // children instead.
+    const mastText = await mastheadText(page);
     record(
-      tag + ": local time line renders",
-      (await page.locator('[data-testid="local-time"]').count()) >= 1,
+      tag + ": no local time line on the core row (ruling 275)",
+      (await page.locator('[data-testid="local-time"]').count()) === 0,
+    );
+    record(
+      tag + ": no origin, place or segment label on the core row (ruling 275)",
+      !/From South Africa|Johannesburg|Returnee/.test(mastText),
+      mastText.replace(/\n/g, " | ").slice(0, 160),
+    );
+    // B4A section 1: a member cannot block themself, so the Owner view has no overflow.
+    record(
+      tag + ": no block overflow on the owner view (B4A section 1)",
+      (await page.locator('[data-testid="block-control"]').count()) === 0,
     );
 
     // Check 7: condensing.
@@ -610,6 +636,32 @@ async function runVisitor(browserType, bname, vp, theme, mode) {
       (await page.locator('[data-testid="badges"]').count()) === 1,
     );
     record(tag + ": empty sections absent for a visitor", !ids.includes("convey"), ids.join(","));
+    // B4A section 4: every signed-in Visitor carries the overflow, and it is the last control in
+    // the action row. Its one item reads Block, never Report (ruling 207) and never a second item.
+    record(
+      tag + ": overflow present, one item, reading Block (B4A section 4)",
+      (await page.locator('[data-testid="block-menu-trigger"]').count()) === 1 &&
+        (await page.locator('[data-testid="block-menu"]').count()) === 0,
+    );
+    await tap(page, '[data-testid="block-menu-trigger"]');
+    await page.waitForTimeout(200);
+    record(
+      tag + ": the menu opens with exactly one item, Block Thandiwe",
+      (await page.locator('[data-testid="block-menu"] [role="menuitem"]').count()) === 1 &&
+        (await page.locator('[data-testid="block-menu-item"]').innerText()) === "Block Thandiwe" &&
+        (await page.locator('[data-testid="block-menu-trigger"]').getAttribute("aria-expanded")) ===
+          "true",
+      await page.locator('[data-testid="block-menu"]').innerText(),
+    );
+    await noOverflow(page, tag + " menu open");
+    await page.keyboard.press("Escape");
+    await page.waitForTimeout(200);
+    record(
+      tag + ": Esc closes the menu and returns focus to the trigger",
+      (await page.locator('[data-testid="block-menu"]').count()) === 0 &&
+        (await page.evaluate(() => document.activeElement?.getAttribute("data-testid") ?? null)) ===
+          "block-menu-trigger",
+    );
     if (mode === "connected") {
       record(
         tag + ": Connected pill, Follow toggle",
@@ -769,6 +821,19 @@ async function runPublic(browserType, bname, vp, theme) {
     record(
       tag + ": no badges row, no relationship actions for the public",
       (await page.locator('[data-testid="badges"], [data-testid="relationship"]').count()) === 0,
+    );
+    // B4A section 1: the control is absent on the Public signed-out view. There is no identity to
+    // block with, and ruling 208 puts it on the Visitor view only.
+    record(
+      tag + ": no block overflow on the public view (B4A section 1)",
+      (await page.locator('[data-testid="block-control"]').count()) === 0,
+    );
+    // Ruling 275, under 212: the core row on the view that reaches the most people.
+    record(
+      tag + ": no origin, place, segment label or local time on the core row (ruling 275)",
+      (await page.locator('[data-testid="local-time"]').count()) === 0 &&
+        !/From South Africa|Johannesburg|Returnee/.test(await mastheadText(page)),
+      (await mastheadText(page)).replace(/\n/g, " ").slice(0, 160),
     );
     const text = await page.locator("body").innerText();
     record(

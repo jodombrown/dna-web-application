@@ -1,8 +1,15 @@
 // Ported from profile/strand-patch/Profile.jsx (B3-Profile-v3, rulings 122, 127, 130, 131, 134,
-// 136). Behavior unchanged. One masthead for every view: `hero` is the locked, condensing banner;
+// 136). One masthead for every view: `hero` is the locked, condensing banner;
 // `hero && split` the expanded public split banner; neither is the in-column card form. The ground
 // carries the member's textile tile (ruling 132), the one place a pattern sits behind a page head.
 // Mate masie appears nowhere on the profile (ruling 133).
+//
+// Ruling 275, under ruling 212: the core row is name, handle, avatar, headline, identity tier and
+// pattern, and nothing else, at any scope and for any viewer. Origin, current place, the segment
+// label and the place-derived local time line left it and obey admit_section as sections. The props
+// that carried them (`originCountry`, `currentPlace`, `segmentLabel`, `timeLine`) are gone rather
+// than left unpassed, because a component that still accepts a prop the doctrine forbids is a prop
+// somebody eventually passes.
 import type { CSSProperties, ReactNode } from "react";
 import { Avatar } from "./Avatar";
 import { Button } from "./Button";
@@ -19,15 +26,12 @@ export type ProfileHeaderMember = {
   avatar?: string | null | undefined;
   cover?: string | null | undefined;
   coverFocus?: string | null | undefined;
-  originCountry?: string | null | undefined;
-  currentPlace?: string | null | undefined;
   pattern?: MastheadPattern | null | undefined;
 };
 
 export type ProfileHeaderProps = {
   member: ProfileHeaderMember;
   identified?: boolean | undefined;
-  segmentLabel?: string | null | undefined;
   actions?: ReactNode;
   onAvatar?: (() => void) | undefined;
   onCover?: (() => void) | undefined;
@@ -39,7 +43,6 @@ export type ProfileHeaderProps = {
   condensedAvatar?: number;
   bleed?: number;
   gutter?: number | undefined;
-  timeLine?: string | null | undefined;
   coverHeight?: number;
   avatarSize?: number;
   children?: ReactNode;
@@ -51,7 +54,6 @@ const ONE: CSSProperties = { whiteSpace: "nowrap", overflow: "hidden", textOverf
 export function ProfileHeader({
   member,
   identified,
-  segmentLabel,
   actions,
   onAvatar,
   onCover,
@@ -63,13 +65,11 @@ export function ProfileHeader({
   condensedAvatar = 64,
   bleed = 0,
   gutter,
-  timeLine,
   coverHeight = 220,
   avatarSize = 112,
   children,
   style,
 }: ProfileHeaderProps) {
-  const origin = member.originCountry ? "From " + member.originCountry : null;
   const base = assetBase();
   const overlap = Math.round(avatarSize * (hero ? 0.5 : 0.55));
   const tile = base + "patterns/" + (member.pattern || "kente") + "-pattern.svg";
@@ -190,82 +190,7 @@ export function ProfileHeader({
             {member.headline}
           </span>
         )}
-        {(origin || member.currentPlace) && (
-          <span
-            style={{
-              fontSize: 13,
-              color: "var(--ink-3)",
-              lineHeight: 1.3,
-              display: "flex",
-              alignItems: "center",
-              gap: 5,
-              ...ONE,
-            }}
-          >
-            <Icon name="map-pin" size={12} />
-            {[origin, member.currentPlace].filter(Boolean).join(" · ")}
-          </span>
-        )}
-        {timeLine && (
-          <span
-            style={{
-              fontSize: 13,
-              color: "var(--ink-3)",
-              lineHeight: 1.3,
-              display: "flex",
-              alignItems: "center",
-              gap: 5,
-              ...ONE,
-            }}
-          >
-            <Icon name="clock" size={12} />
-            {timeLine}
-          </span>
-        )}
       </div>
-    </div>
-  );
-  const meta = (
-    <div
-      style={{
-        display: "flex",
-        flexWrap: "wrap",
-        gap: "4px 14px",
-        fontSize: 15,
-        color: "var(--ink-3)",
-        lineHeight: 1.4,
-      }}
-    >
-      {segmentLabel && (
-        <span style={{ color: "var(--ink-2)", fontWeight: 500 }}>{segmentLabel}</span>
-      )}
-      {origin && (
-        <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
-          <Icon name="globe" size={14} />
-          {origin}
-        </span>
-      )}
-      {member.currentPlace && (
-        <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
-          <Icon name="map-pin" size={14} />
-          {member.currentPlace}
-        </span>
-      )}
-    </div>
-  );
-  const time = timeLine && (
-    <div
-      data-testid="local-time"
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        gap: 5,
-        fontSize: 13,
-        color: "var(--ink-3)",
-      }}
-    >
-      <Icon name="clock" size={13} />
-      {timeLine}
     </div>
   );
   const slot = (actions || children) && (
@@ -365,8 +290,6 @@ export function ProfileHeader({
                   aria-hidden="true"
                   style={{ width: 48, height: 1, background: "var(--ink-3)", margin: "4px 0 2px" }}
                 />
-                {meta}
-                {time}
               </div>
             </div>
           </div>
@@ -565,8 +488,6 @@ export function ProfileHeader({
                 >
                   {member.name}
                 </h1>
-                {meta}
-                {time}
               </div>
             </div>
           )}
@@ -684,8 +605,6 @@ export function ProfileHeader({
                 {member.headline}
               </div>
             )}
-            {meta}
-            {time}
           </div>
         </div>
       )}

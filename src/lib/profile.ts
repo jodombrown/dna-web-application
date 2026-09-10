@@ -5,7 +5,11 @@
 // nothing here filters. This module is the only profile read in the app (no second projection).
 // Writes: save_profile_section(section, payload), one section per call, under the owner's own RLS.
 // Relationship actions go through Connect's write paths (Brief 4): set_follow, withdraw_request,
-// respond_to_request.
+// respond_to_request. Block and unblock are chassis, not Profile's and not Connect's (ruling 186);
+// they live in lib/blocks.ts.
+//
+// Ruling 275, under 212: the place-derived local time line left the core row on every surface, so
+// the helper that composed it left with the ProfileHeader props that carried it.
 import { format } from "date-fns";
 import type { Audience } from "@/components/strand/AudienceSelect";
 import type { AttestationItem } from "@/components/strand/AttestationRail";
@@ -122,6 +126,13 @@ export type ProfileView = {
   }[];
   visibility?: Partial<Record<SectionKey, Audience>> | undefined;
   relationship?: { state: RelationshipState; following: boolean } | undefined;
+  /**
+   * B4A section 4: has the viewer blocked this member. The viewer's own `member_blocks` row, which
+   * they may already read, so telling them discloses nothing. The converse is deliberately absent
+   * from the projection: nothing that reaches a blocked member may separate a block from a stranger
+   * (B4A section 7). It is false for a blocked viewer exactly as it is for every other viewer.
+   */
+  viewer_blocked?: boolean | undefined;
   mutuals: { name: string; handle: string; avatar_path?: string | undefined }[];
   shared_spaces: string[];
   anchored?: boolean | undefined;
@@ -292,49 +303,4 @@ export function whenShort(iso: string | null | undefined): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";
   return format(d, "EEE d MMM");
-}
-
-// ---------------------------------------------------------------------------
-// Local time (ruling 131): real, from the member's stored zone and the viewer's device zone; absent
-// without a location. "14:32 in Johannesburg" for the owner; "· 2 hours ahead of you" for a viewer.
-// ---------------------------------------------------------------------------
-
-function minutesInZone(tz: string, now: Date): number {
-  const parts = new Intl.DateTimeFormat("en-GB", {
-    timeZone: tz,
-    hour: "numeric",
-    minute: "numeric",
-    hourCycle: "h23",
-  }).formatToParts(now);
-  const h = Number(parts.find((p) => p.type === "hour")?.value ?? 0);
-  const m = Number(parts.find((p) => p.type === "minute")?.value ?? 0);
-  return h * 60 + m;
-}
-
-export function timeLine(
-  tz: string | null | undefined,
-  place: string | null | undefined,
-  owner: boolean,
-  now = new Date(),
-): string | null {
-  if (!tz) return null;
-  let t: string;
-  try {
-    t = now.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: tz });
-  } catch {
-    return null;
-  }
-  const city = (place ?? "").split(",")[0]?.trim() || tz.split("/").pop()?.replace(/_/g, " ") || "";
-  if (owner) return t + " in " + city;
-  let diff =
-    minutesInZone(tz, now) - minutesInZone(Intl.DateTimeFormat().resolvedOptions().timeZone, now);
-  if (diff > 720) diff -= 1440;
-  if (diff < -720) diff += 1440;
-  const hrs = Math.abs(diff) / 60;
-  const n = Number.isInteger(hrs) ? String(hrs) : hrs.toFixed(1);
-  const rel =
-    diff === 0
-      ? "same time as you"
-      : n + (n === "1" ? " hour " : " hours ") + (diff > 0 ? "ahead of you" : "behind you");
-  return t + " in " + city + " · " + rel;
 }

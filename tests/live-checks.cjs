@@ -363,6 +363,8 @@ async function get(url, headers = {}) {
         );
         const memberSelf = await memberRpc(memberToken, "profile_view", {});
         const memberId = memberSelf.body && memberSelf.body.member && memberSelf.body.member.id;
+        const memberHandle =
+          memberSelf.body && memberSelf.body.member && memberSelf.body.member.handle;
         record(
           "ruling 218: the fixture owner and the viewer are two different members",
           !!ownerId && !!memberId && ownerId !== memberId,
@@ -665,6 +667,68 @@ async function get(url, headers = {}) {
               ),
               "media " + (media.body || []).length + " links " + (links.body || []).length,
             );
+
+            // Brief 4A, section 7's acceptance test, live and as a real member, with the block
+            // above in place. The blocker is MEMBER_EMAIL and the blocked party is OWNER_EMAIL.
+            //
+            // The one thing that must never differ between a blocked party and a stranger is
+            // anything naming the block. `viewer_blocked` is the caller's own row, so it is true
+            // for the blocker and false for the blocked party, which is what an unblocked stranger
+            // reads too. The relationship object is absent for both, per ruling 198.
+            if (!ownerHandle || !memberHandle) {
+              skip(
+                "B4A section 7: the blocked party's projection, live",
+                "one of the two handles did not resolve, so there is nothing to read",
+              );
+            } else {
+              const blockerSees = await memberRpc(memberToken, "profile_view", {
+                p_handle: ownerHandle,
+              });
+              record(
+                "B4A section 4: the blocker's own block reaches them as viewer_blocked",
+                blockerSees.status === 200 &&
+                  !!blockerSees.body &&
+                  blockerSees.body.viewer_blocked === true &&
+                  blockerSees.body.relationship === undefined,
+                "viewer_blocked " +
+                  JSON.stringify(blockerSees.body && blockerSees.body.viewer_blocked) +
+                  " relationship " +
+                  JSON.stringify(blockerSees.body && blockerSees.body.relationship),
+              );
+              const blockedSees = await memberRpc(ownerToken, "profile_view", {
+                p_handle: memberHandle,
+              });
+              record(
+                "B4A section 7: the blocked party's page still loads (ruling 198 item 4)",
+                blockedSees.status === 200 &&
+                  !!blockedSees.body &&
+                  blockedSees.body.viewer === "member",
+                "status " + blockedSees.status + " " + blockedSees.text.slice(0, 80),
+              );
+              // Every key naming a block state must be present and false, which is what an
+              // unblocked stranger reads. Checked over the parsed keys rather than by matching the
+              // serialised payload: run 114 failed this arm on a regex whose \\s* backtracked to
+              // zero width, so the negative lookahead landed on the space before "false" and
+              // reported a disclosure that the projection did not make.
+              const blockedBody = blockedSees.body || {};
+              const blockKeys = Object.keys(blockedBody).filter((k) => /block/i.test(k));
+              const failed = [];
+              if (blockedBody.viewer_blocked !== false) failed.push("viewer_blocked");
+              if (blockedBody.relationship !== undefined) failed.push("relationship present");
+              if ((blockedBody.mutuals || []).length !== 0) failed.push("mutuals");
+              if ((blockedBody.shared_spaces || []).length !== 0) failed.push("shared_spaces");
+              if (blockedBody.anchored === true) failed.push("anchored");
+              if (blockedBody.dia_line !== undefined) failed.push("dia_line");
+              const disclosing = blockKeys.filter((k) => blockedBody[k] !== false);
+              if (disclosing.length) failed.push("keys " + disclosing.join(","));
+              record(
+                "B4A section 7: nothing in the blocked party's projection discloses the block",
+                !!blockedSees.body && failed.length === 0,
+                failed.length
+                  ? failed.join("; ")
+                  : "keys naming a block: " + (blockKeys.join(",") || "none"),
+              );
+            }
             const blockOut = await memberRest(
               memberToken,
               "member_blocks?blocker_id=eq." + memberId + "&blocked_id=eq." + ownerId,
