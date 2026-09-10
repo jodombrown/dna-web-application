@@ -489,7 +489,10 @@ const CONNECT_MEMBERS = [
     chips: ["Healthcare & Wellness", "Leadership"],
     badges: [],
     mutuals: [{ name: "Lerato Khumalo", avatar_path: null }],
-    rel: "window",
+    // Ruling 214: this member declined inside the window. private.relationship_display maps that
+    // to sent before the projection returns, so the fixture carries what the wire carries and the
+    // card is compared against a genuinely pending one below.
+    rel: "sent",
     following: false,
     _segment: "returnee",
     _location: "United States",

@@ -3,6 +3,12 @@
 Session 13, 9 September 2026. Audit, not a build. Run before Brief 5, against `main` at 11d1819 and
 against the canonical Supabase project `dgspjevjoblujcoljvkn`.
 
+> **Amended in place, 9 September 2026, after Fix PR 01** (rulings 212 to 218, migration
+> `20260909160000_fix_pr_01_rulings_212_216.sql` and
+> `20260909170000_r229_withdraw_renders_as_sent.sql`; rulings 225, 226 and 228 arrived with them). The body below is the pass as written and is not
+> rewritten; **Status after Fix PR 01** at the end of section 4 carries one line per finding, and
+> two of this report's own statements are corrected there.
+
 ## Nothing was changed
 
 No fix, no policy change, no migration, no schema change. Two candidate fixes were obvious while
@@ -417,6 +423,115 @@ row` now returns 401 and the suite scores 35 of 40 on `main` (run 92). The test 
 disagree, and which one is wrong depends on whether the revoke was intended. That decision is not
 this report's to make.
 
+### The addendum resolved, 9 September 18:55
+
+The drift the addendum found was Fix PR 01's, caught mid-application. That session was replacing the
+grants, the policies and the projections in sequence against the live project while the migration
+file was still uncommitted in its working tree, so for a period the canonical database really did
+carry narrowed grants with no migration on `main` to account for them. Recording it was right, and
+the sequencing that made it possible was not; **ruling 225** is the rule it broke, written after the
+fact: a migration is committed before the state it describes is applied to the shared project, and a
+batch applied in pieces is carried whole by the repo before the first piece runs. The migration is
+now committed as
+`20260909160000_fix_pr_01_rulings_212_216.sql`, and every function body in it matches
+`pg_proc.prosrc` on the project by md5, so the tree and the canonical database agree again and a
+`db reset` reproduces the live state rather than reverting it.
+
+Two of the addendum's readings do not survive that, and one does.
+
+**"It does not close F2a or F2b" was true at 18:30 and is false now.** At that moment the grants had
+been replaced and `profile_view` and `private.connect_card` had not, which is exactly what the
+addendum observed. Both have since been replaced. The probe it used cannot decide the question
+either way, though, and that is worth more than the timing: it read `thandiwe-dube`, whose Origin,
+Where and Segment audiences sit at their default of `everyone`, where returning those attributes is
+the audience working rather than a gate missing. `member_visibility` holds one row on this project
+(`intent = anchored`), so any probe that does not set the fixture first sees the `everyone` case.
+Paired, one transaction each, viewer Yusuf:
+
+| Probe | `profile_view.member` keys |
+| --- | --- |
+| Audiences at their default `everyone` | `cover_focus, current_place, handle, headline, id, local_tz, name, origin_country, pattern, segment, segment_label, tier` |
+| Same probe, audiences at `connections` | `cover_focus, handle, headline, id, name, pattern, tier` |
+
+The Connect card behaves the same way: `origin`, `place` and `segment_label` present in the first,
+absent in the second. This is the F2 fixture the pass built by hand in section 3, and it is the only
+thing that separates the two cases.
+
+**"`members_member_select` is still `USING (true)`" was not live-checked.** The policy replacement
+and the grant narrowing were applied in one statement batch, so the state the addendum describes —
+`USING (true)` over eight columns — never existed. The addendum marks the grant table "verified
+live, not inferred" and does not make that claim for the policy; that half was read from the
+migrations on `main`, which did not yet carry the change. The policy is `private.can_see_core(id)`.
+**Ruling 226** settles it: F1 is closed, not narrowed.
+
+**The CI consequence was correct and is fixed here.** `tests/live-checks.cjs` did hardcode `CORE_COLS`
+with four of the revoked columns. It now asserts the eight identity columns come back and that the
+five section-gated ones are refused, which is the assertion ruling 212 wants standing.
+
+**Ruling 228 applies to the arms that replaced it.** The ruling-218 arms cannot run without two test
+accounts, and an arm that cannot run is reported as unproven, never as passing and never folded into
+a passing count. `tests/live-checks.cjs` now prints an `UNPROVEN` line per arm it could not
+exercise, names them in the summary, and counts them apart from the passes. Without the credentials
+one line fires and covers the whole group, which is what CI prints today; the other five guards sit
+inside the block, for the case where the accounts exist but a precondition does not — no access
+token, no resolvable member id, a fixture owner with no `origin_country` to filter on, or one with
+no visible posts for `post_media` and `post_links` to hang off.
+
+### Status after Fix PR 01
+
+One line per finding. Every closed line was re-tested live with this report's own probe, as a member
+or as `anon` inside `BEGIN … ROLLBACK`, and the counter list under **Live method** was reproduced
+before and after and is unchanged.
+
+| # | Status | What was done, and what the probe returned |
+| --- | --- | --- |
+| **F1** | **Closed** (IB-1, ruling 226) | `members_member_select` is now `private.can_see_core(id)`, ruling 213's rule, and the `authenticated` grant is `id, handle, name, headline, avatar_path, cover_path, cover_focus, pattern`. `anon` is narrowed to the same eight, because an anonymous read of `members.origin_country` is F2a one step back. Live as an isolated member: the identity columns return 6 rows; `profile_private, profile_shared, identified_at, updated_at` and the five section-gated columns are refused, `42501 permission denied for table members` |
+| **F2a** | **Closed** (IB-2) | `profile_view` admits or omits `origin_country`, `current_place`, `current_country`, `local_tz`, `segment` and `segment_label` per `admit_section` with the explicit viewer, anonymous callers included. Live as `anon` against the same fixture: the `member` object carried `id, handle, name, headline, cover_focus, pattern, tier` and none of the six |
+| **F2b** | **Closed** (IB-2) | Ruling 212 settled the collision the report could not: the five are section-gated on every path. Same fixture, viewer Yusuf, live: `profile_view.member` as above; the Connect card returned `name, handle, headline, chips, badges, mutuals, rel, following` and no `place`, `origin` or `segment_label`. The section guard and the attribute now read the same three booleans, so they cannot disagree again |
+| **F3** | **Closed** (IB-3) | Ruling 213. `private.admit_member` is the single row rule, called by the `members` policies, `profile_view`, the Members and Suggested lenses, `connect_where` and `send_introduction`. Live with `profile_private = true`: for a non-connection `profile_view` returned `NULL` (identical to an unknown handle), the member was absent from Members and Suggested, `connect_where` returned `{"continent":[],"diaspora":[]}`, the row was gone from `members`, and `send_introduction` refused with `send_introduction: not available`. For an existing connection: card, row and profile unchanged, `sections {}`, `private true`, exactly as before |
+| **F4** | **Closed** (IB-4) | The block predicate is on `posts_member_select` and on `posts_event_host_select`, which is OR-ed with it and could otherwise readmit a member-authored post anchored to an event the caller hosts. Live with the report's own block in place: `feed` 6 → **0**, `posts` 6 → 0, `post_media` 6 → 0, `post_links` 1 → 0, `events` 2 → 0, `stories` 1 → 0. The one Space and one opportunity the blocker still reads are a third member's, reached through her own active Space role, not through a blocked member's post. Symmetric: the blocked member reads 0 of the blocker's posts |
+| **F5** | **Closed** (IB-5) | The `location`, `origin` and `segment` axes now check `admit_section` like the other seven. Same fixture, live: `{"origin":"South Africa"}` returned nothing where it had returned the member, `{"segment":"returnee"}` returned only the member who had not withheld Segment, `{"location":"United States"}` the same. `connect_filter_options()` needed no change; see the correction below |
+| **F6** | **Closed** (IB-6) | Ruling 214. `private.relationship_display` maps `window` to `sent` at the projection boundary; `private.relationship_state` keeps the distinction, where it governs whether a new introduction is accepted. Live, sender Yusuf with one pending request and one decline three days old: the two Members cards were byte-identical apart from identity (`{"rel": "sent", "chips": [], "badges": [], "mutuals": [], "following": false, "identified": false}` each), both Sent rows read `sent`, both `profile_view.relationship` objects read `{"state": "sent", "following": false}`, and the sender still read 0 rows from `connection_requests`. `MEMBER_REL` and `RelationshipState` lost the fourth state |
+| **F7** | Open, Medium (IB-7) | Not in this PR |
+| **F8** | **No fix; record corrected** | Ruling 216. `docs/GAPS.md` G1 no longer says the table can only hold rows placed by hand. The irreversibility is intended and ruling 211 says so; the audit did not have 211 when it wrote the finding |
+| **F9 to F15, F17** | Open, at their severities | Not in this PR. F9 lands on Brief 5; F10 is not worth a migration in a PR this security-sensitive; F15 is defence in depth behind a schema that is not exposed, and the next pass proves that over real HTTP |
+| **F16** | **Closed** (IB-10) | Ruling 215. `publish_post`'s Connect branch calls `send_introduction` or writes nothing. Live: a recipient inside the window and a recipient who had blocked the author were both refused with `send_introduction: not available`; a valid recipient wrote exactly one row, `pending`, with `to_name` taken from the members row rather than the composer's free text. CLAUDE.md's five named write paths are true again |
+| **G6** | **Closed** (227, 229) | Not one of the seventeen: opened by this PR while closing F6, and closed inside it rather than split across two. `private.relationship_display` maps a withdrawn request to `sent` for the rest of the window, as it already maps `window` to `sent`. Live, sender Yusuf against one pending, one declined three days ago and one withdrawn: raw `relationship_state` reads `sent`, `window`, `none`; the Members cards read `sent, sent, sent`; all three hold a Sent row reading `sent`; Suggested returns `[]`; `profile_view.relationship` is `{"state": "sent", "following": false}` for all three; and `send_introduction` refuses all three at the same line with the same message. A genuine `none` pair still succeeds, and a withdrawal older than the window releases |
+
+### Two corrections to this report, and one residual it did not have
+
+**F16's second writer was already broken, and the fix repairs it.** The pass read the code and
+recorded a second writer; the path had not been exercised. Live, `publish_post`'s Connect branch
+raised `42501 new row violates row-level security policy for table "connection_requests"` on every
+call, because the B4 migration dropped the sender's `SELECT` (ruling 157) and the branch's
+`INSERT … RETURNING id` needs a row it is allowed to read back — a `SECURITY INVOKER` function
+cannot write to a table its caller may not read. So the composer's Connect verb had been failing
+since Brief 4, and F16's severity was right for a different reason than the one given.
+`send_introduction` is `SECURITY DEFINER` and returns the id, so routing through it closes the
+finding and repairs the verb in the same change.
+
+**`connect_filter_options()` builds no axis from members.** Fix PR 01's handoff says an option list
+built from members who have hidden the attribute is the same disclosure one step back. That premise
+does not hold against this codebase, and this report's own section 2 says so: every axis is a
+reference vocabulary (`world_countries`, `countries`, the two enums, `focus_areas`, `industries`,
+`skills`, `regional_expertise`, `member_segments`), so no member contributes a value to any list and
+a Private member is absent from all ten by construction. Deriving the lists from admitted members
+instead would have changed what the filter sheet offers, which is a visual change no ruling asked
+for. No change made; recorded here because the difference is between the handoff and the code, not
+between two readings of a finding.
+
+**Residual, new, Low, not in F6 — raised here, then closed here.** On Profile a `sent` relationship renders a **Request sent** button
+wired to `withdraw_request`. After ruling 214 a decline inside the window renders as `sent` too, and
+the two diverge under the action rather than in the payload: withdrawing a pending request moves the
+sender to `none` and the Connect action returns, while withdrawing inside the window is a silent
+no-op and the button stays. The payloads are byte-identical, which is what ruling 214 and Done Means
+item 5 ask for; the state transition was not. Three answers were defensible, so the choice went to a
+ruling rather than being made here: ruling 227 stated the requirement and ruling 229 chose option 1,
+which holds the display at `sent` for the rest of the window and leaves the server no-op literal.
+Built in this PR, because withdraw is F6 one layer up and leaving it would split ruling 214 across
+two PRs. G6 in `docs/GAPS.md` records the two rejected options and the accepted cost; G7 records the
+one thing deliberately not built, a withdraw affordance on My Network's Sent rows.
+
 ### What passed, stated as results
 
 Worth recording because these were the things most likely to have gone wrong and did not.
@@ -468,8 +583,18 @@ Gap Register, not in a fix that rides on this report.
   earlier claim that a repeat of check 2 over real HTTP was the first thing the next pass should do
   pointed at work that largely exists.
 
-  What is genuinely left for the next pass is narrower: PostgREST's own layer as listed above, and
-  the gap described next.
+  **Closed by evidence, 9 September 19:59, and not by argument.** Fix PR 01's matrix run on
+  `93d5f75` ([34394466777](https://github.com/jodombrown/dna-web-application/actions/runs/34394466777))
+  passed **step 6** against the deployed preview, over real HTTP, on a head carrying the narrowed
+  grant. That step now asserts the grant in both directions rather than only that the switches are
+  excluded: the eight identity columns come back for a shared profile, and `origin_country`,
+  `current_place`, `current_country`, `local_tz` and `segment` are refused. So **F1 and F2a have
+  HTTP evidence, not only role-boundary evidence**, and this section's original "first thing the
+  next pass should do" was done inside the fix PR without a second pass being scheduled for it.
+
+  What is genuinely left for the next pass is narrower still: PostgREST's own layer as listed above
+  — `db-schemas`, RPC routing, embedded-resource expansion, `Prefer` headers, `graphql_public` — and
+  the gap described next. F15's containment is in that remainder and is still unproved.
 - **The shape of the existing live-check suite, which is why it is green while F1 to F4 hold.**
   Worth stating plainly, because a green suite beside four High findings otherwise reads as a
   contradiction. Three reasons, all structural rather than a bug in the suite:

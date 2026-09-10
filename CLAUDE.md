@@ -47,6 +47,15 @@ Polymorphic references (author, anchor, notification object) use the shared anch
 Counts shown to a viewer are computed within that viewer's RLS scope and render nothing below five.
 Confirmed flags on contributions are set only by the counterparty or a payment rail record, never by inference or by DIA.
 DIA reads message metadata only; no query it runs may select message body content unless the member invoked a "help me reply" action in that thread.
+A migration is committed before the state it describes is applied to the shared project, and if a
+batch has to be applied in pieces the repo carries the whole batch before the first piece runs
+(ruling 225). Applying first leaves the canonical database ahead of every checkout, so a `db reset`
+reverts work nobody knew was there and a concurrent session audits a state no migration explains,
+which is exactly what happened on 9 September and became PASS-01's 18:30 addendum.
+
+A test arm that cannot run is reported as unproven, never as passing, and never folded into a
+passing count (ruling 228). An arm that silently vanishes reads as coverage the suite does not have.
+
 Build order for any surface: schema and RLS, then Edge Functions, then UI. Confirm any design extraction arrived with real content before building from it; a missing or empty extraction is a stop-and-report condition, never a reason to reconstruct the prototype from ruling summaries (ruling 90). No surface is built without an approved Claude Design prototype (ruling 62); the extraction and SPEC.md are the visual contract, the brief is the behavior contract.
 Design tokens and components come from Strand via the extraction; never from shadcn, never from the old repo (rulings 70, 72).
 Exit check for every surface is the responsive test matrix on the deployed URL: 360, 390, 430, 744, 820, 1024 both orientations, 1280, 1536, both themes, Safari and Chrome (ruling 61).

@@ -29,11 +29,25 @@ What exists:
 
 What is missing:
 
-- Any writer. No Block action on a member card, a profile, a post, a thread or a sheet, so in the
-  running app the table can only ever hold rows put there by hand.
+- Any **surface**. No Block action on a member card, a profile, a post, a thread or a sheet, so in
+  the running app nothing offers a member the action.
 - Report entirely: no report object, no reason vocabulary, no queue, no admin surface. Ruling 115's
   human review queue has no inbox.
 - An unblock surface, which the delete policy already permits but nothing calls.
+
+**Correction, ruling 216.** This entry used to say the table "can only ever hold rows put there by
+hand". That is true of the app and false of the API, and PASS-01's F8 proved it live: the
+`authenticated` grant carries `INSERT` and `DELETE` on `member_blocks` and an ordinary member
+inserted a block row over PostgREST. The gap is the missing surface, not a missing writer, and the
+distinction matters because the ruling-198 trigger fires on that insert whoever wrote it. The
+security pass's own re-test of F4 uses that path, and so does the standing block arm in
+`tests/live-checks.cjs` (ruling 218).
+
+F8 also flagged the irreversibility that follows: deleting the block row does not restore the
+connection or the follow, because the trigger **revokes** edges rather than deleting them. That is
+intended and ruling 211 says so — unblocking restores nothing and a revoked edge is re-made
+deliberately. F8 was written before 211 existed. Nothing to fix; the block surface's brief inherits
+it.
 
 Where it belongs: the chassis, not an engine. Convene, Collaborate, Contribute and Messaging all
 filter on the same table (ruling 186), so the surface is written once and every engine inherits it.
@@ -712,3 +726,198 @@ control arm run at the same time on the same head.
 Recorded because the claim was made one message before the sample that broke it, which is the third
 time in this investigation an over-strong reading has been corrected by the next observation — after
 `color-scheme` and after native form controls.
+
+### Update, 9 September 19:59: the fourth sighting, and the envelope has still only ever widened
+
+Fix PR 01's matrix run on `93d5f75` ([34394466777](https://github.com/jodombrown/dna-web-application/actions/runs/34394466777), job `102611352995`) failed one check of 5990 with G5's own words:
+
+```
+FAIL: webkit-360x800-dark profile owner flow WEB PROCESS CRASHED
+  | Error: locator.inputValue: Target page, context or browser has been closed
+  - waiting for locator('[data-testid="section-where"]').locator('input').first()
+  | state unavailable: Error: page.evaluate: Target crashed
+  | DOM before the section saves {"nodes":546,"options":71,"selects":20,"fields":14,"sections":15}
+```
+
+Sighting four, and it did not repeat on the next full run, which is consistent with the roughly
+one-crash-per-six-full-runs rate this entry already records. With the `1536x960-light` one recorded
+above, the sampled population now spans **both themes, six viewports, and both the owner and the
+visitor flow**. The envelope this entry already
+settled on — **WebKit plus the Profile surface** — holds, and nothing narrower does.
+
+**What to watch for next, because it is the reverse of the mistake ruling 205 caught.** Every new
+sighting so far has *widened* the envelope and none has narrowed it. That is a one-directional
+record, and a one-directional record is exactly the shape that invites an over-strong reading in the
+other direction: if a WebKit failure turns up in a **third flow**, one that is not the Profile
+surface at all, the honest reading may be that the envelope is WebKit rather than WebKit-plus-
+Profile, and this entry's own framing would be the thing that was too narrow.
+
+There is already a candidate. The same run failed a second WebKit check, `webkit-430x932-light
+flow`, on the composer rather than on Profile: `page.waitForSelector` timed out after 30s waiting
+for `section[role="dialog"][aria-label="Compose"]` to detach, with the locator resolving visible 64
+times. It read as a hang rather than a crash on that first sighting, and on that basis it was **not**
+recorded as a G5 sighting. The update below corrects that. Two things narrowed it at the time, and
+one of them still holds:
+
+- `Sheet` unmounts on a plain `setTimeout(SHEET_DUR)`, 300ms, not on `transitionend`. A dropped
+  animation event therefore cannot produce a 30-second hang, and that hypothesis is out.
+- What remains is either that `open` never flipped — the close is `page.keyboard.press("Escape")`
+  against a `window` keydown listener, fired straight after a click on an audience radio, so a
+  keypress that does not land flips nothing — or that the web process was wedged enough that timers
+  and React commits stopped while the DOM still answered Playwright's queries.
+
+The first is a test-robustness question and the second would be G5's envelope widening past Profile.
+One sample does not separate them, and a decision rule was fixed in advance of the next run rather
+than after seeing it: if the composer hang recurs on a head that still touches no composer code it
+is systematic and gets a root cause, and if it does not it stays recorded as a single unproven
+anomaly, called neither passing nor a flake (ruling 228).
+
+**Outcome across two further runs: it recurred, and the reading above is wrong.**
+
+The next run, on `3213f77`
+([34398547302](https://github.com/jodombrown/dna-web-application/actions/runs/34398547302)), passed
+**5996 of 5996**, both engines, every tier. On that sample alone the rule said the anomaly stays
+unproven, and that is what was reported at 20:38.
+
+The run after it, on `85ef492`
+([34402440306](https://github.com/jodombrown/dna-web-application/actions/runs/34402440306), job
+`102637543541`), failed **1 of 5997** on the same wait:
+
+```
+FAIL: webkit-360x800-dark flow Error: page.waitForSelector: Target page, context or browser has been closed
+  - waiting for locator('section[role="dialog"][aria-label="Compose"]') to be detached
+    3 x locator resolved to visible <section role="dialog" aria-modal="true" aria-label="Compose">
+```
+
+`85ef492` is documentation only. It touches no composer code, no component and no runtime source at
+all, so under the rule fixed in advance this is systematic and gets a root cause rather than a flake
+label.
+
+**Two things above are corrected by it.**
+
+**It is not a hang.** The first sighting timed out after 30s with the locator resolving 64 times.
+This one resolved 3 times and then reported `Target page, context or browser has been closed`. The
+page did not stay up and refuse to unmount; it went away. That is the same string G5's own crash
+line carries — `WEB PROCESS CRASHED | Error: locator.inputValue: Target page, context or browser has
+been closed` — minus the prefix.
+
+**The prefix is the whole reason this looked like a different defect.** `WEB PROCESS CRASHED` is
+written by `tests/profile.cjs`, which registers `page.on("crash")` and sets a flag. **No flow in
+`tests/matrix.cjs` registers a crash listener** — they register `pageerror` and `console` only. So a
+WebKit web-process crash in the composer flow *cannot* be labelled as one. It surfaces as whichever
+Playwright call happened to be in flight when the process died: a closed target if the crash lands
+during a call, a 30-second timeout if it lands between them.
+
+**So the envelope is WebKit, not WebKit plus Profile.** The "plus Profile" half was an artifact of
+where the instrumentation is, not of where the defect is. That is exactly the reverse of the mistake
+ruling 205 caught, and this entry predicted it one update earlier: if a WebKit failure turns up in a
+third flow, the honest reading may be that the envelope is WebKit. It turned up, in the composer
+flow, twice.
+
+Sightings restated: four labelled crashes on the Profile surface, plus **three** unlabelled ones on
+the composer flow — `webkit-430x932-light`, `webkit-360x800-dark` and, on run 101
+([34407997137](https://github.com/jodombrown/dna-web-application/actions/runs/34407997137)),
+`webkit-744x1133-light` with the identical `Target page, context or browser has been closed` after
+3 locator resolutions. Seven across four of the last five full runs.
+
+The composer sightings now span **three distinct viewports and both themes**, which is the same
+spread the Profile sightings took four crashes to reach. Two flows, the same signature, the same
+engine, and the only thing that distinguishes them in the log is which one happens to register
+`page.on("crash")`. The Profile surface is where the defect is most *visible*, not where it lives.
+
+**Follow-up, not done here** (this PR is a security fix and CLAUDE.md's scope rule keeps it out):
+register `page.on("crash")` in `tests/matrix.cjs` the way `tests/profile.cjs` already does, so a
+crashed web process is reported as a crash in every flow rather than as whatever call it interrupted.
+Two lines per flow, and until it exists every non-Profile WebKit crash will be mis-read the way this
+one was.
+
+**On the two totals, because they differ and the difference is not the suite growing.** The failing
+run recorded 5990 checks and the green one 5996. Nothing was added to `tests/matrix.cjs` between
+them. A flow that throws — a timeout or a crashed web process — stops before its remaining checks
+run, so the six missing checks are the tail of the two flows that died, not six checks that did not
+exist. Read a lower total in a failing matrix run as truncation, not as a smaller suite.
+
+## G8. `main` is unverified, not green (ruling 237)
+
+**Severity: high for sequencing, not for correctness. Opened 9 September 2026. Closed by Fix PR 01
+merging and `main` completing a matrix again.**
+
+`main`'s matrix job has failed at **step 6**, the Brief 3 live checks, since the `members` grants
+moved on the canonical project: runs 86, 88, 92 and 94 all die there on the `CORE_COLS` breakage
+PR #14 recorded. Step 6 gates step 9, so **no browser matrix has completed on `main` for hours**,
+and `main`'s last full verification predates the grant change entirely.
+
+This is not the same as `main` being red on a known defect. It is `main` being **unverified**: the
+responsive matrix that ruling 61 makes the exit check for every surface has not run there, so
+nothing is known about `main` in either engine at any width since the change.
+
+The practical consequence is sequencing, and it is the reason this is written down rather than left
+for someone to infer from four red runs:
+
+- Fix PR 01 is what restores it. Its branch is the only one that has reached step 9, because it
+  carries the `CORE_COLS` fix that lets step 6 pass.
+- **Nothing else should merge until it does**, and no Code session should start on Brief 4A or 4B
+  until Fix PR 01 lands and `main` completes a matrix again. Both would otherwise branch from a
+  `main` whose last full verification predates the grant change.
+- Design work on 4B is unaffected. A prototype does not branch from `main`.
+
+## G6. Withdraw separated the two states ruling 214 joined — closed (ruling 229)
+
+**Opened and closed 9 September 2026, both inside Fix PR 01. Ruling 227 stated the requirement,
+ruling 229 chose option 1 of the three the gap set out. Kept here rather than deleted, because the
+rejected options are the reason the chosen one costs what it costs.**
+
+Ruling 214 joined `window` to `sent`: a decline inside the window and a request still waiting return
+byte-identical payloads from every projection, so the sender cannot tell them apart by reading.
+Verified live in that PR, on the Members card, on the Sent row and on `profile_view.relationship`.
+
+The action is not joined. On Profile a `sent` relationship renders a **Request sent** button wired to
+`withdraw_request`. `withdraw_request` updates a `pending` row and nothing else, so:
+
+| The sender's state | What Request sent does | What the surface then shows |
+| --- | --- | --- |
+| Pending request | the row becomes `withdrawn`, the pair returns to `none` | the Connect action comes back |
+| Declined, inside the window | nothing; the update matches no row | the button stays |
+
+One click separates the two, which is the thing ruling 157 exists to prevent. The payload half of
+ruling 214 holds; the transition half was never stated.
+
+Three answers were defensible and the gap recorded them rather than guessing, in the shape G2 had
+before ruling 198: keep the button and hold the display at Pending; remove the button from Profile
+so nothing is clickable; or remember the press so both land on `none`.
+
+**Ruling 229 chose the first.** `private.relationship_display` maps a withdrawn request to `sent`
+for the rest of the decline window, exactly as it already maps `window` to `sent`. Server behaviour
+inside the window is untouched and stays a literal no-op, there is no schema change, and because no
+Connect action comes back in either case the sender cannot re-send from the surface.
+
+The button was not the only surface, and the other three are closed with it:
+
+| Surface | Before | After |
+| --- | --- | --- |
+| Profile's Request sent button | pending → `none`, window → `sent` | both stay `sent` |
+| Members card `rel` | pending `sent`, window `sent`, withdrawn `none` | all three `sent` |
+| My Network → Sent | row vanishes on withdrawal, stays for the window | row stays for both, for the window's length |
+| Suggested | a withdrawn candidate reappears, a window one does not | neither reappears |
+| `send_introduction` | accepts a re-send from the withdrawn sender, refuses the window one | refuses both, one message |
+
+**Accepted cost, recorded rather than discovered.** A sender who withdraws a genuine pending request
+does not get the Connect action back for that member until the window elapses, even though the
+withdrawal really happened and the recipient's Requests row really did leave. They gave up their
+turn. Verified live: a withdrawal older than `decline_window_days` releases, and the pair returns to
+`none` on every surface.
+
+## G7. My Network's Sent section has no withdraw affordance
+
+**Severity: low. Not a merge blocker. Opened 9 September 2026 while closing G6. A Connect
+increment, deliberately not built in Fix PR 01.**
+
+`src/lib/connect.ts` exports `withdrawIntroduction`, and no component calls it. The only withdraw a
+member can reach is Profile's **Request sent** button, so withdrawing a request means navigating to
+the recipient's profile rather than acting on the Sent row that shows the request.
+
+Ruling 229's display rule is already in place for it: a Sent row reads `sent` whether the request is
+pending, inside the window, or withdrawn inside the window, so an affordance added there inherits
+the rule rather than restating it. What the increment has to decide is only what the control looks
+like on a card that has no primary action slot, which is a Connect surface question and belongs to a
+Connect brief.

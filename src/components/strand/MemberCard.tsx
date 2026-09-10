@@ -22,7 +22,10 @@ import { Chip } from "./Chip";
 import { Icon } from "./Icon";
 import { IdentityMark } from "./IdentityMark";
 
-export const MEMBER_REL = ["none", "sent", "received", "connected", "window"] as const;
+// Ruling 214: there is no window state on a surface. private.relationship_display maps it to
+// sent before the projection returns, so the sender sees the Pending pill and nothing else, and
+// cannot separate a decline inside the window from a request still waiting.
+export const MEMBER_REL = ["none", "sent", "received", "connected"] as const;
 export type MemberRel = (typeof MEMBER_REL)[number];
 export type MemberCardContext =
   "members" | "suggested" | "requests" | "sent" | "connections" | "following";
@@ -188,7 +191,6 @@ function Actions({
             Connected
           </>,
         )}
-      {/* rel 'window' (rulings 157, 161, 168): nothing in the primary slot. */}
       {stacked ? (
         <div style={{ display: "flex", gap: 8 }}>
           {follow}
