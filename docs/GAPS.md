@@ -837,10 +837,11 @@ them. A flow that throws — a timeout or a crashed web process — stops before
 run, so the six missing checks are the tail of the two flows that died, not six checks that did not
 exist. Read a lower total in a failing matrix run as truncation, not as a smaller suite.
 
-## G8. `main` is unverified, not green (ruling 237)
+## G8. `main` was unverified, not green — closed (ruling 237)
 
-**Severity: high for sequencing, not for correctness. Opened 9 September 2026. Closed by Fix PR 01
-merging and `main` completing a matrix again.**
+**Opened 9 September 2026, closed 10 September 2026 at 00:40 when `main` completed a matrix for the
+first time since the grants moved. Kept rather than deleted, because the distinction it turns on —
+unverified is not the same as red — is the reusable part.**
 
 `main`'s matrix job has failed at **step 6**, the Brief 3 live checks, since the `members` grants
 moved on the canonical project: runs 86, 88, 92 and 94 all die there on the `CORE_COLS` breakage
@@ -860,6 +861,62 @@ for someone to infer from four red runs:
   until Fix PR 01 lands and `main` completes a matrix again. Both would otherwise branch from a
   `main` whose last full verification predates the grant change.
 - Design work on 4B is unaffected. A prototype does not branch from `main`.
+
+### Closed, 10 September 00:40
+
+Fix PR 01 merged at 00:02:41 as `bb57e64`, and `main`'s run 103
+([34419547470](https://github.com/jodombrown/dna-web-application/actions/runs/34419547470)) is the
+first matrix to complete there since the grants moved.
+
+| Tier | Result |
+| --- | --- |
+| `deploy` | green |
+| Step 6, live checks and the ruling 218 signed-in arms | **green** |
+| Browser matrix, Chromium, every width, both orientations, both themes | **green** |
+| Browser matrix, WebKit | 1 failure of 5983 |
+
+**`main` is verified.** That is what this gap asked for and it does not require a green WebKit tier:
+the condition was that the matrix *runs to completion* so `main`'s behaviour is known, and it now
+does. Nothing is gated on this any more — Brief 4A and 4B may start, and other work may merge.
+
+The one failure is recorded below rather than here, because it is **not** the signature this file has
+been tracking.
+
+### Update, 10 September 00:40: a WebKit failure that is NOT this signature
+
+`main`'s run 103 ([34419547470](https://github.com/jodombrown/dna-web-application/actions/runs/34419547470))
+failed 1 of 5983, WebKit, and it is neither a crash nor the Compose-dialog wait:
+
+```
+FAIL: webkit 820x1180 light connect: flow completed locator.click: Timeout 15000ms exceeded.
+  - waiting for locator('[role="dialog"][aria-label="Introduce yourself to Adaeze Nwosu"]')
+      .getByRole('button', { name: 'Send introduction' })
+```
+
+It is recorded here **without being counted as a G5 sighting**, deliberately. A click that never
+becomes actionable is a third distinct symptom, and this entry has already been wrong once by
+reading a symptom as a different defect and once by reading two symptoms as unrelated. It is neither
+until there is evidence.
+
+**What is established.** No code change caused it. `main` at `bb57e64` and `3213f77` differ in
+exactly one file for `src/` and `tests/` — `tests/live-checks.cjs`, which is step 6's script and
+which the browser matrix never loads. `tests/connect.cjs`, `tests/matrix.cjs` and all of `src/` are
+byte-identical, and `3213f77` passed **this exact tier** 5996/5996 in both engines. Same code, same
+viewport, same theme, opposite outcome.
+
+**One observation worth keeping, stated as an observation (ruling 205).** Every WebKit failure
+sampled so far lands on a sheet or dialog transition: the Compose dialog failing to detach (three
+times), the Profile surface during navigation or a section input (four), and now a dialog button
+that never becomes actionable. Playwright's actionability requires an element to be *stable* — the
+same box across two animation frames — so a stalled compositor or rAF would produce exactly this
+timeout, and `Sheet` animates for 300ms. That is a hypothesis with a mechanism, not a finding, and
+`tests/connect.cjs`'s own `tap()` helper already exists because clicks on this surface were fragile
+enough to need a hit test and a retry loop before clicking.
+
+**What would settle it**, and is the same follow-up this entry already logs: register
+`page.on("crash")` in `tests/matrix.cjs`. A click timeout with a crash flag set is G5; a click
+timeout with no crash is something else. Today the suite cannot tell those apart outside
+`tests/profile.cjs`.
 
 ## G6. Withdraw separated the two states ruling 214 joined — closed (ruling 229)
 
