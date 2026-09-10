@@ -131,3 +131,12 @@ confers no tier.
 
 Ruling 61's matrix on the deployed URL, Chromium and WebKit, nine viewports including 1024 in both
 orientations, both themes. Results per tier are recorded on the PR at merge time (ruling 199).
+
+The auth arm is split the way `tests/block.cjs` and `tests/vocabulary.cjs` are split, and for the
+same reason. `runAuthLayout` is the responsive half — every new surface rendered, the additions in
+place, no horizontal overflow — and runs at all nine viewports in both themes. `runAuthFlows` is the
+state half — the two identities the brief names, ruling 240's gate, and every error state — and runs
+on the two representative layouts in both themes. The first shape of this arm ran all nine flows at
+all eighteen combinations in both engines and was heading for the job's 45-minute timeout, which
+would have produced no matrix at all: the failure ruling 237 named. The split is a change to how the
+arm is scheduled, not to what it asserts.

@@ -196,10 +196,14 @@ async function sentState(browserType, vp, theme, tune) {
   return { html, elapsed, calls: auth.recoverCalls.length };
 }
 
-async function runAuth(browserType, bname, [w, h], theme) {
+/**
+ * The responsive half (ruling 61): every new surface rendered at every viewport and both themes,
+ * with the additions in place and no horizontal overflow. One browser, four navigations, so it is
+ * cheap enough to run across the whole matrix. The state flows live in runAuthFlows, which runs on
+ * the two representative layouts the way tests/block.cjs and tests/vocabulary.cjs do.
+ */
+async function runAuthLayout(browserType, bname, [w, h], theme) {
   const tag = `${bname}-${w}x${h}-${theme}-auth`;
-
-  // 1. Sign in: the additions are present, in DOM order, and nothing above the Password field moved.
   {
     const { browser, page } = await open(browserType, [w, h], theme);
     try {
@@ -256,11 +260,52 @@ async function runAuth(browserType, bname, [w, h], theme) {
         above,
       );
       await noOverflow(page, tag + ": sign-in");
+
+      // The reset request surface.
+      await page.goto(BASE + "/reset", { waitUntil: "domcontentloaded" });
+      await page.waitForSelector('[data-testid="reset-request"]');
+      await hydrated(page);
+      record(
+        tag + ": /reset names itself",
+        (await page.locator("h1").innerText()).trim() === "Reset your password",
+      );
+      await noOverflow(page, tag + ": reset request");
+
+      // The reset landing in the state members actually hit.
+      await page.goto(BASE + "/reset/new" + EXPIRED_HASH, { waitUntil: "domcontentloaded" });
+      await page.waitForSelector('[data-testid="reset-expired"]', { timeout: 15000 });
+      await hydrated(page);
+      await noOverflow(page, tag + ": reset landing expired");
+
+      // The signed-in change-password surface, inside the shell.
+      await page.goto(BASE + "/sign-in", { waitUntil: "domcontentloaded" });
+      await hydrated(page);
+      await page.fill('input[type="email"]', "member@test.invalid");
+      await page.fill('input[type="password"]', "x");
+      await page.click('button[type="submit"]');
+      await page.waitForURL("**/feed", { timeout: 15000 });
+      await page.goto(BASE + "/password", { waitUntil: "domcontentloaded" });
+      await page.waitForSelector('[data-testid="password"]', { timeout: 15000 });
+      await hydrated(page);
+      record(
+        tag + ": /password renders in the shell content column",
+        (await page.locator("header").count()) > 0 &&
+          (await page.locator("h1").innerText()).trim() === "Change your password",
+      );
+      await noOverflow(page, tag + ": change password");
     } catch (e) {
-      record(tag + ": sign-in additions flow completed", false, String(e).slice(0, 200));
+      record(tag + ": layout pass completed", false, String(e).slice(0, 200));
     }
     await browser.close();
   }
+}
+
+/**
+ * The state flows: the two identities the brief names, ruling 240's gate, and every error state.
+ * Backend-shaped rather than layout-shaped, so they run on the two representative layouts.
+ */
+async function runAuthFlows(browserType, bname, [w, h], theme) {
+  const tag = `${bname}-${w}x${h}-${theme}-auth`;
 
   // 2. The alert block takes focus, and the offending fields carry the border and nothing else.
   {
@@ -555,4 +600,4 @@ async function runAuth(browserType, bname, [w, h], theme) {
   }
 }
 
-module.exports = { runAuth };
+module.exports = { runAuthLayout, runAuthFlows };

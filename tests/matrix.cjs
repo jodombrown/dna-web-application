@@ -2764,12 +2764,21 @@ if (require.main === module)
               await runConnect(bt, bname, vp, theme);
         }
         // Brief 4B (rulings 230 to 236, 240): sign-in's additions, the two reset routes and the
-        // signed-in change-password path.
+        // signed-in change-password path. The layout pass runs everywhere; the state flows run on
+        // the two representative layouts, as vocab and block do.
         if (process.env.SPECIAL.includes("auth")) {
-          const { runAuth } = require("./auth.cjs");
+          const { runAuthLayout, runAuthFlows } = require("./auth.cjs");
           for (const vp of process.env.ONLY ? [JSON.parse(process.env.ONLY)] : VIEWPORTS)
             for (const theme of process.env.THEME ? [process.env.THEME] : THEMES)
-              await runAuth(bt, bname, vp, theme);
+              await runAuthLayout(bt, bname, vp, theme);
+          for (const vp of process.env.ONLY
+            ? [JSON.parse(process.env.ONLY)]
+            : [
+                [390, 844],
+                [1280, 800],
+              ])
+            for (const theme of process.env.THEME ? [process.env.THEME] : THEMES)
+              await runAuthFlows(bt, bname, vp, theme);
         }
       }
       const fails = results.filter((r) => !r.ok);
@@ -2812,9 +2821,16 @@ if (require.main === module)
       ])
         for (const theme of THEMES)
           for (const fail of [false, true]) await runVocabulary(bt, bname, vp, theme, fail);
-      // Brief 4B: the auth surfaces, every viewport, both themes.
-      const { runAuth } = require("./auth.cjs");
-      for (const vp of VIEWPORTS) for (const theme of THEMES) await runAuth(bt, bname, vp, theme);
+      // Brief 4B: every auth surface rendered at every viewport and both themes, then the state
+      // flows on the two representative layouts.
+      const { runAuthLayout, runAuthFlows } = require("./auth.cjs");
+      for (const vp of VIEWPORTS)
+        for (const theme of THEMES) await runAuthLayout(bt, bname, vp, theme);
+      for (const vp of [
+        [390, 844],
+        [1280, 800],
+      ])
+        for (const theme of THEMES) await runAuthFlows(bt, bname, vp, theme);
       // Ruling 198: the blocked viewer's profile.
       const { runBlock } = require("./block.cjs");
       for (const vp of [
