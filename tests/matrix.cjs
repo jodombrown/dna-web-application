@@ -4,7 +4,7 @@
 // layer, so the real client code paths run against a deterministic backend. Backend behaviour
 // (RLS, the feed view) is verified separately in SQL against the live project.
 // Usage: BASE=https://b2-shell-feed.dna-web-application.pages.dev WEBKIT=1 node tests/matrix.cjs
-// Env: ONLY='[390,844]' runs one viewport; SPECIAL=publish,guards,keyboard,silence,shell,targeted,profile,connect,vocab,block,auth,onboarding runs flows only.
+// Env: ONLY='[390,844]' runs one viewport; SPECIAL=publish,guards,keyboard,silence,shell,width,targeted,profile,connect,vocab,block,auth,onboarding runs flows only.
 // Brief 3 profile flows live in tests/profile.cjs and Brief 4 Connect flows in tests/connect.cjs; both share this mock.
 const { chromium, webkit } = require("playwright");
 const fs = require("fs");
@@ -1599,12 +1599,73 @@ function finish({ full = false, engines = [] } = {}) {
   process.exit(fails.length ? 1 : 0);
 }
 
+/**
+ * Ruling 344. The shell clips its root at the viewport (overflow hidden on the 100dvh column), so
+ * documentElement.scrollWidth never exceeds innerWidth and the check this replaces could not fail
+ * on the very tier it existed for. This one finds the element. Three measures, any of which fails:
+ * the document is wider than the viewport; some rendered element's right edge lies past it; or a
+ * vertical scroll container's content is wider than its box, which is the shape a clipped overflow
+ * takes on the compact tier. Skipped: descendants of a designed horizontal scroller (an inline
+ * overflow-x of auto or scroll, which is how every strip in Strand declares itself) and of an
+ * aria-hidden ancestor (a parked affordance, a closed sheet). The detail names the offender and
+ * its edges, so a failing tier says what to fix.
+ */
+async function measureWidth(page) {
+  return page.evaluate(() => {
+    const iw = window.innerWidth;
+    const describe = (el) => {
+      const parts = [];
+      for (let e = el; e && e !== document.body && parts.length < 6; e = e.parentElement) {
+        const attrs = [...e.attributes]
+          .filter((a) =>
+            /^(data-testid|data-scroller|data-sheet-scrim|data-fab|role|aria-label)$/.test(a.name),
+          )
+          .map((a) => `${a.name}=${a.value.slice(0, 24)}`)
+          .join(",");
+        parts.unshift(e.tagName.toLowerCase() + (attrs ? `{${attrs}}` : ""));
+      }
+      return parts.join(" > ");
+    };
+    const isStrip = (e) =>
+      !!e.style && (e.style.overflowX === "auto" || e.style.overflowX === "scroll");
+    const skipped = (el) => {
+      for (let p = el.parentElement; p && p !== document.body; p = p.parentElement) {
+        if (p.getAttribute("aria-hidden") === "true") return true;
+        if (isStrip(p)) return true;
+      }
+      return false;
+    };
+    let widest = null;
+    let panning = null;
+    for (const el of document.querySelectorAll("body *")) {
+      const r = el.getBoundingClientRect();
+      if (!r.width && !r.height) continue;
+      if (r.right > iw + 0.5 && !skipped(el) && (!widest || r.right > widest.right))
+        widest = { right: Math.round(r.right), left: Math.round(r.left), path: describe(el) };
+      if (!panning && !isStrip(el) && el.scrollWidth > el.clientWidth + 1) {
+        const cs = getComputedStyle(el);
+        if ((cs.overflowY === "auto" || cs.overflowY === "scroll") && !skipped(el))
+          panning = { sw: el.scrollWidth, cw: el.clientWidth, path: describe(el) };
+      }
+    }
+    const docSW = document.documentElement.scrollWidth;
+    const ok = docSW <= iw && !widest && !panning;
+    const detail = ok
+      ? ""
+      : [
+          docSW > iw ? `document ${docSW} wider than viewport ${iw}` : "",
+          widest ? `element ends at ${widest.right} past viewport ${iw}: ${widest.path}` : "",
+          panning ? `scroller pans ${panning.sw} in a ${panning.cw} box: ${panning.path}` : "",
+        ]
+          .filter(Boolean)
+          .join(" | ");
+    return { ok, iw, docSW, widest, panning, detail };
+  });
+}
+
 async function noOverflow(page, label) {
-  const { sw, iw } = await page.evaluate(() => ({
-    sw: document.documentElement.scrollWidth,
-    iw: window.innerWidth,
-  }));
-  record(label + " no horizontal overflow", sw <= iw, `scrollWidth ${sw} > innerWidth ${iw}`);
+  const m = await measureWidth(page);
+  record(label + " no horizontal overflow", m.ok, m.detail);
 }
 
 async function shot(page, name) {
@@ -3088,6 +3149,99 @@ const TARGETED_VIEWPORTS = [
 ];
 
 // Silence when DIA times out or errors: identical to no DIA.
+// ---------------------------------------------------------------------------
+// Ruling 344: the width arm. One arm per engine and viewport, light theme (width does not depend
+// on the palette), walking every surface the suites open in the states that change its layout:
+// the three onboarding screens, the feed with the composer, the notification and account panels
+// open, Connect's list and mosaic, the owner's profile, change password, sign-in and reset. Each
+// stop is one check that fails when the document is wider than the viewport at that tier, with
+// the offending element named (measureWidth above).
+// ---------------------------------------------------------------------------
+const WIDTH_STOPS = [
+  ["/connect", "connect members"],
+  ["/connect?lens=where", "connect where"],
+  ["/m/thandiwe-dube", "profile"],
+  ["/password", "change password"],
+];
+
+async function runWidth(browserType, bname, [w, h]) {
+  const tag = `${bname}-${w}x${h}-width`;
+  armStart(tag);
+  const browser = await launch(browserType);
+  const ctx = await browser.newContext({
+    viewport: { width: w, height: h },
+    hasTouch: w <= 1024,
+    isMobile: w < 1024,
+    deviceScaleFactor: 1,
+    colorScheme: "light",
+  });
+  const page = await ctx.newPage();
+  const db = makeMockDb();
+  seedPosts(db, 3);
+  const who = {
+    name: "Amara Osei",
+    username: null,
+    suggestion: "amara-osei",
+    avatar_path: null,
+    completed: false,
+  };
+  const where = { city: null, country: null, completed: false };
+  const relationship = {
+    stance: "exploring",
+    stance_label: "Still exploring",
+    declared: false,
+    completed: false,
+  };
+  db.onboarding.state = { next: "who", who, where, relationship, onboarded_at: null };
+  await mockSupabase(page, db);
+  const stop = async (label) => {
+    await page.waitForTimeout(600);
+    await noOverflow(page, `${tag} ${label}`);
+  };
+  const visit = async (path, glob, label) => {
+    await page.goto(BASE + path, { waitUntil: "networkidle" }).catch(() => undefined);
+    if (glob) await page.waitForURL(glob, { timeout: 15000 });
+    await stop(label);
+  };
+  try {
+    await visit("/reset", null, "reset request");
+    await visit("/sign-in", null, "sign-in");
+    await page.fill('input[type="email"]', "member@test.invalid");
+    await page.fill('input[type="password"]', "x");
+    await page.click('button[type="submit"]');
+    await page.waitForURL("**/welcome", { timeout: 15000 });
+    await page.waitForSelector('[data-testid="onboarding-who"]', { timeout: 15000 });
+    await stop("onboarding who");
+    db.onboarding.state.next = "where";
+    db.onboarding.state.who = { ...who, username: "amara-osei", completed: true };
+    await visit("/where", "**/where", "onboarding where");
+    db.onboarding.state.next = "relationship";
+    db.onboarding.state.where = { city: "Nairobi", country: "Kenya", completed: true };
+    await visit("/relationship", "**/relationship", "onboarding relationship");
+    db.onboarding.state.next = null;
+    db.onboarding.state.onboarded_at = new Date().toISOString();
+    await visit("/feed", "**/feed", "feed");
+    await page.waitForSelector('[data-testid="compose"]');
+    await page.click('[data-testid="compose"]');
+    await stop("composer open");
+    await page.keyboard.press("Escape");
+    await page.waitForTimeout(400);
+    await page.click('[data-testid="bell"]');
+    await stop("notifications open");
+    await page.keyboard.press("Escape");
+    await page.waitForTimeout(400);
+    await page.click('[data-testid="avatar"]');
+    await stop("account panel open");
+    await page.keyboard.press("Escape");
+    for (const [path, label] of WIDTH_STOPS) await visit(path, null, label);
+  } catch (e) {
+    record(tag + " completed", false, String(e).slice(0, 400));
+  } finally {
+    await shot(page, `${tag}-last`).catch(() => undefined);
+    await browser.close();
+  }
+}
+
 async function runSilence(browserType, bname) {
   const tag = `${bname}-390x844-light-silence`;
   armStart(tag);
@@ -3205,6 +3359,7 @@ module.exports = {
   watchCrash,
   shot,
   noOverflow,
+  measureWidth,
   BASE,
   OUT,
   VIEWPORTS,
@@ -3260,6 +3415,10 @@ if (require.main === module)
         if (process.env.SPECIAL.includes("shell"))
           for (const vp of process.env.ONLY ? [JSON.parse(process.env.ONLY)] : VIEWPORTS)
             await runShell(bt, bname, vp);
+        // Ruling 344: the width arm, every viewport.
+        if (process.env.SPECIAL.includes("width"))
+          for (const vp of process.env.ONLY ? [JSON.parse(process.env.ONLY)] : VIEWPORTS)
+            await runWidth(bt, bname, vp);
         if (process.env.SPECIAL.includes("targeted"))
           for (const vp of process.env.ONLY ? [JSON.parse(process.env.ONLY)] : TARGETED_VIEWPORTS)
             await runTargeted(bt, bname, vp);
@@ -3345,6 +3504,7 @@ if (require.main === module)
         for (const theme of only ? [process.env.THEME || "light"] : THEMES)
           await runViewport(bt, bname, vp, theme);
         await runShell(bt, bname, vp);
+        await runWidth(bt, bname, vp);
       }
       if (only) {
         finish({ full: false, engines: engines.map(([n]) => n) });

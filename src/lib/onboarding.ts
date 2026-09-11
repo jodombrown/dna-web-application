@@ -15,8 +15,8 @@ export type OnboardingState = {
     name: string;
     /** Null until screen one has been written, even though a placeholder handle exists. */
     username: string | null;
-    /** The server's derivation from the name, the same steps as deriveUsername below. */
-    suggestion: string;
+    /** The server's derivation from the name, the same steps as deriveUsername below; null when the name folds to nothing (ruling 343). */
+    suggestion: string | null;
     avatar_path: string | null;
     completed: boolean;
   };
@@ -32,13 +32,24 @@ export type OnboardingState = {
 };
 
 /**
- * SPEC section 9's derivation, mirrored by private.derive_username: trim, lowercase, strip
+ * Ruling 343, mirrored exactly by private.derive_username: trim, NFKD, strip combining marks
+ * (the five Unicode combining-mark blocks), then SPEC section 9's rules: lowercase, strip
  * everything except a-z 0-9 space and hyphen, spaces to hyphens, collapse runs, trim hyphens.
- * The forty-character cut is the handle column's, not the SPEC's.
+ * "Jaûne" derives jaune, "José Núñez-Ålund" derives jose-nunez-alund. A name in a script that
+ * folds to nothing derives "", and the field stays empty (gap G15). The forty-character cut is
+ * the handle column's, not the SPEC's.
  */
+// The five Unicode combining-mark blocks, the same class private.derive_username strips. A class
+// made only of combining marks is what no-misleading-character-class exists to flag; here it is
+// the point.
+// eslint-disable-next-line no-misleading-character-class
+const COMBINING_MARKS = /[\u0300-\u036F\u1AB0-\u1AFF\u1DC0-\u1DFF\u20D0-\u20FF\uFE20-\uFE2F]/g;
+
 export function deriveUsername(name: string): string {
   return name
     .trim()
+    .normalize("NFKD")
+    .replace(COMBINING_MARKS, "")
     .toLowerCase()
     .replace(/[^a-z0-9 -]/g, "")
     .replace(/ /g, "-")
@@ -61,11 +72,11 @@ export type WhoResult =
       name: string;
       username: string;
       avatar_path: string | null;
-      suggestion: string;
+      suggestion: string | null;
       username_changes: number;
     }
-  | { status: "taken"; suggestion: string }
-  | { status: "invalid"; suggestion: string };
+  | { status: "taken"; suggestion: string | null }
+  | { status: "invalid"; suggestion: string | null };
 
 export type WhereResult = { status: "ok"; city: string; country: string };
 

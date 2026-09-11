@@ -206,7 +206,12 @@ export function AppShell({
           onIntentC={warm}
           lensBar={headerLens}
           style={{
+            // Ruling 344: the safe-area insets live here and on the dock, once. viewport-fit=cover
+            // is declared in the root route's head, so on a notched phone the header's row starts
+            // below the status bar and, in landscape, clear of the notch on either side.
             paddingTop: "env(safe-area-inset-top)",
+            paddingLeft: `calc(${expanded ? 32 : 16}px + env(safe-area-inset-left))`,
+            paddingRight: `calc(${expanded ? 32 : 8}px + env(safe-area-inset-right))`,
             height: "auto",
             minHeight: expanded ? 64 : 56,
             zIndex: 20,
@@ -339,7 +344,16 @@ export function AppShell({
             fixed
             active={active ?? undefined}
             onSelect={go}
-            style={compact ? undefined : { padding: "0 120px" }}
+            // Longhands, not the shorthand: the shorthand used to wipe the dock's own safe-area
+            // bottom padding on the medium tier (ruling 344).
+            style={
+              compact
+                ? undefined
+                : {
+                    paddingLeft: "calc(120px + env(safe-area-inset-left))",
+                    paddingRight: "calc(120px + env(safe-area-inset-right))",
+                  }
+            }
           />
         )}
         {fabMount && (

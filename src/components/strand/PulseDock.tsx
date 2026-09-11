@@ -182,7 +182,11 @@ export function PulseDock({
         display: "flex",
         alignItems: "stretch",
         height: 64,
-        padding: "0 8px",
+        // Ruling 344: the dock carries its own safe-area insets, all three edges it touches, so a
+        // notched phone in landscape keeps the first and last C clear of the notch.
+        paddingTop: 0,
+        paddingLeft: "calc(8px + env(safe-area-inset-left))",
+        paddingRight: "calc(8px + env(safe-area-inset-right))",
         paddingBottom: "env(safe-area-inset-bottom)",
         background: "var(--bg)",
         borderTop: "1px solid var(--line)",
