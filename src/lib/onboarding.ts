@@ -188,39 +188,102 @@ export function usernameValid(u: string): boolean {
 /** media-upload's own ceiling, so a photo that would be refused is refused here without a round trip. */
 export const PHOTO_MAX_BYTES = 10 * 1024 * 1024;
 
+/**
+ * Ruling 345: the iOS camera hands the picker HEIC, and a HEIC never passed media-upload's sniff
+ * (it accepts only jpeg, png, webp), so screen one's control sat disabled forever behind a request
+ * that could not succeed. The mitigations, in order: normalise to JPEG in the browser first so the
+ * default iPhone format uploads at all; fit within the same edge Tinify would (a 48 MP capture is
+ * hundreds of KB, not tens of MB, so the round trip is short and never near the bucket ceiling); and
+ * bound the request in time so a stalled mobile connection resolves to the failed alert rather than
+ * a control that never comes back.
+ */
+const PHOTO_MAX_EDGE = 2000;
+const PHOTO_JPEG_QUALITY = 0.85;
+export const PHOTO_UPLOAD_TIMEOUT_MS = 30_000;
+
 export type PhotoUpload =
-  { ok: true; path: string } | { ok: false; reason: "too_large" | "failed" };
+  { ok: true; path: string; previewUrl: string } | { ok: false; reason: "too_large" | "failed" };
+
+/**
+ * Decode the picked file and re-encode it as a downscaled JPEG. Returns the original file untouched
+ * when the browser cannot decode it (a HEIC on a build without the system codec, a corrupt file):
+ * the server still runs its own sniff and Tinify pass, so the fallback fails safe rather than
+ * blocking the upload. Runs only in the browser; the canvas and object URLs it uses are DOM APIs.
+ */
+async function normalisePhoto(file: File): Promise<File> {
+  if (typeof document === "undefined" || typeof createImageBitmap !== "function") return file;
+  let bitmap: ImageBitmap;
+  try {
+    bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
+  } catch {
+    return file;
+  }
+  try {
+    const scale = Math.min(1, PHOTO_MAX_EDGE / Math.max(bitmap.width, bitmap.height));
+    const w = Math.max(1, Math.round(bitmap.width * scale));
+    const h = Math.max(1, Math.round(bitmap.height * scale));
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return file;
+    ctx.drawImage(bitmap, 0, 0, w, h);
+    const blob = await new Promise<Blob | null>((resolve) =>
+      canvas.toBlob(resolve, "image/jpeg", PHOTO_JPEG_QUALITY),
+    );
+    if (!blob) return file;
+    return new File([blob], "avatar.jpg", { type: "image/jpeg" });
+  } catch {
+    return file;
+  } finally {
+    bitmap.close();
+  }
+}
 
 /**
  * One step, no crop (ruling 324): the file goes to Storage through Brief 3's avatar path
  * (media-upload, slot avatar) and the storage path comes back for onboard_who. Too large and failed
- * are told apart because SPEC section 3 gives each its own alert.
+ * are told apart because SPEC section 3 gives each its own alert. The returned previewUrl is the
+ * object URL of the bytes actually uploaded, so screen one previews an image every browser can
+ * render (never the raw HEIC it was handed); the caller owns revoking it.
  */
 export async function uploadOnboardingPhoto(file: File): Promise<PhotoUpload> {
-  if (file.size > PHOTO_MAX_BYTES) return { ok: false, reason: "too_large" };
   const sb = getSupabase();
   if (!sb) return { ok: false, reason: "failed" };
   const { data } = await sb.auth.getSession();
   const token = data.session?.access_token;
   if (!token) return { ok: false, reason: "failed" };
+
+  const upload = await normalisePhoto(file);
+  // The ceiling applies to what actually leaves the device. A normalised capture is far under it;
+  // this catches only the pathological case where decoding failed and the original is oversized.
+  if (upload.size > PHOTO_MAX_BYTES) return { ok: false, reason: "too_large" };
+
   const form = new FormData();
-  form.append("file", file);
+  form.append("file", upload);
   form.append("slot", "avatar");
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), PHOTO_UPLOAD_TIMEOUT_MS);
   try {
     const res = await fetch(functionsUrl("media-upload"), {
       method: "POST",
       headers: { Authorization: "Bearer " + token, apikey: SUPABASE_PUBLISHABLE_KEY },
       body: form,
+      signal: controller.signal,
     });
     if (res.status === 413) return { ok: false, reason: "too_large" };
     if (!res.ok) return { ok: false, reason: "failed" };
     const out = (await res.json()) as { storage_path?: string; error?: string };
     if (out.error === "too_large") return { ok: false, reason: "too_large" };
     return out.storage_path
-      ? { ok: true, path: out.storage_path }
+      ? { ok: true, path: out.storage_path, previewUrl: URL.createObjectURL(upload) }
       : { ok: false, reason: "failed" };
   } catch {
+    // A timeout abort, a network drop, a JSON parse failure: every rejection is the failed alert,
+    // never a control left mid-upload (ruling 345).
     return { ok: false, reason: "failed" };
+  } finally {
+    clearTimeout(timer);
   }
 }
 

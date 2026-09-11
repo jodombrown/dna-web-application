@@ -273,6 +273,9 @@ export function WhoScreen({ state, onSubmit }: { state: OnboardingState; onSubmi
   const [taken, setTaken] = useState(false);
   const [busy, setBusy] = useState(false);
   const fileRef = useRef<HTMLInputElement | null>(null);
+  // The object URL last handed to the preview, revoked whenever it is replaced so a rapid re-pick
+  // does not leak. A resume-loaded signed URL is not an object URL and is left alone.
+  const objectUrlRef = useRef<string | null>(null);
 
   // Resume: the saved photo renders in its chosen state.
   useEffect(() => {
@@ -286,6 +289,14 @@ export function WhoScreen({ state, onSubmit }: { state: OnboardingState; onSubmi
     };
   }, [state.who.avatar_path]);
 
+  // Revoke a preview object URL still held when the screen unmounts.
+  useEffect(
+    () => () => {
+      if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
+    },
+    [],
+  );
+
   const onName = (v: string) => {
     setName(v);
     if (!usernameTyped) setUsername(deriveUsername(v));
@@ -296,20 +307,24 @@ export function WhoScreen({ state, onSubmit }: { state: OnboardingState; onSubmi
     setTaken(false);
   };
 
+  const showPreview = (url: string | undefined) => {
+    if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
+    objectUrlRef.current = url && url.startsWith("blob:") ? url : null;
+    setPhotoUrl(url);
+  };
+
   const pick = async (file: File | undefined) => {
     if (!file) return;
     setAlert(null);
     setUploading(true);
-    const local = URL.createObjectURL(file);
     try {
       const out = await uploadOnboardingPhoto(file);
       if (!out.ok) {
-        URL.revokeObjectURL(local);
         setAlert(out.reason === "too_large" ? COPY.who.photoTooLarge : COPY.who.photoFailed);
         return;
       }
       setPhotoPath(out.path);
-      setPhotoUrl(local);
+      showPreview(out.previewUrl);
     } finally {
       setUploading(false);
       if (fileRef.current) fileRef.current.value = "";
@@ -435,7 +450,7 @@ export function WhoScreen({ state, onSubmit }: { state: OnboardingState; onSubmi
                   disabled={disabled}
                   onClick={() => {
                     setPhotoPath(null);
-                    setPhotoUrl(undefined);
+                    showPreview(undefined);
                   }}
                   style={{
                     all: "unset",

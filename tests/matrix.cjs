@@ -703,6 +703,9 @@ function makeMockDb() {
       taken: false,
       failScreen: null,
       delayMs: 0,
+      // Ruling 345: what the last media-upload actually carried, so an arm can prove the client
+      // normalised the file (converted to JPEG, downscaled) before it left the browser.
+      lastUpload: null,
     },
     // Brief 5: media-upload refusals, so the photo's two alerts can be exercised.
     mediaTooLarge: false,
@@ -798,6 +801,14 @@ async function mockSupabase(page, db, opts = {}) {
       });
     }
     if (p === "/functions/v1/media-upload") {
+      // Ruling 345: record what left the browser. The multipart headers for the file part name its
+      // filename and Content-Type; the body length stands in for the uploaded byte count.
+      const buf = req.postDataBuffer && req.postDataBuffer();
+      const head = buf ? buf.slice(0, 4096).toString("latin1") : "";
+      db.onboarding.lastUpload = {
+        bytes: buf ? buf.length : 0,
+        jpeg: /content-type:\s*image\/jpeg/i.test(head) || /filename="[^"]*\.jpe?g"/i.test(head),
+      };
       await new Promise((r) => setTimeout(r, 300));
       if (db.mediaTooLarge) return json({ error: "too_large" }, 413);
       if (db.mediaFail) return json({ error: "upload_failed" }, 500);
@@ -3300,7 +3311,11 @@ if (require.main === module)
         // Brief 5 (ruling 279): the three screens at every viewport and both themes, then the
         // state proofs on the two representative layouts.
         if (process.env.SPECIAL.includes("onboarding")) {
-          const { runOnboardingLayout, runOnboardingFlows } = require("./onboarding.cjs");
+          const {
+            runOnboardingLayout,
+            runOnboardingFlows,
+            runOnboardingPhotoFormats,
+          } = require("./onboarding.cjs");
           for (const vp of process.env.ONLY ? [JSON.parse(process.env.ONLY)] : VIEWPORTS)
             for (const theme of process.env.THEME ? [process.env.THEME] : THEMES)
               await runOnboardingLayout(bt, bname, vp, theme);
@@ -3312,6 +3327,8 @@ if (require.main === module)
               ])
             for (const theme of process.env.THEME ? [process.env.THEME] : THEMES)
               await runOnboardingFlows(bt, bname, vp, theme);
+          // Ruling 345: the HEIC and oversized-JPEG arm runs once per engine, at the compact tier.
+          await runOnboardingPhotoFormats(bt, bname, [390, 844], process.env.THEME || "light");
         }
         if (process.env.SPECIAL.includes("connect")) {
           const { runConnect } = require("./connect.cjs");
@@ -3397,7 +3414,11 @@ if (require.main === module)
         }
       // Brief 5 (ruling 279): the three onboarding screens everywhere, the state flows on the
       // two representative layouts.
-      const { runOnboardingLayout, runOnboardingFlows } = require("./onboarding.cjs");
+      const {
+        runOnboardingLayout,
+        runOnboardingFlows,
+        runOnboardingPhotoFormats,
+      } = require("./onboarding.cjs");
       for (const vp of VIEWPORTS)
         for (const theme of THEMES) await runOnboardingLayout(bt, bname, vp, theme);
       for (const vp of [
@@ -3405,6 +3426,8 @@ if (require.main === module)
         [1280, 800],
       ])
         for (const theme of THEMES) await runOnboardingFlows(bt, bname, vp, theme);
+      // Ruling 345: the HEIC and oversized-JPEG arm runs once per engine, at the compact tier.
+      await runOnboardingPhotoFormats(bt, bname, [390, 844], "light");
     }
     finish({ full: true, engines: engines.map(([n]) => n) });
   })().catch((e) => {
