@@ -3152,8 +3152,9 @@ const TARGETED_VIEWPORTS = [
 // ---------------------------------------------------------------------------
 // Ruling 344: the width arm. One arm per engine and viewport, light theme (width does not depend
 // on the palette), walking every surface the suites open in the states that change its layout:
-// the three onboarding screens, the feed with the composer, the notification and account panels
-// open, Connect's list and mosaic, the owner's profile, change password, sign-in and reset. Each
+// the public profile signed out, the three onboarding screens, the feed with the composer, the
+// notification and account panels open, Connect's list and mosaic, the owner's profile, change
+// password, sign-in and reset. Each
 // stop is one check that fails when the document is wider than the viewport at that tier, with
 // the offending element named (measureWidth above).
 // ---------------------------------------------------------------------------
@@ -3204,6 +3205,8 @@ async function runWidth(browserType, bname, [w, h]) {
     await stop(label);
   };
   try {
+    // Signed out first: the public profile is the surface the element ruling 344 names sat on.
+    await visit("/m/thandiwe-dube", null, "public profile");
     await visit("/reset", null, "reset request");
     await visit("/sign-in", null, "sign-in");
     await page.fill('input[type="email"]', "member@test.invalid");
