@@ -98,6 +98,7 @@ async function menuItem(page) {
 // ---------------------------------------------------------------------------
 async function runBlock(browserType, bname, [w, h], theme) {
   const tag = `${bname}-${w}x${h}-${theme}-blocked`;
+  M.armStart(tag);
   const expanded = w >= 1024;
   const { browser, page } = await open(browserType, [w, h], theme, {
     mode: "blocked",
@@ -180,6 +181,7 @@ async function runBlock(browserType, bname, [w, h], theme) {
 // ---------------------------------------------------------------------------
 async function runBlocker(browserType, bname, [w, h], theme) {
   const tag = `${bname}-${w}x${h}-${theme}-blocker`;
+  M.armStart(tag);
   const expanded = w >= 1024;
   const { browser, page } = await open(browserType, [w, h], theme, {
     mode: "blocker",
@@ -245,6 +247,7 @@ async function runBlocker(browserType, bname, [w, h], theme) {
 // ---------------------------------------------------------------------------
 async function runBlockFlow(browserType, bname, [w, h], theme) {
   const tag = `${bname}-${w}x${h}-${theme}-block-flow`;
+  M.armStart(tag);
   const { browser, page, db } = await open(browserType, [w, h], theme, {
     mode: "stranger",
     rel: "none",
@@ -372,6 +375,7 @@ async function runBlockFlow(browserType, bname, [w, h], theme) {
 // ---------------------------------------------------------------------------
 async function runBlockFocus(browserType, bname, [w, h], theme) {
   const tag = `${bname}-${w}x${h}-${theme}-block-focus`;
+  M.armStart(tag);
   const { browser, page } = await open(browserType, [w, h], theme, {
     mode: "stranger",
     rel: "none",

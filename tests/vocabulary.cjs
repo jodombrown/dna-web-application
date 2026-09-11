@@ -46,6 +46,7 @@ function seedNeed(db) {
 
 async function runVocabulary(browserType, bname, [w, h], theme, fail) {
   const tag = `${bname}-${w}x${h}-${theme}-vocab-${fail ? "failed" : "served"}`;
+  M.armStart(tag);
   const browser = await launch(browserType);
   const ctx = await browser.newContext({
     viewport: { width: w, height: h },

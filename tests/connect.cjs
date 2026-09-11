@@ -103,6 +103,7 @@ async function lensTab(page, label) {
 async function runConnect(browserType, bname, vp, theme) {
   const [w] = vp;
   const tag = `${bname} ${w}x${vp[1]} ${theme} connect`;
+  M.armStart(tag);
   const compact = w < 640;
   const expanded = w > 1024;
   const wide = w >= 1440;

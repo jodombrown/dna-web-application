@@ -1243,29 +1243,265 @@ async function launch(browserType) {
     opts.env = { ...process.env, WEBKIT_DISABLE_COMPOSITING_MODE: "1" };
   const browser = await browserType.launch(opts);
   const css = PROBE_CSS[process.env.RULING200_PROBE];
-  if (!css) return browser;
-  const newContext = browser.newContext.bind(browser);
+  if (css) {
+    const probeContext = browser.newContext.bind(browser);
+    browser.newContext = async (o) => {
+      const ctx = await probeContext(o);
+      await ctx.addInitScript((text) => {
+        const add = () => {
+          const s = document.createElement("style");
+          s.setAttribute("data-ruling-200-probe", "");
+          s.textContent = text;
+          document.documentElement.appendChild(s);
+        };
+        if (document.documentElement) add();
+        else document.addEventListener("readystatechange", add, { once: true });
+      }, css);
+      return ctx;
+    };
+  }
+  // Ruling 274. Wrapped last, so it also covers the context the probe hands back. Every page in
+  // every flow is created on a context from here, so the listener cannot be forgotten by a flow
+  // that exists now or one written later, which is the gap the ruling names.
+  const outerContext = browser.newContext.bind(browser);
   browser.newContext = async (o) => {
-    const ctx = await newContext(o);
-    await ctx.addInitScript((text) => {
-      const add = () => {
-        const s = document.createElement("style");
-        s.setAttribute("data-ruling-200-probe", "");
-        s.textContent = text;
-        document.documentElement.appendChild(s);
-      };
-      if (document.documentElement) add();
-      else document.addEventListener("readystatechange", add, { once: true });
-    }, css);
+    const ctx = await outerContext(o);
+    ctx.on("page", watchCrash);
     return ctx;
   };
   return browser;
 }
 
+// ---------------------------------------------------------------------------
+// Arms, the crash flag (ruling 274) and the declared count (ruling 292).
+//
+// An arm is one flow at one engine, viewport and theme: the unit ruling 292 says is comparable
+// between runs, and the unit ruling 274's flag has to be attached to. Flows run strictly one after
+// another, so one module-level cursor is the whole bookkeeping. `armStart(tag)` opens an arm and
+// closes the one before it; every check `record()` emits until the next `armStart` belongs to it.
+//
+// The crash listener is registered in `launch()` rather than two lines into each flow, because the
+// defect ruling 274 names is a flow that never registered one. Every page every flow opens comes
+// from `launch()`, so no flow can forget and a flow written later inherits it.
+// ---------------------------------------------------------------------------
 const results = [];
-function record(name, ok, detail = "") {
-  results.push({ name, ok, detail });
-  if (!ok) console.log("FAIL", name, detail);
+const armLog = [];
+const crashSightings = [];
+let openArm = null;
+
+/** The tier ruling 61's matrix is read in. Widths are the app's own breakpoints. */
+function tierOf(name) {
+  const m = /(\d+)x(\d+)/.exec(name || "");
+  if (!m) return "unsized";
+  const w = Number(m[1]);
+  return w < 640 ? "compact" : w > 1024 ? "expanded" : "medium";
+}
+
+function armStart(tag) {
+  armClose();
+  openArm = { arm: tag, from: results.length, crashed: false, pages: new Set() };
+  return tag;
+}
+
+function armClose() {
+  if (!openArm) return;
+  armLog.push({
+    arm: openArm.arm,
+    tier: tierOf(openArm.arm),
+    emitted: results.length - openArm.from,
+    crashed: openArm.crashed,
+  });
+  openArm = null;
+}
+
+/**
+ * Ruling 274. Registered on every page `launch()` produces. The flag is sticky for the rest of the
+ * arm: once the web process is gone every check behind it fails for that reason and no other, which
+ * is exactly the distinction the suite could not previously draw.
+ */
+function watchCrash(page) {
+  // Pinned here rather than read when the event fires: the page belongs to the arm that opened it,
+  // and a crash reported during teardown must not be charged to whichever arm opened next.
+  const owner = openArm;
+  if (owner) owner.pages.add(page);
+  page.on("crash", () => {
+    const on = owner || openArm;
+    const arm = on ? on.arm : "(no arm open)";
+    if (on) on.crashed = true;
+    crashSightings.push({ arm, tier: tierOf(arm), at: new Date().toISOString() });
+    console.log("WEB PROCESS CRASHED |", arm);
+  });
+  return page;
+}
+
+/** Whether the arm currently open has lost a web process. */
+function armCrashed() {
+  return !!(openArm && openArm.crashed);
+}
+
+function record(name, ok, detail = "", crashed = armCrashed()) {
+  results.push({ name, ok, detail, arm: openArm ? openArm.arm : null, crashed });
+  // Ruling 274: every failure carries the flag or its absence, in the line a reader sees first.
+  if (!ok) console.log("FAIL", crashed ? "[CRASH]" : "[no crash]", name, detail);
+}
+// ---------------------------------------------------------------------------
+// Ruling 292: the suite declares what each arm emits, or the count is not evidence.
+//
+// tests/expected-counts.json is that declaration, generated by EXPECT=write and committed. Nothing
+// infers it at run time: a number derived from the run it is checking cannot detect that run being
+// short. Enforcement is per arm and never per run, because a crashed flow abandons the checks
+// behind it, and an arm that emitted fewer is reported as incomplete rather than quietly reducing
+// a total (rulings 228 and 292).
+// ---------------------------------------------------------------------------
+const EXPECTED_PATH = path.join(__dirname, "expected-counts.json");
+
+function loadExpected() {
+  try {
+    return JSON.parse(fs.readFileSync(EXPECTED_PATH, "utf8"));
+  } catch {
+    return null;
+  }
+}
+
+function sortedObject(pairs) {
+  return Object.fromEntries([...pairs].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
+}
+
+function accountForArms({ full, engines }) {
+  armClose();
+  const seen = new Map();
+  for (const a of armLog) seen.set(a.arm, (seen.get(a.arm) || 0) + a.emitted);
+  fs.writeFileSync(path.join(OUT, "arm-counts.json"), JSON.stringify(sortedObject(seen), null, 2));
+
+  if (process.env.EXPECT === "write") {
+    // Calibration. Merges upward against what is already declared: an arm that lost a web process
+    // during calibration emitted fewer checks than it owes, and taking the lower number would bake
+    // the crash in as the expectation. A declared number only ever falls by a deliberate edit.
+    const prior = loadExpected() || {};
+    const next = new Map(Object.entries(prior));
+    for (const [arm, n] of seen) next.set(arm, Math.max(prior[arm] || 0, n));
+    const body = JSON.stringify(sortedObject(next), null, 2) + "\n";
+    fs.writeFileSync(EXPECTED_PATH, body);
+    // Also into the artifact and the job log, so a calibration run on a runner can be read back
+    // without a checkout of the runner's own workspace.
+    fs.writeFileSync(path.join(OUT, "expected-counts.json"), body);
+    console.log(
+      `EXPECT=write: ${next.size} arms declared\n--- BEGIN expected-counts.json ---\n` +
+        body +
+        "--- END expected-counts.json ---",
+    );
+    return;
+  }
+
+  const expected = loadExpected();
+  if (!expected) {
+    record(
+      "ruling 292: an expected count per arm is declared",
+      false,
+      `${EXPECTED_PATH} is missing or unreadable; regenerate it with EXPECT=write`,
+    );
+    return;
+  }
+
+  for (const [arm, n] of seen) {
+    const want = expected[arm];
+    const crashed = armLog.some((a) => a.arm === arm && a.crashed);
+    const label = `ruling 292 | ${arm}: emitted every check it declares`;
+    if (want === undefined) {
+      record(
+        `ruling 292 | ${arm}: the arm is declared`,
+        false,
+        `UNDECLARED: emitted ${n} checks and is absent from expected-counts.json; regenerate with EXPECT=write`,
+        crashed,
+      );
+    } else if (n < want) {
+      record(
+        label,
+        false,
+        `INCOMPLETE: emitted ${n} of ${want}; the ${want - n} checks behind the failure never ran`,
+        crashed,
+      );
+    } else if (n > want) {
+      record(
+        label,
+        false,
+        `DRIFT: emitted ${n} against a declared ${want}; the declaration is stale, regenerate with EXPECT=write`,
+        crashed,
+      );
+    } else {
+      record(label, true, "", crashed);
+    }
+  }
+
+  if (!full) {
+    console.log(
+      "ruling 292: SPECIAL, ONLY or THEME is set, so this is a subset run and arms that did not " +
+        "run are not swept for. The missing-arm sweep is a full-run check.",
+    );
+    return;
+  }
+  // Ruling 228's case, and the one a total conceals: an arm that stopped running entirely emits
+  // nothing, so it appears nowhere in what was observed and can only be found in what was declared.
+  const inScope = (arm) => engines.some((e) => arm.startsWith(e + "-") || arm.startsWith(e + " "));
+  for (const arm of Object.keys(expected)) {
+    if (seen.has(arm) || !inScope(arm)) continue;
+    record(
+      `ruling 292 | ${arm}: the arm ran`,
+      false,
+      `MISSING: declares ${expected[arm]} checks and emitted none`,
+    );
+  }
+}
+
+/**
+ * The closing summary. Ruling 292: arms are what is comparable between runs, so the arms lead and
+ * the check count is printed as a count and never as a score. Ruling 274: every failure is printed
+ * with the crash flag or its absence, so a G5 sighting and a different symptom are told apart in
+ * the line a reader sees first.
+ */
+function finish({ full = false, engines = [] } = {}) {
+  accountForArms({ full, engines });
+  const fails = results.filter((r) => !r.ok);
+  fs.writeFileSync(path.join(OUT, "results.json"), JSON.stringify(results, null, 2));
+  fs.writeFileSync(
+    path.join(OUT, "arms.json"),
+    JSON.stringify({ armLog, crashSightings }, null, 2),
+  );
+
+  const byTier = new Map();
+  for (const a of armLog) {
+    const t = byTier.get(a.tier) || { arms: 0, crashed: 0, failed: new Set() };
+    t.arms += 1;
+    if (a.crashed) t.crashed += 1;
+    byTier.set(a.tier, t);
+  }
+  for (const f of fails) {
+    const t = f.arm && byTier.get(tierOf(f.arm));
+    if (t) t.failed.add(f.arm);
+  }
+
+  console.log("\n=== arms by tier (ruling 61's matrix; ruling 292: arms, not a total) ===");
+  for (const tier of ["compact", "medium", "expanded", "unsized"]) {
+    const t = byTier.get(tier);
+    if (!t) continue;
+    console.log(
+      `${tier}: ${t.arms} arms | ${t.arms - t.failed.size} with no failing check | ` +
+        `${t.failed.size} with at least one | ${t.crashed} that lost a web process`,
+    );
+  }
+
+  const crashFails = fails.filter((f) => f.crashed);
+  console.log(
+    `\n=== failures classified (ruling 274) ===\n` +
+      `${crashFails.length} behind a web-process crash (G5) | ` +
+      `${fails.length - crashFails.length} not behind one`,
+  );
+  if (crashSightings.length)
+    console.log("arms that lost a web process: " + crashSightings.map((c) => c.arm).join(", "));
+
+  console.log(`\n${results.length - fails.length} of ${results.length} checks passed`);
+  fails.forEach((f) => console.log("FAIL", f.crashed ? "[CRASH]" : "[no crash]", f.name, f.detail));
+  process.exit(fails.length ? 1 : 0);
 }
 
 async function noOverflow(page, label) {
@@ -1291,6 +1527,7 @@ async function signIn(page) {
 
 async function runViewport(browserType, bname, [w, h], theme) {
   const tag = `${bname}-${w}x${h}-${theme}`;
+  armStart(tag);
   const isTouch = w < 1024 || w === 1024;
   const browser = await launch(browserType);
   const ctx = await browser.newContext({
@@ -1662,6 +1899,7 @@ async function runViewport(browserType, bname, [w, h], theme) {
 // End-to-end publish (once per tier) including link unfurl, image attach, and the feed card via the router.
 async function runPublish(browserType, bname, [w, h], theme) {
   const tag = `${bname}-${w}x${h}-${theme}-publish`;
+  armStart(tag);
   const browser = await launch(browserType);
   const ctx = await browser.newContext({
     viewport: { width: w, height: h },
@@ -1850,6 +2088,7 @@ async function runPublish(browserType, bname, [w, h], theme) {
 // is not already a post.
 async function runPublishGuards(browserType, bname, [w, h], theme) {
   const tag = `${bname}-${w}x${h}-${theme}-guards`;
+  armStart(tag);
   const browser = await launch(browserType);
   const ctx = await browser.newContext({
     viewport: { width: w, height: h },
@@ -1944,6 +2183,7 @@ async function runPublishGuards(browserType, bname, [w, h], theme) {
 // Shell, Feed lenses, quick-look overlay, notifications: one run per viewport, light theme.
 async function runShell(browserType, bname, [w, h]) {
   const tag = `${bname}-${w}x${h}-shell`;
+  armStart(tag);
   const browser = await launch(browserType);
   const ctx = await browser.newContext({
     viewport: { width: w, height: h },
@@ -2203,6 +2443,7 @@ async function runShell(browserType, bname, [w, h]) {
 async function runTargeted(browserType, bname, [w, h]) {
   const tier = w < 640 ? "compact" : w > 1024 ? "expanded" : "medium";
   const tag = `${bname}-${w}x${h}-targeted`;
+  armStart(tag);
   const browser = await launch(browserType);
   // Pointer context: check 2 needs a file drag, which only the pointer mode arms; every other
   // check reads the same on either input mode.
@@ -2754,6 +2995,7 @@ const TARGETED_VIEWPORTS = [
 // Silence when DIA times out or errors: identical to no DIA.
 async function runSilence(browserType, bname) {
   const tag = `${bname}-390x844-light-silence`;
+  armStart(tag);
   const browser = await launch(browserType);
   const ctx = await browser.newContext({
     viewport: { width: 390, height: 844 },
@@ -2795,6 +3037,7 @@ async function runSilence(browserType, bname) {
 // iOS keyboard surrogate: shrink visualViewport and check data-kb and Publish placement.
 async function runKeyboard(browserType, bname) {
   const tag = `${bname}-390x844-keyboard`;
+  armStart(tag);
   const browser = await launch(browserType);
   const ctx = await browser.newContext({
     viewport: { width: 390, height: 844 },
@@ -2862,6 +3105,9 @@ module.exports = {
   signIn,
   record,
   results,
+  armStart,
+  armCrashed,
+  watchCrash,
   shot,
   noOverflow,
   BASE,
@@ -2877,12 +3123,36 @@ module.exports = {
   CONNECT_WHERE,
 };
 
+/**
+ * Ruling 283: the job is split by engine, so a run names the engine it drives and its arms are
+ * comparable against the arms of the same engine and no other. ENGINE=chromium or ENGINE=webkit
+ * runs one; unset keeps the old shape, where WEBKIT=1 adds WebKit alongside Chromium.
+ */
+function selectEngines() {
+  const all = { chromium, webkit };
+  const pick = (process.env.ENGINE || "").trim();
+  if (!pick) {
+    const engines = [["chromium", chromium]];
+    if (process.env.WEBKIT === "1") engines.push(["webkit", webkit]);
+    return engines;
+  }
+  const names = pick
+    .split(",")
+    .map((n) => n.trim())
+    .filter(Boolean);
+  const unknown = names.filter((n) => !all[n]);
+  // Loud rather than empty: an ENGINE typo that silently ran nothing would report a green run of
+  // no arms at all, which is the shape of false all-clear this PR exists to remove.
+  if (unknown.length || !names.length)
+    throw new Error(`ENGINE=${pick} names no engine this suite drives (chromium, webkit)`);
+  return names.map((n) => [n, all[n]]);
+}
+
 if (require.main === module)
   (async () => {
     const only = process.env.ONLY ? JSON.parse(process.env.ONLY) : null;
     if (process.env.SPECIAL) {
-      const specialEngines = [["chromium", chromium]];
-      if (process.env.WEBKIT === "1") specialEngines.push(["webkit", webkit]);
+      const specialEngines = selectEngines();
       for (const [bname, bt] of specialEngines) {
         if (process.env.SPECIAL.includes("publish"))
           await runPublish(bt, bname, [390, 844], "light");
@@ -2956,13 +3226,9 @@ if (require.main === module)
               await runAuthFlows(bt, bname, vp, theme);
         }
       }
-      const fails = results.filter((r) => !r.ok);
-      console.log(`${results.length - fails.length}/${results.length} checks passed`);
-      fails.forEach((f) => console.log("FAIL:", f.name, f.detail));
-      process.exit(fails.length ? 1 : 0);
+      finish({ full: false, engines: specialEngines.map(([n]) => n) });
     }
-    const engines = [["chromium", chromium]];
-    if (process.env.WEBKIT === "1") engines.push(["webkit", webkit]);
+    const engines = selectEngines();
     for (const [bname, bt] of engines) {
       for (const vp of only ? [only] : VIEWPORTS) {
         for (const theme of only ? [process.env.THEME || "light"] : THEMES)
@@ -2970,10 +3236,7 @@ if (require.main === module)
         await runShell(bt, bname, vp);
       }
       if (only) {
-        const fails = results.filter((r) => !r.ok);
-        console.log(`${results.length - fails.length}/${results.length} checks passed`);
-        fails.forEach((f) => console.log("FAIL:", f.name, f.detail));
-        process.exit(fails.length ? 1 : 0);
+        finish({ full: false, engines: engines.map(([n]) => n) });
       }
       await runPublish(bt, bname, [390, 844], "light");
       await runPublish(bt, bname, [1280, 800], "dark");
@@ -3022,9 +3285,14 @@ if (require.main === module)
           await runBlockFocus(bt, bname, vp, theme);
         }
     }
-    const fails = results.filter((r) => !r.ok);
-    fs.writeFileSync(path.join(OUT, "results.json"), JSON.stringify(results, null, 2));
-    console.log(`\n${results.length - fails.length}/${results.length} checks passed`);
-    fails.forEach((f) => console.log("FAIL:", f.name, f.detail));
-    process.exit(fails.length ? 1 : 0);
-  })();
+    finish({ full: true, engines: engines.map(([n]) => n) });
+  })().catch((e) => {
+    // Ruling 228: a run that dies mid-flow still owes a report. The arm that was open is short of
+    // its declared count and is named as incomplete, rather than the whole run vanishing.
+    record("the matrix run completed without throwing", false, String(e).slice(0, 1200));
+    try {
+      finish({ full: false, engines: [] });
+    } catch {
+      process.exit(1);
+    }
+  });

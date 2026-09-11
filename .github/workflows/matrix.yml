@@ -1,5 +1,9 @@
 # Responsive test matrix (ruling 61) against a deployed Pages URL, in Chromium and WebKit.
 # Dispatch it for a branch; base_url defaults to that branch's Pages preview alias.
+#
+# The default only resolves for a branch whose name is already a valid host label. Cloudflare
+# slugifies an alias, so a branch carrying a slash needs base_url passed explicitly; the deployment
+# check names the URL it tried, so the failure says so rather than looking like a dead deployment.
 name: Responsive matrix
 
 on:
@@ -7,6 +11,10 @@ on:
     inputs:
       base_url:
         description: Deployed URL to test (defaults to the branch's Pages preview)
+        required: false
+        default: ""
+      engine:
+        description: One engine (chromium or webkit). Empty runs both in this one job.
         required: false
         default: ""
       special:
@@ -19,6 +27,10 @@ on:
         default: ""
       theme:
         description: One theme (light or dark)
+        required: false
+        default: ""
+      expect:
+        description: Ruling 292; set to "write" to regenerate tests/expected-counts.json from this run instead of enforcing it.
         required: false
         default: ""
       probe:
@@ -39,7 +51,8 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
-      - run: bun install --frozen-lockfile
+      # Ruling 217: the registry is a third party this job does not test.
+      - run: scripts/retry.sh 3 bun install --frozen-lockfile
       - name: Resolve target URL and artifact slug
         id: target
         env:
@@ -54,22 +67,19 @@ jobs:
           # carry a slash. Map every rejected character, for any branch shape, not just that one.
           SLUG=$(printf '%s' "$REF_NAME" | tr -d '\r\n' | tr '"/:<>|*?\\' '-')
           [ -n "$SLUG" ] || SLUG="ref"
+          ENGINES="${{ inputs.engine }}"
+          [ -n "$ENGINES" ] || ENGINES="chromium webkit"
+          echo "engines=$ENGINES" >> "$GITHUB_OUTPUT"
           echo "slug=$SLUG" >> "$GITHUB_OUTPUT"
-          echo "Testing $URL (artifact slug $SLUG)"
-      - name: Live check (deployed HTML serves the app)
-        run: |
-          set -e
-          URL="${{ steps.target.outputs.url }}"
-          code=$(curl -sS -o /tmp/sign-in.html -w '%{http_code}' "$URL/sign-in")
-          echo "GET /sign-in -> $code"
-          test "$code" = "200"
-          grep -q '<title>DNA</title>' /tmp/sign-in.html
-          grep -q 'manifest.webmanifest' /tmp/sign-in.html
-          code=$(curl -sS -o /dev/null -w '%{http_code}' "$URL/strand/adinkra/mate-masie.svg")
-          echo "GET /strand/adinkra/mate-masie.svg -> $code"
-          test "$code" = "200"
+          echo "Testing $URL in $ENGINES (artifact slug $SLUG)"
+      - name: The deployment serves every path the suites open (ruling 217)
+        env:
+          BASE: ${{ steps.target.outputs.url }}
+        run: scripts/deployment-serves.sh
+      # Ruling 217: cdn.playwright.dev and apt are third parties this gate does not test, and a
+      # failure here ends the matrix before a test body runs.
       - name: Install browsers
-        run: bunx playwright install --with-deps chromium webkit
+        run: scripts/retry.sh 3 bunx playwright install --with-deps ${{ steps.target.outputs.engines }}
       # Ruling 200: a dispatched run reproduces the web-process crash but, without this, records
       # only that it happened. Core dumps cost nothing on a passing run and are the only route to
       # the signal and stack the investigation still lacks. Diagnostic only; no pass criterion.
@@ -106,20 +116,24 @@ jobs:
           echo '```' >> "$GITHUB_STEP_SUMMARY"
           grep -E '^(ruling 200 loop|RESULT|LOOP .*CRASHED)' "$OUT/loop.log" >> "$GITHUB_STEP_SUMMARY" || true
           echo '```' >> "$GITHUB_STEP_SUMMARY"
-      - name: Run matrix (Chromium and WebKit)
+      - name: Run matrix
         if: ${{ inputs.loop == '' }}
         env:
           BASE: ${{ steps.target.outputs.url }}
           WEBKIT: "1"
+          ENGINE: ${{ inputs.engine }}
           OUT: ${{ github.workspace }}/matrix-out
           # Empty is falsy in tests/matrix.cjs, so an unset input runs the whole matrix.
           SPECIAL: ${{ inputs.special }}
           ONLY: ${{ inputs.only }}
           THEME: ${{ inputs.theme }}
+          EXPECT: ${{ inputs.expect }}
           RULING200_PROBE: ${{ inputs.probe }}
         run: |
+          set -o pipefail
+          mkdir -p "$OUT"
           ulimit -c unlimited
-          node tests/matrix.cjs
+          node tests/matrix.cjs 2>&1 | tee "$OUT/matrix.log"
       - name: Extract the signal and stack from any core (ruling 200)
         if: always()
         run: |
@@ -128,7 +142,15 @@ jobs:
           cores=(/tmp/cores/core.*)
           echo "cores written: ${#cores[@]}"
           [ "${#cores[@]}" -eq 0 ] && exit 0
-          sudo apt-get update -qq && sudo apt-get install -y -qq gdb elfutils
+          # Ruling 217: this step is diagnostic by its own charter, and apt and gdb are third
+          # parties it does not test. It reports what it found and never fails the job; a red gate
+          # here would be red for a reason unrelated to anything the matrix asserts.
+          sudo apt-get update -qq && sudo apt-get install -y -qq gdb elfutils || {
+            echo "::notice::gdb and elfutils could not be installed; cores are retained unanalysed."
+            mkdir -p "$OUT/cores"
+            for c in "${cores[@]}"; do cp "$c" "$OUT/cores/" 2>/dev/null || true; done
+            exit 0
+          }
           mkdir -p "$OUT/cores"
           for c in "${cores[@]}"; do
             name=$(basename "$c")
@@ -178,8 +200,38 @@ jobs:
               cp "$c" "$OUT/cores/" 2>/dev/null || echo "core copy failed (size?)" | tee -a "$OUT/cores/stacks.txt"
             fi
           done
+          exit 0
         env:
           OUT: ${{ github.workspace }}/matrix-out
+      # Rulings 267, 274 and 292: the per-arm accounting, the result per tier and whether a failure
+      # sat behind a crash, readable in the tail without fetching the log.
+      #
+      # Last of the reporting steps on purpose. It used to run before the core extraction above,
+      # and on the one kind of run where the classification matters most, a run that lost a web
+      # process, that step then printed up to 4000 lines of gdb frames after it and buried the
+      # summary again. Run 45 is where that showed: ruling 267's own defect, reintroduced one step
+      # further down the job.
+      - name: Arms, tiers and the crash classification, in the tail
+        if: always()
+        env:
+          OUT: ${{ github.workspace }}/matrix-out
+        run: |
+          set -uo pipefail
+          log="$OUT/matrix.log"
+          if [ ! -s "$log" ]; then
+            echo "The matrix step produced no output; it did not reach tests/matrix.cjs."
+            exit 0
+          fi
+          tail=$(sed -n '/=== arms by tier/,$p' "$log")
+          [ -n "$tail" ] || tail=$(tail -80 "$log")
+          echo "=== the matrix summary, re-emitted (ruling 267) ==="
+          printf '%s\n' "$tail"
+          {
+            echo "### matrix (ruling 292: arms, not a total)"
+            echo '```'
+            printf '%s\n' "$tail"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
       - name: Upload screenshots and results
         if: always()
         uses: actions/upload-artifact@v4

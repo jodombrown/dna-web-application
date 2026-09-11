@@ -29,7 +29,9 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
-      - run: bun install --frozen-lockfile
+      # Ruling 217: the registry is a third party this job does not test. A blip there used to be
+      # indistinguishable from a broken lockfile.
+      - run: scripts/retry.sh 3 bun install --frozen-lockfile
       - run: bun run lint
       - run: bunx tsc --noEmit -p tsconfig.json
       - run: bun run build
@@ -79,12 +81,18 @@ jobs:
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           command: pages deploy dist --project-name=dna-web-application --branch=${{ github.ref_name }} --commit-hash=${{ github.sha }} --commit-dirty=true
 
-  # Exit check (ruling 61): the responsive matrix against the deployed preview, Chromium and WebKit.
-  matrix:
+  # Ruling 218's arms, in their own job.
+  #
+  # Ruling 267: these arms used to run after the browser download, so reading them meant fetching a
+  # 160 KB log to find them under about 1,200 lines of apt and CDN noise. On their own runner there
+  # is no such noise, they report in about two minutes instead of after the full matrix, and they
+  # are re-emitted at the end of the job besides. They gate nothing in the browser matrix: a REST
+  # finding and a rendering finding are different questions and ruling 217 says a gate answers one.
+  live:
     needs: deploy
     if: ${{ needs.deploy.outputs.deployed == 'true' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 20
     env:
       BASE: ${{ needs.deploy.outputs.url || format('https://{0}.dna-web-application.pages.dev', github.ref_name) }}
     steps:
@@ -92,64 +100,76 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
-      - run: bun install --frozen-lockfile
-      - name: Live check (deployed HTML serves the app)
-        run: |
-          set -e
-          echo "Testing $BASE"
-          for i in $(seq 1 12); do
-            code=$(curl -sS -o /tmp/sign-in.html -w '%{http_code}' "$BASE/sign-in" || true)
-            [ "$code" = "200" ] && break
-            sleep 10
-          done
-          echo "GET /sign-in -> $code"
-          test "$code" = "200"
-          grep -q '<title>DNA</title>' /tmp/sign-in.html
-          grep -q 'manifest.webmanifest' /tmp/sign-in.html
-          # tests/live-checks.cjs asserts /connect (ruling 156) in a single GET with no retry,
-          # seconds after a fresh direct-upload deployment. Run 86 returned 404 there and took
-          # the whole matrix with it while every REST assertion passed. Poll it the way
-          # /sign-in is polled, so the suite runs against a deployment that has propagated.
-          for i in $(seq 1 12); do
-            code=$(curl -sS -o /tmp/connect.html -w '%{http_code}' "$BASE/connect" || true)
-            [ "$code" = "200" ] && break
-            sleep 10
-          done
-          echo "GET /connect -> $code"
-          test "$code" = "200"
-          # Brief 4B's new routes serve from the deployment before the browser matrix opens them.
-          for p in /reset /reset/new /password; do
-            code=$(curl -sS -o /dev/null -w '%{http_code}' "$BASE$p" || true)
-            echo "GET $p -> $code"
-            test "$code" = "200"
-          done
-          code=$(curl -sS -o /dev/null -w '%{http_code}' "$BASE/strand/adinkra/mate-masie.svg")
-          echo "GET /strand/adinkra/mate-masie.svg -> $code"
-          test "$code" = "200"
-          # Ruling 184's asset contract: every path in the table serves from the deployment, so the
-          # redesign is a file overwrite. favicon.ico is absent by the founder's own 9 September
-          # edit and is deliberately not checked here.
-          for p in /strand/logo.png /favicon.png /apple-touch-icon.png /icon-192.png /icon-512.png; do
-            code=$(curl -sS -o /dev/null -w '%{http_code}' "$BASE$p")
-            echo "GET $p -> $code"
-            test "$code" = "200"
-          done
-          # The manifest's icons must resolve, or an install produces an iconless app.
-          curl -sS "$BASE/manifest.webmanifest" -o /tmp/manifest.json
-          grep -q '/icon-192.png' /tmp/manifest.json
-          grep -q '/icon-512.png' /tmp/manifest.json
-          ! grep -q 'mate-masie' /tmp/manifest.json
+      - run: scripts/retry.sh 3 bun install --frozen-lockfile
+      - name: The deployment serves every path the suites open (ruling 217)
+        run: scripts/deployment-serves.sh
       # Ruling 218's arms are signed-in and need two seeded non-real accounts. Repository secrets
       # are not visible to a step unless the workflow passes them, so without this block the arms
       # skip and report unproven (ruling 228) however many secrets exist. A fork PR gets empty
       # strings here and the arms skip, which is the correct outcome rather than a failure.
-      - name: Brief 3 live checks (served HTML, the anonymous REST surface, and the signed-in arms)
+      - name: Brief 3 and Brief 4 live checks (served HTML, the anonymous REST surface, the signed-in arms)
         env:
           OWNER_EMAIL: ${{ secrets.OWNER_EMAIL }}
           OWNER_PASSWORD: ${{ secrets.OWNER_PASSWORD }}
           MEMBER_EMAIL: ${{ secrets.MEMBER_EMAIL }}
           MEMBER_PASSWORD: ${{ secrets.MEMBER_PASSWORD }}
-        run: node tests/live-checks.cjs
+        run: |
+          set -o pipefail
+          mkdir -p live-out
+          node tests/live-checks.cjs 2>&1 | tee live-out/live-checks.log
+      # Ruling 267. `if: always()` because the arms are most worth reading in the tail on the run
+      # where one of them failed, which is the run where the step above stopped early.
+      - name: Live-check arms, re-emitted in the tail (ruling 267)
+        if: always()
+        run: |
+          echo "=== tests/live-checks.cjs, re-emitted (ruling 267) ==="
+          if [ -s live-out/live-checks.log ]; then
+            cat live-out/live-checks.log
+            {
+              echo "### Live-check arms (ruling 218)"
+              echo '```'
+              cat live-out/live-checks.log
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "The live-check step produced no output; it did not reach tests/live-checks.cjs."
+          fi
+      - name: Upload the live-check log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-checks-${{ github.run_number }}
+          path: live-out
+          if-no-files-found: warn
+
+  # Exit check (ruling 61): the responsive matrix against the deployed preview.
+  #
+  # Rulings 223 and 283: one job per engine rather than one job driving both. Run 108 finished at
+  # 38m16s of a 45-minute budget with both engines in one process, and ruling 283 records that the
+  # next surface arm starts from 38 rather than 24, so Convene breaches the ceiling. The two engines
+  # share no state, so splitting them halves the wall clock instead of deferring the breach, and it
+  # buys two things raising the ceiling does not: a Chromium result that no longer waits on WebKit,
+  # and, with fail-fast off, a Chromium result that a WebKit crash can no longer take down with it.
+  # Under ruling 265 that is the difference between a red matrix and a red engine.
+  matrix:
+    needs: deploy
+    if: ${{ needs.deploy.outputs.deployed == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        engine: [chromium, webkit]
+    env:
+      BASE: ${{ needs.deploy.outputs.url || format('https://{0}.dna-web-application.pages.dev', github.ref_name) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: scripts/retry.sh 3 bun install --frozen-lockfile
+      - name: The deployment serves every path the suites open (ruling 217)
+        run: scripts/deployment-serves.sh
       # The runner image ships a Google Chrome apt source the matrix never reads: browsers come
       # from Playwright. On 9 September its Packages index served a hash sum mismatch, apt-get
       # update inside --with-deps exited 100, and the matrix never started. Drop the source.
@@ -158,17 +178,47 @@ jobs:
           set -e
           sudo rm -f /etc/apt/sources.list.d/google-chrome.list \
                      /etc/apt/sources.list.d/google-chrome.sources
-      - name: Install browsers
-        run: bunx playwright install --with-deps chromium webkit
-      - name: Run matrix (Chromium and WebKit)
+      # Ruling 217: cdn.playwright.dev and apt are third parties this gate does not test, and a
+      # failure here used to end the matrix before a test body ran. Retried, and only the engine
+      # this job drives is downloaded, which halves both the transfer and the apt surface.
+      - name: Install the browser this job drives
+        run: scripts/retry.sh 3 bunx playwright install --with-deps ${{ matrix.engine }}
+      - name: Run the matrix (${{ matrix.engine }})
         env:
-          WEBKIT: "1"
+          ENGINE: ${{ matrix.engine }}
           OUT: ${{ github.workspace }}/matrix-out
-        run: node tests/matrix.cjs
+        run: |
+          set -o pipefail
+          mkdir -p "$OUT"
+          node tests/matrix.cjs 2>&1 | tee "$OUT/matrix.log"
+      # Rulings 274 and 292 put the classification and the per-arm accounting at the end of the
+      # suite's own output. Lifting that tail into the job summary means the result per tier, and
+      # whether a failure sat behind a crash, is readable without opening the log at all.
+      - name: Arms, tiers and the crash classification, in the tail (rulings 267, 274, 292)
+        if: always()
+        env:
+          OUT: ${{ github.workspace }}/matrix-out
+        run: |
+          set -uo pipefail
+          log="$OUT/matrix.log"
+          if [ ! -s "$log" ]; then
+            echo "The matrix step produced no output; it did not reach tests/matrix.cjs."
+            exit 0
+          fi
+          tail=$(sed -n '/=== arms by tier/,$p' "$log")
+          [ -n "$tail" ] || tail=$(tail -80 "$log")
+          echo "=== ${{ matrix.engine }}: the matrix summary, re-emitted (ruling 267) ==="
+          printf '%s\n' "$tail"
+          {
+            echo "### ${{ matrix.engine }} (ruling 292: arms, not a total)"
+            echo '```'
+            printf '%s\n' "$tail"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
       - name: Upload screenshots and results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: matrix-run-${{ github.run_number }}
+          name: matrix-${{ matrix.engine }}-run-${{ github.run_number }}
           path: matrix-out
           if-no-files-found: warn
