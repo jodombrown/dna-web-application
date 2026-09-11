@@ -13,7 +13,8 @@
 # src/lib/supabase.ts. The MEMBER_ secrets are the live-check job's own. A fork PR gets empty
 # secrets and the signed-in phases print UNPROVEN (ruling 228). The probe is written to the runner's
 # tmp at run time, so this workflow file is the only file the audit PR adds besides the report
-# (PASS-02 Done Means 7).
+# (PASS-02 Done Means 7). Storage calls are fetch-only: supabase-js createClient pulls realtime-js,
+# which throws on Node 20 without a ws package.
 name: Security Pass 02 HTTP
 
 on:
@@ -41,7 +42,7 @@ jobs:
         run: |
           mkdir -p /tmp/probe && cd /tmp/probe
           npm init -y >/dev/null 2>&1
-          npm i --no-audit --no-fund @supabase/supabase-js@2 sharp@0.33 piexifjs@1.0.6 >/dev/null 2>&1
+          npm i --no-audit --no-fund sharp@0.33 piexifjs@1.0.6 >/dev/null 2>&1
           echo "deps installed"
       - name: Write the probe to the runner
         run: |
@@ -49,7 +50,6 @@ jobs:
           echo "wrote $(wc -l < /tmp/probe/probe.mjs) lines"
         env:
           PROBE_SRC: |
-            import { createClient } from "@supabase/supabase-js";
             import sharp from "sharp";
             import piexif from "piexifjs";
 
@@ -101,6 +101,8 @@ jobs:
             if (H_MEM) {
               out("A3.member_attest_embed_attester", await get("attestations?select=*,members!attestations_attester_member_id_fkey(*)", H_MEM));
               out("A3.member_media_embed_members", await get("media?select=*,members(*)", H_MEM));
+              out("A3.member_members_identity_cols", await get("members?select=id,name,handle,headline&limit=3", H_MEM));
+              out("A3.member_members_gated_cols", await get("members?select=id,origin_country,current_country,stance&limit=3", H_MEM));
             }
 
             const cnt = (h) => ({ ...h, Prefer: "count=exact", Range: "0-0" });
@@ -143,7 +145,7 @@ jobs:
             ]) out("E.refuse " + u, await unfurl(u));
             out("E.control_public https://example.com/", await unfurl("https://example.com/"));
 
-            // ---- Phase D: media-upload EXIF measurement (rulings 347, 352) ----
+            // ---- Phase D: media-upload EXIF measurement (rulings 347, 352), fetch-only storage ----
             if (!H_MEM) { out("D.unproven", { reason: "no member token" }); process.exit(0); }
             const health = await fetch(URL + "/functions/v1/media-upload", { method: "GET", headers: H_MEM });
             out("D.health", { status: health.status, body: (await health.text()).slice(0, 120) });
@@ -180,7 +182,6 @@ jobs:
               { name: "png_text", buf: pngText, type: "image/png", ext: "png", markers: ["tEXt", "DNA-AUDIT"] },
               { name: "webp_exif", buf: webpExif, type: "image/webp", ext: "webp", markers: ["EXIF", "DNA-AUDIT-EXIF"] },
             ];
-            const sb = createClient(URL, KEY, { global: { headers: { Authorization: "Bearer " + TOKEN } } });
             const created = [];
             for (const c of cases) {
               const hasIn = c.markers.some((m) => c.buf.includes(Buffer.from(m, "latin1")));
@@ -192,23 +193,21 @@ jobs:
               const res = await r.json().catch(() => null);
               if (!res || !res.storage_path) { out("D." + c.name, { upload_status: r.status, res }); continue; }
               created.push({ name: c.name, media_id: res.media_id, storage_path: res.storage_path });
-              const signed = await sb.storage.from("profile-media").createSignedUrl(res.storage_path, 120);
-              let master = null;
-              if (signed.data && signed.data.signedUrl) {
-                const mr = await fetch(signed.data.signedUrl);
-                master = Buffer.from(await mr.arrayBuffer());
-              }
-              const hits = master ? c.markers.filter((m) => master.includes(Buffer.from(m, "latin1"))) : ["<no-master>"];
+              const mr = await fetch(URL + "/storage/v1/object/authenticated/profile-media/" + res.storage_path,
+                { headers: { apikey: KEY, Authorization: "Bearer " + TOKEN } });
+              const master = mr.ok ? Buffer.from(await mr.arrayBuffer()) : null;
+              const hits = master ? c.markers.filter((m) => master.includes(Buffer.from(m, "latin1"))) : ["<no-master:" + mr.status + ">"];
               out("D." + c.name, {
                 input_had_metadata: hasIn, bytes_in: c.buf.length,
-                master_bytes: master ? master.length : null,
+                master_fetch_status: mr.status, master_bytes: master ? master.length : null,
                 metadata_markers_surviving_in_master: hits,
                 stripped: master ? hits.length === 0 : null,
                 media_id: res.media_id, storage_path: res.storage_path });
             }
             for (const c of created) {
-              const del = await sb.storage.from("profile-media").remove([c.storage_path]);
-              out("D.cleanup " + c.name, { removed: !del.error, error: del.error ? del.error.message : null });
+              const dr = await fetch(URL + "/storage/v1/object/profile-media/" + c.storage_path,
+                { method: "DELETE", headers: { apikey: KEY, Authorization: "Bearer " + TOKEN } });
+              out("D.cleanup " + c.name, { status: dr.status });
             }
             out("D.media_ids_for_auditor_reversal", created.map((c) => c.media_id));
       - name: Run the HTTP arms
