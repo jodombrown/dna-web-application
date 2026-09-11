@@ -4,7 +4,7 @@
 // layer, so the real client code paths run against a deterministic backend. Backend behaviour
 // (RLS, the feed view) is verified separately in SQL against the live project.
 // Usage: BASE=https://b2-shell-feed.dna-web-application.pages.dev WEBKIT=1 node tests/matrix.cjs
-// Env: ONLY='[390,844]' runs one viewport; SPECIAL=publish,guards,keyboard,silence,shell,targeted,profile,connect,vocab,block,auth runs flows only.
+// Env: ONLY='[390,844]' runs one viewport; SPECIAL=publish,guards,keyboard,silence,shell,targeted,profile,connect,vocab,block,auth,onboarding runs flows only.
 // Brief 3 profile flows live in tests/profile.cjs and Brief 4 Connect flows in tests/connect.cjs; both share this mock.
 const { chromium, webkit } = require("playwright");
 const fs = require("fs");
@@ -676,6 +676,37 @@ function makeMockDb() {
       requests: [],
       blocks: [],
     },
+    // Brief 5: what onboarding_state() answers and what the onboarding function was sent. Every
+    // existing flow signs in as a member who has onboarded (next null), so the gate in the root
+    // route holds nothing; the onboarding arm sets next itself.
+    onboarding: {
+      state: {
+        next: null,
+        who: {
+          name: "Amara Osei",
+          username: "amara-osei",
+          suggestion: "amara-osei",
+          avatar_path: null,
+          completed: true,
+        },
+        where: { city: "Nairobi", country: "Kenya", completed: true },
+        relationship: {
+          stance: "exploring",
+          stance_label: "Still exploring",
+          declared: false,
+          completed: true,
+        },
+        onboarded_at: "2026-09-01T00:00:00+00:00",
+      },
+      writes: [],
+      explainerOpens: 0,
+      taken: false,
+      failScreen: null,
+      delayMs: 0,
+    },
+    // Brief 5: media-upload refusals, so the photo's two alerts can be exercised.
+    mediaTooLarge: false,
+    mediaFail: false,
     // Brief 4: Connect's projection state and the writes the surface made.
     connect: {
       overrides: {},
@@ -768,6 +799,8 @@ async function mockSupabase(page, db, opts = {}) {
     }
     if (p === "/functions/v1/media-upload") {
       await new Promise((r) => setTimeout(r, 300));
+      if (db.mediaTooLarge) return json({ error: "too_large" }, 413);
+      if (db.mediaFail) return json({ error: "upload_failed" }, 500);
       return json({
         storage_path: `${UID}/p1/${db.post_media.length + 1}.png`,
         width: 1200,
@@ -786,6 +819,66 @@ async function mockSupabase(page, db, opts = {}) {
           })),
         );
       return json({ signedURL: "/object/sign/" + p.split("/object/sign/")[1] + "?token=t" });
+    }
+    if (p === "/rest/v1/rpc/onboarding_state") return json(db.onboarding.state);
+    if (p === "/functions/v1/onboarding") {
+      const ob = db.onboarding;
+      const body = req.postDataJSON() || {};
+      if (ob.delayMs) await new Promise((r) => setTimeout(r, ob.delayMs));
+      if (body.event === "explainer_opened") {
+        ob.explainerOpens++;
+        return json({ ok: true });
+      }
+      ob.writes.push(body);
+      if (ob.failScreen === body.screen)
+        return json({ ok: false, error: { code: "P0001", message: "That did not save." } }, 400);
+      const st = ob.state;
+      if (body.screen === "who") {
+        if (ob.taken)
+          return json({ ok: true, result: { status: "taken", suggestion: st.who.suggestion } });
+        st.who = {
+          ...st.who,
+          name: body.name,
+          username: body.username,
+          avatar_path: body.avatar_path,
+          completed: true,
+        };
+        st.next = st.where.completed ? (st.onboarded_at ? null : "relationship") : "where";
+        return json({
+          ok: true,
+          result: {
+            status: "ok",
+            name: body.name,
+            username: body.username,
+            avatar_path: body.avatar_path,
+            suggestion: st.who.suggestion,
+            username_changes: body.username === st.who.suggestion ? 0 : 1,
+          },
+        });
+      }
+      if (body.screen === "where") {
+        st.where = { city: body.city, country: body.country, completed: true };
+        st.next = "relationship";
+        return json({ ok: true, result: { status: "ok", city: body.city, country: body.country } });
+      }
+      if (body.screen === "relationship") {
+        const now = new Date().toISOString();
+        if (body.touched)
+          st.relationship = { ...st.relationship, stance: body.stance, declared: true };
+        st.relationship.completed = true;
+        st.onboarded_at = now;
+        st.next = null;
+        return json({
+          ok: true,
+          result: {
+            status: "ok",
+            stance: st.relationship.stance,
+            stance_declared_at: body.touched ? now : null,
+            onboarded_at: now,
+          },
+        });
+      }
+      return json({ ok: false, error: { code: "bad_screen" } }, 400);
     }
     if (p === "/functions/v1/connect-suggest") {
       await new Promise((r) => setTimeout(r, 150));
@@ -3204,6 +3297,22 @@ if (require.main === module)
               await runBlockFocus(bt, bname, vp, theme);
             }
         }
+        // Brief 5 (ruling 279): the three screens at every viewport and both themes, then the
+        // state proofs on the two representative layouts.
+        if (process.env.SPECIAL.includes("onboarding")) {
+          const { runOnboardingLayout, runOnboardingFlows } = require("./onboarding.cjs");
+          for (const vp of process.env.ONLY ? [JSON.parse(process.env.ONLY)] : VIEWPORTS)
+            for (const theme of process.env.THEME ? [process.env.THEME] : THEMES)
+              await runOnboardingLayout(bt, bname, vp, theme);
+          for (const vp of process.env.ONLY
+            ? [JSON.parse(process.env.ONLY)]
+            : [
+                [390, 844],
+                [1280, 800],
+              ])
+            for (const theme of process.env.THEME ? [process.env.THEME] : THEMES)
+              await runOnboardingFlows(bt, bname, vp, theme);
+        }
         if (process.env.SPECIAL.includes("connect")) {
           const { runConnect } = require("./connect.cjs");
           for (const vp of process.env.ONLY ? [JSON.parse(process.env.ONLY)] : VIEWPORTS)
@@ -3286,6 +3395,16 @@ if (require.main === module)
           await runBlockFlow(bt, bname, vp, theme);
           await runBlockFocus(bt, bname, vp, theme);
         }
+      // Brief 5 (ruling 279): the three onboarding screens everywhere, the state flows on the
+      // two representative layouts.
+      const { runOnboardingLayout, runOnboardingFlows } = require("./onboarding.cjs");
+      for (const vp of VIEWPORTS)
+        for (const theme of THEMES) await runOnboardingLayout(bt, bname, vp, theme);
+      for (const vp of [
+        [390, 844],
+        [1280, 800],
+      ])
+        for (const theme of THEMES) await runOnboardingFlows(bt, bname, vp, theme);
     }
     finish({ full: true, engines: engines.map(([n]) => n) });
   })().catch((e) => {

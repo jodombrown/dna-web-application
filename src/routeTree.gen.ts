@@ -11,8 +11,11 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ShellRouteImport } from './routes/_shell'
+import { Route as RelationshipRouteImport } from './routes/relationship'
 import { Route as ResetRouteImport } from './routes/reset'
 import { Route as SignInRouteImport } from './routes/sign-in'
+import { Route as WelcomeRouteImport } from './routes/welcome'
+import { Route as WhereRouteImport } from './routes/where'
 import { Route as ShellCRouteImport } from './routes/_shell/$c'
 import { Route as ShellConnectRouteImport } from './routes/_shell/connect'
 import { Route as ShellFeedRouteImport } from './routes/_shell/feed'
@@ -30,6 +33,11 @@ const ShellRoute = ShellRouteImport.update({
   id: '/_shell',
   getParentRoute: () => rootRouteImport,
 } as any)
+const RelationshipRoute = RelationshipRouteImport.update({
+  id: '/relationship',
+  path: '/relationship',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ResetRoute = ResetRouteImport.update({
   id: '/reset',
   path: '/reset',
@@ -38,6 +46,16 @@ const ResetRoute = ResetRouteImport.update({
 const SignInRoute = SignInRouteImport.update({
   id: '/sign-in',
   path: '/sign-in',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const WelcomeRoute = WelcomeRouteImport.update({
+  id: '/welcome',
+  path: '/welcome',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const WhereRoute = WhereRouteImport.update({
+  id: '/where',
+  path: '/where',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ShellCRoute = ShellCRouteImport.update({
@@ -78,8 +96,11 @@ const ShellPostsIdRoute = ShellPostsIdRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/relationship': typeof RelationshipRoute
   '/reset': typeof ResetRoute
   '/sign-in': typeof SignInRoute
+  '/welcome': typeof WelcomeRoute
+  '/where': typeof WhereRoute
   '/$c': typeof ShellCRoute
   '/connect': typeof ShellConnectRoute
   '/feed': typeof ShellFeedRoute
@@ -90,8 +111,11 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/relationship': typeof RelationshipRoute
   '/reset': typeof ResetRoute
   '/sign-in': typeof SignInRoute
+  '/welcome': typeof WelcomeRoute
+  '/where': typeof WhereRoute
   '/$c': typeof ShellCRoute
   '/connect': typeof ShellConnectRoute
   '/feed': typeof ShellFeedRoute
@@ -104,8 +128,11 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/_shell': typeof ShellRouteWithChildren
+  '/relationship': typeof RelationshipRoute
   '/reset': typeof ResetRoute
   '/sign-in': typeof SignInRoute
+  '/welcome': typeof WelcomeRoute
+  '/where': typeof WhereRoute
   '/_shell/$c': typeof ShellCRoute
   '/_shell/connect': typeof ShellConnectRoute
   '/_shell/feed': typeof ShellFeedRoute
@@ -118,8 +145,11 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/relationship'
     | '/reset'
     | '/sign-in'
+    | '/welcome'
+    | '/where'
     | '/$c'
     | '/connect'
     | '/feed'
@@ -130,8 +160,11 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/relationship'
     | '/reset'
     | '/sign-in'
+    | '/welcome'
+    | '/where'
     | '/$c'
     | '/connect'
     | '/feed'
@@ -143,8 +176,11 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/_shell'
+    | '/relationship'
     | '/reset'
     | '/sign-in'
+    | '/welcome'
+    | '/where'
     | '/_shell/$c'
     | '/_shell/connect'
     | '/_shell/feed'
@@ -157,8 +193,11 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   ShellRoute: typeof ShellRouteWithChildren
+  RelationshipRoute: typeof RelationshipRoute
   ResetRoute: typeof ResetRoute
   SignInRoute: typeof SignInRoute
+  WelcomeRoute: typeof WelcomeRoute
+  WhereRoute: typeof WhereRoute
   ResetNewRoute: typeof ResetNewRoute
 }
 
@@ -178,6 +217,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ShellRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/relationship': {
+      id: '/relationship'
+      path: '/relationship'
+      fullPath: '/relationship'
+      preLoaderRoute: typeof RelationshipRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/reset': {
       id: '/reset'
       path: '/reset'
@@ -190,6 +236,20 @@ declare module '@tanstack/react-router' {
       path: '/sign-in'
       fullPath: '/sign-in'
       preLoaderRoute: typeof SignInRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/welcome': {
+      id: '/welcome'
+      path: '/welcome'
+      fullPath: '/welcome'
+      preLoaderRoute: typeof WelcomeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/where': {
+      id: '/where'
+      path: '/where'
+      fullPath: '/where'
+      preLoaderRoute: typeof WhereRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_shell/$c': {
@@ -267,8 +327,11 @@ const ShellRouteWithChildren = ShellRoute._addFileChildren(ShellRouteChildren)
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ShellRoute: ShellRouteWithChildren,
+  RelationshipRoute: RelationshipRoute,
   ResetRoute: ResetRoute,
   SignInRoute: SignInRoute,
+  WelcomeRoute: WelcomeRoute,
+  WhereRoute: WhereRoute,
   ResetNewRoute: ResetNewRoute,
 }
 export const routeTree = rootRouteImport

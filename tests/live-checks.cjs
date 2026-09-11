@@ -768,6 +768,72 @@ async function get(url, headers = {}) {
           // are deliberately unconnected, so this arm has nothing to restore and leaves the graph
           // unchanged. Pointing it at a connected pair would not.
         }
+
+        // -------------------------------------------------------------------------------------
+        // Brief 5 (Done Means 4, 5 and 8). Both test accounts completed onboarding once through
+        // the real surface (tests/onboard-test-accounts.cjs, run from its workflow): Owner Test
+        // touched a card, Member Test finished without touching. The live rows carry that
+        // difference, the gate is closed for both, and a second finish is refused and changes
+        // nothing. Read through onboarding_state(), the one read projection; the RPC is the one
+        // path that could set onboarded_at, so a refused second call is the proof it is set once.
+        // -------------------------------------------------------------------------------------
+        const ownerState = await memberRpc(ownerToken, "onboarding_state", {});
+        const memberState = await memberRpc(memberToken, "onboarding_state", {});
+        const os = ownerState.body && typeof ownerState.body === "object" ? ownerState.body : null;
+        const ms =
+          memberState.body && typeof memberState.body === "object" ? memberState.body : null;
+        record(
+          "B5: both test accounts have onboarded, so the gate holds neither (Done Means 8)",
+          !!os &&
+            !!ms &&
+            os.next === null &&
+            ms.next === null &&
+            !!os.onboarded_at &&
+            !!ms.onboarded_at,
+          "owner next=" +
+            (os ? String(os.next) : "no state") +
+            " member next=" +
+            (ms ? String(ms.next) : "no state"),
+        );
+        record(
+          "B5: Owner Test touched a card, so stance_declared_at is set (Done Means 4)",
+          !!os && os.relationship && os.relationship.declared === true,
+          os && os.relationship
+            ? "declared " + os.relationship.declared + " stance " + os.relationship.stance
+            : "no state",
+        );
+        record(
+          "B5: Member Test finished without touching, so stance_declared_at is null and the default stands (Done Means 4)",
+          !!ms &&
+            ms.relationship &&
+            ms.relationship.declared === false &&
+            ms.relationship.stance === "exploring",
+          ms && ms.relationship
+            ? "declared " + ms.relationship.declared + " stance " + ms.relationship.stance
+            : "no state",
+        );
+        const before = os ? os.onboarded_at : null;
+        const again = await memberRpc(ownerToken, "onboard_relationship", {
+          p_stance: "kin",
+          p_touched: true,
+        });
+        const after = await memberRpc(ownerToken, "onboarding_state", {});
+        const as = after.body && typeof after.body === "object" ? after.body : null;
+        record(
+          "B5: a second onboard_relationship is refused and onboarded_at does not change (Done Means 5)",
+          again.status >= 400 &&
+            /already complete/.test(JSON.stringify(again.body || "")) &&
+            !!as &&
+            as.onboarded_at === before &&
+            !!os &&
+            as.relationship.stance === os.relationship.stance,
+          "status " +
+            again.status +
+            " onboarded_at " +
+            (as ? as.onboarded_at : "?") +
+            " was " +
+            before,
+        );
       }
     }
   }

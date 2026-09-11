@@ -149,3 +149,103 @@ export function onboardRelationship(input: {
 export function emitExplainerOpened(stance?: Stance): void {
   void post({ event: "explainer_opened", stance: stance ?? null }).catch(() => undefined);
 }
+
+// ---------------------------------------------------------------------------
+// The routes, the gate's reading of a path, and the photo path (SPEC sections 1 and 4).
+// ---------------------------------------------------------------------------
+
+export const ONBOARDING_ORDER: OnboardingScreen[] = ["who", "where", "relationship"];
+export const ONBOARDING_ROUTE: Record<OnboardingScreen, "/welcome" | "/where" | "/relationship"> = {
+  who: "/welcome",
+  where: "/where",
+  relationship: "/relationship",
+};
+
+/** The onboarding screen a path renders, or null for any other route. */
+export function screenOfPath(pathname: string): OnboardingScreen | null {
+  const p = pathname.replace(/\/$/, "") || "/";
+  for (const s of ONBOARDING_ORDER) if (ONBOARDING_ROUTE[s] === p) return s;
+  return null;
+}
+
+/** Routes the gate never holds: the auth surfaces a signed-in member may still need to reach. */
+export function isUngated(pathname: string): boolean {
+  const p = pathname.replace(/\/$/, "") || "/";
+  return p === "/sign-in" || p === "/reset" || p === "/reset/new";
+}
+
+/** Ruling 334: three to forty characters, in the handle column's shape; the server enforces it too. */
+export const USERNAME_MIN = 3;
+export const USERNAME_MAX = 40;
+export function usernameValid(u: string): boolean {
+  return (
+    /^[a-z0-9][a-z0-9-]{1,38}[a-z0-9]$/.test(u) &&
+    u.length >= USERNAME_MIN &&
+    u.length <= USERNAME_MAX
+  );
+}
+
+/** media-upload's own ceiling, so a photo that would be refused is refused here without a round trip. */
+export const PHOTO_MAX_BYTES = 10 * 1024 * 1024;
+
+export type PhotoUpload =
+  { ok: true; path: string } | { ok: false; reason: "too_large" | "failed" };
+
+/**
+ * One step, no crop (ruling 324): the file goes to Storage through Brief 3's avatar path
+ * (media-upload, slot avatar) and the storage path comes back for onboard_who. Too large and failed
+ * are told apart because SPEC section 3 gives each its own alert.
+ */
+export async function uploadOnboardingPhoto(file: File): Promise<PhotoUpload> {
+  if (file.size > PHOTO_MAX_BYTES) return { ok: false, reason: "too_large" };
+  const sb = getSupabase();
+  if (!sb) return { ok: false, reason: "failed" };
+  const { data } = await sb.auth.getSession();
+  const token = data.session?.access_token;
+  if (!token) return { ok: false, reason: "failed" };
+  const form = new FormData();
+  form.append("file", file);
+  form.append("slot", "avatar");
+  try {
+    const res = await fetch(functionsUrl("media-upload"), {
+      method: "POST",
+      headers: { Authorization: "Bearer " + token, apikey: SUPABASE_PUBLISHABLE_KEY },
+      body: form,
+    });
+    if (res.status === 413) return { ok: false, reason: "too_large" };
+    if (!res.ok) return { ok: false, reason: "failed" };
+    const out = (await res.json()) as { storage_path?: string; error?: string };
+    if (out.error === "too_large") return { ok: false, reason: "too_large" };
+    return out.storage_path
+      ? { ok: true, path: out.storage_path }
+      : { ok: false, reason: "failed" };
+  } catch {
+    return { ok: false, reason: "failed" };
+  }
+}
+
+/** A signed URL for a stored avatar path, for the chosen state on resume. */
+export async function onboardingPhotoUrl(
+  path: string | null | undefined,
+): Promise<string | undefined> {
+  const sb = getSupabase();
+  if (!sb || !path) return undefined;
+  const { data } = await sb.storage.from("profile-media").createSignedUrl(path, 60 * 60);
+  return data?.signedUrl ?? undefined;
+}
+
+/** The query key every onboarding read and write shares, so the gate and the screens see one state. */
+export const onboardingQueryKey = (memberId: string) => ["onboarding", memberId] as const;
+
+/**
+ * SPEC section 3: on resume the lead reads Welcome back. Resume is a session that opened with a
+ * screen already written, read once from the first state this page load resolves, so moving from
+ * one screen to the next inside a session never turns into a resume.
+ */
+let resumedSession: boolean | null = null;
+export function noteInitialState(state: OnboardingState | null): void {
+  if (resumedSession === null && state) resumedSession = state.who.completed && state.next !== null;
+}
+export function isResumedSession(): boolean {
+  return resumedSession === true;
+}

@@ -1,0 +1,36 @@
+# Brief 5, Done Means 8: onboard the two ruling 218 test accounts once, through the real surface on
+# a deployment, with the same secrets the live arms use. Idempotent: an account already past the
+# gate is reported and left alone. Dispatch by hand; nothing runs it on a schedule.
+name: Onboard the test accounts
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: Deployed URL to drive (defaults to the branch's Pages preview)
+        required: false
+        default: ""
+
+jobs:
+  onboard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      BASE: ${{ inputs.base_url || format('https://{0}.dna-web-application.pages.dev', github.ref_name) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: scripts/retry.sh 3 bun install --frozen-lockfile
+      - name: The deployment serves every path the suites open (ruling 217)
+        run: scripts/deployment-serves.sh
+      - name: Install Chromium
+        run: scripts/retry.sh 3 bunx playwright install --with-deps chromium
+      - name: Onboard Owner Test and Member Test through the surface
+        env:
+          OWNER_EMAIL: ${{ secrets.OWNER_EMAIL }}
+          OWNER_PASSWORD: ${{ secrets.OWNER_PASSWORD }}
+          MEMBER_EMAIL: ${{ secrets.MEMBER_EMAIL }}
+          MEMBER_PASSWORD: ${{ secrets.MEMBER_PASSWORD }}
+        run: node tests/onboard-test-accounts.cjs
