@@ -387,6 +387,7 @@ export function WhoScreen({ state, onSubmit }: { state: OnboardingState; onSubmi
           value={username}
           onChange={(e) => onUsername((e.target as HTMLInputElement).value)}
           autoComplete="off"
+          autoCorrect="off"
           autoCapitalize="none"
           spellCheck={false}
           disabled={disabled}

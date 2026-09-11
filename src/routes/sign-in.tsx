@@ -176,7 +176,7 @@ function SignIn() {
           />
           <CheckEmail
             heading="Check your email"
-            body={`We sent a confirmation link to ${sent}. Open it to finish creating your account. It works once and for one day.`}
+            body={`We sent a confirmation link to ${sent}. Open it to finish creating your account. It works once and for one hour.`}
             small="Nothing arrived after a few minutes? Check the address above and your spam folder."
             onUseDifferent={() => {
               setSent(null);

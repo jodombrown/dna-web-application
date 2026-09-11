@@ -3,7 +3,8 @@
 // surface, so a failure here is a data-level finding, not a rendering one.
 // Usage: BASE=https://<preview>.dna-web-application.pages.dev node tests/live-checks.cjs
 // Env: SHARED (default thandiwe-dube), UNSHARED (default kwame-mensah), UNSHARED_ID; SKIP_REST=1
-// skips the Supabase calls where the network policy blocks them.
+// skips the Supabase calls where the network policy blocks them. SUPABASE_ACCESS_TOKEN runs the
+// Hotfix 01 arm against the real onboard_who through the project's SQL query endpoint.
 //
 // Ruling 218 adds three signed-in arms for Fix PR 01, run when OWNER_EMAIL, OWNER_PASSWORD,
 // MEMBER_EMAIL and MEMBER_PASSWORD are set and skipped when they are not: a signed-in member (F1),
@@ -837,6 +838,73 @@ async function get(url, headers = {}) {
       }
     }
   }
+  // -----------------------------------------------------------------------------------------
+  // Hotfix 01 (rulings 374 to 376): onboard_who against the real function. The onboarding photo
+  // arm in tests/onboarding.cjs mocks the onboarding function, which is how a refusal of every
+  // path the media pipeline stores went unseen by three checks and was found only by the human
+  // walkthrough (ruling 358). This arm calls public.onboard_who itself, inside one transaction
+  // that builds its own fixture and rolls back: tests/fixtures/hotfix01-onboard-who.sql, run
+  // byte for byte through the project's SQL query endpoint, the same channel the migration was
+  // verified over. It needs a Management API token, supplied by the runner and never by this
+  // file; without one it reports unproven (ruling 228).
+  {
+    const ACCESS_TOKEN = process.env.SUPABASE_ACCESS_TOKEN;
+    const PROJECT_REF =
+      process.env.SUPABASE_PROJECT_REF ||
+      ((SUPABASE_URL || "").match(/^https:\/\/([a-z]+)\.supabase\.co$/) || [])[1];
+    const armName =
+      "Hotfix 01: onboard_who accepts only the caller's registered avatar (H1a, H1b, H1c)";
+    if (process.env.SKIP_REST) {
+      skip(armName, "SKIP_REST");
+    } else if (!ACCESS_TOKEN || !PROJECT_REF) {
+      skip(
+        armName,
+        "set SUPABASE_ACCESS_TOKEN (and SUPABASE_PROJECT_REF when SUPABASE_URL is not the canonical shape)",
+      );
+    } else {
+      const sql = fs.readFileSync(
+        path.join(__dirname, "fixtures/hotfix01-onboard-who.sql"),
+        "utf8",
+      );
+      const r = await fetch(
+        "https://api.supabase.com/v1/projects/" + PROJECT_REF + "/database/query",
+        {
+          method: "POST",
+          headers: { Authorization: "Bearer " + ACCESS_TOKEN, "content-type": "application/json" },
+          body: JSON.stringify({ query: sql }),
+        },
+      );
+      const text = await r.text();
+      let rows = null;
+      try {
+        rows = JSON.parse(text);
+      } catch {}
+      if (r.status !== 200 || !Array.isArray(rows)) {
+        skip(armName, "query endpoint answered " + r.status + " " + text.slice(0, 160));
+      } else {
+        // Every direction is its own row; a direction with no row did not run and is unproven.
+        const byOrd = new Map(rows.map((row) => [row.ord, row]));
+        for (const row of rows.filter((x) => x.ord === 0)) {
+          record("Hotfix 01: " + row.step, !!row.ok, "expected " + row.expect + "; got " + row.got);
+        }
+        for (const [ord, label] of [
+          [1, "H1a: a registered avatar path is accepted"],
+          [2, "H1b: an unregistered path under the caller's folder is refused"],
+          [3, "H1c: a registered path owned by another member is refused"],
+        ]) {
+          const row = byOrd.get(ord);
+          if (!row) skip("Hotfix 01: " + label, "no result row; the fixture did not reach it");
+          else
+            record(
+              "Hotfix 01: " + row.step,
+              !!row.ok,
+              "expected " + row.expect + "; got " + row.got,
+            );
+        }
+      }
+    }
+  }
+
   const fails = results.filter((r) => !r.ok);
   console.log(`\n${results.length - fails.length}/${results.length} live checks passed`);
   // Ruling 228: unproven is its own outcome. It does not fail the run, and it is never folded into

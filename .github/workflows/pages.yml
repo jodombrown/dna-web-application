@@ -113,6 +113,9 @@ jobs:
           OWNER_PASSWORD: ${{ secrets.OWNER_PASSWORD }}
           MEMBER_EMAIL: ${{ secrets.MEMBER_EMAIL }}
           MEMBER_PASSWORD: ${{ secrets.MEMBER_PASSWORD }}
+          # Hotfix 01: the onboard_who arm runs one rolled-back transaction through the project's
+          # SQL query endpoint; without this token it reports unproven (ruling 228).
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
         run: |
           set -o pipefail
           mkdir -p live-out
