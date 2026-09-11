@@ -116,6 +116,11 @@ async function signInTo(page, glob) {
   await page.waitForURL(glob, { timeout: 15000 });
 }
 
+/** A goto the gate is expected to redirect: WebKit rejects the interrupted navigation, Chromium does not. */
+const gotoRedirected = async (page, path, glob) => {
+  await page.goto(BASE + path, { waitUntil: "domcontentloaded" }).catch(() => undefined);
+  await page.waitForURL(glob, { timeout: 15000 });
+};
 const pathOf = (page) => new URL(page.url()).pathname.replace(/\/$/, "");
 const mainText = (page) => page.locator("main").innerText();
 /** Ruling 308: no numeral on any screen. The hint's "twice" is a word. */
@@ -383,15 +388,13 @@ async function runOnboardingFlows(browserType, bname, [w, h], theme) {
     // The gate (SPEC section 1, ruling 307).
     await signInTo(page, "**/welcome");
     record(tag + ": a fresh member signs in and lands on /welcome", pathOf(page) === "/welcome");
-    await page.goto(BASE + "/feed", { waitUntil: "domcontentloaded" });
-    await page.waitForURL("**/welcome", { timeout: 15000 });
+    await gotoRedirected(page, "/feed", "**/welcome");
     record(
       tag + ": the Feed is held until screen three writes",
       pathOf(page) === "/welcome" && (await page.locator('[data-testid="compose"]').count()) === 0,
       pathOf(page) + " compose=" + (await page.locator('[data-testid="compose"]').count()),
     );
-    await page.goto(BASE + "/relationship", { waitUntil: "domcontentloaded" });
-    await page.waitForURL("**/welcome", { timeout: 15000 });
+    await gotoRedirected(page, "/relationship", "**/welcome");
     record(
       tag + ": a screen ahead of the next one redirects to the next one",
       pathOf(page) === "/welcome",
@@ -596,8 +599,7 @@ async function runOnboardingFlows(browserType, bname, [w, h], theme) {
       !/welcome|congratulations|you're all set|tour/i.test(feedText) &&
         (await page.locator('[role="dialog"]').count()) === 0,
     );
-    await page.goto(BASE + "/welcome", { waitUntil: "domcontentloaded" });
-    await page.waitForURL("**/feed", { timeout: 15000 });
+    await gotoRedirected(page, "/welcome", "**/feed");
     record(
       tag + ": an onboarded member opening an onboarding route is sent to the Feed",
       pathOf(page) === "/feed",
