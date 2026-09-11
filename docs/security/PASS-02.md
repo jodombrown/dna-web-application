@@ -15,9 +15,12 @@ a breach. The most consequential single check — the SSRF review of `link-unfur
 real HTTP against thirteen addresses it must refuse (Guardrails and scope E below), so there is no
 stop-and-report condition.
 
-The one repository change this pass makes is additive and outside the application: a workflow file,
-`.github/workflows/security-pass-02-http.yml`, that runs the arms this environment cannot (below).
-The report itself is the second and only other file.
+This report is the only file PR #28 merges (ruling 372). The real-HTTP arms ran from a workflow,
+`.github/workflows/security-pass-02-http.yml`, added to the branch at commit `f86e2548` and cited
+throughout at that commit; it is **deliberately not merged to `main`**. On `main` anyone with write
+access could dispatch it, and each run uploads to the canonical project and leaves `public.media`
+rows no member can delete. Referencing it at its branch commit keeps the evidence reproducible
+without putting that button on `main`.
 
 Ruling 205 applies to the findings: where a pattern is claimed from a handful of observations it is
 recorded as an observation. Ruling 228 applies to the arms: an arm that could not run is reported as
@@ -35,7 +38,7 @@ open egress, against `https://dgspjevjoblujcoljvkn.supabase.co` with the publish
 `pg_policies`, `pg_proc`, `supabase_migrations` read directly. Every row in the scope-A table below
 names which surface produced it. PASS-01's environment refused outbound HTTPS to the project and so
 does this one (the agent proxy answers 403 to CONNECT for `dgspjevjoblujcoljvkn.supabase.co` and for
-`*.pages.dev`); that is why the HTTP arms run as the committed workflow job.
+`*.pages.dev`); that is why the HTTP arms ran as the workflow job at branch commit `f86e2548`.
 
 ### The write window, and its reversal
 
@@ -50,15 +53,16 @@ and `public.media` rows (scope D). They were made in one contiguous window and r
   `7c496c63…`) were reversed from this session at 16:29 UTC (`DELETE … RETURNING id` returned all
   three). No member holds a delete on `public.media` by design, so this half is the auditor's.
 
-**State counters, before and after** (the two lists differ, and every difference is Conformance
-audit 01's, running concurrently against the same project — ruling 205, attributed, not mine):
+**State counters, before and after** (the two lists differ, and every difference belongs to member
+`40271e08`, handle `walkthrough-test-account` — the founder's walkthrough under ruling 358, verified
+from the catalog, not mine and not Conformance audit 01's, which rolled back every write it made):
 
 | Counter | Before (15:53:20Z) | After (16:29:01Z) | Delta | Whose |
 | --- | --- | --- | --- | --- |
-| members | 7 | 8 | +1 | Conformance-01 (`40271e08`) |
-| auth.users | 7 | 8 | +1 | Conformance-01 |
-| media | 0 | 1 | +1 | Conformance-01 (`40271e08`, 16:09) |
-| storage profile-media | 14 | 15 | +1 | Conformance-01 |
+| members | 7 | 8 | +1 | walkthrough-test-account (`40271e08`, created 16:02) |
+| auth.users | 7 | 8 | +1 | walkthrough-test-account |
+| media | 0 | 1 | +1 | walkthrough-test-account (`40271e08`, avatar uploaded 16:09) |
+| storage profile-media | 14 | 15 | +1 | walkthrough-test-account |
 | shared / private | 1 / 0 | 1 / 0 | 0 | — |
 | posts / attestations | 11 / 2 | 11 / 2 | 0 | — |
 | member_blocks / connections / requests | 0 / 6 / 3 | 0 / 6 / 3 | 0 | — |
@@ -66,8 +70,13 @@ audit 01's, running concurrently against the same project — ruling 205, attrib
 | storage post-media | 18 | 18 | 0 | — |
 
 **This pass's own net footprint is zero**: its three media rows and three storage objects were
-created inside the window and all six reversed. The residual `media = 1` row belongs to Conformance
-audit 01 and was left untouched.
+created inside the window and all six reversed. The residual `media = 1` row belongs to
+`walkthrough-test-account` and was left untouched. That account's avatar is stored as a 1500×2000
+JPEG (125 KB, `optimized`), so the camera photo converted and uploaded on the server side; but its
+`avatar_path` is null and `who_completed_at` is null, so onboarding screen one was never finished.
+Whether that stop was deliberate or the Continue action failed after the photo is a question for the
+walkthrough notes, not this pass. PASS-02's earlier attribution of these deltas to Conformance audit
+01 was a guess stated as fact and is corrected here (ruling 370: re-derive, never assume).
 
 ### Session open: `main`'s recent commits by author (ruling 286)
 
@@ -310,8 +319,11 @@ from **IB-11**. None blocks a merge.
 | **F21** | `deliverImageUrl` signs every delivery URL for 3600 s; a URL minted while a profile was Shared keeps serving for up to an hour after the member turns Private, an audience change the URL outlives. Bounded to one hour, avatar/cover only | **Low** | IB-15 | code + Storage semantics |
 | **F23** | No server-side rate limit on `send_introduction`, `dismiss_suggestion`, the `member_blocks` insert, `onboard_who`, or `media-upload`. The in-memory limiters in `dia-compose-read` (30/min) and `connect-suggest` are per-isolate and reset on cold start, so they bound a warm instance only. Enumeration cost (F22) and upload/abuse cost are effectively unbounded | **Low** (Medium at scale) | IB-16 | code read |
 | **F24** | The `onboarding` Edge Function emits the ruling-311 company-facing signal (screen completed, time-on-screen, stance declared vs default, photo/username set here vs later, provider entry path) while ruling 34's consent and de-identification mechanism does not yet exist. The app-authored record carries no name, id, place or handle, but it is written to request-scoped edge logs that carry the caller's JWT `sub`, so correlation to a member id is possible by anyone with log access | **Low** | IB-17 | code read |
+| **F25** | The migration tree diverges from `schema_migrations`: 20 of 27 repo migration filenames carry a leading timestamp that differs from the recorded version, so a `supabase db push` from a clean checkout would treat those 20 as unapplied and try to re-run them (failing on already-present objects). Two recorded migrations (`fix_pr_01`, `r229`) also store empty `statements`. Not an invite-boundary gate; a gate before any use of `supabase db push` or Supabase branches. This is the migration-drift check `r17ghana` already runs and DNA lacks | **Medium** | — (gate before `supabase db push` / branches) | MCP/SQL introspection |
 
-No finding rises to High. F18, F19, F20 and F22 are the four worth closing before the first invite.
+No finding rises to High. F18, F19, F20 and F22 are the four worth closing before the first invite; F25 gates before any use of `supabase db push` or Supabase branches.
+
+**The miss (ruling 370).** This pass did **not** find the finding Conformance audit 01 records in its section 5 (gate **IB-18**): any member can `INSERT` directly into `public.connection_requests` over PostgREST — the `connection_requests_member_insert` policy admits `from_member_id = auth.uid() AND status = 'pending'` and `authenticated` holds `INSERT` — so a pending request can be created straight from the table, skipping `send_introduction`'s block check, decline window and Private-member rule (ruling 215). PASS-02's doctrine check 5 wrongly read blocks as holding "except one oracle." The cause is method: this pass re-derived the grants and policies only for functions merged since PASS-01, and for `connection_requests` carried PASS-01's status forward as "as PASS-01" instead of re-deriving from the catalog. PASS-01's line was true for the app's write path and false for the table's API grant. Re-derived here from the catalog, the insert path is confirmed. Ruling 370 is the correction: a security pass re-derives every table's grants and write policies from the catalog every time, and never carries an earlier pass's write-path table forward.
 
 **F15 status change.** PASS-01 held F15 (the `anon`-granted `third_party_label` with a
 caller-supplied `p_public`) as Low defence-in-depth "unproved over HTTP." This pass **proves the
@@ -378,6 +390,8 @@ Two functions exist in old migrations but not in the database (`profile_vocabula
   consequence: a `supabase db push` from a clean checkout would treat those 20 as unapplied and try
   to re-run them, because push matches by version string. The canonical database is managed by hand,
   not by push, which is why this has not surfaced; recorded so it is not mistaken for cleanliness.
+  Numbered as **F25** (Medium) in section 5, gated before any use of `supabase db push` or Supabase
+  branches.
 - **Two recorded migrations carry empty `statements`**: `fix_pr_01_rulings_212_216`
   (`20260909160000`) and `r229_withdraw_renders_as_sent` (`20260909170000`) both store the md5 of the
   empty string. The repo files carry their full content (12 and 3 function definitions), and those
@@ -404,10 +418,12 @@ Two functions exist in old migrations but not in the database (`profile_vocabula
 - **[absolute] Nothing was fixed.** Findings only. No schema, policy, migration or configuration
   change in Supabase or Cloudflare.
 - **The HTTP arms ran over real HTTP.** Scope A, the `link-unfurl` SSRF probes (scope E) and the
-  media-upload EXIF measurement (scope D) ran on a GitHub runner via
-  `.github/workflows/security-pass-02-http.yml` (run 2, `f86e2548`), because this session's proxy
-  refuses `dgspjevjoblujcoljvkn.supabase.co`. No role-boundary check is labelled HTTP; every row in
-  section 1 names its surface.
+  media-upload EXIF measurement (scope D) ran on a GitHub runner from
+  `.github/workflows/security-pass-02-http.yml` at branch commit `f86e2548` (run 2), because this
+  session's proxy refuses `dgspjevjoblujcoljvkn.supabase.co`. That workflow is **not merged**: PR #28
+  carries this report only (ruling 372), and the workflow is cited at `f86e2548` so the evidence is
+  reproducible without leaving a dispatchable uploader on `main`. No role-boundary check is labelled
+  HTTP; every row in section 1 names its surface.
 - **Scope E, stated as a result (ruling 190).** `link-unfurl` refused all thirteen probes over real
   HTTP — `169.254.169.254` (cloud metadata), `127.0.0.1`, `localhost`, `[::1]`,
   `metadata.google.internal`, `100.100.100.200`, `2130706433` (decimal 127.0.0.1), `0177.0.0.1`
@@ -415,15 +431,20 @@ Two functions exist in old migrations but not in the database (`profile_vocabula
   — each returning `null`, while the public control `https://example.com/` returned a title. No SSRF
   finding.
 - **The two state lists are recorded** above, with the one contiguous write window (16:28:00Z to
-  16:28:13Z) and its reversal. This pass's net footprint is zero; the residual delta is Conformance
-  audit 01's.
+  16:28:13Z) and its reversal. This pass's net footprint is zero; the residual delta belongs to
+  `walkthrough-test-account` (member `40271e08`, ruling 358), not Conformance audit 01, which rolled
+  back its writes.
 - The closing report states results, not that a check is running (ruling 190).
 
 ## Closing
 
-The pass is complete and its results are stated above. Seven findings numbered from F18: **zero
-High, four Medium (F18, F19, F20, F22), three Low (F21, F23, F24)**, becoming gates IB-11 to IB-17,
-plus F15 downgraded to contained. The nine open PASS-01 findings each carry a status line; F9 keeps
+The pass is complete and its results are stated above. Eight findings numbered from F18: **zero
+High, five Medium (F18, F19, F20, F22, F25), three Low (F21, F23, F24)**; F18-F24 become gates
+IB-11 to IB-17, F25 gates before `supabase db push` / Supabase branches, and F15 is downgraded to
+contained. This pass also missed the ruling-215 `connection_requests` direct-insert High that
+Conformance audit 01 found (gate **IB-18**), by carrying a table's status forward from PASS-01
+instead of re-deriving it from the catalog; recorded above under "The miss" and settled by ruling
+370. The nine open PASS-01 findings each carry a status line; F9 keeps
 its shape for Brief 6.
 
 The shape this pass set out to find — material reaching the client without passing the audience
