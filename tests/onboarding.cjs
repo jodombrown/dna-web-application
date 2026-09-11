@@ -771,6 +771,11 @@ async function runOnboardingPhotoFormats(browserType, bname, [w, h], theme) {
         : "no upload recorded",
     );
     record(
+      tag + ": the normalised master carries no EXIF metadata (ruling 347, client side)",
+      !!up && up.exif === false,
+      up ? `exif=${up.exif}` : "no upload recorded",
+    );
+    record(
       tag + ": the chosen preview is a rendered image (ruling 345)",
       (await page.locator('[data-testid="photo-plate"] img').count()) === 1,
     );

@@ -805,9 +805,14 @@ async function mockSupabase(page, db, opts = {}) {
       // filename and Content-Type; the body length stands in for the uploaded byte count.
       const buf = req.postDataBuffer && req.postDataBuffer();
       const head = buf ? buf.slice(0, 4096).toString("latin1") : "";
+      // A JPEG's EXIF segment carries the marker "Exif\0\0" near the file start; a canvas re-encode
+      // carries none, which is how ruling 347's client-side strip is proven.
+      const sep = head.indexOf("\r\n\r\n");
+      const fileHead = sep >= 0 ? head.slice(sep + 4) : head;
       db.onboarding.lastUpload = {
         bytes: buf ? buf.length : 0,
         jpeg: /content-type:\s*image\/jpeg/i.test(head) || /filename="[^"]*\.jpe?g"/i.test(head),
+        exif: fileHead.includes("Exif\u0000\u0000"),
       };
       await new Promise((r) => setTimeout(r, 300));
       if (db.mediaTooLarge) return json({ error: "too_large" }, 413);
