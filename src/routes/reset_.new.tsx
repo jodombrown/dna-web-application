@@ -50,13 +50,19 @@ function ResetLanding() {
     // recorded before the client was created.
     captureRecoveryFromUrl();
     const state = recoveryState();
+    // Ruling 318. updateUser and the scoped signOut both replace the session object this effect
+    // depends on, so it re-runs after submit() has already cleared the flag and set "done". Read
+    // fresh, the flag is gone and the session is live, which is the "form" branch: the completed
+    // state was overwritten and the member stayed on the form with a password already changed.
+    // Whether that lands before or after "done" is scheduling, which is why it showed only in
+    // WebKit. A finished submit is never reopened by this effect.
     if (state === "expired" || !session) {
       // Nothing is being protected in this state, so the flag is dropped and the gate lets go.
       clearRecovery();
-      setStage("expired");
+      setStage((s) => (s === "done" ? s : "expired"));
       return;
     }
-    setStage("form");
+    setStage((s) => (s === "done" ? s : "form"));
   }, [ready, session]);
 
   const submit = async (e: FormEvent) => {

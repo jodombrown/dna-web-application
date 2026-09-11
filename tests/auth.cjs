@@ -181,7 +181,7 @@ async function hydrated(page) {
 }
 
 /**
- * Ruling 301: what the recovery arm was looking at when it gave up.
+ * Ruling 318: what the recovery arm was looking at when it gave up.
  *
  * The arm has failed only in WebKit, and in Chromium never: runs 113, 115 attempt 2, 116, 117 and
  * 119, at three viewport and theme pairs. Every one of those failures recorded nothing but the
@@ -204,7 +204,7 @@ async function recoveryState(page, auth) {
       .getAttribute('[data-testid="reset-new"]', "aria-busy")
       .catch(() => null);
   } catch (e) {
-    // A dead web process cannot answer; ruling 274's flag on the record says which case this is.
+    // A dead web process cannot answer; ruling 316's flag on the record says which case this is.
     state.url = "state unavailable: " + String(e).slice(0, 140);
   }
   return (
@@ -515,7 +515,7 @@ async function runAuthFlows(browserType, bname, [w, h], theme) {
       );
       await noOverflow(page, tag + ": reset landing");
     } catch (e) {
-      // Ruling 301, and ruling 206: red, with enough recorded to classify the next firing.
+      // Ruling 318, and ruling 206: red, with enough recorded to classify the next firing.
       record(
         tag + ": recovery landing flow completed",
         false,

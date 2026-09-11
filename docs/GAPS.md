@@ -1130,3 +1130,46 @@ audience the correct gate would have admitted and nothing is withheld from or di
 It closes by moving the object to the folder for the post that now owns it, or by leaving it and
 letting the member re-attach; either is a data touch on one row, not a code change. The guard shipped
 in `20260910065849_publish_path_defects.sql` means no further draft can reach this state.
+
+## G13. The reset landing overwrote its own completion (ruling 318, superseding 301)
+
+**Severity: medium. A product defect in Brief 4B's `/reset/new` route, not a harness fault. Opened
+11 September 2026 from PR #21's first run carrying ruling 301's diagnostic. Fixed in the PR that
+opens this entry; recorded so the history of the arm reads correctly.**
+
+Ruling 301 held that the auth recovery arm was the failure most likely to be mistaken for a real
+one, and instrumented it so the next firing could be classified rather than guessed at. Run 120
+([34537723787](https://github.com/jodombrown/dna-web-application/actions/runs/34537723787)), the
+first run carrying that diagnostic, `matrix (webkit)`:
+
+```
+FAIL [no crash] webkit-390x844-dark-auth: recovery landing flow completed TimeoutError: page.waitForSelector: Timeout 15000ms exceeded.
+Call log:
+  - waiting for locator('[data-testid="reset-done"]') to be visible
+ | {"url":"https://claude-dna-page-crash-regist.dna-web-application.pages.dev/reset/new","rendered":["reset-new"],"alert":"","busy":"false"} | updateUser calls 1 | logout scopes ["others"]
+```
+
+Read in order: not a lost web process, so not G5. The password update reached the mock and was
+answered. The scoped sign-out ran. `aria-busy` is false, so `submit()`'s `finally` ran. No alert,
+so nothing was rejected. And the form is still the rendered stage. The surface completed the
+password change, signed other devices out, and stayed on the form.
+
+The cause is in `src/routes/reset_.new.tsx`. `submit()` ends with `clearRecovery()` and
+`setStage("done")`. The `[ready, session]` effect ends with `setStage("form")`. `updateUser` and the
+scoped sign-out both replace the session object the effect depends on, so the effect re-runs after
+the submit resolves; by then the recovery flag has been cleared and the session is live, which is
+the `form` branch, and it overwrites `done`. Whether the effect lands before or after the `done`
+set is scheduling, which is why it showed only in WebKit and moved between viewport and theme
+pairs: runs 113, 115 attempt 2, 116, 117, 119, 120, 122 and 123, never twice at the same pair, and
+never in Chromium.
+
+**Ruling 301 is superseded by 318 because the arm was never unstable.** It was reporting a real
+defect the harness could not previously distinguish from noise; the flake reading rested on failures
+that recorded nothing but the selector they timed out on. The instrumentation ruling 301 added was
+correct and stays; its premise that the fault was probably in the arm was wrong, and one classified
+firing settled it.
+
+The fix is the smallest change the arm can prove: both `setStage` calls in that effect become
+functional updaters that leave a `done` stage alone. No route restructuring, no new arm, timeout not
+raised. The existing recovery arm is the proof, because it already fails in the engine that shows
+the defect and passes in the one that does not.
