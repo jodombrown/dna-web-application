@@ -628,7 +628,6 @@ function StanceCard({
         cursor: disabled ? "default" : "pointer",
         outline: "none",
         boxSizing: "border-box",
-        minHeight: "100%",
       }}
     >
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
