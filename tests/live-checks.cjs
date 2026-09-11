@@ -111,7 +111,7 @@ async function get(url, headers = {}) {
       "member_origin?member_id=eq." + UNSHARED_ID + "&select=*",
       "member_intent?member_id=eq." + UNSHARED_ID + "&select=*",
       "member_links?member_id=eq." + UNSHARED_ID + "&select=*",
-      "member_segment_details?member_id=eq." + UNSHARED_ID + "&select=*",
+      "member_stance_details?member_id=eq." + UNSHARED_ID + "&select=*",
       "member_focus_areas?member_id=eq." + UNSHARED_ID + "&select=*",
       "member_skills?member_id=eq." + UNSHARED_ID + "&select=*",
       "member_follows?member_id=eq." + UNSHARED_ID + "&select=*",
@@ -142,10 +142,10 @@ async function get(url, headers = {}) {
     );
     // The shared profile: core row visible, connections-only and anchored tables still zero rows.
     // Anon's grant on members is column-limited. Ruling 212 narrowed it to the identity columns:
-    // origin_country, current_place, current_country, local_tz and segment are section-gated on
+    // origin_country, current_place, current_country, local_tz and stance are section-gated on
     // every path and are read through profile_view, which gates them, or not at all (F2a).
     const CORE_COLS = "id,handle,name,headline,avatar_path,cover_path,cover_focus,pattern";
-    const GATED_COLS = "origin_country,current_place,current_country,local_tz,segment";
+    const GATED_COLS = "origin_country,current_place,current_country,local_tz,stance";
     const core = await rest("members?handle=eq." + SHARED + "&select=" + CORE_COLS);
     const switches = await rest(
       "members?handle=eq." + SHARED + "&select=profile_private,profile_shared",
@@ -291,8 +291,8 @@ async function get(url, headers = {}) {
       "current_place",
       "current_country",
       "local_tz",
-      "segment",
-      "segment_label",
+      "stance",
+      "stance_label",
     ];
 
     const signIn = async (email, password) => {
@@ -410,10 +410,10 @@ async function get(url, headers = {}) {
         }
 
         const canFixture = !!ownerId && !!ownerHandle && relState !== "connected";
-        // ARM 2 (F2a, F2b, F5, gates IB-2 and IB-5). Origin, Where and Segment set to My
+        // ARM 2 (F2a, F2b, F5, gates IB-2 and IB-5). Origin, Where and Stance set to My
         // connections on a profile the viewer is not connected to, so the section audience and the
         // core row disagree. Omit, never blank: the assertion is that the key is absent.
-        const SECTIONS = ["origin", "where", "segment"];
+        const SECTIONS = ["origin", "where", "stance"];
         let prior = new Map();
         if (canFixture) {
           const priorVis = await memberRest(
@@ -435,7 +435,7 @@ async function get(url, headers = {}) {
           const sharedOn = await saveSection(ownerToken, "switches", { shared: true });
           if (sharedOn.status >= 300) fixtureSet = false;
           record(
-            "F2: the fixture sets Origin, Where and Segment to connections and shares the profile",
+            "F2: the fixture sets Origin, Where and Stance to connections and shares the profile",
             fixtureSet,
           );
 
@@ -447,7 +447,7 @@ async function get(url, headers = {}) {
           const gatedView = await memberRpc(memberToken, "profile_view", { p_handle: ownerHandle });
           const gatedMember = (gatedView.body && gatedView.body.member) || {};
           record(
-            "F2b: profile_view.member carries no origin, place, time zone or segment for a stranger",
+            "F2b: profile_view.member carries no origin, place, time zone or stance for a stranger",
             gatedView.status === 200 && GATED_KEYS.every((k) => !(k in gatedMember)),
             "keys " + Object.keys(gatedMember).join(","),
           );
@@ -458,11 +458,11 @@ async function get(url, headers = {}) {
           );
           const gatedCard = await cardOf(memberToken, ownerHandle);
           record(
-            "F2b: the Connect card carries no place, origin or segment label",
+            "F2b: the Connect card carries no place, origin or stance label",
             !!gatedCard &&
               !("place" in gatedCard) &&
               !("origin" in gatedCard) &&
-              !("segment_label" in gatedCard),
+              !("stance_label" in gatedCard),
             gatedCard ? Object.keys(gatedCard).join(",") : "no card for " + ownerHandle,
           );
           record(

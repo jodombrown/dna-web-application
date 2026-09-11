@@ -50,7 +50,7 @@ export const CONNECT_LENSES: (Lens<ConnectLens> & { scope: string })[] = [
 ];
 
 export type FilterKey =
-  | "segment"
+  | "stance"
   | "location"
   | "origin"
   | "heritage"
@@ -63,7 +63,7 @@ export type FilterKey =
 
 /** The ten axes in their fixed order (SPEC section 8). Labels are copy; the option values come from tables. */
 export const FILTER_AXES: { key: FilterKey; label: string }[] = [
-  { key: "segment", label: "Segment" },
+  { key: "stance", label: "Relationship to the continent" },
   { key: "location", label: "Current location" },
   { key: "origin", label: "Country of origin" },
   { key: "heritage", label: "Heritage" },
@@ -125,7 +125,7 @@ export type CardRow = {
   avatar_path?: string | undefined;
   identified?: boolean | undefined;
   headline?: string | undefined;
-  segment_label?: string | undefined;
+  stance_label?: string | undefined;
   place?: string | undefined;
   origin?: string | undefined;
   heritage?: string | undefined;
@@ -156,7 +156,7 @@ export type NetworkView = {
 };
 export type WhereView = { continent: string[]; diaspora: string[] };
 export type FilterOptions = {
-  segments: { value: string; label: string }[];
+  stances: { value: string; label: string }[];
   locations: string[];
   origins: string[];
   heritage: string[];
@@ -198,7 +198,7 @@ export function toMember(c: ConnectCard): MemberCardMember {
     avatar: c.avatarUrl,
     identified: c.identified,
     headline: c.headline,
-    segmentLabel: c.segment_label,
+    stanceLabel: c.stance_label,
     place: c.place,
     origin: c.origin,
     heritage: c.heritage,

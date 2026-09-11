@@ -142,9 +142,9 @@ const PROFILE_MEMBER = {
   tier: "attested",
   handle: "thandiwe-dube",
   pattern: "kente",
-  segment: "returnee",
-  // Ruling 187: profile_view resolves the label from public.member_segments.
-  segment_label: "Returnee",
+  stance: "returnee",
+  // Ruling 187: profile_view resolves the label from public.member_stances.
+  stance_label: "Returnee",
   headline: "Solar engineer, mini-grids for rural clinics",
   local_tz: "Africa/Johannesburg",
   cover_focus: "center 35%",
@@ -208,7 +208,7 @@ const EVERYONE_SECTIONS = {
       title: "Solar for Clinics, working session",
     },
   ],
-  segment: { fields: SEGMENT_FIELDS, segment: "returnee" },
+  stance: { fields: SEGMENT_FIELDS, stance: "returnee" },
   languages: { languages: ["English", "isiZulu", "Sesotho"] },
   contribute: [
     {
@@ -237,7 +237,7 @@ const VISIBILITY = {
   origin: "everyone",
   skills: "everyone",
   convene: "everyone",
-  segment: "everyone",
+  stance: "everyone",
   languages: "everyone",
   contribute: "everyone",
   collaborate: "everyone",
@@ -252,12 +252,13 @@ const VOCAB = {
   interests: ["Energy", "Health", "Farming"],
   countries: ["South Africa", "Ghana", "Nigeria", "Kenya"],
   world: ["Germany", "Ghana", "Kenya", "South Africa", "United Kingdom", "United States"],
-  // Ruling 187: the segment chooser reads the vocabulary, not a map in the component.
-  segments: [
+  // Ruling 187: the stance chooser reads the vocabulary, not a map in the component.
+  stances: [
     { value: "returnee", label: "Returnee" },
+    { value: "kin", label: "Kin" },
     { value: "anchor", label: "Anchor" },
     { value: "ally", label: "Ally" },
-    { value: "exploring", label: "Still Exploring" },
+    { value: "exploring", label: "Still exploring" },
   ],
   heritage: ["Continental", "First generation", "Second generation"],
   pathway: ["Already returned", "Planning to return", "Not returning"],
@@ -377,7 +378,7 @@ function profileProjection(db, anon) {
     sections.links = LINKS;
     sections.intent = { note: INTENT_NOTE, intent: ["Find collaborators", "Host and convene"] };
     sections.convey = [];
-    sections.segment.variants = { returnee: SEGMENT_FIELDS, exploring: { interests: [] } };
+    sections.stance.variants = { returnee: SEGMENT_FIELDS, exploring: { interests: [] } };
     return { ...base, viewer: "owner", anchored: false, sections, switches: sw, visibility: vis };
   }
   const anchored = pr.mode === "connected" || pr.mode === "anchor";
@@ -418,7 +419,7 @@ const CONNECT_MEMBERS = [
     name: "Adaeze Nwosu",
     identified: true,
     headline: "Clinic coordinator, Enugu and Manchester",
-    segment_label: "Returnee",
+    stance_label: "Returnee",
     place: "Manchester, United Kingdom",
     origin: "Nigeria",
     heritage: "Second generation",
@@ -430,7 +431,7 @@ const CONNECT_MEMBERS = [
     ],
     rel: "none",
     following: false,
-    _segment: "returnee",
+    _stance: "returnee",
     _location: "United Kingdom",
     _focus: "Healthcare & Wellness",
   },
@@ -440,7 +441,7 @@ const CONNECT_MEMBERS = [
     name: "Yusuf Diallo",
     identified: false,
     headline: "Solar engineer between Dakar and Lyon",
-    segment_label: "Anchor",
+    stance_label: "Anchor",
     place: "Dakar, Senegal",
     origin: "Senegal",
     heritage: "Continental",
@@ -449,7 +450,7 @@ const CONNECT_MEMBERS = [
     mutuals: [{ name: "Lerato Khumalo", avatar_path: null }],
     rel: "sent",
     following: true,
-    _segment: "anchor",
+    _stance: "anchor",
     _location: "Senegal",
     _focus: "Infrastructure & Energy",
   },
@@ -459,7 +460,7 @@ const CONNECT_MEMBERS = [
     name: "Kwame Mensah",
     identified: true,
     headline: "Fintech founder, Accra",
-    segment_label: "Anchor",
+    stance_label: "Anchor",
     place: "Accra, Ghana",
     origin: "Ghana",
     heritage: "Continental",
@@ -470,7 +471,7 @@ const CONNECT_MEMBERS = [
     following: false,
     message:
       "Hello Amara. I saw your note on savings products for market traders. I have done two of these in Accra and would like to compare notes.",
-    _segment: "anchor",
+    _stance: "anchor",
     _location: "Ghana",
     _focus: "Finance & Investment",
   },
@@ -480,7 +481,7 @@ const CONNECT_MEMBERS = [
     name: "Lerato Khumalo",
     identified: false,
     headline: "Community organiser, Soweto",
-    segment_label: "Ally",
+    stance_label: "Ally",
     place: "Johannesburg, South Africa",
     origin: "South Africa",
     heritage: "Continental",
@@ -501,7 +502,7 @@ const CONNECT_MEMBERS = [
     mutuals: [],
     rel: "connected",
     following: true,
-    _segment: "ally",
+    _stance: "ally",
     _location: "South Africa",
     _focus: "Education & Training",
   },
@@ -511,7 +512,7 @@ const CONNECT_MEMBERS = [
     name: "Thandiwe Dube",
     identified: true,
     headline: "Building clinics between Johannesburg and Houston",
-    segment_label: "Returnee",
+    stance_label: "Returnee",
     place: "Houston, United States",
     origin: "South Africa",
     heritage: "First generation",
@@ -523,7 +524,7 @@ const CONNECT_MEMBERS = [
     // card is compared against a genuinely pending one below.
     rel: "sent",
     following: false,
-    _segment: "returnee",
+    _stance: "returnee",
     _location: "United States",
     _focus: "Healthcare & Wellness",
   },
@@ -533,7 +534,7 @@ const CONNECT_MEMBERS = [
     name: "Ngozi Okafor",
     identified: false,
     headline: "Agritech, Lagos",
-    segment_label: "Still Exploring",
+    stance_label: "Still exploring",
     place: "Lagos, Nigeria",
     origin: "Nigeria",
     heritage: "Continental",
@@ -542,7 +543,7 @@ const CONNECT_MEMBERS = [
     mutuals: [],
     rel: "none",
     following: false,
-    _segment: "exploring",
+    _stance: "exploring",
     _location: "Nigeria",
     _focus: "Agriculture & Food Systems",
   },
@@ -563,11 +564,12 @@ const CONNECT_WHERE = {
   diaspora: ["Canada", "France", "United Kingdom", "United States"],
 };
 const CONNECT_OPTIONS = {
-  segments: [
+  stances: [
     { value: "returnee", label: "Returnee" },
+    { value: "kin", label: "Kin" },
     { value: "anchor", label: "Anchor" },
     { value: "ally", label: "Ally" },
-    { value: "exploring", label: "Still Exploring" },
+    { value: "exploring", label: "Still exploring" },
   ],
   locations: [
     "Canada",
@@ -613,7 +615,7 @@ const CONNECT_OPTIONS = {
   ],
 };
 
-/** A card as connect_cards emits it: the private fixture keys (_segment, _location, _focus) never leave the mock. */
+/** A card as connect_cards emits it: the private fixture keys (_stance, _location, _focus) never leave the mock. */
 function connectCard(m, overrides) {
   const out = {};
   for (const k of Object.keys(m)) if (!k.startsWith("_")) out[k] = m[k];
@@ -813,7 +815,7 @@ async function mockSupabase(page, db, opts = {}) {
         const f = body.p_filters || {};
         if (body.p_lens === "members") {
           let rows = cx.membersEmpty ? [] : CONNECT_MEMBERS.slice();
-          if (f.segment) rows = rows.filter((m) => m._segment === f.segment);
+          if (f.stance) rows = rows.filter((m) => m._stance === f.stance);
           if (f.location) rows = rows.filter((m) => m._location === f.location);
           if (f.focus) rows = rows.filter((m) => m._focus === f.focus);
           if (f.origin) rows = rows.filter((m) => m.origin === f.origin);

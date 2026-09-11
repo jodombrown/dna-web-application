@@ -1173,3 +1173,38 @@ The fix is the smallest change the arm can prove: both `setStage` calls in that 
 functional updaters that leave a `done` stage alone. No route restructuring, no new arm, timeout not
 raised. The existing recovery arm is the proof, because it already fails in the engine that shows
 the defect and passes in the one that does not.
+
+## G14. Brief 5 landed its schema and write paths without its surface (ruling 90)
+
+**Severity: blocks Brief 5's Done, not a merge finding. Opened 11 September 2026.**
+
+`onboarding/SPEC.md` did not arrive with the Brief 5 handoff: it is not in this repository, not in
+Notion, not in the artifact gallery. Ruling 90 makes that a stop-and-report, and ruling 276 keeps
+the prototype page unread, so the three screens, the gate in the root route and the matrix arm
+were not built from ruling summaries. What is in the tree is everything the handoff governs on its
+own: `20260911090000_b5_stance_onboarding.sql` (the stance axis, the vocabulary rows including Kin,
+every projection reading stance, the four onboarding functions), the `onboarding` Edge Function
+(the transport that emits ruling 311's company-facing signal), and `src/lib/onboarding.ts`.
+
+Two things are deliberately not done and wait on the SPEC together:
+
+- The migration is committed and not applied, and the function is not deployed. Applying renames
+  the wire keys `main`'s deployed client reads (`segment`, `segments`, `segment_label`), so applying
+  before the surface merges breaks Connect's filter and Profile's block on the deployed URL for the
+  whole review window. It was rehearsed against the canonical project inside a rolled-back
+  transaction: counts verified, the four functions exercised as both test accounts. The apply and
+  the deploy happen with the surface PR, still committed-before-applied under ruling 225.
+- No route, no gate. The routes beyond `/welcome` and every string are SPEC sections 1 to 12.
+
+Decisions taken in the handoff's absence of the live schema (ruling 242), to be confirmed or
+overturned when the SPEC is read: `members.handle` is the username (no parallel column; the
+handoff's own rule for `current_place`), `who_completed_at` marks screen one because `name` is NOT
+NULL from the sign-up trigger, a username is three to forty characters until the SPEC's hint copy
+supplies its two numerals, and a stance change on Profile records `stance_declared_at` through a
+trigger so no grant on that column is needed. Rulings 313 to 333, which the handoff cites, are in
+neither the register (revision 5 ends at 305) nor Notion (D414 is the last row); their content was
+taken from the handoff's own text and no number above 312 is cited in code.
+
+Profile's visible copy still says Segment (`TITLES`, the empty act, the chooser label) and its
+empty line does not mention Kin: Brief 3's SPEC governs that copy and a copy change is its own
+revision, not this PR's.
