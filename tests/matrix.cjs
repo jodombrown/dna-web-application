@@ -1565,6 +1565,26 @@ function accountForArms({ full, engines }) {
 }
 
 /**
+ * Ruling 357: the classes a failure is already known to fall into, in the order the tail prints
+ * them. The first is ruling 274's crash flag. The second is a WebKit-only aborted fetch on the
+ * mocked REST origin, worded by the engine as an access-control denial ("… due to access control
+ * checks."): not a crash, and not the app, since every request to that origin is fulfilled
+ * in-process. tests/connect.cjs and tests/profile.cjs filter it out of their own page-error checks;
+ * this names it anywhere else it surfaces. Add a class here when a sighting is understood, never
+ * to make a tail read cleaner.
+ */
+const ABORTED_MOCK_FETCH = new RegExp(
+  `${SB.replace(/\./g, "\\.")}\\S*\\s+due to access control checks`,
+);
+const KNOWN_CLASSES = [
+  { id: "behind a web-process crash (G5)", test: (f) => f.crashed },
+  {
+    id: "an aborted fetch on mocked REST (WebKit, ruling 357)",
+    test: (f) => !f.crashed && ABORTED_MOCK_FETCH.test(f.detail || ""),
+  },
+];
+
+/**
  * The closing summary. Ruling 317: arms are what is comparable between runs, so the arms lead and
  * the check count is printed as a count and never as a score. Ruling 316: every failure is printed
  * with the crash flag or its absence, so a G5 sighting and a different symptom are told apart in
@@ -1601,11 +1621,14 @@ function finish({ full = false, engines = [] } = {}) {
     );
   }
 
-  const crashFails = fails.filter((f) => f.crashed);
+  // Ruling 357: name the class, so the ruling 199 line written from this tail names it too. A
+  // failure that matches no known class is printed as unclassified, which is the one worth reading.
+  const classified = KNOWN_CLASSES.map((k) => [k.id, fails.filter((f) => k.test(f)).length]);
+  const unclassified = fails.filter((f) => !KNOWN_CLASSES.some((k) => k.test(f))).length;
   console.log(
-    `\n=== failures classified (ruling 274) ===\n` +
-      `${crashFails.length} behind a web-process crash (G5) | ` +
-      `${fails.length - crashFails.length} not behind one`,
+    `\n=== failures classified (rulings 274, 357) ===\n` +
+      classified.map(([id, n]) => `${n} ${id}`).join(" | ") +
+      ` | ${unclassified} unclassified`,
   );
   if (crashSightings.length)
     console.log("arms that lost a web process: " + crashSightings.map((c) => c.arm).join(", "));
