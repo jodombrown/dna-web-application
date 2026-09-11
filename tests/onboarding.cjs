@@ -713,4 +713,82 @@ async function runOnboardingFlows(browserType, bname, [w, h], theme) {
   }
 }
 
-module.exports = { runOnboardingLayout, runOnboardingFlows };
+// ---------------------------------------------------------------------------
+// Ruling 345: the formats a real iPhone hands screen one. A genuine HEIC (the default camera
+// format, which media-upload's sniff rejects) and a JPEG over the bucket ceiling. Both must resolve
+// the control to a determinate state, never leave it disabled mid-upload (the reported hang), and
+// the oversized JPEG must reach Storage having been converted to JPEG and downscaled in the browser
+// first. Runs once, at the compact tier, per engine.
+//
+// What this emulated arm cannot prove, and why the deployed-URL and real-iOS runs still stand: on a
+// Linux browser build without the system HEIC codec the client's decode falls back to the original
+// bytes, and the network mock answers 200 regardless of type, so a raw-HEIC regression would still
+// read as chosen here. Only real iOS Safari decodes HEIC to a canvas; that is the gate for the HEIC
+// conversion itself. The oversized-JPEG proof is engine-faithful because JPEG decodes everywhere.
+const path = require("path");
+const HEIC_FIXTURE = path.join(__dirname, "fixtures", "iphone-real.heic");
+const OVERSIZED_JPEG = path.join(__dirname, "fixtures", "oversized.jpg");
+const OVERSIZED_BYTES = require("fs").statSync(OVERSIZED_JPEG).size;
+
+async function runOnboardingPhotoFormats(browserType, bname, [w, h], theme) {
+  const tag = `${bname}-${w}x${h}-onboarding-photo`;
+  M.armStart(tag);
+  const { browser, page, db } = await open(browserType, [w, h], theme, freshState());
+  try {
+    await signInTo(page, "**/welcome");
+    await page.waitForSelector('[data-testid="onboarding-who"]', { timeout: 15000 });
+    await page.locator('[data-testid="name"]').fill("Amara Osei");
+
+    // A real iPhone HEIC. The control must resolve to chosen with Continue live, never sit disabled.
+    db.onboarding.lastUpload = null;
+    await page.setInputFiles('[data-testid="photo-input"]', HEIC_FIXTURE);
+    await page.waitForSelector('[data-testid="photo-change"]', { timeout: 20000 });
+    record(
+      tag + ": a real iPhone HEIC resolves the control, never a hung disabled state (ruling 345)",
+      (await page.locator('[data-testid="photo-plate"]').getAttribute("data-state")) === "chosen" &&
+        !(await page.locator('[data-testid="continue"]').isDisabled()) &&
+        (await page.locator('[data-testid="who-form"]').getAttribute("aria-busy")) !== "true",
+    );
+
+    // Reset and pick a JPEG over the 10 MB bucket ceiling. Pre-fix this either hung on the mobile
+    // round trip or was refused; now it is decoded, downscaled and re-encoded before upload.
+    await page.locator('[data-testid="photo-remove"]').click();
+    db.onboarding.lastUpload = null;
+    await page.setInputFiles('[data-testid="photo-input"]', OVERSIZED_JPEG);
+    await page.waitForSelector('[data-testid="photo-change"]', { timeout: 20000 });
+    record(
+      tag +
+        ": a JPEG over the bucket limit uploads instead of hanging or being refused (ruling 345)",
+      (await page.locator('[data-testid="photo-plate"]').getAttribute("data-state")) === "chosen" &&
+        (await alertText(page)) === null,
+    );
+    const up = db.onboarding.lastUpload;
+    record(
+      tag + ": the oversized JPEG was converted to JPEG and downscaled in the browser (ruling 345)",
+      !!up && up.jpeg === true && up.bytes > 0 && up.bytes < OVERSIZED_BYTES / 2,
+      up
+        ? `sent ${up.bytes} bytes, jpeg=${up.jpeg}, from ${OVERSIZED_BYTES}`
+        : "no upload recorded",
+    );
+    record(
+      tag + ": the normalised master carries no EXIF metadata (ruling 347, client side)",
+      !!up && up.exif === false,
+      up ? `exif=${up.exif}` : "no upload recorded",
+    );
+    record(
+      tag + ": the chosen preview is a rendered image (ruling 345)",
+      (await page.locator('[data-testid="photo-plate"] img').count()) === 1,
+    );
+  } catch (e) {
+    await shot(page, `onboarding-photo-fail-${bname}-${w}-${theme}`).catch(() => undefined);
+    record(
+      tag + ": photo-formats arm completed",
+      false,
+      page.url() + " " + String(e).slice(0, 400),
+    );
+  } finally {
+    await browser.close();
+  }
+}
+
+module.exports = { runOnboardingLayout, runOnboardingFlows, runOnboardingPhotoFormats };

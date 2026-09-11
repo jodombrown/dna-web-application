@@ -4,6 +4,7 @@
 // SECURITY DEFINER RPC under the member's own JWT and emits the company-facing signal (ruling 311)
 // where connect-suggest already logs.
 import type { Stance } from "@/components/strand/SegmentBlock";
+import { deliverImageUrl, extensionFor, normalizeImage } from "./media";
 import { functionsUrl, getSupabase, SUPABASE_PUBLISHABLE_KEY } from "./supabase";
 
 export type OnboardingScreen = "who" | "where" | "relationship";
@@ -185,53 +186,86 @@ export function usernameValid(u: string): boolean {
   );
 }
 
-/** media-upload's own ceiling, so a photo that would be refused is refused here without a round trip. */
+/** The bucket ceiling, applied to what actually leaves the device after normalisation. */
 export const PHOTO_MAX_BYTES = 10 * 1024 * 1024;
 
+/**
+ * Ruling 345: the iOS camera hands the picker HEIC, and a HEIC never passed media-upload's sniff
+ * (jpeg, png, webp only), so screen one's control sat disabled forever behind a request that could
+ * not succeed. The mitigations, in order: normalise to JPEG in the browser first (the pipeline's
+ * `normalizeImage`, rulings 346 and 347) so the default iPhone format uploads at all and a large
+ * capture lands far under the bucket ceiling; and bound the request in time so a stalled mobile
+ * connection resolves to the failed alert rather than a control that never comes back.
+ */
+export const PHOTO_UPLOAD_TIMEOUT_MS = 30_000;
+
+/** The size the avatar renders at, delivered from the one master through a Storage transform. */
+export const AVATAR_DELIVERY_PX = 480;
+
 export type PhotoUpload =
-  { ok: true; path: string } | { ok: false; reason: "too_large" | "failed" };
+  { ok: true; path: string; previewUrl: string } | { ok: false; reason: "too_large" | "failed" };
 
 /**
- * One step, no crop (ruling 324): the file goes to Storage through Brief 3's avatar path
- * (media-upload, slot avatar) and the storage path comes back for onboard_who. Too large and failed
- * are told apart because SPEC section 3 gives each its own alert.
+ * One step, no crop (ruling 324): the picked file is normalised by the shared media pipeline, sent
+ * to the one write path (media-upload, kind avatar), and the master's storage path comes back for
+ * onboard_who. Too large and failed are told apart because SPEC section 3 gives each its own alert.
+ * The returned previewUrl is the object URL of the bytes actually uploaded, so screen one previews an
+ * image every browser can render (never the raw HEIC it was handed); the caller owns revoking it.
  */
 export async function uploadOnboardingPhoto(file: File): Promise<PhotoUpload> {
-  if (file.size > PHOTO_MAX_BYTES) return { ok: false, reason: "too_large" };
   const sb = getSupabase();
   if (!sb) return { ok: false, reason: "failed" };
   const { data } = await sb.auth.getSession();
   const token = data.session?.access_token;
   if (!token) return { ok: false, reason: "failed" };
+
+  // Convert and downscale before upload; on a decode failure fall back to the original bytes, which
+  // the server's own strip and validation still stand behind.
+  const normalized = await normalizeImage(file);
+  const upload = normalized
+    ? new File([normalized.blob], "avatar." + extensionFor(normalized.type), {
+        type: normalized.type,
+      })
+    : file;
+  if (upload.size > PHOTO_MAX_BYTES) return { ok: false, reason: "too_large" };
+
   const form = new FormData();
-  form.append("file", file);
+  form.append("file", upload);
   form.append("slot", "avatar");
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), PHOTO_UPLOAD_TIMEOUT_MS);
   try {
     const res = await fetch(functionsUrl("media-upload"), {
       method: "POST",
       headers: { Authorization: "Bearer " + token, apikey: SUPABASE_PUBLISHABLE_KEY },
       body: form,
+      signal: controller.signal,
     });
     if (res.status === 413) return { ok: false, reason: "too_large" };
     if (!res.ok) return { ok: false, reason: "failed" };
     const out = (await res.json()) as { storage_path?: string; error?: string };
     if (out.error === "too_large") return { ok: false, reason: "too_large" };
     return out.storage_path
-      ? { ok: true, path: out.storage_path }
+      ? { ok: true, path: out.storage_path, previewUrl: URL.createObjectURL(upload) }
       : { ok: false, reason: "failed" };
   } catch {
+    // A timeout abort, a network drop, a JSON parse failure: every rejection is the failed alert,
+    // never a control left mid-upload (ruling 345).
     return { ok: false, reason: "failed" };
+  } finally {
+    clearTimeout(timer);
   }
 }
 
-/** A signed URL for a stored avatar path, for the chosen state on resume. */
+/** A signed, delivery-sized URL for a stored avatar master, for the chosen state on resume. */
 export async function onboardingPhotoUrl(
   path: string | null | undefined,
 ): Promise<string | undefined> {
-  const sb = getSupabase();
-  if (!sb || !path) return undefined;
-  const { data } = await sb.storage.from("profile-media").createSignedUrl(path, 60 * 60);
-  return data?.signedUrl ?? undefined;
+  return deliverImageUrl("profile-media", path, {
+    width: AVATAR_DELIVERY_PX,
+    height: AVATAR_DELIVERY_PX,
+    resize: "cover",
+  });
 }
 
 /** The query key every onboarding read and write shares, so the gate and the screens see one state. */
