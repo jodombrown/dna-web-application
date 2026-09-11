@@ -12,7 +12,7 @@ const { launch, makeMockDb, seedPosts, mockSupabase, signIn, record, shot, noOve
   M;
 const SB_RE = SB.replace(/\./g, "\\.");
 const CANCELLED_MOCK_FETCH = new RegExp(
-  `^(?:\\w*Error: )?Fetch API cannot load https?:[\\s/]*${SB_RE}\\S*\\s+due to access control checks\\.?$`,
+  `(?:^|[\\s/])${SB_RE}\\S*\\s+due to access control checks\\.?$`,
 );
 const IGNORED_CONSOLE = new RegExp(
   [

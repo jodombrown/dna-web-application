@@ -19,10 +19,15 @@ const SB_RE = SB.replace(/\./g, "\\.");
  *
  * Every request to the mocked Supabase origin is fulfilled in-process by tests/matrix.cjs with
  * access-control-allow-origin: *, so a real access-control denial cannot happen there. Only this
- * exact wording, and only for that origin, is ignored; any other page error still fails the check.
+ * wording, and only for that origin, is ignored; any other page error still fails the check.
+ *
+ * Ruling 357: the pattern used to require the "Fetch API cannot load https:" prefix, and the
+ * message as it reaches the suite starts at the host ("/dgsp….supabase.co/rest/v1/post_saves?…
+ * due to access control checks."), so the filter never matched in runs 115, 133 or 136 and the
+ * check it guarded passed by never running. It now anchors on the origin and the tail.
  */
 const CANCELLED_MOCK_FETCH = new RegExp(
-  `^(?:\\w*Error: )?Fetch API cannot load https?:[\\s/]*${SB_RE}\\S*\\s+due to access control checks\\.?$`,
+  `(?:^|[\\s/])${SB_RE}\\S*\\s+due to access control checks\\.?$`,
 );
 /**
  * Console errors that carry no signal about the app: Google Fonts is unreachable from CI and the
@@ -960,7 +965,11 @@ async function runGate(browserType, bname, vp, theme) {
 
 /** One viewport, one theme: public, gate, owner, and the three visitor personas. */
 async function runProfile(browserType, bname, vp, theme) {
-  const full = M.FULL_PREVIEW_AT.has(vp[0]) || process.env.SPECIAL;
+  // The visitor personas run at the three preview widths in every run shape. A SPECIAL run used to
+  // widen this to every width, which emitted arms no full run declares and so failed ruling 292's
+  // accounting on every dispatched profile run (found by PR #25 at 744; ruling 357). What runs is
+  // now what is declared, in the subset and the full run alike.
+  const full = M.FULL_PREVIEW_AT.has(vp[0]);
   await runPublic(browserType, bname, vp, theme);
   await runGate(browserType, bname, vp, theme);
   await runOwner(browserType, bname, vp, theme);
