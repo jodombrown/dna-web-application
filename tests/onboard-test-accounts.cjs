@@ -1,6 +1,6 @@
 // Brief 5, Done Means 8: the two ruling 218 test accounts complete onboarding once, through the
 // real surface on the deployed URL, rather than the live arms learning to bypass the gate. Run
-// from .github/workflows/onboard-test-accounts.yml with the same secrets the live arms use.
+// from the Responsive matrix workflow with onboard=1, with the same secrets the live arms use.
 //
 // Owner Test touches a card (Returnee, the stance they already carry) so stance_declared_at is set;
 // Member Test finishes without touching so it stays null and the default stands. Both keep the

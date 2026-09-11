@@ -1195,6 +1195,6 @@ marks screen one. Profile's visible label still reads Segment and is corrected u
 Profile spec as a follow-up, not here (ruling 336).
 
 The ruling 218 test accounts completed onboarding once through the real surface, by
-`.github/workflows/onboard-test-accounts.yml` running `tests/onboard-test-accounts.cjs` against the
-deployment: Owner Test touched a card, Member Test did not, and the live arms in
+the Responsive matrix workflow dispatched with `onboard=1`, which runs
+`tests/onboard-test-accounts.cjs` against the deployment: Owner Test touched a card, Member Test did not, and the live arms in
 `tests/live-checks.cjs` read that difference every run rather than bypassing the gate.
