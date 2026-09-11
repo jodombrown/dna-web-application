@@ -1,6 +1,6 @@
 # Conformance audit 01: the product against the register
 
-Session 13, 11 September 2026, run against `main` at `3c7e0e1` (the merge of PR #26) and the
+Session 14, 11 September 2026, run against `main` at `3c7e0e1` (the merge of PR #26) and the
 canonical Supabase project `dgspjevjoblujcoljvkn`. Read-only. Nothing in `src/`, `supabase/`, `docs/`
 or `public/` was changed, no migration was written, no copy was edited, and every live check ran
 inside a transaction that was rolled back. The register checked against is Revision 8, rulings 1 to
@@ -12,8 +12,9 @@ observation. Ruling 289 applies: where a finding wants a ruling, it says so and 
 
 Founder commits on `main` by app id 159125892 (`gpt-engineer-app[bot]`): sixteen in total, all on
 9 September, the last being `08bf787` "Added favicon.png to site". None since 10 September. The
-working tree was clean at open. Two commits by `jodombrown` (`b65f6ee`, `569fc37`) are the founder's
-own Code sessions, not Lovable.
+working tree was clean at open. Two commits (`b65f6ee`, `569fc37`) carry the author account
+`region17gh` (`r17ghana@gmail.com`), the founder's Region 17 Claude Code seat, a permitted identity
+under ruling 369; they are the founder's own Code sessions, not Lovable.
 
 State of `main`'s matrix, stated as results (ruling 190): the latest completed Pages run on `main`
 is run 139 on `96d956c`, conclusion failure; its merge message records one WebKit failure under
