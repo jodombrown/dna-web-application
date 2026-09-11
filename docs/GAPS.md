@@ -174,16 +174,16 @@ Run against the canonical project on 9 September 2026, as a real member with rea
 reading the SQL. A block was inserted, every projection that returns a member was called from both
 sides, and the database was returned to its prior state (zero block rows, `where_floor` back to 5).
 
-| Projection | Blocker's view | Blocked party's view | Result |
-| --- | --- | --- | --- |
-| `connect_cards('members')` | blocked member absent | blocker absent | pass, both directions |
-| `connect_cards('suggested')` | blocked member absent | blocker absent | pass, both directions |
-| `connect_cards('network')` (connections, requests, sent, following) | blocked member absent | blocker absent | pass, both directions |
-| Mutual names (`connect_card`, `profile_view.mutuals`) | mutual emptied | mutual emptied | pass, both directions |
-| DIA rail rows (`connect-suggest`) | inherits `connect_cards('suggested')` under the member's own JWT | same | pass, both directions |
-| `connect_where()` underlying counts | country tile disappeared | country tile disappeared | pass, both directions |
-| `connection_request_intros(ids)` | **returned the other party's name** | **same** | **failed; fixed in this PR** |
-| `profile_view(handle)` subject | returned the profile | returned the profile | **failed; logged as G2, not fixed** |
+| Projection                                                          | Blocker's view                                                   | Blocked party's view     | Result                              |
+| ------------------------------------------------------------------- | ---------------------------------------------------------------- | ------------------------ | ----------------------------------- |
+| `connect_cards('members')`                                          | blocked member absent                                            | blocker absent           | pass, both directions               |
+| `connect_cards('suggested')`                                        | blocked member absent                                            | blocker absent           | pass, both directions               |
+| `connect_cards('network')` (connections, requests, sent, following) | blocked member absent                                            | blocker absent           | pass, both directions               |
+| Mutual names (`connect_card`, `profile_view.mutuals`)               | mutual emptied                                                   | mutual emptied           | pass, both directions               |
+| DIA rail rows (`connect-suggest`)                                   | inherits `connect_cards('suggested')` under the member's own JWT | same                     | pass, both directions               |
+| `connect_where()` underlying counts                                 | country tile disappeared                                         | country tile disappeared | pass, both directions               |
+| `connection_request_intros(ids)`                                    | **returned the other party's name**                              | **same**                 | **failed; fixed in this PR**        |
+| `profile_view(handle)` subject                                      | returned the profile                                             | returned the profile     | **failed; logged as G2, not fixed** |
 
 The `connect_where` rows sit below the floor of five on real data, so that line was proved by
 dropping `where_floor` to 1 for the two calls and restoring it to 5 immediately after.
@@ -772,7 +772,7 @@ visitor flow**. The envelope this entry already
 settled on — **WebKit plus the Profile surface** — holds, and nothing narrower does.
 
 **What to watch for next, because it is the reverse of the mistake ruling 205 caught.** Every new
-sighting so far has *widened* the envelope and none has narrowed it. That is a one-directional
+sighting so far has _widened_ the envelope and none has narrowed it. That is a one-directional
 record, and a one-directional record is exactly the shape that invites an over-strong reading in the
 other direction: if a WebKit failure turns up in a **third flow**, one that is not the Profile
 surface at all, the honest reading may be that the envelope is WebKit rather than WebKit-plus-
@@ -830,7 +830,7 @@ been closed` — minus the prefix.
 **The prefix is the whole reason this looked like a different defect.** `WEB PROCESS CRASHED` is
 written by `tests/profile.cjs`, which registers `page.on("crash")` and sets a flag. **No flow in
 `tests/matrix.cjs` registers a crash listener** — they register `pageerror` and `console` only. So a
-WebKit web-process crash in the composer flow *cannot* be labelled as one. It surfaces as whichever
+WebKit web-process crash in the composer flow _cannot_ be labelled as one. It surfaces as whichever
 Playwright call happened to be in flight when the process died: a closed target if the crash lands
 during a call, a 30-second timeout if it lands between them.
 
@@ -849,7 +849,7 @@ the composer flow — `webkit-430x932-light`, `webkit-360x800-dark` and, on run 
 The composer sightings now span **three distinct viewports and both themes**, which is the same
 spread the Profile sightings took four crashes to reach. Two flows, the same signature, the same
 engine, and the only thing that distinguishes them in the log is which one happens to register
-`page.on("crash")`. The Profile surface is where the defect is most *visible*, not where it lives.
+`page.on("crash")`. The Profile surface is where the defect is most _visible_, not where it lives.
 
 **Follow-up, not done here** (this PR is a security fix and CLAUDE.md's scope rule keeps it out):
 register `page.on("crash")` in `tests/matrix.cjs` the way `tests/profile.cjs` already does, so a
@@ -894,15 +894,15 @@ Fix PR 01 merged at 00:02:41 as `bb57e64`, and `main`'s run 103
 ([34419547470](https://github.com/jodombrown/dna-web-application/actions/runs/34419547470)) is the
 first matrix to complete there since the grants moved.
 
-| Tier | Result |
-| --- | --- |
-| `deploy` | green |
-| Step 6, live checks and the ruling 218 signed-in arms | **green** |
-| Browser matrix, Chromium, every width, both orientations, both themes | **green** |
-| Browser matrix, WebKit | 1 failure of 5983 |
+| Tier                                                                  | Result            |
+| --------------------------------------------------------------------- | ----------------- |
+| `deploy`                                                              | green             |
+| Step 6, live checks and the ruling 218 signed-in arms                 | **green**         |
+| Browser matrix, Chromium, every width, both orientations, both themes | **green**         |
+| Browser matrix, WebKit                                                | 1 failure of 5983 |
 
 **`main` is verified.** That is what this gap asked for and it does not require a green WebKit tier:
-the condition was that the matrix *runs to completion* so `main`'s behaviour is known, and it now
+the condition was that the matrix _runs to completion_ so `main`'s behaviour is known, and it now
 does. Nothing is gated on this any more — Brief 4A and 4B may start, and other work may merge.
 
 The one failure is recorded below rather than here, because it is **not** the signature this file has
@@ -933,7 +933,7 @@ viewport, same theme, opposite outcome.
 **One observation worth keeping, stated as an observation (ruling 205).** Every WebKit failure
 sampled so far lands on a sheet or dialog transition: the Compose dialog failing to detach (three
 times), the Profile surface during navigation or a section input (four), and now a dialog button
-that never becomes actionable. Playwright's actionability requires an element to be *stable* — the
+that never becomes actionable. Playwright's actionability requires an element to be _stable_ — the
 same box across two animation frames — so a stalled compositor or rAF would produce exactly this
 timeout, and `Sheet` animates for 300ms. That is a hypothesis with a mechanism, not a finding, and
 `tests/connect.cjs`'s own `tap()` helper already exists because clicks on this surface were fragile
@@ -951,9 +951,9 @@ Brief 4A's PR #20, head `79db1b1`, run 115
 matrix job was re-run once on the **same commit and the same tree**, and the two attempts share not
 one failure. Chromium was clean at every width, both orientations and both themes in both attempts.
 
-| Attempt | WebKit failures |
-| --- | --- |
-| 1 (job 102831943218) | `webkit 360x800 light connect: no page errors`, two REST requests to `post_saves` and `post_reactions` aborted "due to access control checks" |
+| Attempt              | WebKit failures                                                                                                                                                                                                                                                                                                                                  |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 1 (job 102831943218) | `webkit 360x800 light connect: no page errors`, two REST requests to `post_saves` and `post_reactions` aborted "due to access control checks"                                                                                                                                                                                                    |
 | 2 (job 102845377529) | `webkit-390x844-light profile owner flow` **WEB PROCESS CRASHED** at `section-where`'s input; `webkit-1280x800-dark profile owner flow` **WEB PROCESS CRASHED** at the same input; `webkit-820x1180-dark profile visitor connected flow`, `page.waitForURL` to `**/feed` timed out at sign-in; `webkit-390x844-dark-auth: recovery landing flow` |
 
 **Two of attempt 2's four are this signature**, and they are counted: `WEB PROCESS CRASHED` on the
@@ -1001,10 +1001,10 @@ Verified live in that PR, on the Members card, on the Sent row and on `profile_v
 The action is not joined. On Profile a `sent` relationship renders a **Request sent** button wired to
 `withdraw_request`. `withdraw_request` updates a `pending` row and nothing else, so:
 
-| The sender's state | What Request sent does | What the surface then shows |
-| --- | --- | --- |
-| Pending request | the row becomes `withdrawn`, the pair returns to `none` | the Connect action comes back |
-| Declined, inside the window | nothing; the update matches no row | the button stays |
+| The sender's state          | What Request sent does                                  | What the surface then shows   |
+| --------------------------- | ------------------------------------------------------- | ----------------------------- |
+| Pending request             | the row becomes `withdrawn`, the pair returns to `none` | the Connect action comes back |
+| Declined, inside the window | nothing; the update matches no row                      | the button stays              |
 
 One click separates the two, which is the thing ruling 157 exists to prevent. The payload half of
 ruling 214 holds; the transition half was never stated.
@@ -1020,13 +1020,13 @@ Connect action comes back in either case the sender cannot re-send from the surf
 
 The button was not the only surface, and the other three are closed with it:
 
-| Surface | Before | After |
-| --- | --- | --- |
-| Profile's Request sent button | pending → `none`, window → `sent` | both stay `sent` |
-| Members card `rel` | pending `sent`, window `sent`, withdrawn `none` | all three `sent` |
-| My Network → Sent | row vanishes on withdrawal, stays for the window | row stays for both, for the window's length |
-| Suggested | a withdrawn candidate reappears, a window one does not | neither reappears |
-| `send_introduction` | accepts a re-send from the withdrawn sender, refuses the window one | refuses both, one message |
+| Surface                       | Before                                                              | After                                       |
+| ----------------------------- | ------------------------------------------------------------------- | ------------------------------------------- |
+| Profile's Request sent button | pending → `none`, window → `sent`                                   | both stay `sent`                            |
+| Members card `rel`            | pending `sent`, window `sent`, withdrawn `none`                     | all three `sent`                            |
+| My Network → Sent             | row vanishes on withdrawal, stays for the window                    | row stays for both, for the window's length |
+| Suggested                     | a withdrawn candidate reappears, a window one does not              | neither reappears                           |
+| `send_introduction`           | accepts a re-send from the withdrawn sender, refuses the window one | refuses both, one message                   |
 
 **Accepted cost, recorded rather than discovered.** A sender who withdraws a genuine pending request
 does not get the Connect action back for that member until the window elapses, even though the
@@ -1198,3 +1198,28 @@ The ruling 218 test accounts completed onboarding once through the real surface,
 the Responsive matrix workflow dispatched with `onboard=1`, which runs
 `tests/onboard-test-accounts.cjs` against the deployment: Owner Test touched a card, Member Test did not, and the live arms in
 `tests/live-checks.cjs` read that difference every run rather than bypassing the gate.
+
+## G15. A name that folds to nothing gets no username suggestion, and the hint still promises one (ruling 343)
+
+**Severity: low. Not a merge blocker. Recorded 11 September 2026 with the transliterating fold.**
+
+Ruling 343 made the username derivation transliterate rather than delete: trim, NFKD, strip
+combining marks, then SPEC section 9's rules, the same fold in `private.derive_username` and
+`deriveUsername` in `src/lib/onboarding.ts`. "Jaûne" derives `jaune` where it derived `jane`.
+
+Two shapes still derive nothing, measured against the canonical project before the change was
+written (ruling 242):
+
+- A name in a non-Latin script (王小明, Кирилл, أحمد) has no compatibility decomposition to ASCII,
+  folds to nothing, and leaves the username field empty. The `'member'` placeholder both readers
+  used to substitute is gone: the server returns a null suggestion, `onboard_who` refuses an empty
+  username as invalid, and the member types one. Screen one's hint still reads "We'll suggest one
+  from your name.", which is not true for them; the copy needs a fallback line for the empty
+  field, and it is copy, so it waits on a ruling rather than being invented here.
+- Four Latin letters have no decomposition either and still fall to the ASCII filter: Ø (Søren
+  Ødegård derives `sren-degard`), ß (`strae`), Ł (`ukasz`) and Æ (`sir`). A transliteration table
+  (Ø to o, ß to ss, Ł to l, Æ to ae, and the Icelandic Þ and Ð) would close these; it is a second
+  fold rule on both sides and waits on the same ruling.
+
+The fold on both sides was checked against sixteen names, identical output on all sixteen; the
+matrix's onboarding-flows arm proves the client half on "Jaûne Ñoño-Ålund".

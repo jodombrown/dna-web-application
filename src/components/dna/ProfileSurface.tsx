@@ -1131,6 +1131,9 @@ function ProfileBody(p: BodyProps) {
     vis,
   } = p;
   const compact = tier === "compact";
+  // The C deck's bleed past the column's padding: never more than the gutter the column actually
+  // has (measured above as `bleed`: 16 on compact, 32 on the medium public column), 24 at most.
+  const deckBleed = Math.min(24, bleed);
   const expanded = tier === "expanded";
   const m = profile.member;
   const s = profile.sections;
@@ -1798,9 +1801,12 @@ function ProfileBody(p: BodyProps) {
                     gap: 12,
                     overflowX: "auto",
                     scrollSnapType: "x mandatory",
-                    width: "calc(100% + 48px)",
-                    margin: "8px -24px",
-                    padding: "0 24px 8px",
+                    // Ruling 344: the strip bleeds to the column's edge and no further. It bled
+                    // 24 on both tiers against the compact column's 16 gutter, which put its right
+                    // edge 8 past the viewport at 360, 390 and 430 and let the public page pan.
+                    width: `calc(100% + ${deckBleed * 2}px)`,
+                    margin: `8px -${deckBleed}px`,
+                    padding: `0 ${deckBleed}px 8px`,
                     boxSizing: "border-box",
                     WebkitOverflowScrolling: "touch",
                   }

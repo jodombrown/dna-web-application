@@ -414,6 +414,14 @@ async function runOnboardingFlows(browserType, bname, [w, h], theme) {
       tag + ": the suggestion follows the name until the member types in the field",
       (await username.inputValue()) === "thandiwe-dube",
     );
+    // Ruling 343: the fold transliterates rather than deletes. The client derives the same string
+    // the server does (NFKD, strip combining marks, then section 9), so this proves the client half.
+    await name.fill("Jaûne Ñoño-Ålund");
+    record(
+      tag + ": an accented name transliterates rather than losing its letters (ruling 343)",
+      (await username.inputValue()) === "jaune-nono-alund",
+      "got " + (await username.inputValue()),
+    );
     await username.fill("thandi");
     await name.fill("Thandiwe D");
     record(
