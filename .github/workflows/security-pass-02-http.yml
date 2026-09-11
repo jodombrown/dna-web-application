@@ -1,0 +1,219 @@
+# Security Pass 02: the real-HTTP arms (PASS-02 scopes A, E, D).
+#
+# The audit environment refuses outbound HTTPS to the Supabase project, so the arms the report
+# labels "over real HTTP" run here, on a runner with open egress, against the canonical project
+# dgspjevjoblujcoljvkn. One job, three phases, all read-only except the media-upload EXIF
+# measurement, which uploads three synthetic images carrying GPS EXIF, a PNG tEXt chunk and a WebP
+# EXIF chunk through the deployed function, fetches the stored masters to prove what metadata
+# survives (rulings 347, 352), then deletes the storage objects it created. The public.media rows
+# the function records are reversed by the auditor from the session after the run (a member holds
+# no delete on public.media by design), inside the write window the report records.
+#
+# The publishable key and project URL below are the public values already shipped in
+# src/lib/supabase.ts. The MEMBER_ secrets are the live-check job's own. A fork PR gets empty
+# secrets and the signed-in phases print UNPROVEN (ruling 228). The probe is written to the runner's
+# tmp at run time, so this workflow file is the only file the audit PR adds besides the report
+# (PASS-02 Done Means 7).
+name: Security Pass 02 HTTP
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches:
+      - claude/charming-euler-9m8a8s
+    paths:
+      - .github/workflows/security-pass-02-http.yml
+
+jobs:
+  http-arms:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      SUPABASE_URL: https://dgspjevjoblujcoljvkn.supabase.co
+      PUBLISHABLE_KEY: sb_publishable_yuc09jnHUXWQfMbbAp5_ng_2zXPNU0x
+      MEMBER_EMAIL: ${{ secrets.MEMBER_EMAIL }}
+      MEMBER_PASSWORD: ${{ secrets.MEMBER_PASSWORD }}
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Install probe deps (runner only, not the repo)
+        run: |
+          mkdir -p /tmp/probe && cd /tmp/probe
+          npm init -y >/dev/null 2>&1
+          npm i --no-audit --no-fund @supabase/supabase-js@2 sharp@0.33 piexifjs@1.0.6 >/dev/null 2>&1
+          echo "deps installed"
+      - name: Write the probe to the runner
+        run: |
+          printf '%s\n' "$PROBE_SRC" > /tmp/probe/probe.mjs
+          echo "wrote $(wc -l < /tmp/probe/probe.mjs) lines"
+        env:
+          PROBE_SRC: |
+            import { createClient } from "@supabase/supabase-js";
+            import sharp from "sharp";
+            import piexif from "piexifjs";
+
+            const URL = process.env.SUPABASE_URL;
+            const KEY = process.env.PUBLISHABLE_KEY;
+            const H_ANON = { apikey: KEY, Authorization: "Bearer " + KEY };
+            const out = (label, obj) => console.log("PASS02 " + label + " " + JSON.stringify(obj));
+
+            const email = process.env.MEMBER_EMAIL, password = process.env.MEMBER_PASSWORD;
+            let TOKEN = null;
+            if (email && password) {
+              const r = await fetch(URL + "/auth/v1/token?grant_type=password", {
+                method: "POST", headers: { apikey: KEY, "content-type": "application/json" },
+                body: JSON.stringify({ email, password }) });
+              const b = await r.json().catch(() => null);
+              TOKEN = b && b.access_token ? b.access_token : null;
+            }
+            out("signin", { member: !!TOKEN });
+            const H_MEM = TOKEN ? { apikey: KEY, Authorization: "Bearer " + TOKEN } : null;
+
+            const get = async (path, headers) => {
+              const r = await fetch(URL + "/rest/v1/" + path, { headers });
+              const cr = r.headers.get("content-range");
+              const text = await r.text();
+              return { status: r.status, content_range: cr, len: text.length, snippet: text.slice(0, 180) };
+            };
+            const rpc = async (fn, headers, body) => {
+              const r = await fetch(URL + "/rest/v1/rpc/" + fn, {
+                method: "POST", headers: { ...headers, "content-type": "application/json" },
+                body: JSON.stringify(body || {}) });
+              const text = await r.text();
+              return { status: r.status, snippet: text.slice(0, 160) };
+            };
+
+            // ---- Phase A: PostgREST's own layer ----
+            out("A1.private_table_anon", await get("connect_settings?select=*", H_ANON));
+            out("A1.private_table_anon_profile", await get("connect_settings?select=*", { ...H_ANON, "Accept-Profile": "private" }));
+            out("A1.private_rpc_anon", await rpc("derive_username", H_ANON, { p_name: "x" }));
+            out("A1.private_rpc_third_party_anon", await rpc("third_party_label", H_ANON, {}));
+            if (H_MEM) out("A1.private_rpc_member", await rpc("derive_username", H_MEM, { p_name: "x" }));
+
+            for (const fn of ["profile_view", "public_attestations", "connect_cards", "vocabularies",
+                              "onboard_who", "onboarding_state", "send_introduction", "connect_where"]) {
+              out("A2.anon_rpc_" + fn, await rpc(fn, H_ANON, fn === "profile_view" ? { p_handle: "thandiwe-dube" } : {}));
+            }
+
+            out("A3.anon_attest_embed_member", await get("attestations?select=*,members!attestations_member_id_fkey(*)", H_ANON));
+            out("A3.anon_attest_embed_attester", await get("attestations?select=*,members!attestations_attester_member_id_fkey(*)", H_ANON));
+            if (H_MEM) {
+              out("A3.member_attest_embed_attester", await get("attestations?select=*,members!attestations_attester_member_id_fkey(*)", H_MEM));
+              out("A3.member_media_embed_members", await get("media?select=*,members(*)", H_MEM));
+            }
+
+            const cnt = (h) => ({ ...h, Prefer: "count=exact", Range: "0-0" });
+            out("A4.anon_members_count", await get("members?select=id", cnt(H_ANON)));
+            out("A4.anon_attest_count", await get("attestations?select=id", cnt(H_ANON)));
+            out("A4.anon_member_about_count", await get("member_about?select=member_id", cnt(H_ANON)));
+            if (H_MEM) {
+              out("A4.member_members_count", await get("members?select=id", cnt(H_MEM)));
+              out("A4.member_feed_count", await get("feed?select=id", cnt(H_MEM)));
+              out("A4.member_posts_count", await get("posts?select=id", cnt(H_MEM)));
+              out("A4.member_edges_count", await get("edges?select=id", cnt(H_MEM)));
+              out("A4.member_connections_count", await get("member_connections?select=member_id", cnt(H_MEM)));
+              out("A4.member_skills_count", await get("member_skills?select=member_id", cnt(H_MEM)));
+            }
+            out("A4.anon_count_planned", await get("members?select=id", { ...H_ANON, Prefer: "count=planned", Range: "0-0" }));
+
+            const gql = async (headers) => {
+              const r = await fetch(URL + "/graphql/v1", { method: "POST",
+                headers: { ...headers, "content-type": "application/json" },
+                body: JSON.stringify({ query: "{ __typename }" }) });
+              const t = await r.text();
+              return { status: r.status, snippet: t.slice(0, 200) };
+            };
+            out("A5.graphql_anon", await gql(H_ANON));
+            if (H_MEM) out("A5.graphql_member", await gql(H_MEM));
+
+            // ---- Phase E: link-unfurl SSRF ----
+            const unfurl = async (u) => {
+              if (!H_MEM) return { unproven: true };
+              const r = await fetch(URL + "/functions/v1/link-unfurl", { method: "POST",
+                headers: { ...H_MEM, "content-type": "application/json" }, body: JSON.stringify({ url: u }) });
+              const t = await r.text();
+              return { status: r.status, body: t.slice(0, 120) };
+            };
+            for (const u of [
+              "http://169.254.169.254/latest/meta-data/", "http://127.0.0.1/", "http://localhost/",
+              "http://[::1]/", "http://metadata.google.internal/", "http://100.100.100.200/",
+              "http://2130706433/", "http://0177.0.0.1/", "file:///etc/passwd",
+              "gopher://127.0.0.1:6379/_", "http://192.168.0.1/", "http://10.0.0.1/", "http://[fd00::1]/"
+            ]) out("E.refuse " + u, await unfurl(u));
+            out("E.control_public https://example.com/", await unfurl("https://example.com/"));
+
+            // ---- Phase D: media-upload EXIF measurement (rulings 347, 352) ----
+            if (!H_MEM) { out("D.unproven", { reason: "no member token" }); process.exit(0); }
+            const health = await fetch(URL + "/functions/v1/media-upload", { method: "GET", headers: H_MEM });
+            out("D.health", { status: health.status, body: (await health.text()).slice(0, 120) });
+
+            const base = () => sharp({ create: { width: 64, height: 64, channels: 3, background: { r: 10, g: 120, b: 90 } } });
+            const jpegPlain = await base().jpeg().toBuffer();
+            const gps = {};
+            gps[piexif.GPSIFD.GPSLatitudeRef] = "N";
+            gps[piexif.GPSIFD.GPSLatitude] = [[40, 1], [45, 1], [3600, 100]];
+            gps[piexif.GPSIFD.GPSLongitudeRef] = "W";
+            gps[piexif.GPSIFD.GPSLongitude] = [[73, 1], [59, 1], [3600, 100]];
+            const zeroth = {}; zeroth[piexif.ImageIFD.Make] = "DNA-AUDIT";
+            const exifStr = piexif.dump({ "0th": zeroth, GPS: gps, Exif: {}, "1st": {}, thumbnail: null });
+            const jpegGps = Buffer.from(piexif.insert(exifStr, jpegPlain.toString("binary")), "binary");
+
+            const pngPlain = await base().png().toBuffer();
+            const kv = Buffer.from("Comment\0DNA-AUDIT GPS 40.76,-73.98 device iPhone", "latin1");
+            const pc = Buffer.alloc(12 + kv.length);
+            pc.writeUInt32BE(kv.length, 0); pc.write("tEXt", 4, "latin1"); kv.copy(pc, 8);
+            const crc = (b) => { let c = ~0; for (let i = 0; i < b.length; i++) { c ^= b[i]; for (let k = 0; k < 8; k++) c = (c >>> 1) ^ (0xEDB88320 & -(c & 1)); } return (~c) >>> 0; };
+            pc.writeUInt32BE(crc(pc.subarray(4, 8 + kv.length)), 8 + kv.length);
+            const iend = pngPlain.length - 12;
+            const pngText = Buffer.concat([pngPlain.subarray(0, iend), pc, pngPlain.subarray(iend)]);
+
+            const webpPlain = await base().webp().toBuffer();
+            const exifPayload = Buffer.from("II*\0\b\0\0\0\0\0DNA-AUDIT-EXIF", "latin1");
+            const ec = Buffer.alloc(8 + exifPayload.length + (exifPayload.length & 1));
+            ec.write("EXIF", 0, "latin1"); ec.writeUInt32LE(exifPayload.length, 4); exifPayload.copy(ec, 8);
+            const webpExif = Buffer.concat([webpPlain, ec]);
+            webpExif.writeUInt32LE(webpExif.length - 8, 4);
+
+            const cases = [
+              { name: "jpeg_gps", buf: jpegGps, type: "image/jpeg", ext: "jpg", markers: ["Exif", "DNA-AUDIT"] },
+              { name: "png_text", buf: pngText, type: "image/png", ext: "png", markers: ["tEXt", "DNA-AUDIT"] },
+              { name: "webp_exif", buf: webpExif, type: "image/webp", ext: "webp", markers: ["EXIF", "DNA-AUDIT-EXIF"] },
+            ];
+            const sb = createClient(URL, KEY, { global: { headers: { Authorization: "Bearer " + TOKEN } } });
+            const created = [];
+            for (const c of cases) {
+              const hasIn = c.markers.some((m) => c.buf.includes(Buffer.from(m, "latin1")));
+              const fd = new FormData();
+              fd.append("file", new Blob([c.buf], { type: c.type }), c.name + "." + c.ext);
+              fd.append("slot", "avatar");
+              const r = await fetch(URL + "/functions/v1/media-upload", { method: "POST",
+                headers: { apikey: KEY, Authorization: "Bearer " + TOKEN }, body: fd });
+              const res = await r.json().catch(() => null);
+              if (!res || !res.storage_path) { out("D." + c.name, { upload_status: r.status, res }); continue; }
+              created.push({ name: c.name, media_id: res.media_id, storage_path: res.storage_path });
+              const signed = await sb.storage.from("profile-media").createSignedUrl(res.storage_path, 120);
+              let master = null;
+              if (signed.data && signed.data.signedUrl) {
+                const mr = await fetch(signed.data.signedUrl);
+                master = Buffer.from(await mr.arrayBuffer());
+              }
+              const hits = master ? c.markers.filter((m) => master.includes(Buffer.from(m, "latin1"))) : ["<no-master>"];
+              out("D." + c.name, {
+                input_had_metadata: hasIn, bytes_in: c.buf.length,
+                master_bytes: master ? master.length : null,
+                metadata_markers_surviving_in_master: hits,
+                stripped: master ? hits.length === 0 : null,
+                media_id: res.media_id, storage_path: res.storage_path });
+            }
+            for (const c of created) {
+              const del = await sb.storage.from("profile-media").remove([c.storage_path]);
+              out("D.cleanup " + c.name, { removed: !del.error, error: del.error ? del.error.message : null });
+            }
+            out("D.media_ids_for_auditor_reversal", created.map((c) => c.media_id));
+      - name: Run the HTTP arms
+        working-directory: /tmp/probe
+        run: |
+          node probe.mjs 2>&1 | tee run.log
+          echo "=== PASS02 SUMMARY ==="
+          grep '^PASS02' run.log || true
