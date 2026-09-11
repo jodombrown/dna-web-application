@@ -368,7 +368,7 @@ async function runOwner(browserType, bname, vp, theme) {
       tag + ": all sections present for the owner (empty ones show their act)",
       [
         "about",
-        "segment",
+        "stance",
         "origin",
         "where",
         "work",
@@ -414,7 +414,7 @@ async function runOwner(browserType, bname, vp, theme) {
       (await page.locator('[data-testid="local-time"]').count()) === 0,
     );
     record(
-      tag + ": no origin, place or segment label on the core row (ruling 275)",
+      tag + ": no origin, place or stance label on the core row (ruling 275)",
       !/From South Africa|Johannesburg|Returnee/.test(mastText),
       mastText.replace(/\n/g, " | ").slice(0, 160),
     );
@@ -829,7 +829,7 @@ async function runPublic(browserType, bname, vp, theme) {
     );
     // Ruling 275, under 212: the core row on the view that reaches the most people.
     record(
-      tag + ": no origin, place, segment label or local time on the core row (ruling 275)",
+      tag + ": no origin, place, stance label or local time on the core row (ruling 275)",
       (await page.locator('[data-testid="local-time"]').count()) === 0 &&
         !/From South Africa|Johannesburg|Returnee/.test(await mastheadText(page)),
       (await mastheadText(page)).replace(/\n/g, " ").slice(0, 160),

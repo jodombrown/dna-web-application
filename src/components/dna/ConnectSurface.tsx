@@ -117,8 +117,8 @@ function FilterControls({
   const values = (key: FilterKey): { value: string; label: string }[] => {
     if (!options) return [];
     switch (key) {
-      case "segment":
-        return options.segments;
+      case "stance":
+        return options.stances;
       case "location":
         return options.locations.map((v) => ({ value: v, label: v }));
       case "origin":
@@ -529,8 +529,8 @@ export function ConnectSurface({ member, search }: { member: Member; search: Con
 
   // Applied filters as chips (Members only).
   const chipLabel = (key: FilterKey, value: string) => {
-    if (key === "segment")
-      return optionsData?.segments.find((s) => s.value === value)?.label ?? value;
+    if (key === "stance")
+      return optionsData?.stances.find((s) => s.value === value)?.label ?? value;
     if (key === "corridor")
       return optionsData?.corridors.find((c) => c.id === value)?.label ?? value;
     return value;

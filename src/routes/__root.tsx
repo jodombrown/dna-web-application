@@ -6,14 +6,23 @@ import {
   useLocation,
   useNavigate,
   useRouter,
+  useRouterState,
   HeadContent,
   Scripts,
 } from "@tanstack/react-router";
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
-import { AuthProvider } from "../lib/auth";
+import { AuthProvider, useAuth } from "../lib/auth";
+import {
+  isUngated,
+  noteInitialState,
+  ONBOARDING_ORDER,
+  ONBOARDING_ROUTE,
+  screenOfPath,
+} from "../lib/onboarding";
+import { useOnboardingState } from "../lib/onboarding-hooks";
 import { captureRecoveryFromUrl, recoveryPending } from "../lib/recovery";
 
 function NotFoundComponent() {
@@ -144,6 +153,71 @@ function RecoveryGate() {
   return null;
 }
 
+/**
+ * Brief 5 (SPEC section 1, ruling 307): every guarded route redirects to the first incomplete
+ * onboarding screen until onboarded_at is set, decided by onboarding_state() and never inferred
+ * client-side. One place, like RecoveryGate above it, so no route can forget. A member who has
+ * onboarded and opens an onboarding route is sent to the Feed; a screen already completed is
+ * reachable (Back reaches it), a screen ahead of the next one is not. Guarded routes render
+ * nothing until the state is known, so the Feed never flashes before the redirect.
+ */
+function OnboardingGate({ children }: { children: ReactNode }) {
+  const navigate = useNavigate();
+  const pathname = useLocation({ select: (l) => l.pathname });
+  const { ready, member } = useAuth();
+  const enabled = ready && !!member && !recoveryPending();
+  const q = useOnboardingState(member?.id, enabled);
+  const state = q.data ?? null;
+  useEffect(() => {
+    if (state) noteInitialState(state);
+  }, [state]);
+
+  const screen = screenOfPath(pathname);
+  const ungated = isUngated(pathname);
+  let target: "/feed" | "/welcome" | "/where" | "/relationship" | null = null;
+  if (enabled && q.status === "success" && state) {
+    const next = state.next;
+    if (next === null) {
+      if (screen) target = "/feed";
+    } else {
+      const want = ONBOARDING_ROUTE[next];
+      if (screen) {
+        if (ONBOARDING_ORDER.indexOf(screen) > ONBOARDING_ORDER.indexOf(next)) target = want;
+      } else if (!ungated) target = want;
+    }
+  }
+  // Only once the router is idle. While a transition is pending the router still renders the
+  // previous match (sign-in, after its own redirect to the Feed), and a redirect issued into that
+  // window keeps the previous match mounted and its redirect firing: a loop between the two.
+  const routerStatus = useRouterState({ select: (s) => s.status });
+  // While a transition is pending the router still renders the resolved (previous) match, so a
+  // guarded route that is being left must stay held too, or the Feed flashes on its way out.
+  const resolvedPath = useRouterState({
+    select: (s) => (s.resolvedLocation ?? s.location).pathname,
+  });
+  const issued = useRef<string | null>(null);
+  useEffect(() => {
+    if (!target) {
+      issued.current = null;
+      return;
+    }
+    if (routerStatus !== "idle") return;
+    const key = pathname + " -> " + target;
+    if (issued.current === key) return;
+    issued.current = key;
+    void navigate({ to: target, replace: true, search: {} });
+  }, [target, pathname, routerStatus, navigate]);
+
+  const leavingGuarded =
+    routerStatus !== "idle" && !isUngated(resolvedPath) && !screenOfPath(resolvedPath);
+  const holding =
+    enabled &&
+    ((!ungated && (q.status === "pending" || target !== null)) ||
+      (leavingGuarded && q.status === "success" && !!state && state.next !== null));
+  if (holding) return null;
+  return <>{children}</>;
+}
+
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
 
@@ -153,7 +227,9 @@ function RootComponent() {
         <RecoveryGate />
         {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
         {/* The composer mounts once inside the shell layout (src/routes/_shell.tsx), not here. */}
-        <Outlet />
+        <OnboardingGate>
+          <Outlet />
+        </OnboardingGate>
       </AuthProvider>
     </QueryClientProvider>
   );

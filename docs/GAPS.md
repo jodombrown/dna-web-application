@@ -1173,3 +1173,28 @@ The fix is the smallest change the arm can prove: both `setStage` calls in that 
 functional updaters that leave a `done` stage alone. No route restructuring, no new arm, timeout not
 raised. The existing recovery arm is the proof, because it already fails in the engine that shows
 the defect and passes in the one that does not.
+
+## G14. Brief 5 landed its schema first and its surface second (rulings 90, 225, 334 to 336)
+
+**Severity: none open. Recorded 11 September 2026 so the two-step landing is legible in the tree.**
+
+`onboarding/SPEC.md` did not arrive with the first Brief 5 handoff, so PR #23's first commit carried
+only what the handoff governs on its own: `20260911090000_b5_stance_onboarding.sql`, the four
+onboarding functions, the `onboarding` Edge Function and the stance rename in the client. The SPEC
+arrived with register revision 6, and the second commit built the three screens, the gate in the
+root route and the split matrix arm to it. The SPEC is committed at `docs/onboarding/SPEC.md`.
+
+The migration was held until the surface existed, because applying it renames the wire keys
+`main`'s deployed client reads. It was rehearsed against the canonical project inside a rolled-back
+transaction first, then applied with the surface, still committed before applied (ruling 225).
+
+Rulings 334 to 336 confirm the decisions the first commit had to take against the live schema:
+username is three to forty characters, enforced in `onboard_who`; a later stance change on Profile
+stamps `stance_declared_at` by trigger; `members.handle` is the username and `who_completed_at`
+marks screen one. Profile's visible label still reads Segment and is corrected under 300 in the
+Profile spec as a follow-up, not here (ruling 336).
+
+The ruling 218 test accounts completed onboarding once through the real surface, by
+the Responsive matrix workflow dispatched with `onboard=1`, which runs
+`tests/onboard-test-accounts.cjs` against the deployment: Owner Test touched a card, Member Test did not, and the live arms in
+`tests/live-checks.cjs` read that difference every run rather than bypassing the gate.

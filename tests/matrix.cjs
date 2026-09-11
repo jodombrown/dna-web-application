@@ -4,7 +4,7 @@
 // layer, so the real client code paths run against a deterministic backend. Backend behaviour
 // (RLS, the feed view) is verified separately in SQL against the live project.
 // Usage: BASE=https://b2-shell-feed.dna-web-application.pages.dev WEBKIT=1 node tests/matrix.cjs
-// Env: ONLY='[390,844]' runs one viewport; SPECIAL=publish,guards,keyboard,silence,shell,targeted,profile,connect,vocab,block,auth runs flows only.
+// Env: ONLY='[390,844]' runs one viewport; SPECIAL=publish,guards,keyboard,silence,shell,targeted,profile,connect,vocab,block,auth,onboarding runs flows only.
 // Brief 3 profile flows live in tests/profile.cjs and Brief 4 Connect flows in tests/connect.cjs; both share this mock.
 const { chromium, webkit } = require("playwright");
 const fs = require("fs");
@@ -142,9 +142,9 @@ const PROFILE_MEMBER = {
   tier: "attested",
   handle: "thandiwe-dube",
   pattern: "kente",
-  segment: "returnee",
-  // Ruling 187: profile_view resolves the label from public.member_segments.
-  segment_label: "Returnee",
+  stance: "returnee",
+  // Ruling 187: profile_view resolves the label from public.member_stances.
+  stance_label: "Returnee",
   headline: "Solar engineer, mini-grids for rural clinics",
   local_tz: "Africa/Johannesburg",
   cover_focus: "center 35%",
@@ -208,7 +208,7 @@ const EVERYONE_SECTIONS = {
       title: "Solar for Clinics, working session",
     },
   ],
-  segment: { fields: SEGMENT_FIELDS, segment: "returnee" },
+  stance: { fields: SEGMENT_FIELDS, stance: "returnee" },
   languages: { languages: ["English", "isiZulu", "Sesotho"] },
   contribute: [
     {
@@ -237,7 +237,7 @@ const VISIBILITY = {
   origin: "everyone",
   skills: "everyone",
   convene: "everyone",
-  segment: "everyone",
+  stance: "everyone",
   languages: "everyone",
   contribute: "everyone",
   collaborate: "everyone",
@@ -252,12 +252,13 @@ const VOCAB = {
   interests: ["Energy", "Health", "Farming"],
   countries: ["South Africa", "Ghana", "Nigeria", "Kenya"],
   world: ["Germany", "Ghana", "Kenya", "South Africa", "United Kingdom", "United States"],
-  // Ruling 187: the segment chooser reads the vocabulary, not a map in the component.
-  segments: [
+  // Ruling 187: the stance chooser reads the vocabulary, not a map in the component.
+  stances: [
     { value: "returnee", label: "Returnee" },
+    { value: "kin", label: "Kin" },
     { value: "anchor", label: "Anchor" },
     { value: "ally", label: "Ally" },
-    { value: "exploring", label: "Still Exploring" },
+    { value: "exploring", label: "Still exploring" },
   ],
   heritage: ["Continental", "First generation", "Second generation"],
   pathway: ["Already returned", "Planning to return", "Not returning"],
@@ -377,7 +378,7 @@ function profileProjection(db, anon) {
     sections.links = LINKS;
     sections.intent = { note: INTENT_NOTE, intent: ["Find collaborators", "Host and convene"] };
     sections.convey = [];
-    sections.segment.variants = { returnee: SEGMENT_FIELDS, exploring: { interests: [] } };
+    sections.stance.variants = { returnee: SEGMENT_FIELDS, exploring: { interests: [] } };
     return { ...base, viewer: "owner", anchored: false, sections, switches: sw, visibility: vis };
   }
   const anchored = pr.mode === "connected" || pr.mode === "anchor";
@@ -418,7 +419,7 @@ const CONNECT_MEMBERS = [
     name: "Adaeze Nwosu",
     identified: true,
     headline: "Clinic coordinator, Enugu and Manchester",
-    segment_label: "Returnee",
+    stance_label: "Returnee",
     place: "Manchester, United Kingdom",
     origin: "Nigeria",
     heritage: "Second generation",
@@ -430,7 +431,7 @@ const CONNECT_MEMBERS = [
     ],
     rel: "none",
     following: false,
-    _segment: "returnee",
+    _stance: "returnee",
     _location: "United Kingdom",
     _focus: "Healthcare & Wellness",
   },
@@ -440,7 +441,7 @@ const CONNECT_MEMBERS = [
     name: "Yusuf Diallo",
     identified: false,
     headline: "Solar engineer between Dakar and Lyon",
-    segment_label: "Anchor",
+    stance_label: "Anchor",
     place: "Dakar, Senegal",
     origin: "Senegal",
     heritage: "Continental",
@@ -449,7 +450,7 @@ const CONNECT_MEMBERS = [
     mutuals: [{ name: "Lerato Khumalo", avatar_path: null }],
     rel: "sent",
     following: true,
-    _segment: "anchor",
+    _stance: "anchor",
     _location: "Senegal",
     _focus: "Infrastructure & Energy",
   },
@@ -459,7 +460,7 @@ const CONNECT_MEMBERS = [
     name: "Kwame Mensah",
     identified: true,
     headline: "Fintech founder, Accra",
-    segment_label: "Anchor",
+    stance_label: "Anchor",
     place: "Accra, Ghana",
     origin: "Ghana",
     heritage: "Continental",
@@ -470,7 +471,7 @@ const CONNECT_MEMBERS = [
     following: false,
     message:
       "Hello Amara. I saw your note on savings products for market traders. I have done two of these in Accra and would like to compare notes.",
-    _segment: "anchor",
+    _stance: "anchor",
     _location: "Ghana",
     _focus: "Finance & Investment",
   },
@@ -480,7 +481,7 @@ const CONNECT_MEMBERS = [
     name: "Lerato Khumalo",
     identified: false,
     headline: "Community organiser, Soweto",
-    segment_label: "Ally",
+    stance_label: "Ally",
     place: "Johannesburg, South Africa",
     origin: "South Africa",
     heritage: "Continental",
@@ -501,7 +502,7 @@ const CONNECT_MEMBERS = [
     mutuals: [],
     rel: "connected",
     following: true,
-    _segment: "ally",
+    _stance: "ally",
     _location: "South Africa",
     _focus: "Education & Training",
   },
@@ -511,7 +512,7 @@ const CONNECT_MEMBERS = [
     name: "Thandiwe Dube",
     identified: true,
     headline: "Building clinics between Johannesburg and Houston",
-    segment_label: "Returnee",
+    stance_label: "Returnee",
     place: "Houston, United States",
     origin: "South Africa",
     heritage: "First generation",
@@ -523,7 +524,7 @@ const CONNECT_MEMBERS = [
     // card is compared against a genuinely pending one below.
     rel: "sent",
     following: false,
-    _segment: "returnee",
+    _stance: "returnee",
     _location: "United States",
     _focus: "Healthcare & Wellness",
   },
@@ -533,7 +534,7 @@ const CONNECT_MEMBERS = [
     name: "Ngozi Okafor",
     identified: false,
     headline: "Agritech, Lagos",
-    segment_label: "Still Exploring",
+    stance_label: "Still exploring",
     place: "Lagos, Nigeria",
     origin: "Nigeria",
     heritage: "Continental",
@@ -542,7 +543,7 @@ const CONNECT_MEMBERS = [
     mutuals: [],
     rel: "none",
     following: false,
-    _segment: "exploring",
+    _stance: "exploring",
     _location: "Nigeria",
     _focus: "Agriculture & Food Systems",
   },
@@ -563,11 +564,12 @@ const CONNECT_WHERE = {
   diaspora: ["Canada", "France", "United Kingdom", "United States"],
 };
 const CONNECT_OPTIONS = {
-  segments: [
+  stances: [
     { value: "returnee", label: "Returnee" },
+    { value: "kin", label: "Kin" },
     { value: "anchor", label: "Anchor" },
     { value: "ally", label: "Ally" },
-    { value: "exploring", label: "Still Exploring" },
+    { value: "exploring", label: "Still exploring" },
   ],
   locations: [
     "Canada",
@@ -613,7 +615,7 @@ const CONNECT_OPTIONS = {
   ],
 };
 
-/** A card as connect_cards emits it: the private fixture keys (_segment, _location, _focus) never leave the mock. */
+/** A card as connect_cards emits it: the private fixture keys (_stance, _location, _focus) never leave the mock. */
 function connectCard(m, overrides) {
   const out = {};
   for (const k of Object.keys(m)) if (!k.startsWith("_")) out[k] = m[k];
@@ -674,6 +676,37 @@ function makeMockDb() {
       requests: [],
       blocks: [],
     },
+    // Brief 5: what onboarding_state() answers and what the onboarding function was sent. Every
+    // existing flow signs in as a member who has onboarded (next null), so the gate in the root
+    // route holds nothing; the onboarding arm sets next itself.
+    onboarding: {
+      state: {
+        next: null,
+        who: {
+          name: "Amara Osei",
+          username: "amara-osei",
+          suggestion: "amara-osei",
+          avatar_path: null,
+          completed: true,
+        },
+        where: { city: "Nairobi", country: "Kenya", completed: true },
+        relationship: {
+          stance: "exploring",
+          stance_label: "Still exploring",
+          declared: false,
+          completed: true,
+        },
+        onboarded_at: "2026-09-01T00:00:00+00:00",
+      },
+      writes: [],
+      explainerOpens: 0,
+      taken: false,
+      failScreen: null,
+      delayMs: 0,
+    },
+    // Brief 5: media-upload refusals, so the photo's two alerts can be exercised.
+    mediaTooLarge: false,
+    mediaFail: false,
     // Brief 4: Connect's projection state and the writes the surface made.
     connect: {
       overrides: {},
@@ -766,6 +799,8 @@ async function mockSupabase(page, db, opts = {}) {
     }
     if (p === "/functions/v1/media-upload") {
       await new Promise((r) => setTimeout(r, 300));
+      if (db.mediaTooLarge) return json({ error: "too_large" }, 413);
+      if (db.mediaFail) return json({ error: "upload_failed" }, 500);
       return json({
         storage_path: `${UID}/p1/${db.post_media.length + 1}.png`,
         width: 1200,
@@ -784,6 +819,66 @@ async function mockSupabase(page, db, opts = {}) {
           })),
         );
       return json({ signedURL: "/object/sign/" + p.split("/object/sign/")[1] + "?token=t" });
+    }
+    if (p === "/rest/v1/rpc/onboarding_state") return json(db.onboarding.state);
+    if (p === "/functions/v1/onboarding") {
+      const ob = db.onboarding;
+      const body = req.postDataJSON() || {};
+      if (ob.delayMs) await new Promise((r) => setTimeout(r, ob.delayMs));
+      if (body.event === "explainer_opened") {
+        ob.explainerOpens++;
+        return json({ ok: true });
+      }
+      ob.writes.push(body);
+      if (ob.failScreen === body.screen)
+        return json({ ok: false, error: { code: "P0001", message: "That did not save." } }, 400);
+      const st = ob.state;
+      if (body.screen === "who") {
+        if (ob.taken)
+          return json({ ok: true, result: { status: "taken", suggestion: st.who.suggestion } });
+        st.who = {
+          ...st.who,
+          name: body.name,
+          username: body.username,
+          avatar_path: body.avatar_path,
+          completed: true,
+        };
+        st.next = st.where.completed ? (st.onboarded_at ? null : "relationship") : "where";
+        return json({
+          ok: true,
+          result: {
+            status: "ok",
+            name: body.name,
+            username: body.username,
+            avatar_path: body.avatar_path,
+            suggestion: st.who.suggestion,
+            username_changes: body.username === st.who.suggestion ? 0 : 1,
+          },
+        });
+      }
+      if (body.screen === "where") {
+        st.where = { city: body.city, country: body.country, completed: true };
+        st.next = "relationship";
+        return json({ ok: true, result: { status: "ok", city: body.city, country: body.country } });
+      }
+      if (body.screen === "relationship") {
+        const now = new Date().toISOString();
+        if (body.touched)
+          st.relationship = { ...st.relationship, stance: body.stance, declared: true };
+        st.relationship.completed = true;
+        st.onboarded_at = now;
+        st.next = null;
+        return json({
+          ok: true,
+          result: {
+            status: "ok",
+            stance: st.relationship.stance,
+            stance_declared_at: body.touched ? now : null,
+            onboarded_at: now,
+          },
+        });
+      }
+      return json({ ok: false, error: { code: "bad_screen" } }, 400);
     }
     if (p === "/functions/v1/connect-suggest") {
       await new Promise((r) => setTimeout(r, 150));
@@ -813,7 +908,7 @@ async function mockSupabase(page, db, opts = {}) {
         const f = body.p_filters || {};
         if (body.p_lens === "members") {
           let rows = cx.membersEmpty ? [] : CONNECT_MEMBERS.slice();
-          if (f.segment) rows = rows.filter((m) => m._segment === f.segment);
+          if (f.stance) rows = rows.filter((m) => m._stance === f.stance);
           if (f.location) rows = rows.filter((m) => m._location === f.location);
           if (f.focus) rows = rows.filter((m) => m._focus === f.focus);
           if (f.origin) rows = rows.filter((m) => m.origin === f.origin);
@@ -3202,6 +3297,22 @@ if (require.main === module)
               await runBlockFocus(bt, bname, vp, theme);
             }
         }
+        // Brief 5 (ruling 279): the three screens at every viewport and both themes, then the
+        // state proofs on the two representative layouts.
+        if (process.env.SPECIAL.includes("onboarding")) {
+          const { runOnboardingLayout, runOnboardingFlows } = require("./onboarding.cjs");
+          for (const vp of process.env.ONLY ? [JSON.parse(process.env.ONLY)] : VIEWPORTS)
+            for (const theme of process.env.THEME ? [process.env.THEME] : THEMES)
+              await runOnboardingLayout(bt, bname, vp, theme);
+          for (const vp of process.env.ONLY
+            ? [JSON.parse(process.env.ONLY)]
+            : [
+                [390, 844],
+                [1280, 800],
+              ])
+            for (const theme of process.env.THEME ? [process.env.THEME] : THEMES)
+              await runOnboardingFlows(bt, bname, vp, theme);
+        }
         if (process.env.SPECIAL.includes("connect")) {
           const { runConnect } = require("./connect.cjs");
           for (const vp of process.env.ONLY ? [JSON.parse(process.env.ONLY)] : VIEWPORTS)
@@ -3284,6 +3395,16 @@ if (require.main === module)
           await runBlockFlow(bt, bname, vp, theme);
           await runBlockFocus(bt, bname, vp, theme);
         }
+      // Brief 5 (ruling 279): the three onboarding screens everywhere, the state flows on the
+      // two representative layouts.
+      const { runOnboardingLayout, runOnboardingFlows } = require("./onboarding.cjs");
+      for (const vp of VIEWPORTS)
+        for (const theme of THEMES) await runOnboardingLayout(bt, bname, vp, theme);
+      for (const vp of [
+        [390, 844],
+        [1280, 800],
+      ])
+        for (const theme of THEMES) await runOnboardingFlows(bt, bname, vp, theme);
     }
     finish({ full: true, engines: engines.map(([n]) => n) });
   })().catch((e) => {

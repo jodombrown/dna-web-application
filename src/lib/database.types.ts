@@ -790,14 +790,14 @@ export type Database = {
           },
         ];
       };
-      member_segment_details: {
+      member_stance_details: {
         Row: {
           base: string | null;
           member_id: string;
           needs: string | null;
           offer: string | null;
           return_timeline: Database["public"]["Enums"]["return_timeline"] | null;
-          segment: Database["public"]["Enums"]["member_segment"];
+          stance: Database["public"]["Enums"]["stance"];
           support: string | null;
           updated_at: string;
         };
@@ -807,7 +807,7 @@ export type Database = {
           needs?: string | null;
           offer?: string | null;
           return_timeline?: Database["public"]["Enums"]["return_timeline"] | null;
-          segment: Database["public"]["Enums"]["member_segment"];
+          stance: Database["public"]["Enums"]["stance"];
           support?: string | null;
           updated_at?: string;
         };
@@ -817,13 +817,13 @@ export type Database = {
           needs?: string | null;
           offer?: string | null;
           return_timeline?: Database["public"]["Enums"]["return_timeline"] | null;
-          segment?: Database["public"]["Enums"]["member_segment"];
+          stance?: Database["public"]["Enums"]["stance"];
           support?: string | null;
           updated_at?: string;
         };
         Relationships: [
           {
-            foreignKeyName: "member_segment_details_member_id_fkey";
+            foreignKeyName: "member_stance_details_member_id_fkey";
             columns: ["member_id"];
             isOneToOne: false;
             referencedRelation: "members";
@@ -831,21 +831,21 @@ export type Database = {
           },
         ];
       };
-      member_segments: {
+      member_stances: {
         Row: {
           label: string;
           position: number;
-          segment: Database["public"]["Enums"]["member_segment"];
+          stance: Database["public"]["Enums"]["stance"];
         };
         Insert: {
           label: string;
           position: number;
-          segment: Database["public"]["Enums"]["member_segment"];
+          stance: Database["public"]["Enums"]["stance"];
         };
         Update: {
           label?: string;
           position?: number;
-          segment?: Database["public"]["Enums"]["member_segment"];
+          stance?: Database["public"]["Enums"]["stance"];
         };
         Relationships: [];
       };
@@ -923,7 +923,11 @@ export type Database = {
           pattern: Database["public"]["Enums"]["masthead_pattern"];
           profile_private: boolean;
           profile_shared: boolean;
-          segment: Database["public"]["Enums"]["member_segment"] | null;
+          stance: Database["public"]["Enums"]["stance"];
+          stance_declared_at: string | null;
+          onboarded_at: string | null;
+          who_completed_at: string | null;
+          username_changes: number;
           updated_at: string;
         };
         Insert: {
@@ -943,7 +947,11 @@ export type Database = {
           pattern?: Database["public"]["Enums"]["masthead_pattern"];
           profile_private?: boolean;
           profile_shared?: boolean;
-          segment?: Database["public"]["Enums"]["member_segment"] | null;
+          stance?: Database["public"]["Enums"]["stance"];
+          stance_declared_at?: string | null;
+          onboarded_at?: string | null;
+          who_completed_at?: string | null;
+          username_changes?: number;
           updated_at?: string;
         };
         Update: {
@@ -963,7 +971,11 @@ export type Database = {
           pattern?: Database["public"]["Enums"]["masthead_pattern"];
           profile_private?: boolean;
           profile_shared?: boolean;
-          segment?: Database["public"]["Enums"]["member_segment"] | null;
+          stance?: Database["public"]["Enums"]["stance"];
+          stance_declared_at?: string | null;
+          onboarded_at?: string | null;
+          who_completed_at?: string | null;
+          username_changes?: number;
           updated_at?: string;
         };
         Relationships: [
@@ -1625,6 +1637,16 @@ export type Database = {
         }[];
       };
       dismiss_suggestion: { Args: { p_target: string }; Returns: undefined };
+      onboard_relationship: {
+        Args: { p_stance: Database["public"]["Enums"]["stance"] | null; p_touched: boolean };
+        Returns: Json;
+      };
+      onboard_where: { Args: { p_city: string; p_country: string }; Returns: Json };
+      onboard_who: {
+        Args: { p_avatar_path?: string | null; p_name: string; p_username?: string | null };
+        Returns: Json;
+      };
+      onboarding_state: { Args: never; Returns: Json };
       profile_view: {
         Args: { p_as_public?: boolean; p_handle?: string };
         Returns: Json;
@@ -1670,13 +1692,13 @@ export type Database = {
         "First generation" | "Second generation" | "Third generation or later" | "Continental";
       link_kind: "website" | "linkedin" | "x" | "instagram";
       masthead_pattern: "kente" | "adinkra" | "mudcloth";
-      member_segment: "returnee" | "anchor" | "ally" | "exploring";
+      stance: "returnee" | "kin" | "anchor" | "ally" | "exploring";
       notification_kind:
         "connection_accepted" | "attestation_received" | "space_role_approved" | "event_reminder";
       post_status: "draft" | "published";
       profile_section:
         | "about"
-        | "segment"
+        | "stance"
         | "origin"
         | "where"
         | "work"
@@ -1846,7 +1868,7 @@ export const Constants = {
       ],
       link_kind: ["website", "linkedin", "x", "instagram"],
       masthead_pattern: ["kente", "adinkra", "mudcloth"],
-      member_segment: ["returnee", "anchor", "ally", "exploring"],
+      stance: ["returnee", "kin", "anchor", "ally", "exploring"],
       notification_kind: [
         "connection_accepted",
         "attestation_received",
@@ -1856,7 +1878,7 @@ export const Constants = {
       post_status: ["draft", "published"],
       profile_section: [
         "about",
-        "segment",
+        "stance",
         "origin",
         "where",
         "work",

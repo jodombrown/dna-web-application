@@ -111,7 +111,7 @@ async function get(url, headers = {}) {
       "member_origin?member_id=eq." + UNSHARED_ID + "&select=*",
       "member_intent?member_id=eq." + UNSHARED_ID + "&select=*",
       "member_links?member_id=eq." + UNSHARED_ID + "&select=*",
-      "member_segment_details?member_id=eq." + UNSHARED_ID + "&select=*",
+      "member_stance_details?member_id=eq." + UNSHARED_ID + "&select=*",
       "member_focus_areas?member_id=eq." + UNSHARED_ID + "&select=*",
       "member_skills?member_id=eq." + UNSHARED_ID + "&select=*",
       "member_follows?member_id=eq." + UNSHARED_ID + "&select=*",
@@ -142,10 +142,10 @@ async function get(url, headers = {}) {
     );
     // The shared profile: core row visible, connections-only and anchored tables still zero rows.
     // Anon's grant on members is column-limited. Ruling 212 narrowed it to the identity columns:
-    // origin_country, current_place, current_country, local_tz and segment are section-gated on
+    // origin_country, current_place, current_country, local_tz and stance are section-gated on
     // every path and are read through profile_view, which gates them, or not at all (F2a).
     const CORE_COLS = "id,handle,name,headline,avatar_path,cover_path,cover_focus,pattern";
-    const GATED_COLS = "origin_country,current_place,current_country,local_tz,segment";
+    const GATED_COLS = "origin_country,current_place,current_country,local_tz,stance";
     const core = await rest("members?handle=eq." + SHARED + "&select=" + CORE_COLS);
     const switches = await rest(
       "members?handle=eq." + SHARED + "&select=profile_private,profile_shared",
@@ -291,8 +291,8 @@ async function get(url, headers = {}) {
       "current_place",
       "current_country",
       "local_tz",
-      "segment",
-      "segment_label",
+      "stance",
+      "stance_label",
     ];
 
     const signIn = async (email, password) => {
@@ -410,10 +410,10 @@ async function get(url, headers = {}) {
         }
 
         const canFixture = !!ownerId && !!ownerHandle && relState !== "connected";
-        // ARM 2 (F2a, F2b, F5, gates IB-2 and IB-5). Origin, Where and Segment set to My
+        // ARM 2 (F2a, F2b, F5, gates IB-2 and IB-5). Origin, Where and Stance set to My
         // connections on a profile the viewer is not connected to, so the section audience and the
         // core row disagree. Omit, never blank: the assertion is that the key is absent.
-        const SECTIONS = ["origin", "where", "segment"];
+        const SECTIONS = ["origin", "where", "stance"];
         let prior = new Map();
         if (canFixture) {
           const priorVis = await memberRest(
@@ -435,7 +435,7 @@ async function get(url, headers = {}) {
           const sharedOn = await saveSection(ownerToken, "switches", { shared: true });
           if (sharedOn.status >= 300) fixtureSet = false;
           record(
-            "F2: the fixture sets Origin, Where and Segment to connections and shares the profile",
+            "F2: the fixture sets Origin, Where and Stance to connections and shares the profile",
             fixtureSet,
           );
 
@@ -447,7 +447,7 @@ async function get(url, headers = {}) {
           const gatedView = await memberRpc(memberToken, "profile_view", { p_handle: ownerHandle });
           const gatedMember = (gatedView.body && gatedView.body.member) || {};
           record(
-            "F2b: profile_view.member carries no origin, place, time zone or segment for a stranger",
+            "F2b: profile_view.member carries no origin, place, time zone or stance for a stranger",
             gatedView.status === 200 && GATED_KEYS.every((k) => !(k in gatedMember)),
             "keys " + Object.keys(gatedMember).join(","),
           );
@@ -458,11 +458,11 @@ async function get(url, headers = {}) {
           );
           const gatedCard = await cardOf(memberToken, ownerHandle);
           record(
-            "F2b: the Connect card carries no place, origin or segment label",
+            "F2b: the Connect card carries no place, origin or stance label",
             !!gatedCard &&
               !("place" in gatedCard) &&
               !("origin" in gatedCard) &&
-              !("segment_label" in gatedCard),
+              !("stance_label" in gatedCard),
             gatedCard ? Object.keys(gatedCard).join(",") : "no card for " + ownerHandle,
           );
           record(
@@ -768,6 +768,72 @@ async function get(url, headers = {}) {
           // are deliberately unconnected, so this arm has nothing to restore and leaves the graph
           // unchanged. Pointing it at a connected pair would not.
         }
+
+        // -------------------------------------------------------------------------------------
+        // Brief 5 (Done Means 4, 5 and 8). Both test accounts completed onboarding once through
+        // the real surface (tests/onboard-test-accounts.cjs, run from its workflow): Owner Test
+        // touched a card, Member Test finished without touching. The live rows carry that
+        // difference, the gate is closed for both, and a second finish is refused and changes
+        // nothing. Read through onboarding_state(), the one read projection; the RPC is the one
+        // path that could set onboarded_at, so a refused second call is the proof it is set once.
+        // -------------------------------------------------------------------------------------
+        const ownerState = await memberRpc(ownerToken, "onboarding_state", {});
+        const memberState = await memberRpc(memberToken, "onboarding_state", {});
+        const os = ownerState.body && typeof ownerState.body === "object" ? ownerState.body : null;
+        const ms =
+          memberState.body && typeof memberState.body === "object" ? memberState.body : null;
+        record(
+          "B5: both test accounts have onboarded, so the gate holds neither (Done Means 8)",
+          !!os &&
+            !!ms &&
+            os.next === null &&
+            ms.next === null &&
+            !!os.onboarded_at &&
+            !!ms.onboarded_at,
+          "owner next=" +
+            (os ? String(os.next) : "no state") +
+            " member next=" +
+            (ms ? String(ms.next) : "no state"),
+        );
+        record(
+          "B5: Owner Test touched a card, so stance_declared_at is set (Done Means 4)",
+          !!os && os.relationship && os.relationship.declared === true,
+          os && os.relationship
+            ? "declared " + os.relationship.declared + " stance " + os.relationship.stance
+            : "no state",
+        );
+        record(
+          "B5: Member Test finished without touching, so stance_declared_at is null and the default stands (Done Means 4)",
+          !!ms &&
+            ms.relationship &&
+            ms.relationship.declared === false &&
+            ms.relationship.stance === "exploring",
+          ms && ms.relationship
+            ? "declared " + ms.relationship.declared + " stance " + ms.relationship.stance
+            : "no state",
+        );
+        const before = os ? os.onboarded_at : null;
+        const again = await memberRpc(ownerToken, "onboard_relationship", {
+          p_stance: "kin",
+          p_touched: true,
+        });
+        const after = await memberRpc(ownerToken, "onboarding_state", {});
+        const as = after.body && typeof after.body === "object" ? after.body : null;
+        record(
+          "B5: a second onboard_relationship is refused and onboarded_at does not change (Done Means 5)",
+          again.status >= 400 &&
+            /already complete/.test(JSON.stringify(again.body || "")) &&
+            !!as &&
+            as.onboarded_at === before &&
+            !!os &&
+            as.relationship.stance === os.relationship.stance,
+          "status " +
+            again.status +
+            " onboarded_at " +
+            (as ? as.onboarded_at : "?") +
+            " was " +
+            before,
+        );
       }
     }
   }

@@ -286,7 +286,7 @@ async function runConnect(browserType, bname, vp, theme) {
 
     // Filters change Members only (ruling 173) and live in the URL (ruling 84).
     if (expanded) {
-      await page.locator('select[data-filter="segment"]').selectOption("returnee");
+      await page.locator('select[data-filter="stance"]').selectOption("returnee");
     } else {
       await tap(page, '[data-testid="open-filters"]');
       await page.waitForSelector('[role="dialog"][aria-label="Filters"]');
@@ -294,16 +294,16 @@ async function runConnect(browserType, bname, vp, theme) {
         tag + ": filters sheet has no Corridor control",
         (await page.locator('[role="dialog"] select[data-filter="corridor"]').count()) === 0,
       );
-      await page.locator('[role="dialog"] select[data-filter="segment"]').selectOption("returnee");
+      await page.locator('[role="dialog"] select[data-filter="stance"]').selectOption("returnee");
       await tap(page, '[data-testid="show-members"]');
       await page.waitForTimeout(400);
     }
-    await page.waitForFunction(() => location.search.includes("segment=returnee"), null, {
+    await page.waitForFunction(() => location.search.includes("stance=returnee"), null, {
       timeout: 10000,
     });
     await page.waitForTimeout(500);
     record(
-      tag + ": segment filter narrows Members",
+      tag + ": stance filter narrows Members",
       (await cards.count()) === 2,
       String(await cards.count()),
     );
@@ -314,7 +314,7 @@ async function runConnect(browserType, bname, vp, theme) {
     await tap(page, await lensTab(page, "Suggested"));
     await page.waitForFunction(
       () =>
-        location.search.includes("lens=suggested") && location.search.includes("segment=returnee"),
+        location.search.includes("lens=suggested") && location.search.includes("stance=returnee"),
       null,
       { timeout: 10000 },
     );
@@ -524,7 +524,7 @@ async function runConnect(browserType, bname, vp, theme) {
       tag + ": Members empty state",
       (await e2.page.getByText("Nobody here yet.").count()) === 1,
     );
-    await openConnect(e2.page, "?segment=ally");
+    await openConnect(e2.page, "?stance=ally");
     record(
       tag + ": filtered empty offers Clear filters (ruling 164)",
       (await e2.page.getByText("Nobody matches these filters.").count()) === 1 &&

@@ -37,7 +37,7 @@ export type MemberCardMember = {
   avatar?: string | undefined;
   identified?: boolean | undefined;
   headline?: string | undefined;
-  segmentLabel?: string | undefined;
+  stanceLabel?: string | undefined;
   place?: string | undefined;
   origin?: string | undefined;
   heritage?: string | undefined;
@@ -296,10 +296,10 @@ export function MemberCard({
         }}
       >
         <span style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-          {m.segmentLabel && (
-            <span style={{ color: "var(--ink-2)", fontWeight: 500 }}>{m.segmentLabel}</span>
+          {m.stanceLabel && (
+            <span style={{ color: "var(--ink-2)", fontWeight: 500 }}>{m.stanceLabel}</span>
           )}
-          {m.segmentLabel && originLine && <span aria-hidden="true">·</span>}
+          {m.stanceLabel && originLine && <span aria-hidden="true">·</span>}
           {originLine && <span>{originLine}</span>}
         </span>
         {m.place && (

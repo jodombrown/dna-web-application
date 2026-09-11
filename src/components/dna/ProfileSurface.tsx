@@ -7,7 +7,7 @@
 //
 // Brief 4A adds the block control to the Visitor action row and nothing else: one overflow item and
 // one confirm sheet, in ProfileBlockControl. Ruling 275, under 212: the masthead carries no origin,
-// no current place, no segment label and no local time line, on any view and for any viewer, so
+// no current place, no stance label and no local time line, on any view and for any viewer, so
 // ProfileHeader no longer takes those props and nothing here composes them.
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
@@ -37,7 +37,7 @@ import { PatternPicker } from "@/components/strand/PatternPicker";
 import { ProfileHeader, type MastheadPattern } from "@/components/strand/ProfileHeader";
 import { RailWidget } from "@/components/strand/RailWidget";
 import { SectionCard } from "@/components/strand/SectionCard";
-import { SegmentBlock, type Segment, type SegmentData } from "@/components/strand/SegmentBlock";
+import { SegmentBlock, type Stance, type SegmentData } from "@/components/strand/SegmentBlock";
 import { Select } from "@/components/strand/Select";
 import { Sheet } from "@/components/strand/Sheet";
 import { Switch } from "@/components/strand/Switch";
@@ -78,7 +78,7 @@ const RELEASE_PX = 24;
 const EDITABLE = [
   "core",
   "about",
-  "segment",
+  "stance",
   "origin",
   "where",
   "work",
@@ -88,7 +88,7 @@ const EDITABLE = [
   "links",
 ] as const;
 type EditableId = (typeof EDITABLE)[number];
-type FieldId = Exclude<EditableId, "core" | "segment">;
+type FieldId = Exclude<EditableId, "core" | "stance">;
 
 type FieldSpec = {
   k: string;
@@ -110,10 +110,10 @@ type SectionSpec = {
 };
 
 type Draft = Record<string, string | string[] | undefined>;
-type SegmentDraft = { segment: Segment; variants: Partial<Record<Segment, SegmentFields>> };
+type SegmentDraft = { stance: Stance; variants: Partial<Record<Stance, SegmentFields>> };
 type Drafts = Partial<Record<FieldId, Draft>> & {
   core?: { name: string; headline: string };
-  segment?: SegmentDraft;
+  stance?: SegmentDraft;
 };
 
 const ACT: Record<ActivityC, [string, string, string]> = {
@@ -129,7 +129,7 @@ const AUD_LABEL: Record<Audience, string> = {
 };
 const TITLES: Record<SectionKey, string> = {
   about: "About",
-  segment: "Segment",
+  stance: "Segment",
   origin: "Origin and heritage",
   where: "Where I am",
   work: "What I work on",
@@ -336,10 +336,10 @@ export function ProfileSurface({ handle, edit, asPublic }: ProfileSurfaceProps) 
       const s = profile.sections;
       if (id === "core")
         return { name: profile.member.name, headline: profile.member.headline ?? "" };
-      if (id === "segment")
+      if (id === "stance")
         return {
-          segment: s.segment?.segment ?? profile.member.segment ?? "returnee",
-          variants: { ...(s.segment?.variants ?? {}) },
+          stance: s.stance?.stance ?? profile.member.stance ?? "returnee",
+          variants: { ...(s.stance?.variants ?? {}) },
         };
       const spec = sectionSpecs.find((x) => x.id === id);
       const src = (s[id] ?? {}) as Record<string, string | string[] | undefined>;
@@ -430,14 +430,14 @@ export function ProfileSurface({ handle, edit, asPublic }: ProfileSurfaceProps) 
       saveMut.mutate({ id, section: "core", payload: { name: c.name, headline: c.headline } });
       return;
     }
-    if (id === "segment") {
+    if (id === "stance") {
       const sd = d as SegmentDraft;
-      const f = sd.variants[sd.segment] ?? {};
+      const f = sd.variants[sd.stance] ?? {};
       saveMut.mutate({
         id,
-        section: "segment",
+        section: "stance",
         payload: {
-          segment: sd.segment,
+          stance: sd.stance,
           timeline: f.timeline ?? null,
           needs: f.needs ?? null,
           base: f.base ?? null,
@@ -624,8 +624,8 @@ export function ProfileSurface({ handle, edit, asPublic }: ProfileSurfaceProps) 
                 }}
               >
                 <span style={{ fontWeight: 500 }}>
-                  {k === "segment" && profile.member.segment_label
-                    ? profile.member.segment_label
+                  {k === "stance" && profile.member.stance_label
+                    ? profile.member.stance_label
                     : TITLES[k]}
                 </span>
                 <span style={{ color: "var(--ink-3)", fontSize: 13 }}>
@@ -1499,63 +1499,62 @@ function ProfileBody(p: BodyProps) {
   const about = p.sectionSpecs.find((x) => x.id === "about");
   if (about) pushField(about);
 
-  // Segment block (ruling 122).
+  // Stance block (ruling 122; the axis is stance since Brief 5, ruling 300).
   {
-    const segEditing = !!drafts.segment;
-    const sd = drafts.segment;
-    const segId: Segment | undefined = segEditing ? sd?.segment : (s.segment?.segment ?? m.segment);
+    const segEditing = !!drafts.stance;
+    const sd = drafts.stance;
+    const segId: Stance | undefined = segEditing ? sd?.stance : (s.stance?.stance ?? m.stance);
     const fields: SegmentFields = segEditing
-      ? (sd?.variants[sd.segment] ?? {})
-      : (s.segment?.fields ?? {});
-    // Ruling 187: the heading follows the segment being edited, so it reads the vocabulary rather
-    // than member.segment_label, which is the saved one. Both resolve to public.member_segments.
+      ? (sd?.variants[sd.stance] ?? {})
+      : (s.stance?.fields ?? {});
+    // Ruling 187: the heading follows the stance being edited, so it reads the vocabulary rather
+    // than member.stance_label, which is the saved one. Both resolve to public.member_stances.
     const segLabel = segId
-      ? (p.vocab?.segments?.find((o) => o.value === segId)?.label ??
-        (segId === m.segment ? (m.segment_label ?? null) : null))
+      ? (p.vocab?.stances?.find((o) => o.value === segId)?.label ??
+        (segId === m.stance ? (m.stance_label ?? null) : null))
       : null;
     const segEmpty = !Object.values(fields).some((v) => (Array.isArray(v) ? v.length : !!v));
-    const present = owner || (!!s.segment && !segEmpty);
+    const present = owner || (!!s.stance && !segEmpty);
     if (present) {
-      const data: SegmentData = { ...fields, segment: segId };
+      const data: SegmentData = { ...fields, stance: segId };
       cards.push(
         <SectionCard
-          key="segment"
-          testId="section-segment"
+          key="stance"
+          testId="section-stance"
           title={segLabel ?? "Segment"}
           owner={owner}
           editing={segEditing}
           keepVisibility={editMode}
-          onEdit={() => p.startEdit("segment")}
-          onSave={() => p.saveEdit("segment")}
-          onCancel={() => p.cancelEdit("segment")}
-          saving={!!p.saving.segment}
-          visibility={vis.segment ?? "everyone"}
-          onVisibility={owner ? (v) => p.setVisibility("segment", v) : undefined}
+          onEdit={() => p.startEdit("stance")}
+          onSave={() => p.saveEdit("stance")}
+          onCancel={() => p.cancelEdit("stance")}
+          saving={!!p.saving.stance}
+          visibility={vis.stance ?? "everyone"}
+          onVisibility={owner ? (v) => p.setVisibility("stance", v) : undefined}
           empty={
             segEmpty && !segEditing
               ? "Say where you stand: returning, anchored on the continent, an ally, or still exploring."
               : null
           }
           emptyAct={segEmpty && !segEditing ? "Choose your segment" : null}
-          onEmptyAct={() => p.startEdit("segment")}
+          onEmptyAct={() => p.startEdit("stance")}
         >
           <SegmentBlock
-            segment={segId ?? "exploring"}
+            stance={segId ?? "exploring"}
             data={data}
             editing={segEditing}
             interestOptions={p.vocab?.interests ?? []}
             timelineOptions={p.vocab?.timeline}
-            segmentOptions={p.vocab?.segments}
+            stanceOptions={p.vocab?.stances}
             onChange={(d) =>
               p.setDrafts((st) => {
-                const prev = st.segment ?? { segment: segId ?? "returnee", variants: {} };
-                const nextSeg = (d.segment ?? prev.segment) as Segment;
-                if (nextSeg !== prev.segment)
-                  return { ...st, segment: { ...prev, segment: nextSeg } };
-                const { segment: _seg, ...rest } = d;
+                const prev = st.stance ?? { stance: segId ?? "returnee", variants: {} };
+                const nextSeg = (d.stance ?? prev.stance) as Stance;
+                if (nextSeg !== prev.stance) return { ...st, stance: { ...prev, stance: nextSeg } };
+                const { stance: _seg, ...rest } = d;
                 return {
                   ...st,
-                  segment: {
+                  stance: {
                     ...prev,
                     variants: {
                       ...prev.variants,

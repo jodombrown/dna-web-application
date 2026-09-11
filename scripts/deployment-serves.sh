@@ -38,6 +38,10 @@ serves /connect /dev/null
 serves /reset
 serves /reset/new
 serves /password
+# Brief 5's routes, opened by tests/onboarding.cjs.
+serves /welcome
+serves /where
+serves /relationship
 serves /strand/adinkra/mate-masie.svg
 # Ruling 184's asset contract: every path in the table serves, so the redesign stays a file
 # overwrite. favicon.ico is absent by the founder's 9 September edit and is deliberately not here.

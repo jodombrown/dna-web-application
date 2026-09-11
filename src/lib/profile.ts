@@ -16,13 +16,13 @@ import type { AttestationItem } from "@/components/strand/AttestationRail";
 import type { Badge } from "@/components/strand/BadgeRow";
 import type { C } from "@/components/strand/cmeta";
 import type { MastheadPattern } from "@/components/strand/ProfileHeader";
-import type { Segment } from "@/components/strand/SegmentBlock";
+import type { Stance } from "@/components/strand/SegmentBlock";
 import type { Json } from "./database.types";
 import { functionsUrl, getSupabase, SUPABASE_PUBLISHABLE_KEY } from "./supabase";
 
 export type SectionKey =
   | "about"
-  | "segment"
+  | "stance"
   | "origin"
   | "where"
   | "work"
@@ -57,10 +57,10 @@ export type SegmentFields = {
 
 export type ProfileSections = {
   about?: { about?: string | undefined };
-  segment?: {
-    segment?: Segment | undefined;
+  stance?: {
+    stance?: Stance | undefined;
     fields: SegmentFields;
-    variants?: Partial<Record<Segment, SegmentFields>> | undefined;
+    variants?: Partial<Record<Stance, SegmentFields>> | undefined;
   };
   origin?: {
     origin_country?: string | undefined;
@@ -95,13 +95,13 @@ export type ProfileMember = {
   current_place?: string | undefined;
   current_country?: string | undefined;
   local_tz?: string | undefined;
-  segment?: Segment | undefined;
+  stance?: Stance | undefined;
   /**
-   * Ruling 187: the segment's display label, resolved by profile_view from public.member_segments,
+   * Ruling 187: the stance's display label, resolved by profile_view from public.member_stances,
    * the one label source. It rides on the member object so the Public (signed-out) view has it too,
    * where public.vocabularies is revoked from anon. The client keeps no map of its own.
    */
-  segment_label?: string | undefined;
+  stance_label?: string | undefined;
   pattern: MastheadPattern;
   tier: "account" | "identified" | "attested";
 };

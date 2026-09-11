@@ -5,7 +5,7 @@
 //
 // Named for the projection, not for a surface: Profile (Brief 3), the Composer (Brief 1) and the
 // Feed (Brief 2) all read this one path.
-import type { Segment } from "@/components/strand/SegmentBlock";
+import type { Stance } from "@/components/strand/SegmentBlock";
 import { getSupabase, type Supabase } from "./supabase";
 
 export type Vocabularies = {
@@ -19,8 +19,8 @@ export type Vocabularies = {
   countries: string[];
   /** Current location list (ruling 142): the world; countries is the African list. */
   world: string[];
-  /** Ruling 187: the segment vocabulary from public.member_segments, in its own position order. */
-  segments: { value: Segment; label: string }[];
+  /** Ruling 187: the stance vocabulary from public.member_stances, in its own position order. */
+  stances: { value: Stance; label: string }[];
   heritage: string[];
   pathway: string[];
   timeline: string[];

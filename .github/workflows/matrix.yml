@@ -18,7 +18,7 @@ on:
         required: false
         default: ""
       special:
-        description: Run flows only (publish, keyboard, silence, shell, targeted, profile, connect, vocab, block, auth)
+        description: Run flows only (publish, keyboard, silence, shell, targeted, profile, connect, vocab, block, auth, onboarding)
         required: false
         default: ""
       only:
@@ -41,9 +41,40 @@ on:
         description: Ruling 200; iterations of the owner-flow crash loop instead of the matrix. Empty runs the matrix.
         required: false
         default: ""
+      onboard:
+        description: Brief 5, Done Means 8; set to "1" to onboard the two ruling 218 test accounts through the deployed surface instead of running the matrix. Idempotent.
+        required: false
+        default: ""
 
 jobs:
+  # Brief 5, Done Means 8: the two ruling 218 test accounts complete onboarding once, through the
+  # real surface on the deployment, with the same secrets the live arms use. Lives in this workflow
+  # rather than its own because a workflow file is dispatchable only once it is on main.
+  onboard:
+    if: ${{ inputs.onboard == '1' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      BASE: ${{ inputs.base_url || format('https://{0}.dna-web-application.pages.dev', github.ref_name) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: scripts/retry.sh 3 bun install --frozen-lockfile
+      - name: The deployment serves every path the suites open (ruling 217)
+        run: scripts/deployment-serves.sh
+      - name: Install Chromium
+        run: scripts/retry.sh 3 bunx playwright install --with-deps chromium
+      - name: Onboard Owner Test and Member Test through the surface
+        env:
+          OWNER_EMAIL: ${{ secrets.OWNER_EMAIL }}
+          OWNER_PASSWORD: ${{ secrets.OWNER_PASSWORD }}
+          MEMBER_EMAIL: ${{ secrets.MEMBER_EMAIL }}
+          MEMBER_PASSWORD: ${{ secrets.MEMBER_PASSWORD }}
+        run: node tests/onboard-test-accounts.cjs
   matrix:
+    if: ${{ inputs.onboard == '' }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:

@@ -1,12 +1,14 @@
 // Ported from profile/strand-patch/Profile.jsx (B3-Profile-v3, ruling 122). Behavior unchanged.
-// One component, four variants; the host keeps the other variants' data when the segment changes.
+// One component, five variants; the host keeps the other variants' data when the stance changes.
 import type { CSSProperties } from "react";
 import { Chip } from "./Chip";
 import { Input } from "./Input";
 import { Select } from "./Select";
 import { VocabularyPicker } from "./VocabularyPicker";
 
-export type Segment = "returnee" | "anchor" | "ally" | "exploring";
+// Brief 5 (ruling 300): the axis is stance, five values in the register's order. kin carries no
+// per-variant fields; a Kin member's block renders their label alone.
+export type Stance = "returnee" | "kin" | "anchor" | "ally" | "exploring";
 
 export type SegmentField =
   | { k: "timeline"; label: string; kind: "select" }
@@ -14,19 +16,20 @@ export type SegmentField =
   | { k: "base"; label: string; kind: "text"; short: true }
   | { k: "interests"; label: string; kind: "vocab" };
 
-// Ruling 187: the labels are not here. public.member_segments is the one label source, reaching
-// this component as vocabularies().segments (the chooser) and profile_view's member.segment_label
+// Ruling 187: the labels are not here. public.member_stances is the one label source, reaching
+// this component as vocabularies().stances (the chooser) and profile_view's member.stance_label
 // (the heading). Ruling 194: nor are the return_timeline values, which come in as timelineOptions
 // from the same projection; the literal that used to sit beside them as a fallback is gone, and a
 // vocabulary that does not load renders an empty control rather than a stale one. SEG carries only
 // the per-variant field sets, which are structure, not vocabulary.
-export const SEG: Record<Segment, { fields: SegmentField[] }> = {
+export const SEG: Record<Stance, { fields: SegmentField[] }> = {
   returnee: {
     fields: [
       { k: "timeline", label: "Return timeline", kind: "select" },
       { k: "needs", label: "What I need on the ground", kind: "text" },
     ],
   },
+  kin: { fields: [] },
   anchor: {
     fields: [
       { k: "base", label: "Continental base", kind: "text", short: true },
@@ -40,7 +43,7 @@ export const SEG: Record<Segment, { fields: SegmentField[] }> = {
 };
 
 export type SegmentData = {
-  segment?: Segment | undefined;
+  stance?: Stance | undefined;
   timeline?: string | undefined;
   needs?: string | undefined;
   base?: string | undefined;
@@ -50,28 +53,28 @@ export type SegmentData = {
 };
 
 export type SegmentBlockProps = {
-  segment?: Segment;
+  stance?: Stance;
   data?: SegmentData;
   editing?: boolean | undefined;
   onChange?: ((data: SegmentData) => void) | undefined;
   interestOptions?: string[];
   timelineOptions?: string[] | undefined;
-  /** Ruling 187: the chooser's values and labels, from vocabularies().segments. */
-  segmentOptions?: { value: Segment; label: string }[] | undefined;
+  /** Ruling 187: the chooser's values and labels, from vocabularies().stances. */
+  stanceOptions?: { value: Stance; label: string }[] | undefined;
   style?: CSSProperties | undefined;
 };
 
 export function SegmentBlock({
-  segment = "exploring",
+  stance = "exploring",
   data = {},
   editing,
   onChange,
   interestOptions = [],
   timelineOptions,
-  segmentOptions = [],
+  stanceOptions = [],
   style,
 }: SegmentBlockProps) {
-  const def = SEG[segment] || SEG.exploring;
+  const def = SEG[stance] || SEG.exploring;
   const set = (k: keyof SegmentData, v: string | string[]) =>
     onChange && onChange({ ...data, [k]: v });
   return (
@@ -87,9 +90,9 @@ export function SegmentBlock({
       {editing && (
         <Select
           label="Segment"
-          value={segment}
-          options={segmentOptions}
-          onChange={(e) => onChange && onChange({ ...data, segment: e.target.value as Segment })}
+          value={stance}
+          options={stanceOptions}
+          onChange={(e) => onChange && onChange({ ...data, stance: e.target.value as Stance })}
         />
       )}
       {def.fields.map((f) => {
