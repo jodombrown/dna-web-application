@@ -2,7 +2,7 @@
 
 Re-extracted from `connect/B4-Connect-v4.dc.html` (v3 approved at ruling 172; v4 is the founder-directed card cycle, rulings 175 to 181, ratified in Chat). Card, skeleton and tile source: `connect/strand-patch/Connect.jsx` (ruling 169), ported to `src/components/strand/MemberCard.tsx` and `PlaceTile.tsx` (section 14). Rulings governing this surface: 46 to 48, 59, 64, 65, 67, 79, 83, 84, 86, 97, 102, 108, 111, 113, 114, 117 to 121, 141, 153 to 182. The four ruling 182 corrections are applied in this copy. Section 12 names every place the prototype and the component source differ; section 14 names every place the build differs from this text, with the ruling or reason.
 
-Schema, RLS, the Edge Function and the `second_degree` materialisation are in `supabase/migrations/20260908200000_b4_connect_tables.sql`, `20260908200100_b4_connect_rls.sql`, `20260908200200_b4_connect_rpcs.sql` and `supabase/functions/connect-suggest/`; the README's Brief 4 notes summarise them.
+Schema, RLS, the Edge Function and the `second_degree` materialisation are in `supabase/migrations/20260908233434_b4_connect_tables.sql`, `20260908233543_b4_connect_rls.sql`, `20260908233909_b4_connect_rpcs.sql` and `supabase/functions/connect-suggest/`; the README's Brief 4 notes summarise them.
 
 Copy rules throughout: sentence case, no em dashes, no emoji, no exclamation marks. Tokens by name only.
 

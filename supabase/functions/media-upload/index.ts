@@ -282,6 +282,18 @@ Deno.serve(async (req: Request) => {
   if (userErr || !userData.user) return json({ error: "unauthorized" }, 401);
   const uid = userData.user.id;
 
+  // Ruling 442 (F23): a ceiling per member on uploads, held in the database
+  // (public.rate_limit_check, under the member's own JWT). The ceiling never reaches the client;
+  // the refusal is a word the surfaces already turn into their failed alert.
+  const { data: allowed, error: rateErr } = await userClient.rpc("rate_limit_check", {
+    p_action: "media_upload",
+  });
+  if (rateErr) {
+    console.log(JSON.stringify({ event: "rate_limit_unavailable", message: rateErr.message }));
+    return json({ error: "rate_limit_unavailable" }, 503);
+  }
+  if (allowed !== true) return json({ error: "rate_limited" }, 429);
+
   let form: FormData;
   try {
     form = await req.formData();

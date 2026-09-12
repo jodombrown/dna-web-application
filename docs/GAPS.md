@@ -34,7 +34,11 @@ What exists:
 - Block and unblock on Profile, from Brief 4A: one overflow item and one confirm sheet in two
   variants, on the signed-in Visitor view. The writes are a plain insert and delete on
   `member_blocks` under the blocker's own RLS, so the ruling 198 trigger carries every consequence
-  and there is no second place for the semantics to live.
+  and there is no second place for the semantics to live. Fix PR 02 (ruling 442) adds a second
+  trigger on the same insert, `on_member_block_rate_limit`, which bounds how many blocks one member
+  may write in an hour through `private.rate_limit`; the ceiling is internal and the refusal is
+  words. The insert stays a plain insert, and the live arms that prove it run as `live_arms` on
+  `LIVE_DB_URL` (ruling 382), never on a Management API token.
 
 What is still missing:
 
