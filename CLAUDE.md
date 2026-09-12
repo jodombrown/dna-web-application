@@ -49,6 +49,7 @@ Before you start, say in one line what you are about to do. Brief updates while 
 [absolute] One read projection and one write path per surface. Profile ships profile_view and save_profile_section; every surface after it follows the same shape. The legacy build had ten-plus duplicate profile-read functions.
 [absolute] The attestations table is chassis and already exists. Every engine writes to it; no engine creates its own attestation, endorsement, or trust table.
 [absolute] No numeric score, percentage, progress indicator, match score, trust score, or completion score is ever computed for display, in any surface, in any form.
+[absolute] Company email addresses come from `src/lib/contact.ts` or its Deno mirror `supabase/functions/_shared/contact.ts`, never a literal in a surface, an edge function, a document or a test; the DNA Email Directory in Notion is the source of truth for every address and where it is published; `noreply@` is retired and nothing sends from it; the app subdomain is never an email domain; every outbound sender carries Reply-To `support@` through the module's sender pairings (ruling 387, which supersedes ruling 385 in full).
 
 ## Doctrine that affects code
 Every post, thread, and notification carries a C tag or the system category; the column is NOT NULL.

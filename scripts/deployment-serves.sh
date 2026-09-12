@@ -51,6 +51,8 @@ serves /apple-touch-icon.png
 serves /icon-192.png
 serves /icon-512.png
 serves /manifest.webmanifest /tmp/manifest.json
+# Ruling 387: security.txt is served by the worker entry from the contact module, not from public/.
+serves /.well-known/security.txt /tmp/security.txt
 
 if [ "$failed" -ne 0 ]; then
   echo "::error::The deployment did not serve every path the suites open. Nothing was tested."
@@ -63,5 +65,6 @@ grep -q 'manifest.webmanifest' /tmp/sign-in.html || { echo "::error::/sign-in li
 grep -q '/icon-192.png' /tmp/manifest.json || { echo "::error::manifest names no 192 icon"; exit 1; }
 grep -q '/icon-512.png' /tmp/manifest.json || { echo "::error::manifest names no 512 icon"; exit 1; }
 ! grep -q 'mate-masie' /tmp/manifest.json || { echo "::error::manifest still names the Adinkra mark"; exit 1; }
+grep -q '^Contact: mailto:' /tmp/security.txt || { echo "::error::/.well-known/security.txt carries no Contact"; exit 1; }
 
 echo "The deployment serves every path the suites open."

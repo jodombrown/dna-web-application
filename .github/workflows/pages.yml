@@ -34,6 +34,9 @@ jobs:
       - run: scripts/retry.sh 3 bun install --frozen-lockfile
       - run: bun run lint
       - run: bunx tsc --noEmit -p tsconfig.json
+      # Ruling 387: the two contact modules agree, and no company email literal is anywhere else.
+      - name: Contact constants parity and the no-literal scan (ruling 387)
+        run: ARMS=parity,scan node tests/contact.cjs
       - run: bun run build
       - name: Cloudflare secrets missing
         if: ${{ env.CF_API_TOKEN == '' || env.CF_ACCOUNT_ID == '' }}
@@ -103,6 +106,10 @@ jobs:
       - run: scripts/retry.sh 3 bun install --frozen-lockfile
       - name: The deployment serves every path the suites open (ruling 217)
         run: scripts/deployment-serves.sh
+      # Ruling 387: security.txt is asserted on the deployment, never on the local source, so the
+      # arm proves the hosting path (text/plain, Contact, a future Expires).
+      - name: security.txt on the deployment (ruling 387)
+        run: ARMS=security node tests/contact.cjs
       # Ruling 218's arms are signed-in and need two seeded non-real accounts. Repository secrets
       # are not visible to a step unless the workflow passes them, so without this block the arms
       # skip and report unproven (ruling 228) however many secrets exist. A fork PR gets empty
