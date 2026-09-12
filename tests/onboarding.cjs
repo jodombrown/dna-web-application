@@ -17,8 +17,7 @@ const COPY = {
     heading: "Welcome to the Diaspora Network of Africa.",
     lead: "Your name, a username and a photo to begin. Where you are, and your relationship to the continent, come next.",
     nameHint: "As you'd like to be known here.",
-    usernameHint:
-      "We'll suggest one from your name. You can change it twice after this, so pick one you'll keep.",
+    usernameHint: "We'll suggest one from your name. Pick one you'll keep.",
     tooLarge: "That photo is too large. Choose a smaller one and try again.",
     failed: "We couldn't add that photo just now. Nothing else you entered is lost. Try again.",
     taken: "That username is taken. Choose another, or keep the one we suggest.",

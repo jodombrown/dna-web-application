@@ -18,7 +18,8 @@ import type { C } from "@/components/strand/cmeta";
 import type { MastheadPattern } from "@/components/strand/ProfileHeader";
 import type { Stance } from "@/components/strand/SegmentBlock";
 import type { Json } from "./database.types";
-import { functionsUrl, getSupabase, SUPABASE_PUBLISHABLE_KEY } from "./supabase";
+import { uploadImage, type ImageSlot, type ImageUpload } from "./media";
+import { getSupabase } from "./supabase";
 
 export type SectionKey =
   | "about"
@@ -201,31 +202,15 @@ function friendlyError(message: string): string {
   return "That did not save. Try again.";
 }
 
-/** The composer's media path (Tinify), aimed at the profile bucket: {member}/{slot}/{uuid}.{ext}. */
-export async function uploadProfileImage(
-  file: File,
-  slot: "avatar" | "cover",
-): Promise<string | null> {
-  const sb = getSupabase();
-  if (!sb) return null;
-  const { data } = await sb.auth.getSession();
-  const token = data.session?.access_token;
-  if (!token) return null;
-  const form = new FormData();
-  form.append("file", file);
-  form.append("slot", slot);
-  try {
-    const res = await fetch(functionsUrl("media-upload"), {
-      method: "POST",
-      headers: { Authorization: "Bearer " + token, apikey: SUPABASE_PUBLISHABLE_KEY },
-      body: form,
-    });
-    if (!res.ok) return null;
-    const out = (await res.json()) as { storage_path?: string };
-    return out.storage_path ?? null;
-  } catch {
-    return null;
-  }
+/**
+ * Ruling 424 (W30): the profile's avatar and cover go through the same client half of the pipeline
+ * as onboarding's photo (lib/media.ts uploadImage: conversion, mime acceptance, the thirty-second
+ * bound), then the section save records the path. media-upload stores every master at
+ * {member}/{mediaId}.{ext} and registers it in public.media; save_profile_section checks that
+ * registry, not a path shape (the ruling 374 shape that W30 turned out to be).
+ */
+export async function uploadProfileImage(file: File, slot: ImageSlot): Promise<ImageUpload> {
+  return uploadImage(file, slot);
 }
 
 // ---------------------------------------------------------------------------

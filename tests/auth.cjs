@@ -560,9 +560,9 @@ async function runAuthFlows(browserType, bname, [w, h], theme) {
       try {
         auth.signupExisting = existing;
         await page.goto(BASE + "/sign-in?join=1", { waitUntil: "domcontentloaded" });
-        await page.waitForSelector('input[autocomplete="name"]');
+        // Ruling 432: sign-up asks for the address and a password only.
+        await page.waitForSelector('input[type="email"]');
         await hydrated(page);
-        await page.fill('input[autocomplete="name"]', "Amara Osei");
         await page.fill('input[type="email"]', "same@test.invalid");
         await page.fill('input[type="password"]', "correct horse battery");
         await page.click('button[type="submit"]');
@@ -587,9 +587,8 @@ async function runAuthFlows(browserType, bname, [w, h], theme) {
     try {
       auth.signupWeak = true;
       await page.goto(BASE + "/sign-in?join=1", { waitUntil: "domcontentloaded" });
-      await page.waitForSelector('input[autocomplete="name"]');
+      await page.waitForSelector('input[type="email"]');
       await hydrated(page);
-      await page.fill('input[autocomplete="name"]', "Amara Osei");
       await page.fill('input[type="email"]', "same@test.invalid");
       await page.fill('input[type="password"]', "password123456");
       await page.click('button[type="submit"]');

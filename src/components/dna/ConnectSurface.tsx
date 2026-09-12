@@ -37,6 +37,7 @@ import { Select } from "@/components/strand/Select";
 import { Sheet } from "@/components/strand/Sheet";
 import { Toast } from "@/components/strand/Toast";
 import { toastStyle } from "@/components/dna/FeedSurface";
+import { IntroSheet } from "@/components/dna/IntroSheet";
 import type { Member } from "@/lib/auth";
 import {
   CONNECT_LENSES,
@@ -64,7 +65,6 @@ import {
 import { setLeftRail, setRightRail, setSurfaceGround } from "@/lib/rail-store";
 import { useMode, useTier, useWide } from "@/lib/tier";
 
-const MESSAGE_MAX = 300;
 const TOAST_MS = 2400;
 const SWIPE_PX = 60;
 
@@ -773,8 +773,6 @@ export function ConnectSurface({ member, search }: { member: Member; search: Con
     );
   }
 
-  const first = intro ? firstName(intro.name) : "";
-  const left = MESSAGE_MAX - message.length;
   const sheetVariant = compact ? "sheet" : "drawer";
   const sheetHead = (title: string, extra: ReactNode, onClose: () => void) => (
     <div
@@ -845,77 +843,19 @@ export function ConnectSurface({ member, search }: { member: Member; search: Con
       </div>
       {body}
 
-      <Sheet
+      <IntroSheet
         open={!!intro}
+        member={
+          intro ? { name: intro.name, headline: intro.headline, avatarUrl: intro.avatarUrl } : null
+        }
+        message={message}
+        onMessage={setMessage}
         onClose={closeIntro}
-        variant={sheetVariant}
-        width="65%"
-        label={intro ? "Introduce yourself to " + intro.name : "Introduce yourself"}
-        style={compact ? { height: "80%" } : undefined}
-      >
-        {intro && (
-          <>
-            {sheetHead("Introduce yourself", null, closeIntro)}
-            <div
-              style={{
-                flex: 1,
-                overflowY: "auto",
-                padding: 20,
-                display: "flex",
-                flexDirection: "column",
-                gap: 16,
-              }}
-            >
-              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                <Avatar name={intro.name} src={intro.avatarUrl} size={48} />
-                <div style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
-                  <span
-                    style={{ fontFamily: "var(--font-display)", fontSize: 26, lineHeight: 1.15 }}
-                  >
-                    {intro.name}
-                  </span>
-                  {intro.headline && (
-                    <span style={{ fontSize: 15, color: "var(--ink-2)" }}>{intro.headline}</span>
-                  )}
-                </div>
-              </div>
-              <Input
-                multiline
-                rows={6}
-                label={"Your message to " + first}
-                maxLength={MESSAGE_MAX}
-                value={message}
-                onChange={(e) =>
-                  setMessage((e.target as HTMLTextAreaElement).value.slice(0, MESSAGE_MAX))
-                }
-                placeholder="Why you, why now. What you noticed on their profile, what you are working on, what you hope comes of it."
-                hint={left === 1 ? "1 character left" : left + " characters left"}
-                autoFocus
-                data-testid="intro-message"
-              />
-              <p style={{ margin: 0, fontSize: 13, lineHeight: 1.4, color: "var(--ink-3)" }}>
-                One message, sent once. It cannot be edited after sending. {first} decides in their
-                own time and you will hear when they accept.
-              </p>
-            </div>
-            {sheetFoot(
-              <>
-                <Button variant="ghost" onClick={closeIntro}>
-                  Cancel
-                </Button>
-                <Button
-                  c="connect"
-                  disabled={!message.trim() || sending}
-                  onClick={() => void send()}
-                  data-testid="send-intro"
-                >
-                  Send introduction
-                </Button>
-              </>,
-            )}
-          </>
-        )}
-      </Sheet>
+        onSend={() => void send()}
+        sending={sending}
+        compact={compact}
+        messageRequired
+      />
 
       {!expanded && (
         <Sheet

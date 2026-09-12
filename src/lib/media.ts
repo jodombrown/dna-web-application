@@ -3,7 +3,7 @@
 // The avatar control is the first consumer; the composer and the profile cover adopt these two
 // functions next, so the conversion, the resize and the metadata strip live here once, not in each
 // surface.
-import { getSupabase } from "./supabase";
+import { functionsUrl, getSupabase, SUPABASE_PUBLISHABLE_KEY } from "./supabase";
 
 export type MediaBucket = "profile-media" | "post-media";
 export type ImageFormat = "image/jpeg" | "image/webp";
@@ -70,6 +70,77 @@ export async function normalizeImage(
 /** The extension the pipeline stores for a normalised master. */
 export function extensionFor(type: ImageFormat): "jpg" | "webp" {
   return type === "image/webp" ? "webp" : "jpg";
+}
+
+/** The bucket ceiling, applied to what actually leaves the device after normalisation. */
+export const IMAGE_MAX_BYTES = 10 * 1024 * 1024;
+
+/**
+ * Ruling 345: every upload is bounded in time. A stalled mobile connection resolves to the failed
+ * state rather than a control that never comes back.
+ */
+export const IMAGE_UPLOAD_TIMEOUT_MS = 30_000;
+
+/** What media-upload accepts once the client has normalised (or could not, and sent the original). */
+export const IMAGE_MIME_ACCEPTED = new Set(["image/jpeg", "image/png", "image/webp"]);
+
+export type ImageSlot = "avatar" | "cover";
+
+export type ImageUpload =
+  { ok: true; path: string; previewUrl: string } | { ok: false; reason: "too_large" | "failed" };
+
+/**
+ * Ruling 424 (W30) under 345 and 346: the one client half of the pipeline for every profile
+ * image. Onboarding's photo and the profile's avatar and cover all call this: convert and
+ * downscale on the device (normalizeImage), refuse a type the server would refuse, bound the
+ * request to IMAGE_UPLOAD_TIMEOUT_MS, and hand back the master's storage path from media-upload,
+ * the one write path. Too large and failed are told apart because each has its own alert.
+ */
+export async function uploadImage(file: File, slot: ImageSlot): Promise<ImageUpload> {
+  const sb = getSupabase();
+  if (!sb) return { ok: false, reason: "failed" };
+  const { data } = await sb.auth.getSession();
+  const token = data.session?.access_token;
+  if (!token) return { ok: false, reason: "failed" };
+
+  // Convert and downscale before upload; on a decode failure fall back to the original bytes, which
+  // the server's own strip and validation still stand behind, but only when it is a type the server
+  // accepts at all (a HEIC no browser could decode is refused here, in words, not by a 415 later).
+  const normalized = await normalizeImage(file);
+  const upload = normalized
+    ? new File([normalized.blob], slot + "." + extensionFor(normalized.type), {
+        type: normalized.type,
+      })
+    : file;
+  if (!IMAGE_MIME_ACCEPTED.has(upload.type)) return { ok: false, reason: "failed" };
+  if (upload.size > IMAGE_MAX_BYTES) return { ok: false, reason: "too_large" };
+
+  const form = new FormData();
+  form.append("file", upload);
+  form.append("slot", slot);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), IMAGE_UPLOAD_TIMEOUT_MS);
+  try {
+    const res = await fetch(functionsUrl("media-upload"), {
+      method: "POST",
+      headers: { Authorization: "Bearer " + token, apikey: SUPABASE_PUBLISHABLE_KEY },
+      body: form,
+      signal: controller.signal,
+    });
+    if (res.status === 413) return { ok: false, reason: "too_large" };
+    if (!res.ok) return { ok: false, reason: "failed" };
+    const out = (await res.json()) as { storage_path?: string; error?: string };
+    if (out.error === "too_large") return { ok: false, reason: "too_large" };
+    return out.storage_path
+      ? { ok: true, path: out.storage_path, previewUrl: URL.createObjectURL(upload) }
+      : { ok: false, reason: "failed" };
+  } catch {
+    // A timeout abort, a network drop, a JSON parse failure: every rejection surfaces, never a
+    // control left mid-upload (ruling 345).
+    return { ok: false, reason: "failed" };
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 export type Transform = {

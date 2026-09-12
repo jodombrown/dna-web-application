@@ -46,6 +46,11 @@ export const COPY = {
   breached:
     "This password appears in a known data breach, so it cannot protect your account. Choose a different one.",
   differ: "The two passwords do not match. Type the new password the same way twice.",
+  // Ruling 414 (W22): the server's refusals each get their own line. "Should be different from the
+  // old password" used to match the too-short rule on the words "should be", so a sixteen-character
+  // password was told it needed ten.
+  samePassword: "That is the password you already use. Choose a different one.",
+  passwordRefused: "That password was not accepted. Choose a different one and try again.",
   wrongCurrent:
     "That is not your current password. Check it and try again. If you have forgotten it, sign out and use Forgot your password.",
   passwordHint: "At least ten characters. A phrase you can remember beats a word you will forget.",
@@ -161,20 +166,42 @@ export async function startProvider(sb: Supabase, provider: Provider): Promise<{
   return { error: false };
 }
 
-export type PasswordFault = "short" | "breached" | "other";
+export type PasswordFault = "short" | "breached" | "same" | "other";
 
-/** Maps GoTrue's password rejections onto the two the copy names, and nothing else. */
-export function passwordFault(
-  error: { message?: string | undefined; code?: string | undefined } | null,
-): PasswordFault {
+type PasswordError = {
+  message?: string | undefined;
+  code?: string | undefined;
+  weak_password?: { reasons?: string[] | undefined } | null | undefined;
+} | null;
+
+/**
+ * Ruling 414 (W22): GoTrue's password rejections mapped to their real reasons. The code is read
+ * first (weak_password carries its reasons: pwned, length, characters; same_password is its own
+ * code), the message second, and nothing is inferred from a fragment two refusals share.
+ */
+export function passwordFault(error: PasswordError): PasswordFault {
   const message = (error?.message || "").toLowerCase();
   const code = (error?.code || "").toLowerCase();
-  if (message.includes("pwned") || message.includes("breach") || message.includes("weak"))
+  const reasons = (error?.weak_password?.reasons || []).map((r) => String(r).toLowerCase());
+  if (code === "same_password" || message.includes("different from the old")) return "same";
+  if (reasons.includes("pwned")) return "breached";
+  if (reasons.includes("length")) return "short";
+  if (
+    message.includes("pwned") ||
+    message.includes("breach") ||
+    message.includes("known to be weak")
+  )
     return "breached";
-  if (code === "weak_password") return "breached";
-  if (message.includes("at least") || message.includes("should be") || message.includes("length"))
-    return "short";
+  if (/at least \d+ characters/.test(message) || message.includes("too short")) return "short";
   return "other";
+}
+
+/** The alert line for a fault, from the one copy table (ruling 414). */
+export function passwordFaultCopy(fault: PasswordFault): string {
+  if (fault === "short") return COPY.tooShort;
+  if (fault === "breached") return COPY.breached;
+  if (fault === "same") return COPY.samePassword;
+  return COPY.passwordRefused;
 }
 
 /**

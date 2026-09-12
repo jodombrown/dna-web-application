@@ -106,7 +106,10 @@ through the `connect-suggest` Edge Function, which calls `connect_cards('suggest
 member's own JWT so nothing the member may not see becomes a fact DIA reasons over.
 
 Write paths: `send_introduction`, `respond_to_request`, `withdraw_request`, `set_follow`,
-`dismiss_suggestion`.
+`dismiss_suggestion`. `connection_requests` has one writer at the API as well as in the app
+(rulings 215, 415): `authenticated` holds no insert grant and no insert policy on the table;
+`send_introduction` is the only path in. The composer carries no Connect verb (ruling 400): a
+request is sent from Connect or from the profile's "Connect with" entry, never published.
 
 `private.relationship_state(viewer, target)` is the single source for none, sent, received,
 connected and window, on Connect and on Profile alike (ruling 188). Neither surface keeps a private

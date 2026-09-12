@@ -21,6 +21,14 @@ export const C_GLYPH: Record<C | "brand", string> = {
 
 export const C_ORDER: C[] = ["connect", "convene", "collaborate", "contribute", "convey"];
 
+/**
+ * Ruling 400 (under 417): the composer carries no Connect verb. A connection request is not a post;
+ * it is written by send_introduction from Connect and from the profile's Connect entry. The four
+ * verbs that remain create an object from text, in C order, always visible (ruling 53).
+ */
+export type ComposerVerb = Exclude<C, "connect">;
+export const COMPOSER_VERBS: ComposerVerb[] = ["convene", "collaborate", "contribute", "convey"];
+
 /** Strand assets are served from public/strand (icons/, adinkra/, patterns/). */
 export const STRAND_ASSET_BASE = "/strand/";
 export function assetBase(): string {

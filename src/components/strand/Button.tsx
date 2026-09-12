@@ -23,7 +23,7 @@ export function Button({
   style,
   ...rest
 }: ButtonProps) {
-  const color = variant === "danger" ? "var(--danger)" : cVar(c);
+  const color = variant === "danger" ? "var(--error)" : cVar(c);
   const base: CSSProperties = {
     fontFamily: "var(--font-sans)",
     fontSize: size === "sm" ? 15 : 17,

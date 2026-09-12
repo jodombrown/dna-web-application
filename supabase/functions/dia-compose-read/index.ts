@@ -15,12 +15,12 @@ const MAX_CHARS = 4000;
 const RATE_LIMIT = 30; // requests per window per session key
 const RATE_WINDOW_MS = 60_000;
 
-type Verb = "connect" | "convene" | "collaborate" | "contribute" | "convey";
-const VERBS: Verb[] = ["connect", "convene", "collaborate", "contribute", "convey"];
+// Ruling 400: the composer carries no Connect verb, so DIA never proposes one.
+type Verb = "convene" | "collaborate" | "contribute" | "convey";
+const VERBS: Verb[] = ["convene", "collaborate", "contribute", "convey"];
 
 // Mirrors VERB_SCHEMA in src/components/strand/Composer.tsx: the only fields DIA may fill per verb.
 const VERB_SCHEMA: Record<Verb, string[]> = {
-  connect: ["who", "why"],
   convene: ["title", "date", "time", "place", "hybrid", "ticket"],
   collaborate: ["title", "category", "roles"],
   contribute: ["title", "instrument", "need", "by"],
@@ -53,8 +53,6 @@ const OUTPUT_SCHEMA = {
       additionalProperties: false,
       properties: {
         title: { type: "string" },
-        who: { type: "string" },
-        why: { type: "string" },
         date: { type: "string" },
         time: { type: "string" },
         place: { type: "string" },
@@ -70,13 +68,13 @@ const OUTPUT_SCHEMA = {
   },
 } as const;
 
-const SYSTEM = `You read a short post a member of DNA (Diaspora Network Africa) is typing and decide which of five acts it is, if any.
+const SYSTEM = `You read a short post a member of DNA (Diaspora Network Africa) is typing and decide which of four acts it is, if any.
 
-Acts (verb): connect = Make an Intro (asking to be introduced to, or to meet, a specific person or kind of person). convene = Host an Event (a gathering with a time or place: dinner, meetup, workshop, panel, call). collaborate = Start a Space (starting a group, project, working group, cohort, initiative and looking for people to build with). contribute = Post a Need (asking for time, skills, or in-kind help; volunteers, mentors, equipment, a venue). convey = Share a Story (a written piece, reflection, lesson, account of something that happened).
+Acts (verb): convene = Host an Event (a gathering with a time or place: dinner, meetup, workshop, panel, call). collaborate = Start a Space (starting a group, project, working group, cohort, initiative and looking for people to build with). contribute = Post a Need (asking for time, skills, or in-kind help; volunteers, mentors, equipment, a venue). convey = Share a Story (a written piece, reflection, lesson, account of something that happened).
 
 Return verb null when the text is a plain update or does not clearly fit one act. Confidence is your probability (0 to 1) that the verb is right.
 
-Fields: include only fields that belong to the chosen verb and that the text states explicitly, copying the member's own words; never invent, infer, or complete a detail that is not there; omit anything absent. connect: who, why. convene: title, date, time, place, hybrid, ticket. collaborate: title, category, roles. contribute: title, instrument, need, by. convey: title. title: a short title in the member's words (under 80 characters) when one is clearly implied. date and time: the raw text as written (for example "Thu 16 Oct", "19:00"). place: the venue, city, or link. hybrid: true only if the text says online, hybrid, zoom, stream, or similar alongside a physical place. ticket: "Paid" only when the text mentions a price, ticket cost, or currency; "Free" when it says free. instrument: "Skills" for expertise or professional help, "In-kind" for goods, equipment, or a venue, "Time" for hours, volunteering, or presence. roles: the people sought, as written. need: what is needed, as written. by: the deadline text as written. who: the person or kind of person to be introduced to. why: the reason given.`;
+Fields: include only fields that belong to the chosen verb and that the text states explicitly, copying the member's own words; never invent, infer, or complete a detail that is not there; omit anything absent. convene: title, date, time, place, hybrid, ticket. collaborate: title, category, roles. contribute: title, instrument, need, by. convey: title. title: a short title in the member's words (under 80 characters) when one is clearly implied. date and time: the raw text as written (for example "Thu 16 Oct", "19:00"). place: the venue, city, or link. hybrid: true only if the text says online, hybrid, zoom, stream, or similar alongside a physical place. ticket: "Paid" only when the text mentions a price, ticket cost, or currency; "Free" when it says free. instrument: "Skills" for expertise or professional help, "In-kind" for goods, equipment, or a venue, "Time" for hours, volunteering, or presence. roles: the people sought, as written. need: what is needed, as written. by: the deadline text as written.`;
 
 const rate = new Map<string, number[]>();
 function limited(key: string): boolean {

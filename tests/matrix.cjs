@@ -590,7 +590,9 @@ const CONNECT_OPTIONS = {
     "Circular, both places",
     "Not planning a return",
   ],
-  corridors: [],
+  // Ruling 436: the corridor row of ruling 243 exists on the live project, so the mock carries it
+  // and the Corridor axis renders (ruling 154). The label is as connect_filter_options builds it.
+  corridors: [{ id: "los-angeles-accra-agriculture", label: "Accra to Los Angeles" }],
   focus: [
     "Agriculture & Food Systems",
     "Technology & Innovation",
@@ -718,7 +720,7 @@ function makeMockDb() {
       whereEmpty: false,
       membersEmpty: false,
       suggestFail: false,
-      corridors: [],
+      corridors: [{ id: "los-angeles-accra-agriculture", label: "Accra to Los Angeles" }],
     },
   };
   return db;
@@ -1897,11 +1899,13 @@ async function runViewport(browserType, bname, [w, h], theme) {
           }),
         ),
       );
+    // Ruling 400: four chips, C order; the composer carries no Connect verb.
     record(
-      tag + " five verb chips visible",
+      tag + " four verb chips visible, no Connect (ruling 400)",
       (await dialog
         .locator('[role="radiogroup"][aria-label="What kind of post"] [role="radio"]')
-        .count()) === 5,
+        .count()) === 4 &&
+        (await dialog.locator('[role="radio"][aria-label^="Make an Intro"]').count()) === 0,
     );
     record(
       tag + " empty: no DiaLine, no preview, publish disabled",
@@ -2002,12 +2006,11 @@ async function runViewport(browserType, bname, [w, h], theme) {
         (await preview.getAttribute("data-c")) === "convey" &&
         (await preview.locator("h3").count()) === 0,
     );
-    // Six previews via chips.
-    for (const v of ["connect", "convene", "collaborate", "contribute", "convey"]) {
+    // Previews via the four chips (ruling 400).
+    for (const v of ["convene", "collaborate", "contribute", "convey"]) {
       if (!FULL_PREVIEW_AT.has(w) && v !== "contribute") continue;
       await ta.fill(SAMPLES[v]);
       const act = {
-        connect: "Make an Intro",
         convene: "Host an Event",
         collaborate: "Start a Space",
         contribute: "Post a Need",

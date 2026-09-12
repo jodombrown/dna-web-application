@@ -1,6 +1,6 @@
 // VERB_SCHEMA from Strand components/dna/Composer.jsx, split into its own module so the card
 // router (src/components/dna/PostCardRouter.tsx) and the Composer share it without a cycle.
-import type { C } from "./cmeta";
+import type { C, ComposerVerb } from "./cmeta";
 
 export type FieldKey =
   | "title"
@@ -29,16 +29,8 @@ export type VerbField = {
 
 export type VerbSchema = { kicker: string | null; action: string | null; fields: VerbField[] };
 
-/** Structured fields of the object each verb creates (brief: backing data shape). */
-export const VERB_SCHEMA: Record<C, VerbSchema> = {
-  connect: {
-    kicker: "Intro",
-    action: "Accept the intro",
-    fields: [
-      { key: "who", label: "Who", icon: "user-plus" },
-      { key: "why", label: "Why", icon: "message-circle", multiline: true },
-    ],
-  },
+/** Structured fields of the object each composer verb creates (brief: backing data shape). */
+export const VERB_SCHEMA: Record<ComposerVerb, VerbSchema> = {
   convene: {
     kicker: "Event",
     action: "Get a ticket",
@@ -89,12 +81,30 @@ export const VERB_SCHEMA: Record<C, VerbSchema> = {
 /** Untyped member posts fall back to Convey with no kicker, title, or action (ruling 68). */
 export const UNTYPED: VerbSchema = { kicker: null, action: null, fields: [] };
 
+/**
+ * Ruling 400: the composer no longer offers Connect, so no new connection_request post is created.
+ * The ones already published still render on the Feed through connection_request_intros (ruling
+ * 157): who and why, never a status, and no act, because a request is answered on Connect. The
+ * card schema is the composer's four plus this row.
+ */
+export const CARD_SCHEMA: Record<C, VerbSchema> = {
+  ...VERB_SCHEMA,
+  connect: {
+    kicker: "Connection request",
+    action: null,
+    fields: [
+      { key: "who", label: "Who", icon: "user-plus" },
+      { key: "why", label: "Why", icon: "message-circle", multiline: true },
+    ],
+  },
+};
+
 export type FieldValue = { value: string | boolean; mine: boolean };
 export type FieldValues = Partial<Record<FieldKey, FieldValue>>;
 
 /** Build the PostCard field rows for a verb from keyed values. Title rows are excluded (the card title carries it). */
 export function fieldRows(verb: C | null, fv: FieldValues) {
-  const schema = verb ? VERB_SCHEMA[verb] : UNTYPED;
+  const schema = verb ? CARD_SCHEMA[verb] : UNTYPED;
   return schema.fields
     .filter((f) => !f.title)
     .map((f) => {

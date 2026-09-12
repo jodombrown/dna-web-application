@@ -8,7 +8,13 @@ import { Checkbox } from "@/components/strand/Checkbox";
 import { Input } from "@/components/strand/Input";
 import { AuthAlert, AuthHeading, AuthLead, useHeadingFocus } from "@/components/dna/AuthSurface";
 import { useAuth } from "@/lib/auth";
-import { COPY, MIN_PASSWORD, passwordFault, signOutOtherSessions } from "@/lib/auth-flow";
+import {
+  COPY,
+  MIN_PASSWORD,
+  passwordFault,
+  passwordFaultCopy,
+  signOutOtherSessions,
+} from "@/lib/auth-flow";
 import { getSupabase } from "@/lib/supabase";
 
 export const Route = createFileRoute("/_shell/password")({
@@ -68,9 +74,10 @@ function ChangePassword() {
       }
       const { error } = await sb.auth.updateUser({ password: next });
       if (error) {
-        const fault = passwordFault(error);
+        // Ruling 414 (W22): the line matches the server's reason (same as the old password,
+        // breached, too short, or refused), never a guess from a shared fragment.
         setFlag("new");
-        setAlert(fault === "short" ? COPY.tooShort : COPY.breached);
+        setAlert(passwordFaultCopy(passwordFault(error)));
         return;
       }
       // Re-authenticating opened a fresh session for this device, so `others` now covers both the
