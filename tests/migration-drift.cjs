@@ -14,6 +14,7 @@
 const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
+const { clientConfig } = require("./live-db.cjs");
 
 const DIR = path.join(__dirname, "../supabase/migrations");
 
@@ -47,12 +48,16 @@ function md5(s) {
     console.log("UNPROVEN migration drift (ruling 444)  (the pg package is not installed)");
     process.exit(0);
   }
-  const client = new pg.Client({
-    connectionString: url,
-    ssl: /sslmode=disable/.test(url) ? false : { rejectUnauthorized: false },
-    statement_timeout: 60_000,
-  });
+  const config = clientConfig(url);
+  if (!config) {
+    console.log(
+      "UNPROVEN migration drift (ruling 444)  (LIVE_DB_URL is not a postgres:// connection string this arm can parse)",
+    );
+    process.exit(0);
+  }
+  let client;
   try {
+    client = new pg.Client(config);
     await client.connect();
   } catch (e) {
     console.log(

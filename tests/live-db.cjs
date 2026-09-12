@@ -34,6 +34,44 @@ function claims(uid) {
   return JSON.stringify({ sub: uid, role: "authenticated", aud: "authenticated" });
 }
 
+/**
+ * pg's client config from LIVE_DB_URL. A password with a reserved character (#, /, @, ?) that was
+ * pasted into the secret without percent-encoding makes the WHATWG URL parser inside pg throw
+ * "Invalid URL" and take the whole suite down with it (run 165). So the string is parsed here
+ * first, greedily up to the last @, and the parts are handed to pg explicitly; a string that fits
+ * neither shape returns null and the arms report unproven rather than crashing. Never logged.
+ */
+function clientConfig(url) {
+  const ssl = /sslmode=disable/.test(url) ? false : { rejectUnauthorized: false };
+  const base = { ssl, statement_timeout: 60_000, query_timeout: 60_000 };
+  try {
+    const u = new URL(url);
+    if (u.hostname) {
+      return {
+        ...base,
+        host: u.hostname,
+        port: u.port ? Number(u.port) : 5432,
+        user: decodeURIComponent(u.username),
+        password: decodeURIComponent(u.password),
+        database: decodeURIComponent(u.pathname.replace(/^\//, "")) || "postgres",
+      };
+    }
+  } catch {
+    /* fall through to the manual parse */
+  }
+  const m =
+    /^postgres(?:ql)?:\/\/([^:@]+):(.*)@([^@\/:?]+)(?::(\d+))?(?:\/([^?]*))?(?:\?.*)?$/.exec(url);
+  if (!m) return null;
+  return {
+    ...base,
+    host: m[3],
+    port: m[4] ? Number(m[4]) : 5432,
+    user: decodeURIComponent(m[1]),
+    password: m[2],
+    database: m[5] ? decodeURIComponent(m[5]) : "postgres",
+  };
+}
+
 /** Run one arm inside a transaction that always rolls back, on a client already connected. */
 async function inTransaction(client, fn) {
   await client.query("begin");
@@ -102,13 +140,15 @@ async function runLiveDbArms({ record, skip }) {
     for (const n of Object.values(names)) skip(n, "the pg package is not installed");
     return;
   }
-  const client = new pg.Client({
-    connectionString: url,
-    ssl: /sslmode=disable/.test(url) ? false : { rejectUnauthorized: false },
-    statement_timeout: 60_000,
-    query_timeout: 60_000,
-  });
+  const config = clientConfig(url);
+  if (!config) {
+    for (const n of Object.values(names))
+      skip(n, "LIVE_DB_URL is not a postgres:// connection string this arm can parse");
+    return;
+  }
+  let client;
   try {
+    client = new pg.Client(config);
     await client.connect();
   } catch (e) {
     for (const n of Object.values(names)) skip(n, "could not connect: " + String(e.message || e));
@@ -415,4 +455,4 @@ async function runLiveDbArms({ record, skip }) {
   }
 }
 
-module.exports = { runLiveDbArms };
+module.exports = { runLiveDbArms, clientConfig };
