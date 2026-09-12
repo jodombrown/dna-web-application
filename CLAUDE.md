@@ -12,6 +12,15 @@ Before ending your turn, check your last paragraph. If it is a plan, an analysis
 
 Before running a command that changes system state (restarts, deletes, config edits, migrations against a remote database), check that the evidence supports that specific action. A signal that pattern-matches to a known failure may have a different cause.
 
+## Permissions and credentials (rulings 371, 378, 382)
+An agent never writes its own permission rules, at any scope. Permissions change only by the
+founder's hand or through a PR the founder approves (ruling 378). A tool-level permission block
+means stop and report, never route around it through another tool (ruling 371).
+
+CI holds one database secret, `LIVE_DB_URL`, a connection string for a dedicated role on the
+canonical project, granted only what the arms need. Never the Management API token, never the
+service role key (ruling 382).
+
 ## Delivering work
 The user's request, or the brief they approved, sets the scope, and the scope is the deliverable: do not quietly narrow, widen, or swap it. Make routine judgment calls yourself; check in only when different readings would lead to materially different work. If you see a real problem with the task as specified, say so in a sentence or two and keep building under stated assumptions; if the user reaffirms, deliver the full request.
 
@@ -104,12 +113,16 @@ copy and no surface derives a relationship from `connection_requests` directly; 
 direct read on that table at all, because a declined status must never reach them (ruling 157).
 
 `private.is_blocked` is symmetric and absolute: every projection that returns a member filters on it
-in both directions. `member_blocks` is chassis, not Connect's (ruling 186); it has no writer in the
-app yet, logged as gap G1 in `docs/GAPS.md`.
+in both directions. `member_blocks` is chassis, not Connect's (ruling 186). Its writer in the app is
+the block control on Profile's Visitor overflow (Brief 4A, ruling 216): `src/lib/blocks.ts` inserts
+and deletes the blocker's own row under `member_blocks_owner_insert` and `member_blocks_owner_delete`,
+and the ruling 198 trigger carries every consequence. Report still has no surface, logged as gap G1
+in `docs/GAPS.md`.
 
-Segment has one source (ruling 187): `public.members.segment` is the axis, `public.member_segments`
-is the label vocabulary every surface reads, and `public.member_segment_details` holds the
-per-variant fields. No component keeps a segment label map.
+Stance has one source (rulings 187, 300): `public.members.stance` (enum `public.stance`, default
+`exploring`) is the axis, `public.member_stances` is the label vocabulary every surface reads, and
+`public.member_stance_details` holds the per-variant fields. Brief 5 dropped `members.segment` and
+renamed the tables. No component keeps a stance label map.
 
 ## Brand assets (ruling 184)
 
@@ -131,6 +144,12 @@ contract, so the next wordmark lands by overwriting files in one directory plus 
 No component may import a logo as a module, inline it as SVG, or hardcode a dimension that assumes
 the current wordmark's aspect ratio. Size by height, width auto.
 
-Lovable commits straight to `main` (ruling 146). Check `main`'s recent commits at the start of any
-code session, report lovable-bot commits, and rebase onto them. On conflict keep the founder's
-visual change and report it rather than resolving it silently.
+Lovable commits straight to `main` (ruling 146) as `gpt-engineer-app[bot]`, app id 159125892
+(ruling 286). Check `main`'s recent commits at the start of any code session, report
+`gpt-engineer-app[bot]` commits, and rebase onto them. On conflict keep the founder's visual change
+and report it rather than resolving it silently.
+
+Commit identity is checked by the GitHub account login or app id from the API, never by the git
+author name or email string (ruling 379). The permitted identities are `jodombrown`, `claude`,
+`gpt-engineer-app[bot]` and `region17gh`, the founder's Region 17 Claude Code seat (ruling 369).
+Any other identity is reported at session open.
