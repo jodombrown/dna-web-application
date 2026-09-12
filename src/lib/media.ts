@@ -81,9 +81,6 @@ export const IMAGE_MAX_BYTES = 10 * 1024 * 1024;
  */
 export const IMAGE_UPLOAD_TIMEOUT_MS = 30_000;
 
-/** What media-upload accepts once the client has normalised (or could not, and sent the original). */
-export const IMAGE_MIME_ACCEPTED = new Set(["image/jpeg", "image/png", "image/webp"]);
-
 export type ImageSlot = "avatar" | "cover";
 
 export type ImageUpload =
@@ -104,15 +101,13 @@ export async function uploadImage(file: File, slot: ImageSlot): Promise<ImageUpl
   if (!token) return { ok: false, reason: "failed" };
 
   // Convert and downscale before upload; on a decode failure fall back to the original bytes, which
-  // the server's own strip and validation still stand behind, but only when it is a type the server
-  // accepts at all (a HEIC no browser could decode is refused here, in words, not by a 415 later).
+  // the server's own strip and validation still stand behind.
   const normalized = await normalizeImage(file);
   const upload = normalized
     ? new File([normalized.blob], slot + "." + extensionFor(normalized.type), {
         type: normalized.type,
       })
     : file;
-  if (!IMAGE_MIME_ACCEPTED.has(upload.type)) return { ok: false, reason: "failed" };
   if (upload.size > IMAGE_MAX_BYTES) return { ok: false, reason: "too_large" };
 
   const form = new FormData();
