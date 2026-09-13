@@ -481,9 +481,11 @@ async function runLiveDbArms({ record, skip }) {
         );
         const where = await attempt(client, "select public.connect_where() as out");
         const text = (r) => JSON.stringify(r.ok && r.rows[0] ? r.rows[0].out : null);
+        const mosaic = where.ok && where.rows[0] ? where.rows[0].out : null;
         return {
           inCards: cards.ok && text(cards).includes(member.id),
           where: where.ok ? text(where) : null,
+          tiles: mosaic ? (mosaic.continent || []).length + (mosaic.diaspora || []).length : 0,
           err: cards.ok ? (where.ok ? null : where.message) : cards.message,
         };
       };
@@ -532,8 +534,7 @@ async function runLiveDbArms({ record, skip }) {
         );
       }
 
-      const emptyMosaic =
-        control.where === null || /^\{"continent":\[\],"diaspora":\[\]\}$/.test(control.where);
+      const emptyMosaic = control.where === null || control.tiles === 0;
       if (emptyMosaic || control.where === gated.where) {
         skip(
           "ruling 459: connect_where excludes an account that has not onboarded",
