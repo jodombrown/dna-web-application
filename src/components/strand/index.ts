@@ -45,3 +45,9 @@ export * from "./CSheetBody";
 // connect/strand-patch/Connect.jsx.
 export * from "./MemberCard";
 export * from "./PlaceTile";
+// Design pass 01 (rulings 486 to 499): the new parts and the two amended ones.
+export * from "./PasswordField";
+export * from "./AuthHead";
+export * from "./BackRow";
+export * from "./CardFade";
+export * from "./VerbRow";

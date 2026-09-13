@@ -494,6 +494,8 @@ export function AppShell({
                 </Button>
               </div>
               <div style={{ padding: "16px", display: "flex", flexDirection: "column", gap: 16 }}>
+                {/* Ruling 428 (B12 item 1): the member's email address is not shown here. It
+                    belongs to User Settings (37), which has no surface yet. */}
                 {member.handle && (
                   <div
                     style={{ display: "flex", flexDirection: "column", gap: 4, margin: "-4px 0" }}

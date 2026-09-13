@@ -1,9 +1,17 @@
-// Ported from the B1-Composer-v3 extraction, composer/strand-patch/Composer.jsx (ruling 107):
-// mounts the patched Sheet (300ms slide, event-level scroll lock); the drop target is the whole
-// fields column with an armed state (1.5px dashed C-colour frame, tint ground, "Drop to add" copy)
-// while a file is dragged over it, before the drop lands; success is confirmed by the thumbnail row
-// and the preview card as before. Drawer geometry (ruling 106): 80% bottom sheet on compact, 65%
-// right drawer on medium with the stacked layout, min(1000, 100%) drawer on expanded.
+// Design pass 01, strand-patch/Composer.jsx (rulings 458, 417, 492, 493, 497, 498, W52; supersedes
+// the B1-Composer-v3 patch). Everything else is Brief 1 byte for byte, including the patched Sheet,
+// the drag-armed drop target, draft autosave, the live PostCard preview and DIA's line.
+// 1. The chip row moved out of the middle of the fields column and sits directly above the text
+//    area, always visible, before anything is typed (458). It is its own component, VerbRow, so the
+//    scroller and its fade are one thing, and a vertical wheel over it scrolls it sideways (493).
+// 2. Four chips in C order; connect has left the composer and VERB_SCHEMA with it (417, 498).
+// 3. `columns`: 2 is B1's drawer with the preview beside the fields; 1 stacks the preview under the
+//    fields, for the 40 percent side sheet on medium and expanded where two columns do not fit.
+// 4. Sheet geometry (ruling 492): 80 percent tall on compact, a 50 percent side sheet on medium and
+//    expanded. B1's 1000px two-column drawer is retired.
+// 5. A saved draft returns by invitation (ruling 497): the composer opens empty and offers
+//    "Continue your draft" with a discard. Autosave and "Draft saved" are unchanged, and ruling
+//    287's clearing on publish is unchanged.
 // Production hooks replace the prototype's localStorage draft and data-URL images:
 // `draft` + `onDraft` (server-side drafts per member and host context, ruling 56), `upload` (media
 // goes through the media-upload Edge Function and Tinify, ruling 55), and the preview renders
@@ -28,10 +36,11 @@ import { DiaLine, type DiaLineState } from "./DiaLine";
 import { Icon } from "./Icon";
 import { IconButton } from "./IconButton";
 import { Input } from "./Input";
-import { Sheet } from "./Sheet";
+import { COMPOSER_SHEET_WIDTH, Sheet } from "./Sheet";
 import { Switch } from "./Switch";
-import { COMPOSER_VERBS, type ComposerVerb } from "./cmeta";
-import { VERB_ACT, VerbChip } from "./VerbChip";
+import { type ComposerVerb } from "./cmeta";
+import { VERB_ACT } from "./VerbChip";
+import { VerbRow } from "./VerbRow";
 import {
   UNTYPED,
   VERB_SCHEMA,
@@ -41,6 +50,8 @@ import {
 } from "./verb-schema";
 
 export { VERB_SCHEMA } from "./verb-schema";
+// COMPOSER_VERBS is cmeta's and is re-exported from the barrel there; a second re-export here made
+// the two paths ambiguous once ruling 417 gave cmeta the ComposerVerb type.
 
 // DIA inference budget. Ruling 54 set 2.5 s; ruling 74 (D176) raises it to 3.5 s after Sonnet-class
 // latency measured at 2.2 to 2.9 s per call. The server mirrors this in dia-compose-read.
@@ -120,6 +131,8 @@ export type ComposerProps = {
   draft?: ComposerSeed | null | undefined;
   onDraft?: ((state: ComposerState | null) => void) | undefined;
   contained?: boolean | undefined;
+  /** 2 is B1's drawer with the preview beside the fields; 1 stacks it under them (ruling 492). */
+  columns?: 1 | 2 | undefined;
   maxImages?: number;
   /**
    * Ruling 193: option lists a field reads from a vocabulary at runtime, keyed by field. The schema
@@ -179,16 +192,22 @@ export function Composer({
   draft,
   onDraft,
   contained,
+  columns,
   maxImages = 4,
   fieldOptions,
 }: ComposerProps) {
   const touch = (mode || (tier === "expanded" ? "pointer" : "touch")) === "touch";
-  /** Compact and medium share the stacked layout (ruling 58); only the container differs. */
-  const stacked = tier !== "expanded";
-  const seed: ComposerSeed = useMemo(
-    () => initial || (!initialVerb && draft) || {},
-    [initial, initialVerb, draft],
-  );
+  /**
+   * Ruling 492: at 50 percent of a medium or expanded viewport two columns do not fit, so the
+   * preview stacks under the fields at every tier unless the host asks for B1's two-column drawer.
+   * Compact and medium already shared the stacked layout (ruling 58).
+   */
+  const stacked = (columns ?? 1) === 1;
+  // Ruling 497: a saved draft returns by invitation. `initial` (a host-supplied seed, such as the
+  // profile's anchored open) still seeds directly; a saved draft does not. The composer opens empty
+  // and offers "Continue your draft"; only that tap applies it.
+  const seed: ComposerSeed = useMemo(() => initial || {}, [initial]);
+  const [offerDone, setOfferDone] = useState(false);
   const [text, setText] = useState(seed.text || "");
   const [verb, setVerb] = useState<ComposerVerb | null>(seed.verb || initialVerb || null);
   const [overridden, setOverridden] = useState(!!(seed.overridden || initialVerb));
@@ -205,7 +224,9 @@ export function Composer({
     seed.dia || { state: null },
   );
   const [diaRecord, setDiaRecord] = useState<DiaRecord | null>(seed.diaRecord || null);
-  const [drafted, setDrafted] = useState(!!draft && !initial);
+  const [drafted, setDrafted] = useState(false);
+  // The offer stands while the composer is untouched and a draft exists for this host context.
+  const invited = !!draft && !initial && !initialVerb;
   const [picker, setPicker] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [armed, setArmed] = useState(false);
@@ -225,6 +246,32 @@ export function Composer({
     Object.values(fv).some((f) => f && f.value);
   const setField = (key: FieldKey, value: string | boolean, mine = true) =>
     setFv((s) => ({ ...s, [key]: { value, mine } }));
+  // The offer stands only while the composer is still empty; once the member has typed, applying
+  // the draft would overwrite their own words.
+  const showOffer = invited && !offerDone && !has;
+
+  // Ruling 497. Continuing applies the saved draft in one act; discarding clears it and the offer.
+  const continueDraft = () => {
+    const d = draft;
+    if (!d) return;
+    setText(d.text || "");
+    setVerb(d.verb || null);
+    setOverridden(!!d.overridden);
+    setFv(d.fields || {});
+    setImages(d.images || []);
+    setLink(d.link || null);
+    setAudience(d.audience || (anchor ? "anchored" : "everyone"));
+    setAsSpace(d.asSpace || "");
+    setDia(d.dia || { state: null });
+    setDiaRecord(d.diaRecord || null);
+    setDrafted(true);
+    setOfferDone(true);
+  };
+  const discardDraft = () => {
+    setOfferDone(true);
+    setDrafted(false);
+    onDraft?.(null);
+  };
 
   // Inference: debounce, pending state, resolve or stay silent. Never after the member has chosen.
   useEffect(() => {
@@ -803,6 +850,37 @@ export function Composer({
           </div>
         </div>
       )}
+      {showOffer && (
+        <div
+          data-draft-offer
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            flexWrap: "wrap",
+            padding: "10px 12px",
+            borderRadius: "var(--radius-m)",
+            background: "var(--bg-sunken)",
+            fontSize: 15,
+            color: "var(--ink-2)",
+          }}
+        >
+          <span style={{ flex: 1, minWidth: 0 }}>You have a draft here.</span>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={continueDraft}
+            data-testid="continue-draft"
+          >
+            Continue your draft
+          </Button>
+          <Button variant="ghost" size="sm" onClick={discardDraft} data-testid="discard-draft">
+            Discard
+          </Button>
+        </div>
+      )}
+      {/* Ruling 458: the chip row sits directly above the text area and is always visible. */}
+      <VerbRow value={verb} onChoose={choose} compact={stacked} />
       <textarea
         ref={taRef}
         aria-label="What is going on with you"
@@ -825,37 +903,7 @@ export function Composer({
           minHeight: 44,
         }}
       />
-      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-        <div
-          role="radiogroup"
-          aria-label="What kind of post"
-          style={
-            stacked
-              ? {
-                  display: "flex",
-                  gap: 8,
-                  overflowX: "auto",
-                  margin: "0 -20px",
-                  padding: "2px 20px",
-                  scrollbarWidth: "none",
-                  // The scrolling row must not widen the layout viewport on touch devices.
-                  contain: "inline-size",
-                }
-              : { display: "flex", gap: 8, flexWrap: "wrap" }
-          }
-        >
-          {COMPOSER_VERBS.map((v) => (
-            <VerbChip
-              key={v}
-              c={v}
-              compact={stacked}
-              selected={verb === v}
-              onClick={() => choose(v)}
-            />
-          ))}
-        </div>
-        <DiaLine state={dia.state} text={dia.text} onNotThis={notThis} />
-      </div>
+      <DiaLine state={dia.state} text={dia.text} onNotThis={notThis} />
       {verb && (
         <div
           style={{
@@ -985,15 +1033,21 @@ export function Composer({
       label="Compose"
       contained={contained}
       keyboardHeight={kb}
-      width={tier === "medium" ? "65%" : 1000}
-      style={
-        tier === "compact"
-          ? {
-              // 80% bottom sheet (ruling 106); with the software keyboard up the sheet takes the
-              // remaining visual viewport minus 8 (composer spec, keyboard-aware).
-              height: kb > 0 ? "calc(100% - 8px)" : "80%",
-            }
-          : undefined
+      // Ruling 492: 80 percent tall on compact, and the composer alone takes 50 percent of the
+      // width on medium and expanded. Never full screen; B1's 1000px drawer is retired.
+      width={COMPOSER_SHEET_WIDTH}
+      // Ruling 480: the action row is a footer in the dialog's flex column, never an overlay.
+      actions={
+        stacked ? (
+          <div style={{ ...col, display: "flex" }}>{publishBtn}</div>
+        ) : (
+          <>
+            <span style={{ marginRight: "auto", fontSize: 13, color: "var(--ink-3)" }}>
+              {isMac ? "⌘ Enter to publish · Esc to close" : "Ctrl Enter to publish · Esc to close"}
+            </span>
+            {publishBtn}
+          </>
+        )
       }
     >
       {header}
@@ -1020,16 +1074,6 @@ export function Composer({
               )}
             </div>
           </div>
-          <div
-            style={{
-              flex: "none",
-              padding: "12px 20px 12px",
-              borderTop: "1px solid var(--line)",
-              background: "var(--surface)",
-            }}
-          >
-            <div style={col}>{publishBtn}</div>
-          </div>
         </Fragment>
       ) : (
         <Fragment>
@@ -1053,22 +1097,6 @@ export function Composer({
             <div style={{ overflowY: "auto", padding: "20px 24px", background: "var(--bg)" }}>
               {preview}
             </div>
-          </div>
-          <div
-            style={{
-              flex: "none",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "flex-end",
-              gap: 12,
-              padding: "12px 24px",
-              borderTop: "1px solid var(--line)",
-            }}
-          >
-            <span style={{ fontSize: 13, color: "var(--ink-3)" }}>
-              {isMac ? "⌘ Enter to publish · Esc to close" : "Ctrl Enter to publish · Esc to close"}
-            </span>
-            {publishBtn}
           </div>
         </Fragment>
       )}

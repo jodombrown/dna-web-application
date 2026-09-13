@@ -67,7 +67,6 @@ export function ComposerShell() {
     return () => {
       active = false;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, seed, member, request, hostContext]);
 
   const infer = useMemo(() => makeInfer(request?.anchor?.name), [request?.anchor?.name]);

@@ -1,4 +1,8 @@
-// Ported from the B2-Shell-Feed-v3 extraction, shell/strand-patch/PulseDock.jsx (ruling 100).
+// Design pass 01, strand-patch/PulseDock.jsx (rulings 100, 489 pass item 15, W33; supersedes the
+// B2-Shell-Feed-v3 patch). The compact bottom bar's active state now matches the wide bar's: brand
+// rung glyph, C text colour, and the 2px brand underline under the label. W33 found the underline
+// only on the wide bar, so active read as a colour change alone on the phone. State dots still
+// never encode a C colour (rule 4).
 // No chip behind the glyph: the Adinkra glyph floats in the bar as a currentColor mask. Active:
 // glyph in the C's brand rung, label in the C's text rung. Hover (pointer): lift to --ink-2 with a
 // 1px translate, no fill. Inactive: --ink-3. `inline` renders the five slots with no bar chrome for
@@ -134,7 +138,7 @@ export function PulseDock({
         <span
           style={{
             lineHeight: 1.2,
-            borderBottom: row && on ? "2px solid var(--c-" + c + ")" : "2px solid transparent",
+            borderBottom: on ? "2px solid var(--c-" + c + ")" : "2px solid transparent",
           }}
         >
           {C_LABEL[c]}

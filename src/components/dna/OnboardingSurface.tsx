@@ -923,9 +923,8 @@ export function ExplainerSheet({
       open={open}
       onClose={onClose}
       variant={compact ? "sheet" : "drawer"}
-      width="65%"
+      // Ruling 492: 80 percent tall on compact, 40 percent wide above; the Sheet holds both.
       label={EXPLAINER.h2}
-      style={compact ? { height: "80%" } : undefined}
     >
       <div
         ref={bodyRef}

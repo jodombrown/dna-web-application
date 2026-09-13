@@ -1,13 +1,20 @@
 // The bell and its list (ruling 82, SPEC section 6). Dot only when a real unread row exists. The
-// list has no route: compact and medium get a full panel under the status bar; expanded gets a
-// 380 popover with an invisible full-frame close button behind it. Esc closes. Opening a row marks
-// it read. Empty is the launch state.
+// list has no route: pointer keeps the 380 popover under the bell; touch gets the standard Sheet at
+// 80 percent, not the full-screen inset B2 built (B17 item 3, ruling 492), so it carries the same
+// focus trap and restore as every other sheet (480). Every row is a link that names its destination
+// before the tap and marks itself read on open (rulings 462, 490). Empty is the launch state, and
+// it is the same EmptyState component as every other empty state (B17 item 4).
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useNavigate } from "@tanstack/react-router";
+import { useEffect, useState, type ReactNode } from "react";
 import { EmptyState } from "@/components/strand/EmptyState";
 import { IconButton } from "@/components/strand/IconButton";
 import { NotificationBell } from "@/components/strand/NotificationBell";
-import { NotificationListItem } from "@/components/strand/NotificationListItem";
+import {
+  NotificationListItem,
+  type NotificationKind,
+} from "@/components/strand/NotificationListItem";
+import { Sheet } from "@/components/strand/Sheet";
 import type { Member } from "@/lib/auth";
 import { hasUnread, loadNotifications, markRead } from "@/lib/notifications";
 import type { Tier } from "@/lib/tier";
@@ -30,6 +37,7 @@ export function NotificationPanel({
   closeKey?: string | undefined;
 }) {
   const qc = useQueryClient();
+  const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   useEffect(() => {
     setOpen(false);
@@ -55,7 +63,30 @@ export function NotificationPanel({
     queryFn: () => loadNotifications(member.id),
     enabled: open,
   });
-  const onRow = async (id: string, read: boolean) => {
+  /**
+   * Ruling 462: a row marks read on open and then goes where its line says it goes. Two of the five
+   * kinds have a surface today: connection_accepted opens the other member's profile, and
+   * connection_request opens My Network's Requests. The other three name their destination in words
+   * and mark read; the navigation lands with the engine that owns the object (Convene is Brief 6,
+   * Collaborate and Contribute follow). Grounded-or-empty applies to a route as much as to a count.
+   */
+  const go = (n: { kind: string; actorHandle?: string | undefined }) => {
+    if (n.kind === "connection_accepted" && n.actorHandle) {
+      setOpen(false);
+      void navigate({ to: "/m/$handle", params: { handle: n.actorHandle }, search: {} });
+      return;
+    }
+    if (n.kind === "connection_request") {
+      setOpen(false);
+      void navigate({ to: "/$c", params: { c: "connect" }, search: { lens: "network" } });
+    }
+  };
+  const onRow = async (
+    id: string,
+    read: boolean,
+    n: { kind: string; actorHandle?: string | undefined },
+  ) => {
+    go(n);
     if (read) return;
     await markRead(id);
     await Promise.all([
@@ -70,83 +101,81 @@ export function NotificationPanel({
     });
   };
   const pointer = tier === "expanded";
+  const head = (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 4,
+        height: 56,
+        padding: "0 8px 0 16px",
+        borderBottom: "1px solid var(--line)",
+        flex: "none",
+      }}
+    >
+      <h2 data-sheet-heading style={{ flex: 1, margin: 0, fontSize: 17, fontWeight: 500 }}>
+        Notifications
+      </h2>
+      <IconButton name="x" label="Close" onClick={() => setOpen(false)} />
+    </div>
+  );
+  const rows: ReactNode = (
+    <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "4px 0 24px" }}>
+      {list.data && list.data.length > 0 ? (
+        list.data.map((n) => (
+          <NotificationListItem
+            key={n.id}
+            kind={n.kind as NotificationKind}
+            actor={n.actor}
+            object={n.object}
+            detail={n.detail}
+            time={timeLabel(n.created_at)}
+            unread={n.read_at === null}
+            onClick={() => void onRow(n.id, n.read_at !== null, n)}
+          />
+        ))
+      ) : list.isPending ? (
+        <p role="status" style={{ margin: 0, padding: "16px", color: "var(--ink-3)" }}>
+          Loading
+        </p>
+      ) : (
+        <div data-testid="notifications-empty">
+          {/* B17 item 4: the same EmptyState component as every other empty state. */}
+          <EmptyState
+            c="brand"
+            title="Nothing yet."
+            body="When a member accepts your connection request, attests a contribution, approves your Space role, or an event you joined is near, it appears here."
+            style={{ margin: "12px 16px" }}
+          />
+        </div>
+      )}
+    </div>
+  );
   return (
     <>
       <NotificationBell unread={unread.data === true} active={open} onClick={toggle} />
-      {open && (
-        <>
-          {pointer && (
+      {/* Pointer keeps B2's 380 popover under the bell. Touch takes the standard Sheet at 80
+          percent, not the full-screen inset B2 built (B17 item 3, rulings 492, 480). */}
+      {pointer ? (
+        open && (
+          <>
             <button
               type="button"
               aria-label="Close notifications"
               onClick={toggle}
               style={{ all: "unset", position: "fixed", inset: 0, zIndex: 40, cursor: "default" }}
             />
-          )}
-          <div
-            role="dialog"
-            aria-label="Notifications"
-            style={
-              pointer
-                ? POPOVER_STYLE
-                : {
-                    position: "fixed",
-                    inset: 0,
-                    paddingTop: "env(safe-area-inset-top)",
-                    zIndex: 50,
-                    background: "var(--bg)",
-                    display: "flex",
-                    flexDirection: "column",
-                    boxSizing: "border-box",
-                    animation: "strand-slide var(--dur-base) var(--ease)",
-                  }
-            }
-          >
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 4,
-                height: 56,
-                padding: "0 8px 0 16px",
-                borderBottom: "1px solid var(--line)",
-                flex: "none",
-              }}
-            >
-              <span style={{ flex: 1, fontSize: 17, fontWeight: 500 }}>Notifications</span>
-              <IconButton name="x" label="Close" onClick={toggle} />
+            <div role="dialog" aria-label="Notifications" style={POPOVER_STYLE}>
+              {head}
+              {rows}
             </div>
-            <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "4px 0 24px" }}>
-              {list.data && list.data.length > 0 ? (
-                list.data.map((n) => (
-                  <NotificationListItem
-                    key={n.id}
-                    kind={n.kind}
-                    actor={n.actor}
-                    object={n.object}
-                    detail={n.detail}
-                    time={timeLabel(n.created_at)}
-                    unread={n.read_at === null}
-                    onClick={() => void onRow(n.id, n.read_at !== null)}
-                  />
-                ))
-              ) : list.isPending ? (
-                <p role="status" style={{ margin: 0, padding: "16px", color: "var(--ink-3)" }}>
-                  Loading
-                </p>
-              ) : (
-                <div data-testid="notifications-empty">
-                  <EmptyState
-                    c="brand"
-                    title="Nothing yet."
-                    body="When a member accepts your intro, attests a contribution, approves your Space role, or an event you joined is near, it appears here."
-                    style={{ margin: "12px 16px" }}
-                  />
-                </div>
-              )}
-            </div>
-          </div>
-        </>
+          </>
+        )
+      ) : (
+        <Sheet open={open} onClose={() => setOpen(false)} variant="sheet" label="Notifications">
+          {head}
+          {rows}
+        </Sheet>
       )}
     </>
   );

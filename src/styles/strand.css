@@ -315,6 +315,21 @@
   --content-max: 680px;
   --page-max: 1120px;
 
+  /* ---- Design pass 01, strand-patch/tokens-additions.css ---- */
+  /* Target size (ruling 498, restating rule 10 against 480): 44 for anything a thumb aims at on
+     its own, 24 the floor for a control inside a line of text or a row that is itself the target. */
+  --target-min: 24px;
+  --target-primary: 44px;
+  /* Auth head (ruling 491): the logo band's height never changes with content, and the logo is
+     top-aligned in it, so the space under the wordmark is the same on every screen. */
+  --auth-logo-band-compact: 84px;
+  --auth-logo-band-wide: 100px;
+  --auth-logo-h-compact: 48px;
+  --auth-logo-h-wide: 56px;
+  --auth-logo-top-compact: 16px;
+  --auth-logo-top-wide: 20px;
+  --auth-head-gap: 20px;
+
   --ease: cubic-bezier(0.2, 0, 0, 1); /* @kind other */
   /* Motion: exactly three durations. */
   --dur-micro: 100ms; /* @kind other */ /* checkbox, switch */
@@ -322,6 +337,12 @@
   --dur-slow: 300ms; /* @kind other */ /* modals, sheets, page */
   --dur-fast: var(--dur-default); /* @kind other */
   --dur-base: var(--dur-default); /* @kind other */ /* legacy aliases */
+
+  /* ---- Design pass 01 motion block (ruling 489) ---- */
+  /* A card loses opacity across this distance, measured up from the sticky bar's bottom edge.
+     Nothing translates and nothing scales, so the list does not appear to move under the reader. */
+  --fade-under-distance: 96px;
+  --fade-under-ease: cubic-bezier(0.2, 0, 0, 1); /* @kind other */
 }
 /* ---- tokens/base.css ---- */
 html {
@@ -401,4 +422,61 @@ textarea[aria-invalid="true"] {
 /* Hidden native file inputs (the composer triggers them from its own buttons). */
 input[type="file"][hidden] {
   display: none;
+}
+
+/* Design pass 01, Sheet (rulings 492, 499): the dialog is opened with showModal(), so the browser
+   owns the top layer, the inert background and the Escape key, and the scrim is ::backdrop. The
+   backdrop inherits custom properties from its originating element, so --scrim resolves in both
+   themes with no second colour written here. */
+dialog.strand-sheet {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  max-width: none;
+  height: 100%;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  overflow: hidden;
+}
+dialog.strand-sheet::backdrop {
+  background: var(--scrim);
+  opacity: 0;
+  transition: opacity var(--dur-slow) var(--ease);
+}
+dialog.strand-sheet[data-shown="1"]::backdrop {
+  opacity: 1;
+}
+@media (prefers-reduced-motion: reduce) {
+  dialog.strand-sheet::backdrop {
+    transition: none;
+  }
+}
+
+/* Design pass 01, AuthHead (ruling 491). One header for auth, onboarding, confirmation and system
+   pages: a fixed logo band, --auth-head-gap, a centred heading, a centred lead. The band's height
+   never changes with content, and an auth column is never vertically centred (a centred column
+   inside a scroller clips its top once the content is taller than the frame); a system or
+   confirmation page centres with auto margins instead (ruling 487). */
+.strand-auth-head {
+  --_auth-band: var(--auth-logo-band-compact);
+  --_auth-logo: var(--auth-logo-h-compact);
+  --_auth-top: var(--auth-logo-top-compact);
+  --_auth-heading: 30px;
+}
+.strand-auth-col {
+  --_auth-col: 400px;
+}
+@media (min-width: 640px) {
+  .strand-auth-head {
+    --_auth-band: var(--auth-logo-band-wide);
+    --_auth-logo: var(--auth-logo-h-wide);
+    --_auth-top: var(--auth-logo-top-wide);
+    --_auth-heading: 32px;
+  }
+  .strand-auth-col {
+    --_auth-col: 480px;
+  }
 }
