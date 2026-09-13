@@ -5,45 +5,41 @@
 // dehydrated state behind the stream barrier), and their content changes per request, so a hash
 // cannot cover them and 'unsafe-inline' is the thing this policy exists to refuse.
 //
-// Rulings 542 and 545: one value, two layers, and no HTMLRewriter pass over the body. The render
-// is the layer that mints, because it is the only layer that can stamp the script tags: the nonce
-// is minted here, inside the per-request router factory, set on `ssr.nonce` so every inline script
-// the router emits carries it, echoed in the shell as `<meta property="csp-nonce">` so the
-// client-side router reads the same value at hydration, and recorded on CSP_NONCE_HEADER so the
-// worker entry can build this response's policy from the same value and strip the header again.
-// It travels on the response and never on a request, because handing it forward meant rebuilding
-// the incoming Request, and `new Request(request, { headers })` is what ruling 542 names: the dev
-// server's Request is not the global one, so undici read its internals as undefined and threw
-// before any route rendered. Nothing on this path constructs a Request.
+// Rulings 542 and 545: one value, two layers, and no HTMLRewriter pass over the body. The worker
+// entry mints it and owns it, so every response it builds carries the matching policy; the render
+// reads the same value out of request scope and stamps it on `ssr.nonce`, so every inline script the
+// router emits carries it, and echoes it in the shell as `<meta property="csp-nonce">` for the
+// client-side router at hydration.
+//
+// The channel is AsyncLocalStorage rather than a header, and that is the one place this departs from
+// ruling 545's letter. Two constraints close off the alternatives:
+//
+//   * Forward on a request header means rebuilding the incoming Request, and
+//     `new Request(request, { headers })` is what ruling 542 names: the dev server's Request is not
+//     the global constructor's, so undici reads its internals as undefined and throws before any
+//     route renders. Nothing on this path constructs a Request any more.
+//   * Back on a response header does work, but only for a 2xx. h3 merges the request event's headers
+//     onto a returned Response only when that Response is ok, so a 404 arrived with the nonce stamped
+//     in its markup and absent from its policy, which blocks the very scripts the policy exists to
+//     allow. Measured on the built worker, not reasoned about.
+//
+// The store itself lives in src/lib/csp-nonce.server.ts, not here: this module is imported by the
+// router and so ships to the client, and `node:async_hooks` cannot be constructed in a browser
+// bundle. The import below is reached only from the `.server()` branch, which the isomorphic split
+// strips from the client build along with what it imports.
 //
 // Static assets never run an inline script; their copy of these headers is public/_headers, which
 // carries the same policy with script-src 'self' and no nonce.
 import { createIsomorphicFn } from "@tanstack/react-start";
-import { getResponseHeader, setResponseHeader } from "@tanstack/react-start/server";
-
-/** The response header the render uses to hand the nonce to the worker entry. Internal only: the
- *  worker strips it before the response leaves, so it never reaches a client or a cache. */
-export const CSP_NONCE_HEADER = "x-dna-csp-nonce";
+import { nonceInScope } from "./csp-nonce.server";
 
 /**
- * This response's nonce on the server, minted once per request; undefined on the client, where the
- * meta tag carries it. Idempotent: a second call in the same request reads back the first value
- * rather than minting a second one, so the markup and the policy can never disagree.
+ * This response's nonce on the server; undefined on the client, where the meta tag carries it, and
+ * undefined outside a request (a build-time render), where the policy falls back to script-src
+ * 'self' with no inline script to cover.
  */
 export const cspNonce = createIsomorphicFn()
-  .server((): string | undefined => {
-    try {
-      const already = getResponseHeader(CSP_NONCE_HEADER);
-      if (already) return already;
-      const nonce = mintNonce();
-      setResponseHeader(CSP_NONCE_HEADER, nonce);
-      return nonce;
-    } catch {
-      // Outside the server request runtime (a build-time render, a client bundle): no nonce, and
-      // the policy falls back to script-src 'self' with no inline script to cover.
-      return undefined;
-    }
-  })
+  .server((): string | undefined => nonceInScope())
   .client((): string | undefined => undefined);
 
 const SUPABASE = "https://dgspjevjoblujcoljvkn.supabase.co";

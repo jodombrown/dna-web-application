@@ -923,10 +923,29 @@ async function get(url, headers = {}) {
       !!metaNonce && metaNonce === headerNonce,
       "meta " + metaNonce.slice(0, 12),
     );
+    // The case that nearly shipped. Deriving the policy from what the render reported works for a 2xx
+    // and silently fails for anything else: h3 merges a request event's headers onto a returned
+    // Response only when that Response is ok, so a 404 arrived with the nonce stamped in its markup
+    // and absent from its policy, blocking the very scripts the policy exists to allow. The worker
+    // entry owns the value now, so a non-2xx render is covered too, and this is the arm that says so.
+    const missing = await get(BASE + "/this-route-does-not-exist");
+    const missingCsp = missing.headers.get("content-security-policy") || "";
+    const missingHeaderNonce = (missingCsp.match(/'nonce-([A-Za-z0-9+/=_-]+)'/) || [])[1] || "";
+    const missingMarkupNonces = [...missing.text.matchAll(/<script[^>]*\snonce="([^"]+)"/g)].map(
+      (m) => m[1],
+    );
     record(
-      "ruling 545: the internal nonce header never reaches the client",
-      h("x-dna-csp-nonce") === "",
-      h("x-dna-csp-nonce") || "absent",
+      "ruling 545: a non-2xx render carries the nonce in its policy as well as its markup",
+      missing.status === 404 &&
+        !!missingHeaderNonce &&
+        missingMarkupNonces.length > 0 &&
+        missingMarkupNonces.every((n) => n === missingHeaderNonce),
+      "status " +
+        missing.status +
+        " header " +
+        missingHeaderNonce.slice(0, 12) +
+        " markup " +
+        [...new Set(missingMarkupNonces)].join(",").slice(0, 40),
     );
     // Per response, not per deployment: a nonce reused across responses is a nonce an attacker can
     // read off one page and reuse on the next, which is the whole point of minting it per render.
