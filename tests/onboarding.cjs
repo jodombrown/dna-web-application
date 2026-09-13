@@ -134,11 +134,13 @@ const noNumeral = (text) => !/\d/.test(text);
  * Ruling 434: a field's own line, the hint slot Strand's Input renders under the control. The
  * refusal replaces the hint there, so reading the line reads whichever is showing.
  */
+// Ruling 434: the reasons render as their own lines under the field, in the block Fix PR 02 built
+// for them, not inside the Input's single error slot. One slot can hold one string and a username
+// can fail several rules at once, so the block is what the arm reads.
 const usernameLine = (page) =>
   page.evaluate(() => {
-    const el = document.querySelector('[data-testid="username"]');
-    const line = el?.parentElement?.lastElementChild;
-    return line && line !== el ? (line.textContent ?? "").trim() : null;
+    const b = document.querySelector('[data-testid="username-refusals"]');
+    return b ? (b.textContent ?? "").trim() : null;
   });
 const alertText = async (page) => {
   const a = page.locator('[data-testid="auth-alert"]');
@@ -565,9 +567,8 @@ async function runOnboardingFlows(browserType, bname, [w, h], theme) {
     await cont.click();
     await page.waitForFunction(
       (t) => {
-        const el = document.querySelector('[data-testid="username"]');
-        const line = el?.parentElement?.lastElementChild;
-        return !!line && line !== el && (line.textContent ?? "").trim() === t;
+        const b = document.querySelector('[data-testid="username-refusals"]');
+        return !!b && (b.textContent ?? "").trim() === t;
       },
       COPY.who.taken,
       { timeout: 15000 },
