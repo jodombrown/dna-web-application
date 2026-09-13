@@ -60,7 +60,7 @@ export function PasswordField({ label, hint, error, id, style, ...rest }: Passwo
             lineHeight: 1.5,
             color: "var(--ink)",
             background: focus ? "var(--surface)" : "var(--bg-sunken)",
-            border: "1px solid " + (error ? "var(--danger)" : focus ? "var(--ink)" : "var(--line)"),
+            border: "1px solid " + (error ? "var(--error)" : focus ? "var(--ink)" : "var(--line)"),
             borderRadius: "var(--radius-m)",
             padding: "0 var(--target-primary) 0 14px",
             minHeight: "var(--target-primary)",
@@ -110,7 +110,7 @@ export function PasswordField({ label, hint, error, id, style, ...rest }: Passwo
       {(error || hint) && (
         <div
           data-testid={error ? "password-refusal" : undefined}
-          style={{ fontSize: 13, lineHeight: 1.4, color: error ? "var(--danger)" : "var(--ink-3)" }}
+          style={{ fontSize: 13, lineHeight: 1.4, color: error ? "var(--error)" : "var(--ink-3)" }}
         >
           {error || hint}
         </div>

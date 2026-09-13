@@ -1330,7 +1330,7 @@ Two related notes on the same rows:
   `event_reminder` is not among them, so its line is written to the same shape and flagged here
   rather than presented as ruling 496 copy.
 
-## G18. The branch's first Pages preview served static files and 404ed every route — closed, one-off
+## G20. The branch's first Pages preview served static files and 404ed every route — closed, one-off
 
 **Severity: medium while it stood, and it blocked the exit check rather than the build. Opened and
 closed 13 September 2026 during Design pass 01 (rulings 61, 217). Closed by the next push: Pages run
@@ -1370,7 +1370,7 @@ deployment URL (`https://<hash>.dna-web-application.pages.dev`) instead of the a
 
 ---
 
-## G19. WebKit runs only in CI, and design pass 01 proved that costs defects
+## G21. WebKit runs only in CI, and design pass 01 proved that costs defects
 
 This container carries Chromium and no WebKit, so a local `node tests/matrix.cjs` proves the
 Chromium half of ruling 61's matrix and nothing else. Under ruling 228 every WebKit arm is therefore
