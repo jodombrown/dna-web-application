@@ -1,43 +1,6 @@
--- ---------------------------------------------------------------------------
--- Brief 5, onboarding: the stance axis, and the three onboarding writes.
---
--- Committed before it is applied (ruling 225). One file, in the handoff's order: add the stance
--- enum and column with its default; copy segment to stance by name; verify the counts and that no
--- row is null; drop segment; add stance_declared_at, onboarded_at and username_changes; rename and
--- update the vocabulary table; replace every projection and write path that read segment so it
--- reads stance. Then the four onboarding functions.
---
--- What was measured on the canonical project before this was written (ruling 242): seven members;
--- two carry segment = returnee, five carry null; four label rows (Returnee, Anchor, Ally, Still
--- Exploring); two member_segment_details rows, both returnee. Nobody is kin, because kin did not
--- exist. The five nulls take the column default, exploring (ruling 247), and their
--- stance_declared_at stays null, which is the true value: the choice was never recorded
--- (ruling 297). No statement in this file writes stance_declared_at or onboarded_at.
---
--- Two things this file never does. stance_declared_at is set by no default, no migration and no
--- backfill; only by a member touching a card (onboard_relationship), or by that member changing
--- their stance later, which the trigger at the end records. onboarded_at is set once, by
--- onboard_relationship, and by nothing else.
---
--- Not in the handoff, decided here and reported: members.handle is the username. It already exists
--- from Brief 3 as the public address (/m/:handle), it is unique, and its check constraint keeps it
--- lowercase, so a second username column would be a second home for one axis, the shape ruling 187
--- names. The handoff's own rule for current_place (reuse, never a parallel column) is applied to it.
--- who_completed_at is added because name is NOT NULL from the sign-up trigger and so cannot mark
--- screen one; the handoff's "first null of name, current_place, onboarded_at" needs a marker for
--- the first screen that a prefilled name does not supply.
--- ---------------------------------------------------------------------------
-
--- 1. The enum and the column. Default exploring (ruling 247): a member always has a stance.
 create type public.stance as enum ('returnee', 'kin', 'anchor', 'ally', 'exploring');
 alter table public.members add column stance public.stance not null default 'exploring';
-
--- 2. Copy segment to stance by name. Every existing value has the same name in the new enum.
 update public.members set stance = segment::text::public.stance where segment is not null;
-
--- 3. Verify before anything is dropped. Every named segment survives under the same name with the
--- same count, every row has a stance, and the only rows whose stance is not their former segment
--- are the ones that had none. The counts print as a notice so the apply log carries them.
 do $$
 declare
   v_members bigint;
@@ -78,14 +41,7 @@ begin
   raise notice 'B5 stance copy verified: members=%, segment before=%, stance after=%, rows defaulted from null=%',
     v_members, v_before, v_after, v_was_null;
 end $$;
-
--- 4. Drop the old column. Not left behind as a second axis (ruling 187).
 alter table public.members drop column segment;
-
--- 5. The onboarding columns. All nullable and unset for every existing member: null is the true
--- value, nobody has onboarded. username_changes counts deliberate changes away from the derived
--- suggestion. No grant to anon or authenticated on any of them: they are read through
--- onboarding_state() and written by the SECURITY DEFINER paths below and nothing else.
 alter table public.members
   add column stance_declared_at timestamptz,
   add column onboarded_at timestamptz,
@@ -95,16 +51,8 @@ comment on column public.members.stance_declared_at is 'Set when the member touc
 comment on column public.members.onboarded_at is 'Set once, by onboard_relationship, and by nothing else. Never cleared.';
 comment on column public.members.who_completed_at is 'Screen one of onboarding was written (onboard_who). name is NOT NULL from the sign-up trigger and cannot mark it.';
 comment on column public.members.username_changes is 'Deliberate username changes away from the derived suggestion. Accepting the suggestion leaves it at 0.';
--- save_profile_section is SECURITY INVOKER (Brief 3), so the owner's own update on the axis column
--- keeps the grant segment had. Nothing else on members changes.
 grant update (stance) on table public.members to authenticated;
-
--- 6. The section key follows the axis. Row values in member_visibility follow the rename.
 alter type public.profile_section rename value 'segment' to 'stance';
-
--- 7. The per-variant block (ruling 122) is keyed by the axis value, so its column, its type and its
--- policy predicate follow. The viewer policy depends on the column type, so it is dropped first and
--- recreated with the same predicate under the new names.
 drop policy member_segment_details_viewer_select on public.member_segment_details;
 drop function private.is_visible_segment_variant(uuid, public.member_segment);
 alter table public.member_segment_details rename to member_stance_details;
@@ -121,7 +69,6 @@ alter policy member_segment_details_owner_update on public.member_stance_details
 alter policy member_segment_details_owner_delete on public.member_stance_details rename to member_stance_details_owner_delete;
 alter policy member_segment_details_admin_select on public.member_stance_details rename to member_stance_details_admin_select;
 alter policy member_segment_details_service_role on public.member_stance_details rename to member_stance_details_service_role;
-
 create or replace function private.is_visible_stance_variant(p_member uuid, p_stance public.stance)
 returns boolean
 language sql stable security definer set search_path = ''
@@ -132,17 +79,12 @@ as $$
 $$;
 revoke execute on function private.is_visible_stance_variant(uuid, public.stance) from public;
 grant execute on function private.is_visible_stance_variant(uuid, public.stance) to anon, authenticated, service_role;
-
 create policy member_stance_details_viewer_select on public.member_stance_details
 for select to authenticated, anon
 using (
   private.can_see_section(member_id, 'stance')
   and private.is_visible_stance_variant(member_id, stance)
 );
-
--- 8. The vocabulary table (ruling 193): renamed, retyped, and its rows become the five stances in
--- ruling 300's order with ruling 300's names. The filter and the profile chooser read this table
--- and nothing else (ruling 187). Positions step through a gap because position is unique.
 alter table public.member_segments rename to member_stances;
 alter table public.member_stances rename column segment to stance;
 alter table public.member_stances alter column stance type public.stance using stance::text::public.stance;
@@ -165,15 +107,7 @@ begin
       (select string_agg(label || '@' || position, ',' order by position) from public.member_stances);
   end if;
 end $$;
-
--- 9. Nothing references the old type now.
 drop type public.member_segment;
-
--- 10. A stance change after onboarding is a declaration too (the handoff: set when a member touches
--- a card in the onboarding session or changes stance later). Recorded here so every writer of the
--- axis inherits it rather than restating it, and so no grant on stance_declared_at is needed for
--- the invoker path. A no-op update does not fire it; onboard_relationship sets the timestamp itself
--- for the case where the member re-selects the default.
 create or replace function private.stance_declared()
 returns trigger
 language plpgsql security definer set search_path = ''
@@ -190,17 +124,6 @@ drop trigger if exists members_stance_declared on public.members;
 create trigger members_stance_declared
   before update of stance on public.members
   for each row execute function private.stance_declared();
-
--- ---------------------------------------------------------------------------
--- 11. Every projection and write path that read segment now reads stance. Each body below is the
--- live definition (matched to pg_proc by md5 before editing) with the axis renamed and nothing
--- else changed: profile_view, save_profile_section, connect_cards, private.connect_card,
--- connect_filter_options, vocabularies. connect_where never read the axis and is untouched.
--- Keys that change on the wire: profile_view.member.stance and .stance_label, sections.stance,
--- connect card stance_label, connect_filter_options.stances, vocabularies.stances, the
--- connect_cards filter key stance, and save_profile_section('stance', {stance, ...}).
--- ---------------------------------------------------------------------------
-
 create or replace function public.profile_view(p_handle text default null, p_as_public boolean default false)
 returns jsonb
 language plpgsql
@@ -529,7 +452,6 @@ begin
   ));
 end;
 $$;
-
 create or replace function public.save_profile_section(section text, payload jsonb)
 returns void
 language plpgsql
@@ -726,7 +648,6 @@ begin
   end if;
 end;
 $$;
-
 create or replace function public.connect_cards(
   p_lens text,
   p_filters jsonb default '{}'::jsonb,
@@ -955,7 +876,6 @@ begin
   raise exception 'connect_cards: unknown lens %', p_lens using errcode = '22023';
 end;
 $$;
-
 create or replace function private.connect_card(p_viewer uuid, p_member uuid, p_context text, p_matched text[])
 returns jsonb
 language plpgsql stable security definer set search_path = ''
@@ -1062,7 +982,6 @@ begin
   ));
 end;
 $$;
-
 create or replace function public.connect_filter_options()
 returns jsonb
 language sql stable security definer set search_path = ''
@@ -1081,7 +1000,6 @@ as $$
     'regions', (select coalesce(jsonb_agg(name order by position), '[]'::jsonb) from public.regional_expertise)
   ) end;
 $$;
-
 create or replace function public.vocabularies()
 returns jsonb
 language sql
@@ -1114,16 +1032,6 @@ as $$
                    from unnest(enum_range(null::public.contribute_instrument)) x)
   );
 $$;
-
--- ---------------------------------------------------------------------------
--- 12. Onboarding: one write per screen, one read projection. Each SECURITY DEFINER, each for
--- auth.uid() only, each returning what the next state needs and nothing about other members.
--- ---------------------------------------------------------------------------
-
--- The username derivation (SPEC section 9, mirrored by the client): trim, lowercase, strip
--- everything except a-z 0-9 space and hyphen, spaces to hyphens, collapse runs, trim hyphens.
--- Cut to the handle column's forty characters at the end, which the SPEC's steps do not mention
--- and the column requires.
 create or replace function private.derive_username(p_name text)
 returns text
 language sql immutable strict set search_path = ''
@@ -1137,11 +1045,6 @@ as $$
     40)), '');
 $$;
 revoke execute on function private.derive_username(text) from public, anon, authenticated;
-
--- Screen one. Name required; username and photo offered. On a collision the result is taken and
--- nothing is written; no suffix is ever appended (SPEC section 9). A username equal to the derived
--- suggestion leaves username_changes where it is; one that differs from both the suggestion and
--- the member's current handle counts as a deliberate change.
 create or replace function public.onboard_who(p_name text, p_username text default null, p_avatar_path text default null)
 returns jsonb
 language plpgsql
@@ -1205,10 +1108,6 @@ begin
                              then m.username_changes + 1 else m.username_changes end);
 end;
 $$;
-
--- Screen two. City and country; the country must be a value in the world list (ruling 142) and
--- anything else is refused. The stored shape is Brief 3's: current_place carries the city,
--- current_country the country, local_tz derived from the city as save_profile_section does.
 create or replace function public.onboard_where(p_city text, p_country text)
 returns jsonb
 language plpgsql
@@ -1248,11 +1147,6 @@ begin
   return jsonb_build_object('status', 'ok', 'city', v_city, 'country', v_country);
 end;
 $$;
-
--- Screen three, and the only path that sets onboarded_at. p_touched is the client flag from SPEC
--- section 6: true on any selection, including re-selecting the default, never on opening the
--- explainer. Untouched, the default stands unrecorded and only onboarded_at is written. Touched,
--- the stance is written and stance_declared_at with it, whether or not the value changed.
 create or replace function public.onboard_relationship(p_stance public.stance, p_touched boolean)
 returns jsonb
 language plpgsql
@@ -1295,10 +1189,6 @@ begin
     'onboarded_at', m.onboarded_at);
 end;
 $$;
-
--- The read projection: the first incomplete screen, and the saved values so resume renders what
--- was saved. Nothing about other members. Screen one is incomplete until onboard_who has written;
--- screen two until current_place is set; screen three until onboarded_at is set.
 create or replace function public.onboarding_state()
 returns jsonb
 language plpgsql
@@ -1339,7 +1229,6 @@ begin
     'onboarded_at', m.onboarded_at);
 end;
 $$;
-
 revoke execute on function public.onboard_who(text, text, text) from public, anon;
 revoke execute on function public.onboard_where(text, text) from public, anon;
 revoke execute on function public.onboard_relationship(public.stance, boolean) from public, anon;

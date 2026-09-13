@@ -100,8 +100,8 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { property: "og:type", content: "website" },
     ],
     links: [
-      { rel: "preconnect", href: "https://fonts.googleapis.com" },
-      { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
+      // Ruling 433 (U-S10): the two brand faces are self-hosted under public/strand/fonts, so no
+      // third party is contacted for type and no preconnect is needed.
       {
         rel: "stylesheet",
         href: appCss,
@@ -121,10 +121,14 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 });
 
 function RootShell({ children }: { children: ReactNode }) {
+  // Ruling 438: the CSP nonce this response was rendered with, echoed for the client-side router
+  // (it reads meta[property="csp-nonce"] at hydration). Absent when no nonce was minted.
+  const nonce = useRouter().options.ssr?.nonce;
   return (
     <html lang="en">
       <head>
         <HeadContent />
+        {nonce && <meta property="csp-nonce" content={nonce} />}
       </head>
       <body>
         {children}

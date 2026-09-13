@@ -12,6 +12,7 @@ export type Database = {
     Tables: {
       attestations: {
         Row: {
+          accepted_at: string | null;
           attested_at: string;
           attester_member_id: string;
           attester_role: string;
@@ -23,6 +24,7 @@ export type Database = {
           object_kind: Database["public"]["Enums"]["anchor_kind"];
         };
         Insert: {
+          accepted_at?: string | null;
           attested_at?: string;
           attester_member_id: string;
           attester_role: string;
@@ -34,6 +36,7 @@ export type Database = {
           object_kind: Database["public"]["Enums"]["anchor_kind"];
         };
         Update: {
+          accepted_at?: string | null;
           attested_at?: string;
           attester_member_id?: string;
           attester_role?: string;
@@ -1565,8 +1568,11 @@ export type Database = {
           anchor_id: string | null;
           anchor_kind: Database["public"]["Enums"]["anchor_kind"] | null;
           audience: Database["public"]["Enums"]["audience"] | null;
+          author_avatar_path: string | null;
+          author_handle: string | null;
           author_id: string | null;
           author_kind: Database["public"]["Enums"]["anchor_kind"] | null;
+          author_name: string | null;
           body: string | null;
           c_category: Database["public"]["Enums"]["c_category"] | null;
           created_at: string | null;
@@ -1581,8 +1587,11 @@ export type Database = {
           anchor_id?: string | null;
           anchor_kind?: Database["public"]["Enums"]["anchor_kind"] | null;
           audience?: Database["public"]["Enums"]["audience"] | null;
+          author_avatar_path?: string | null;
+          author_handle?: string | null;
           author_id?: string | null;
           author_kind?: Database["public"]["Enums"]["anchor_kind"] | null;
+          author_name?: string | null;
           body?: string | null;
           c_category?: Database["public"]["Enums"]["c_category"] | null;
           created_at?: string | null;
@@ -1597,8 +1606,11 @@ export type Database = {
           anchor_id?: string | null;
           anchor_kind?: Database["public"]["Enums"]["anchor_kind"] | null;
           audience?: Database["public"]["Enums"]["audience"] | null;
+          author_avatar_path?: string | null;
+          author_handle?: string | null;
           author_id?: string | null;
           author_kind?: Database["public"]["Enums"]["anchor_kind"] | null;
+          author_name?: string | null;
           body?: string | null;
           c_category?: Database["public"]["Enums"]["c_category"] | null;
           created_at?: string | null;
@@ -1653,6 +1665,7 @@ export type Database = {
       };
       public_attestations: { Args: never; Returns: Json };
       publish_post: { Args: { payload: Json }; Returns: string };
+      rate_limit_check: { Args: { p_action: string }; Returns: boolean };
       respond_to_request: {
         Args: { p_accept: boolean; p_sender: string };
         Returns: undefined;

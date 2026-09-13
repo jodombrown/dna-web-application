@@ -31,7 +31,9 @@ import {
   isResumedSession,
   onboardingPhotoUrl,
   uploadOnboardingPhoto,
+  usernameRefusals,
   usernameValid,
+  USERNAME_REFUSAL,
   type OnboardingState,
 } from "@/lib/onboarding";
 import { useTier, type Tier } from "@/lib/tier";
@@ -46,8 +48,8 @@ export const COPY = {
     nameLabel: "Your name",
     nameHint: "As you'd like to be known here.",
     usernameLabel: "Username",
-    usernameHint:
-      "We'll suggest one from your name. You can change it twice after this, so pick one you'll keep.",
+    // Ruling 411: the hint names no count of changes.
+    usernameHint: "We'll suggest one from your name. Pick one you'll keep.",
     photoLabel: "Photo",
     photoAdd: "Add a photo",
     photoChange: "Change photo",
@@ -303,9 +305,13 @@ export function WhoScreen({ state, onSubmit }: { state: OnboardingState; onSubmi
   };
   const onUsername = (v: string) => {
     setUsernameTyped(true);
-    setUsername(v);
+    // The server lowercases (ruling 334); doing it here means a capital is never a refusal.
+    setUsername(v.toLowerCase());
     setTaken(false);
   };
+  // Ruling 434: the reasons this username is refused, each rendered on its own line below the
+  // field, so Continue disables only with a visible reason (W17, U-O2).
+  const refusals = usernameRefusals(username.trim());
 
   const showPreview = (url: string | undefined) => {
     if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
@@ -383,7 +389,7 @@ export function WhoScreen({ state, onSubmit }: { state: OnboardingState; onSubmi
         <Input
           label={COPY.who.usernameLabel}
           hint={COPY.who.usernameHint}
-          error={taken}
+          error={taken || refusals.length > 0}
           value={username}
           onChange={(e) => onUsername((e.target as HTMLInputElement).value)}
           autoComplete="off"
@@ -394,6 +400,25 @@ export function WhoScreen({ state, onSubmit }: { state: OnboardingState; onSubmi
           data-testid="username"
           required
         />
+        {refusals.length > 0 && (
+          <div
+            role="status"
+            data-testid="username-refusals"
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: 4,
+              marginTop: -16,
+              fontSize: 13,
+              lineHeight: 1.4,
+              color: "var(--error)",
+            }}
+          >
+            {refusals.map((r) => (
+              <span key={r}>{USERNAME_REFUSAL[r]}</span>
+            ))}
+          </div>
+        )}
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
           <span style={{ fontSize: 15, fontWeight: 500, color: "var(--ink-2)" }}>
             {COPY.who.photoLabel}

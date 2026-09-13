@@ -60,7 +60,25 @@ function entryPath(auth: string): string {
   }
 }
 
-const emit = (record: Record<string, unknown>) => console.log(JSON.stringify(record));
+// Ruling 443 (F24): the record is company-facing shape and duration only. Nothing request-scoped
+// rides on it: no JWT sub, no user id, no request id, no header. Any key by one of those names is
+// dropped before the line is written, so a future field cannot reintroduce one by accident. The
+// platform's own per-request log metadata is outside this function's reach and is F24's remaining
+// half, recorded as such.
+const IDENTIFIER_KEYS = new Set([
+  "sub",
+  "user_id",
+  "member_id",
+  "id",
+  "request_id",
+  "jwt",
+  "authorization",
+]);
+const emit = (record: Record<string, unknown>) => {
+  const clean: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(record)) if (!IDENTIFIER_KEYS.has(k)) clean[k] = v;
+  console.log(JSON.stringify(clean));
+};
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });

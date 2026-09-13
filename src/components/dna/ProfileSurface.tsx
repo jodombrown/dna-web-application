@@ -47,7 +47,9 @@ import { VocabularyPicker } from "@/components/strand/VocabularyPicker";
 import { assetBase, C_LABEL, C_ORDER, type C } from "@/components/strand/cmeta";
 import { ProfileBlockControl } from "@/components/dna/ProfileBlockControl";
 import { toastStyle } from "@/components/dna/FeedSurface";
+import { IntroSheet } from "@/components/dna/IntroSheet";
 import { useAuth } from "@/lib/auth";
+import { sendIntroduction } from "@/lib/connect";
 import { blockMember, unblockMember } from "@/lib/blocks";
 import { openComposer } from "@/lib/composer-store";
 import type { Json } from "@/lib/database.types";
@@ -271,7 +273,7 @@ const LINK_STYLE: CSSProperties = {
 export type ProfileSurfaceProps = { handle: string; edit: boolean; asPublic: boolean };
 
 export function ProfileSurface({ handle, edit, asPublic }: ProfileSurfaceProps) {
-  const { ready, member: me } = useAuth();
+  const { ready, member: me, refreshMember } = useAuth();
   const tier = useTier();
   const navigate = useNavigate();
   const qc = useQueryClient();
@@ -303,10 +305,15 @@ export function ProfileSurface({ handle, edit, asPublic }: ProfileSurfaceProps) 
     queryFn: loadPublicAttestations,
     enabled: publicView,
   });
-  const invalidate = useCallback(
-    () => qc.invalidateQueries({ queryKey: ["profile", handle] }),
-    [qc, handle],
-  );
+  // W27: a save re-reads the profile at once (refetch, not only invalidate, so a query that is
+  // not mounted as active still resolves before the masthead renders again), and the shell's own
+  // copy of the member (name and handle from the members row, read at sign-in) is refreshed with
+  // it, so the masthead, the header and the greeting all carry the saved name and headline
+  // without a reload.
+  const invalidate = useCallback(async () => {
+    await qc.refetchQueries({ queryKey: ["profile", handle] });
+    await refreshMember();
+  }, [qc, handle, refreshMember]);
 
   // Toast (the host controls mounting).
   const [toast, setToastText] = useState<string | null>(null);
@@ -469,35 +476,56 @@ export function ProfileSurface({ handle, edit, asPublic }: ProfileSurfaceProps) 
     void quickSave("visibility", { section, audience }, "");
   };
 
-  // Media: the composer's path (Tinify) into the profile bucket, then the section save.
+  // Media (ruling 424): the one client pipeline into the profile bucket, then the section save.
   const avatarInput = useRef<HTMLInputElement>(null);
   const coverInput = useRef<HTMLInputElement>(null);
   const onPick = async (e: ChangeEvent<HTMLInputElement>, slot: "avatar" | "cover") => {
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file) return;
-    const path = await uploadProfileImage(file, slot);
-    if (!path) {
-      toastMsg("That image did not upload. Try again.");
+    const out = await uploadProfileImage(file, slot);
+    if (!out.ok) {
+      toastMsg(
+        out.reason === "too_large"
+          ? "That image is too large. Choose a smaller one and try again."
+          : "That image did not upload. Try again.",
+      );
       return;
     }
-    await quickSave("media", slot === "avatar" ? { avatar_path: path } : { cover_path: path });
+    await quickSave(
+      "media",
+      slot === "avatar" ? { avatar_path: out.path } : { cover_path: out.path },
+    );
   };
 
   // Relationship (rulings 118 to 120).
   const rel = profile?.relationship;
   const first = profile ? (profile.member.name.split(" ")[0] ?? profile.member.name) : "";
+  // Ruling 417 (under 400): the composer carries no Connect verb, so "Connect with {first}" opens
+  // the introduction sheet and writes through send_introduction, the one write path (ruling 215).
+  // The message is optional here (ruling 401); the request sheet Design draws under 401 replaces
+  // this sheet when it ships.
+  const [introOpen, setIntroOpen] = useState(false);
+  const [introMessage, setIntroMessage] = useState("");
+  const [introSending, setIntroSending] = useState(false);
   const connectWith = () => {
     if (!profile) return;
-    openComposer({
-      host: "profile",
-      initialVerb: "connect",
-      anchor: { kind: "member", id: profile.member.id, name: profile.member.name },
-      initial: {
-        fields: { who: { value: profile.member.name, mine: true } },
-        audience: "everyone",
-      },
-    });
+    setIntroMessage("");
+    setIntroOpen(true);
+  };
+  const sendIntro = async () => {
+    if (!profile || introSending) return;
+    setIntroSending(true);
+    try {
+      await sendIntroduction(profile.member.id, introMessage);
+      await invalidate();
+      setIntroOpen(false);
+      toastMsg("Your introduction is with " + first + ".");
+    } catch {
+      toastMsg("That did not go through. Try again.");
+    } finally {
+      setIntroSending(false);
+    }
   };
   const relAct = async (fn: () => Promise<void>, done?: string) => {
     try {
@@ -939,12 +967,31 @@ export function ProfileSurface({ handle, edit, asPublic }: ProfileSurfaceProps) 
       <Toast>{toast}</Toast>
     </div>
   );
+  // Ruling 417: the introduction sheet behind "Connect with {first}", signed-in visitors only.
+  const introNode = visitor && profile && (
+    <IntroSheet
+      open={introOpen}
+      member={{
+        name: profile.member.name,
+        headline: profile.member.headline,
+        avatarUrl: profile.avatarUrl,
+      }}
+      message={introMessage}
+      onMessage={setIntroMessage}
+      onClose={() => setIntroOpen(false)}
+      onSend={() => void sendIntro()}
+      sending={introSending}
+      compact={compact}
+      messageRequired={false}
+    />
+  );
 
   if (!publicView) {
     return (
       <>
         {body}
         {toastNode}
+        {introNode}
       </>
     );
   }
@@ -1146,7 +1193,7 @@ function ProfileBody(p: BodyProps) {
     p.setDrafts((st) => ({ ...st, [id]: { ...((st[id] as Draft | undefined) ?? {}), ...patch } }));
 
   const ownerHint = priv
-    ? "Members see your name, headline, segment, origin and location. Nothing else shows until you switch Private off."
+    ? "Private hides your profile from everyone who is not connected to you. Nothing else shows."
     : shared
       ? "Anyone with the link sees your core row and the sections set to Everyone on DNA. Connections-only and Anchored sections stay inside. Anchored means members who share a Space role or an attested event with you."
       : "Only signed-in members can open your profile. Turn on Share my profile to give the link to anyone.";

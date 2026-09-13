@@ -16,7 +16,7 @@ import { Icon } from "@/components/strand/Icon";
 import { IconButton } from "@/components/strand/IconButton";
 import { LensBar } from "@/components/strand/LensBar";
 import { Toast } from "@/components/strand/Toast";
-import type { C } from "@/components/strand/cmeta";
+import type { ComposerVerb } from "@/components/strand/cmeta";
 import type { Member } from "@/lib/auth";
 import { openComposer } from "@/lib/composer-store";
 import { loadFeed, loadMarks, loadPost, setReacted, setSaved } from "@/lib/feed";
@@ -310,10 +310,10 @@ export function FeedSurface({ member, view }: { member: Member; view: FeedView }
       staleTime: 30_000,
     });
   };
-  const compose = (verb: C) => openComposer({ host: COMPOSER_HOST, initialVerb: verb });
-  const act = (c: C) => (
+  const compose = (verb: ComposerVerb) => openComposer({ host: COMPOSER_HOST, initialVerb: verb });
+  const act = (c: ComposerVerb) => (
     <Button c={c} onClick={() => compose(c)}>
-      {c === "connect" ? "Make an Intro" : "Share a Story"}
+      Share a Story
     </Button>
   );
   const firstName = member.name.split(/\s+/)[0] || member.name;
@@ -322,8 +322,13 @@ export function FeedSurface({ member, view }: { member: Member; view: FeedView }
       ? {
           c: "connect" as const,
           title: "Nobody in your network yet.",
-          body: "Make an intro. Posts from your connections appear here.",
-          action: act("connect"),
+          // Ruling 418: the action leaves the composer (ruling 400) and goes to Connect.
+          body: "Posts from your connections appear here.",
+          action: (
+            <Button c="connect" onClick={() => void navigate({ to: "/connect", search: {} })}>
+              Find people on Connect
+            </Button>
+          ),
         }
       : lens === "mine"
         ? {

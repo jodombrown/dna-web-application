@@ -18,7 +18,13 @@ import {
   useHeadingFocus,
 } from "@/components/dna/AuthSurface";
 import { useAuth } from "@/lib/auth";
-import { COPY, MIN_PASSWORD, passwordFault, signOutOtherSessions } from "@/lib/auth-flow";
+import {
+  COPY,
+  MIN_PASSWORD,
+  passwordFault,
+  passwordFaultCopy,
+  signOutOtherSessions,
+} from "@/lib/auth-flow";
 import { captureRecoveryFromUrl, clearRecovery, recoveryState } from "@/lib/recovery";
 import { getSupabase } from "@/lib/supabase";
 import { useTheme } from "@/lib/tier";
@@ -85,15 +91,12 @@ function ResetLanding() {
     try {
       const { error } = await sb.auth.updateUser({ password: next });
       if (error) {
+        // Ruling 414: a password fault is named by its reason and the form stays; only a refusal
+        // that is not about the password reads as an expired recovery.
         const fault = passwordFault(error);
-        if (fault === "breached") {
+        if (fault !== "other" || /password/i.test(error.message || "")) {
           setFlag("new");
-          setAlert(COPY.breached);
-          return;
-        }
-        if (fault === "short") {
-          setFlag("new");
-          setAlert(COPY.tooShort);
+          setAlert(passwordFaultCopy(fault));
           return;
         }
         clearRecovery();

@@ -6,7 +6,7 @@ import {
   type UnfurlMeta,
   type UploadedImage,
 } from "@/components/strand/Composer";
-import type { C } from "@/components/strand/cmeta";
+import type { C, ComposerVerb } from "@/components/strand/cmeta";
 import type { FieldKey } from "@/components/strand/verb-schema";
 import { functionsUrl, getSupabase, SUPABASE_PUBLISHABLE_KEY } from "./supabase";
 
@@ -44,9 +44,10 @@ export function makeInfer(
       });
       if (!res.ok) return null;
       const data = (await res.json()) as Wire;
-      if (!data || !data.verb) return null;
+      // Ruling 400: the composer carries no Connect verb, so a connect reading is silence.
+      if (!data || !data.verb || data.verb === "connect") return null;
       return {
-        c: data.verb,
+        c: data.verb as ComposerVerb,
         fields: data.fields ?? {},
         confidence: data.confidence,
         latency_ms: data.latency_ms,

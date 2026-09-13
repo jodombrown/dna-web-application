@@ -5,7 +5,7 @@ import type { MouseEvent, ReactNode } from "react";
 import { AUDIENCE_LABEL } from "@/components/strand/AudienceSelect";
 import { Button } from "@/components/strand/Button";
 import { PostCard, type PostCardProps } from "@/components/strand/PostCard";
-import { fieldRows, UNTYPED, VERB_SCHEMA } from "@/components/strand/verb-schema";
+import { CARD_SCHEMA, fieldRows, UNTYPED } from "@/components/strand/verb-schema";
 import type { PostView } from "@/lib/post-view";
 
 export type RouterOptions = {
@@ -31,7 +31,7 @@ export type RouterOptions = {
 
 /** Map a PostView to PostCard props. Untyped posts: convey frame, no kicker, no title, no action (ruling 68). */
 export function postCardProps(view: PostView, opts: RouterOptions = {}): PostCardProps {
-  const schema = view.verb ? VERB_SCHEMA[view.verb] : UNTYPED;
+  const schema = view.verb ? CARD_SCHEMA[view.verb] : UNTYPED;
   const c = view.c_category;
   const title = view.verb ? view.fields.title?.value : undefined;
   const media: PostCardProps["media"] =
@@ -52,6 +52,7 @@ export function postCardProps(view: PostView, opts: RouterOptions = {}): PostCar
   return {
     c,
     author: view.author_name,
+    authorHandle: view.author_handle,
     authorKind: view.author_kind,
     avatarSrc: view.author_avatar,
     meta: view.meta,

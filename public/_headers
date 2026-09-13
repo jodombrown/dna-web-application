@@ -1,0 +1,12 @@
+# Ruling 438 (F19): the security headers for every path Cloudflare Pages serves as a static asset.
+# The worker's responses (every SSR route) set the same six headers in src/server.ts, where the
+# Content-Security-Policy carries a per-response nonce for TanStack Start's inline scripts; this
+# static copy carries no nonce because nothing served from here runs an inline script. Nitro
+# appends its own asset cache rules below at build time (dist/_headers).
+/*
+  Content-Security-Policy: default-src 'self'; connect-src 'self' https://dgspjevjoblujcoljvkn.supabase.co wss://dgspjevjoblujcoljvkn.supabase.co https://api.mapbox.com; img-src 'self' data: blob: https: https://dgspjevjoblujcoljvkn.supabase.co; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'
+  X-Frame-Options: DENY
+  Referrer-Policy: strict-origin-when-cross-origin
+  Strict-Transport-Security: max-age=31536000; includeSubDomains
+  X-Content-Type-Options: nosniff
+  Permissions-Policy: camera=(self), geolocation=(), microphone=()
