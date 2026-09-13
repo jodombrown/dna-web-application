@@ -1368,3 +1368,36 @@ deployment, not the branch, not the alias truncation, and not the build. If it r
 first, and only if a second deployment 404s the same way pass `matrix.yml`'s `base_url` the
 deployment URL (`https://<hash>.dna-web-application.pages.dev`) instead of the alias.
 
+---
+
+## G19. WebKit runs only in CI, and design pass 01 proved that costs defects
+
+This container carries Chromium and no WebKit, so a local `node tests/matrix.cjs` proves the
+Chromium half of ruling 61's matrix and nothing else. Under ruling 228 every WebKit arm is therefore
+**unproven until the CI run reports it**, and a local green is never the exit check.
+
+That is not a theoretical cost. Run 183 on `128fff0` was green on Chromium — 76, 55 and 74 arms with
+no failing check, every failure ruling 292 count drift — and red on WebKit with two defects that
+Chromium could not have shown, each systematic rather than a flake:
+
+**The onboarding explainer's focus.** Eighteen arms, every viewport and both themes:
+`focus lands on the sheet heading (ruling 222)`. `ExplainerSheet` kept a private focus timer and a
+private Tab trap from before the pass rewrote `Sheet`, so two mechanisms competed for the same
+focus: the Sheet focuses on a frame after the dialog enters the top layer, the local copy focused on
+a 30ms timer, and whichever landed last won. Chromium's rAF fires inside 30ms and the heading won;
+WebKit's rAF inside a freshly opened `<dialog>` runs later, so the Sheet's fallback control won and
+focus never reached the heading. Fixed by deleting all three local copies — the timer, the trap and
+a hand-rolled focus restore — and marking the heading `data-sheet-heading`, which is the wiring the
+Sheet already reads. This is ruling 480 and 499's "one Sheet" holding: a second copy of the focus
+contract is not redundancy, it is a race.
+
+**The composer measured mid-slide.** One arm, `webkit-360x800-light publish within viewport`: the
+publish row sat at y 934 in an 800-tall viewport, on a panel whose top was 189px below its resting
+place. Not a layout defect — the harness waited a fixed 500ms for a 300ms slide, which holds on
+Chromium and loses on WebKit, where the transform starts a frame later and runs slower under CI
+load. The sibling check passed in the same breath because a translate does not change height. Fixed
+with `sheetSettled()`, which polls for the panel's resting `transform: none` instead of sleeping.
+
+The method note: a fixed sleep before a geometric assertion is an engine-dependent race, and a
+duplicated focus contract is an engine-dependent race. Both read as green on the engine that happens
+to win. Neither is visible without the WebKit job.

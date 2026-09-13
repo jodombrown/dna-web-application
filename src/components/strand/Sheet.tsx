@@ -210,7 +210,10 @@ export function Sheet({
       const first = list[0] as HTMLElement;
       const last = list[list.length - 1] as HTMLElement;
       const active = document.activeElement as HTMLElement | null;
-      if (e.shiftKey && (active === first || !p.contains(active))) {
+      // The heading is tabindex -1, so it is never in `list`: shift-Tab from it has to wrap to the
+      // last control like shift-Tab from `first` does. showModal() confines Tab to the dialog on
+      // its own, but the contained path has no top layer to lean on.
+      if (e.shiftKey && (active === first || !active || !list.includes(active))) {
         e.preventDefault();
         last.focus();
       } else if (!e.shiftKey && active === last) {

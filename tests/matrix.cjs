@@ -1456,6 +1456,10 @@ function record(name, ok, detail = "", crashed = armCrashed()) {
   results.push({ name, ok, detail, arm: openArm ? openArm.arm : null, crashed });
   // Ruling 316: every failure carries the flag or its absence, in the line a reader sees first.
   if (!ok) console.log("FAIL", crashed ? "[CRASH]" : "[no crash]", name, detail);
+  // Ruling 292 asks for a changed count to be explained by name, and EXPECT=write only ever gives
+  // the number. DUMP_LABELS=1 prints every check as it is emitted, so two arms can be diffed
+  // label by label and the delta named rather than guessed at.
+  if (process.env.DUMP_LABELS) console.log("LABEL", openArm ? openArm.arm : "-", "::", name);
 }
 // ---------------------------------------------------------------------------
 // Ruling 317: the suite declares what each arm emits, or the count is not evidence.
@@ -1709,6 +1713,23 @@ async function noOverflow(page, label) {
   record(label + " no horizontal overflow", m.ok, m.detail);
 }
 
+/** Ruling 492's geometry can only be measured once the slide has finished, and a fixed sleep is a
+ *  race rather than a wait. The Sheet's resting transform is `none` and its in-flight transform is
+ *  an interpolated matrix, so poll for the resting value. A 500ms sleep against the 300ms slide
+ *  held on Chromium and lost on WebKit, which starts the transform a frame later and runs it slower
+ *  under CI load: the composer's publish row measured 189px below the viewport on a panel that was
+ *  still moving. */
+async function sheetSettled(page, selector) {
+  await page.waitForFunction(
+    (sel) => {
+      const el = document.querySelector(sel);
+      return !!el && getComputedStyle(el).transform === "none";
+    },
+    selector,
+    { timeout: 10000, polling: "raf" },
+  );
+}
+
 async function shot(page, name) {
   await page.screenshot({ path: path.join(OUT, name + ".png"), fullPage: false });
 }
@@ -1877,7 +1898,7 @@ async function runViewport(browserType, bname, [w, h], theme) {
     await page.click('[data-testid="compose"]');
     const dialog = page.locator('section[role="dialog"][aria-label="Compose"]');
     await dialog.waitFor({ timeout: 10000 });
-    await page.waitForTimeout(500); // let the 300ms slide (after two frames) settle before measuring
+    await sheetSettled(page, 'section[role="dialog"][aria-label="Compose"]');
     record(tag + " composer opens from the header pill", true);
     if (process.env.DEBUG)
       console.log(

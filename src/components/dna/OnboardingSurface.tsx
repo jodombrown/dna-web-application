@@ -21,7 +21,7 @@ import { Button } from "@/components/strand/Button";
 import { Icon } from "@/components/strand/Icon";
 import { Input } from "@/components/strand/Input";
 import { Select } from "@/components/strand/Select";
-import { Sheet, SHEET_DUR } from "@/components/strand/Sheet";
+import { Sheet } from "@/components/strand/Sheet";
 import { AuthColumn, AuthHead } from "@/components/strand/AuthHead";
 import type { Stance } from "@/components/strand/SegmentBlock";
 import { AuthAlert, useHeadingFocus } from "@/components/dna/AuthSurface";
@@ -724,7 +724,6 @@ export function RelationshipScreen({
   const [alert, setAlert] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [explainer, setExplainer] = useState(false);
-  const linkRef = useRef<HTMLButtonElement | null>(null);
   const cardRefs = useRef<(HTMLDivElement | null)[]>([]);
   const mountedAt = useRef(Date.now());
 
@@ -816,7 +815,6 @@ export function RelationshipScreen({
           {COPY.relationship.footer}
         </p>
         <button
-          ref={linkRef}
           type="button"
           data-testid="explainer-link"
           disabled={busy}
@@ -849,11 +847,9 @@ export function RelationshipScreen({
       <ExplainerSheet
         open={explainer}
         tier={tier}
-        onClose={() => {
-          setExplainer(false);
-          // Ruling 222: focus returns to the link that opened it, once the sheet has left.
-          window.setTimeout(() => linkRef.current?.focus(), SHEET_DUR);
-        }}
+        // Ruling 222's return to the link is the Sheet's, not a copy here: it restores to whatever
+        // held focus when the sheet opened, and only once the top layer has actually gone.
+        onClose={() => setExplainer(false)}
       />
     </OnboardingFrame>
   );
@@ -862,9 +858,6 @@ export function RelationshipScreen({
 // ---------------------------------------------------------------------------
 // The explainer sheet (SPEC section 7; rulings 222, 248, 321).
 // ---------------------------------------------------------------------------
-const FOCUSABLE =
-  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
-
 export function ExplainerSheet({
   open,
   tier,
@@ -875,40 +868,10 @@ export function ExplainerSheet({
   onClose: () => void;
 }) {
   const compact = tier === "compact";
-  const h2Ref = useRef<HTMLHeadingElement | null>(null);
-  const bodyRef = useRef<HTMLDivElement | null>(null);
-
-  // Ruling 222: focus lands on the heading on open and stays inside while open.
-  useEffect(() => {
-    if (!open) return;
-    const t = window.setTimeout(() => h2Ref.current?.focus(), 30);
-    const trap = (e: globalThis.KeyboardEvent) => {
-      if (e.key !== "Tab" || !bodyRef.current) return;
-      const dlg = bodyRef.current.closest('[role="dialog"]') as HTMLElement | null;
-      if (!dlg) return;
-      const items = Array.from(dlg.querySelectorAll<HTMLElement>(FOCUSABLE));
-      if (items.length === 0) return;
-      const first = items[0];
-      const last = items[items.length - 1];
-      if (!first || !last) return;
-      const active = document.activeElement;
-      if (e.shiftKey && (active === first || active === h2Ref.current)) {
-        e.preventDefault();
-        last.focus();
-      } else if (!e.shiftKey && active === last) {
-        e.preventDefault();
-        first.focus();
-      } else if (!dlg.contains(active)) {
-        e.preventDefault();
-        first.focus();
-      }
-    };
-    window.addEventListener("keydown", trap);
-    return () => {
-      window.clearTimeout(t);
-      window.removeEventListener("keydown", trap);
-    };
-  }, [open]);
+  // Ruling 222's focus-on-open and its Tab trap are the Sheet's. A second copy here raced it: the
+  // Sheet focuses on a frame and this focused on a 30ms timer, so whichever landed last won, and on
+  // WebKit (whose rAF inside a freshly opened dialog runs later than 30ms) that was the Sheet's
+  // fallback control rather than the heading. data-sheet-heading is the whole wiring now.
 
   const para: CSSProperties = { margin: 0, fontSize: 15, lineHeight: 1.6, color: "var(--ink-2)" };
   const kicker: CSSProperties = {
@@ -939,7 +902,6 @@ export function ExplainerSheet({
       label={EXPLAINER.h2}
     >
       <div
-        ref={bodyRef}
         data-testid="explainer-sheet"
         style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}
       >
@@ -961,7 +923,7 @@ export function ExplainerSheet({
             }}
           >
             <h2
-              ref={h2Ref}
+              data-sheet-heading
               tabIndex={-1}
               data-testid="explainer-h2"
               style={{
