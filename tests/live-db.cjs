@@ -124,8 +124,7 @@ async function runLiveDbArms({ record, skip }) {
     accepted: "ruling 435: an attestation renders only once accepted",
     url: "ruling 439: publish_post refuses a link without an http or https scheme",
     rate: "ruling 442: the ceiling plus one call to onboard_who is refused in words",
-    onboarded:
-      "ruling 459 (W49): connect_cards and connect_where exclude an account that has not onboarded, and send_introduction refuses it",
+    onboarded: "ruling 459 (W49): connect_cards excludes an account that has not onboarded",
   };
   if (process.env.SKIP_REST) {
     for (const n of Object.values(names)) skip(n, "SKIP_REST");
@@ -462,11 +461,16 @@ async function runLiveDbArms({ record, skip }) {
 
     // ------------------------------------------------------------------------------------------
     // 459 (W49). The arm builds its own fixture (ruling 241): it sets Member Test's onboarded_at
-    // inside the transaction, measures the two projections and the write path with it set, then
-    // clears it and measures the same three again. The pair with onboarded_at set is the negative
-    // control ruling 270 asks for, so each refusal is read against the behaviour it reverts to and
-    // not against nothing. The control write is taken inside a savepoint and rolled back, so the
+    // inside the transaction, measures the projections and the write path with it set, then clears
+    // it and measures the same three again. The pair with onboarded_at set is the negative control
+    // ruling 270 asks for, so each refusal is read against the behaviour it reverts to and not
+    // against nothing. The control write is taken inside a savepoint and rolled back, so the
     // request row it creates cannot be the reason the gated attempt is refused.
+    //
+    // connect_where is the country mosaic, not a list of members: it returns the country names that
+    // hold at least private.setting_int('where_floor', 5) admitted members, so one member entering
+    // or leaving it is observable only at that boundary. The arm reads it both ways and states
+    // which case it met rather than asserting an absence that would pass for the wrong reason.
     // ------------------------------------------------------------------------------------------
     await inTransaction(client, async () => {
       const seen = async () => {
@@ -476,11 +480,10 @@ async function runLiveDbArms({ record, skip }) {
           "select public.connect_cards('members', '{}'::jsonb, null, 200) as out",
         );
         const where = await attempt(client, "select public.connect_where() as out");
-        const has = (r) =>
-          JSON.stringify(r.ok && r.rows[0] ? r.rows[0].out : null).includes(member.id);
+        const text = (r) => JSON.stringify(r.ok && r.rows[0] ? r.rows[0].out : null);
         return {
-          inCards: cards.ok && has(cards),
-          inWhere: where.ok && has(where),
+          inCards: cards.ok && text(cards).includes(member.id),
+          where: where.ok ? text(where) : null,
           err: cards.ok ? (where.ok ? null : where.message) : cards.message,
         };
       };
@@ -509,25 +512,40 @@ async function runLiveDbArms({ record, skip }) {
       const gated = await seen();
       const gatedIntro = await intro();
 
-      if (!control.inCards || !control.inWhere) {
+      if (!control.inCards) {
         skip(
           names.onboarded,
           control.err
             ? "a projection could not be read: " + control.err
-            : "the onboarded member is not in the projections to begin with, so their absence proves nothing",
+            : "the onboarded member is not in connect_cards to begin with, so their absence proves nothing",
         );
       } else {
         record(
           names.onboarded,
-          !gated.inCards && !gated.inWhere,
-          gated.err
-            ? "a projection could not be read: " + gated.err
-            : "in connect_cards " + gated.inCards + ", in connect_where " + gated.inWhere,
+          !gated.inCards,
+          gated.err ? "a projection could not be read: " + gated.err : "in connect_cards true",
         );
         record(
-          "ruling 459 control: the same member is in both projections while onboarded_at is set",
+          "ruling 459 control: the same member is in connect_cards while onboarded_at is set",
           true,
-          "in connect_cards true, in connect_where true",
+          "in connect_cards true",
+        );
+      }
+
+      const emptyMosaic =
+        control.where === null || /^\{"continent":\[\],"diaspora":\[\]\}$/.test(control.where);
+      if (emptyMosaic || control.where === gated.where) {
+        skip(
+          "ruling 459: connect_where excludes an account that has not onboarded",
+          emptyMosaic
+            ? "the mosaic names a country only once it holds five admitted members and no country on this project reaches that floor, so one member entering or leaving it changes nothing to measure"
+            : "the member's country holds more than the floor with or without them, so the tile stands either way and the difference is not observable",
+        );
+      } else {
+        record(
+          "ruling 459: connect_where excludes an account that has not onboarded",
+          true,
+          "mosaic with " + control.where + "; without " + gated.where,
         );
       }
 

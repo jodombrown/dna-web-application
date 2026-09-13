@@ -2,14 +2,8 @@
 // C routes, owns the one composer mount (ruling 56, moved here from the root in Brief 2), the c
 // keypress, and the published toast. The Feed column stays mounted across /feed and /posts/:id so a
 // card expands and collapses in place with the column's scroll position untouched (ruling 105).
-import { useQueryClient, type QueryClient } from "@tanstack/react-query";
-import {
-  createFileRoute,
-  Outlet,
-  redirect,
-  useLocation,
-  useNavigate,
-} from "@tanstack/react-router";
+import { useQueryClient } from "@tanstack/react-query";
+import { createFileRoute, Outlet, useLocation, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { feedViewOf } from "@/lib/feed-view";
 import { lensSearch, parseLens, type LensId } from "@/lib/lens";
@@ -19,57 +13,11 @@ import { FeedSurface, toastStyle } from "@/components/dna/FeedSurface";
 import { Toast } from "@/components/strand/Toast";
 import { C_ORDER, type C } from "@/components/strand/cmeta";
 import { useAuth } from "@/lib/auth";
-import {
-  isUngated,
-  loadOnboardingState,
-  onboardingQueryKey,
-  ONBOARDING_ROUTE,
-  type OnboardingState,
-} from "@/lib/onboarding";
-import { getSupabase } from "@/lib/supabase";
 import { openComposer, useComposerState } from "@/lib/composer-store";
 import { useTier } from "@/lib/tier";
 import { useSearch } from "@tanstack/react-router";
 
-/**
- * Ruling 459 (W49): the onboarding gate decides in the route's load, before any member route
- * renders, and not only in the effect that OnboardingGate runs after the first paint. Every member
- * surface is a child of this layout, so one beforeLoad covers all of them and no route can forget.
- *
- * It runs in the browser only. The session lives in the Supabase client's own storage, not in a
- * cookie, so the server render has no member to gate on; giving it one means a cookie session,
- * which is a second auth path and needs a brief that names it. The half of ruling 459 that does
- * hold on the server is the data: private.admit_member excludes an account that has not onboarded
- * from connect_cards, connect_where and send_introduction, whatever the client does.
- */
-export const Route = createFileRoute("/_shell")({
-  beforeLoad: async ({ context, location }) => {
-    if (typeof window === "undefined") return;
-    if (isUngated(location.pathname)) return;
-    // The public profile renders its own signed-out chrome for a visitor and for "View as public".
-    if (location.pathname.startsWith("/m/")) return;
-    const sb = getSupabase();
-    if (!sb) return;
-    const { data } = await sb.auth.getSession();
-    const memberId = data.session?.user.id;
-    // No session: ShellLayout sends them to sign-in, and the gate has nothing to decide.
-    if (!memberId) return;
-    const qc = (context as { queryClient: QueryClient }).queryClient;
-    let state: OnboardingState | null = null;
-    try {
-      state = await qc.ensureQueryData({
-        queryKey: onboardingQueryKey(memberId),
-        queryFn: loadOnboardingState,
-        staleTime: Infinity,
-      });
-    } catch {
-      // A read that failed is not a decision. The effect gate retries and holds the route.
-      return;
-    }
-    if (state?.next) throw redirect({ to: ONBOARDING_ROUTE[state.next] });
-  },
-  component: ShellLayout,
-});
+export const Route = createFileRoute("/_shell")({ component: ShellLayout });
 
 function isTypingTarget(t: EventTarget | null): boolean {
   const el = t as HTMLElement | null;
