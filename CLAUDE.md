@@ -82,10 +82,23 @@ by the Supabase MCP's `apply_migration` (ruling 553, extending 269). `apply_migr
 version rather than honouring the file's: applying `20260913220000` through it recorded the statements
 byte-identically, md5 and all, under `20260913220047`. That trades one drift row for two and
 manufactures exactly the divergence ruling 444's arm exists to catch, and the only way back is hand
-editing `supabase_migrations.schema_migrations`, which is what PASS-01 was written about. Between the
-push and the merge, `main` carries no file for a version the project records, so the drift arm on
-`main` reads `FAIL … recorded on the project, no file in the tree` and exits 1. That window is
-expected and closes on merge; it is not an empty row, which means something else in that arm.
+editing `supabase_migrations.schema_migrations`, which is what PASS-01 was written about.
+
+Between that push and the merge, the project records a version the branch has no file for, and the
+drift arm reads `FAIL … recorded on the project, no file in the tree` and exits 1. That is not an
+`EMPTY` row: the arm reaches `EMPTY` only at `if (!row.n)`, a recorded row whose `statements` array is
+empty, which is the PASS-01 pair and nothing else. The two conditions are deliberately separate and
+only one of them is red.
+
+On `main` the FAIL is latent rather than manifest. No workflow here carries a `schedule`; `pages.yml`
+runs on `push: branches: ["**"]` and `workflow_dispatch`, so `main` has no run of its own during the
+window, and the merge is itself the push that triggers one — by which point the file is in the tree and
+the run is green. **The exposure is every other branch**, because `migration-drift.cjs` reads
+`supabase/migrations` from the running checkout and the `live` job runs on every branch: during the
+window any branch that does not carry the file goes red at step 8 for a reason that has nothing to do
+with it. So the ordering is not "push then merge promptly" but: `db push` immediately before merging,
+and cut or push nothing else in between. The window should be minutes, and its cost falls on other
+people's branches rather than on the one being merged.
 
 Never force push to `main` (ruling 541) `[absolute]`. Force-with-lease is permitted on a Claude
 working branch, and only after a rebase that was instructed, pinned to the exact prior head. Plain
@@ -101,6 +114,14 @@ the arms that are still running: a Pages deploy retires the previous build's has
 page loading across the swap 404s. It cost one arm's page-error check during Fix PR 03's calibration,
 on one engine of two, and the tell was that only one of the eighteen connect arms failed when a real
 defect would have failed all eighteen. Wait for the dispatch, then push.
+
+The enforcing matrix runs on the final head, and nothing is committed to the branch after it starts
+(ruling 556, which sequences 554 rather than amending it). A commit arriving mid-run does not invalidate
+the run, it invalidates the run's subject: an enforcing run on a head that is about to be superseded
+proves nothing whatever it reports, however green. So finish the branch first — including the report and
+any doctrine lines — and only then let the run that will be cited start. "It is documentation only, so it
+costs time and not validity" is the wrong reading, and it is the one taken during Fix PR 03: a doc-only
+push superseded run 194 and its result described a head that no longer existed.
 
 The SSR nonce is held in `AsyncLocalStorage` (rulings 545, 549), which the Workers runtime provides
 under `nodejs_compat`; `nodejs_als` is the narrower flag for enabling only that API and is not what

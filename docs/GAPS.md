@@ -1473,6 +1473,19 @@ Nothing in the deployed app changes when this lands, so no arm can prove it from
 proof is a reset mail received from the `authSender` address, replied to, and arriving at the
 `support` one.
 
+**Status, 13 September 2026.** Drafts for all three strings now exist and are awaiting the founder's
+approval by number under ruling 496; they are deliberately not quoted here, because copy that has not
+been approved should not sit in the repository looking as though it has. Two notes carried with them:
+
+- The draft footer omits the reset link's expiry duration on purpose. Nobody has read the value
+  configured in Supabase, and a number written into approved copy without reading it off the console is
+  the same failure this gap exists to record. If it is wanted in the line, the configured value comes
+  first and the line is redrafted after.
+- The support line necessarily contains an address. It is approved and pasted into the Supabase console,
+  which the ruling 387 scan does not read — but it must never be quoted into a repository file, including
+  this one. `tests/contact.cjs` fails the build if it is, which is the absolute working rather than an
+  inconvenience: the addresses live in `src/lib/contact.ts` and its Deno mirror, and nowhere else.
+
 ## G23. The introduction expiry window is a seeded default, not a ruled number
 
 **Severity: low. Not a merge blocker, and nothing expires until the migration is applied. Opened

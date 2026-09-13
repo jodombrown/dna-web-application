@@ -59,12 +59,22 @@ deployment, the 404 case by an arm written specifically for it.
    editing the migration ledger that PASS-01 was written about. The CLI records the file's own version
    and leaves the drift arm green. Ruling 553 makes that the only route, extending 269.
 
-   **One consequence to accept rather than discover.** Between that push and the merge, canonical records
-   a version `main` has no file for, so the drift arm on `main` reads
-   `FAIL … recorded on the project, no file in the tree` and exits 1: `main`'s CI goes red for that
-   window. It is not a third `EMPTY` row — `EMPTY` means a recorded row whose `statements` array is
-   empty, which is the PASS-01 pair and a different condition. The window closes on merge, and what
-   canonical carries meanwhile is one nullable column nothing reads plus a nightly cron job.
+   **One consequence to sequence rather than discover.** Between that push and the merge, the project
+   records a version the branch has no file for, and the drift arm reads
+   `FAIL … recorded on the project, no file in the tree` and exits 1. It is not an `EMPTY` row: the arm
+   reaches `EMPTY` only at `if (!row.n)`, a recorded row whose `statements` array is empty, which is the
+   PASS-01 pair and nothing else.
+
+   On `main` that FAIL is latent, not manifest. No workflow here carries a `schedule` — `pages.yml` runs
+   on `push: branches: ["**"]` and `workflow_dispatch` — so `main` has no run of its own during the
+   window, and the merge is itself the push that triggers one, by which point the file is in the tree and
+   the run is green. **The exposure is every other branch.** `migration-drift.cjs` reads
+   `supabase/migrations` from the running checkout and the `live` job runs on every branch, so during the
+   window any branch that does not carry the file goes red at step 8 for a reason that has nothing to do
+   with it — the G17 baseline branch, a Brief 6 branch, a hotfix. So the ordering is not "push then merge
+   promptly" but: `db push` immediately before merging this PR, and cut or push nothing else in between.
+   The window should be minutes, and its cost falls on other people's branches rather than on this one.
+   What the project carries meanwhile is one nullable column nothing reads plus a nightly cron job.
 
    While applying it, decide the window. It is seeded as `private.connect_settings` key
    `introduction_expiry_days` at 30 days, because no ruling in the handoff supplies a number.
@@ -220,13 +230,18 @@ Merged into the doctrine already there rather than added beside it. `CLAUDE.md` 
 
 ## The AsyncLocalStorage question, verified (ruling 549)
 
-Raised as a Moderate-confidence risk before merge: `AsyncLocalStorage` needs a compatibility flag, it demonstrably works on the preview, and whether production matches is invisible until the first production request — the failure mode being the nonce reading undefined while the policy blocks every script it was meant to allow. Verified rather than assumed, and settled rather than live, on three independent legs:
+Raised as a Moderate-confidence risk before merge: `AsyncLocalStorage` needs a compatibility flag, it demonstrably works on the preview, and whether production matches is invisible until the first production request — the failure mode being the nonce reading undefined while the policy blocks every script it was meant to allow.
 
-1. **The flag is not what holds it up.** `nodejs_als` exists to enable *only* that API; `nodejs_compat`, which this project carries, includes it. And from a compatibility date of `2026-08-04` the runtime enables `nodejs_compat` by default — this project's date is `2026-09-01`. From Cloudflare's own compatibility-flags and Node.js runtime documentation, not recollection.
-2. **Production and preview cannot diverge.** Nitro writes both settings into `dist/_worker.js/wrangler.json` (`compatibility_date: 2026-09-01`, `compatibility_flags: ["nodejs_compat"]`), and that file is part of the uploaded artifact. Production and every preview are `wrangler pages deploy dist` of the same build from the same workflow job. There is no per-environment dashboard setting left to discover on a first production request.
-3. **The dependency predates this PR and is already load-bearing in production.** `@tanstack/start-server-core`'s `requestHandler` runs *every* request through `eventStorage.run(...)` against a module-scope `new AsyncLocalStorage()`, and that module is in the built worker (`dist/_worker.js/_ssr/ssr.mjs`, `_ssr/server-B3ynfjdi.mjs`). The built worker holds four ALS constructions; `main`'s `src/lib/csp.ts` held none. An environment without ALS would already be serving nothing, rather than newly breaking on this change.
+The risk is settled rather than live, and this is deliberately stated as one load-bearing argument with two corroborating ones rather than three of equal weight, because only the first cannot move.
 
-So the risk reads as settled. Recorded in CLAUDE.md under ruling 549 so it need not be re-derived.
+**The argument that settles it: the dependency predates this PR and is already load-bearing in production.** `@tanstack/start-server-core`'s `requestHandler` runs *every* request through `eventStorage.run(...)` against a module-scope `new AsyncLocalStorage()`, and that module is in the built worker — `dist/_worker.js/_ssr/ssr.mjs` and `_ssr/server-B3ynfjdi.mjs`. The built worker holds four ALS constructions; `main`'s `src/lib/csp.ts` held none, so this PR adds an instance of a dependency the framework already imposes on every SSR response. An environment without ALS would therefore already be serving nothing at all, rather than newly breaking on this change. That holds whatever the flags turn out to mean, and it is why the conclusion does not rest on the two below.
+
+Corroborating, and weaker for different reasons:
+
+- **Production and preview cannot diverge.** Nitro writes both settings into `dist/_worker.js/wrangler.json` (`compatibility_date: 2026-09-01`, `compatibility_flags: ["nodejs_compat"]`), and that file is part of the uploaded artifact; production and every preview are `wrangler pages deploy dist` of the same build from the same workflow job. Read off the emitted file, so it is checkable — but it speaks to consistency between environments, not to whether the runtime honours the flag.
+- **The flag is probably not what holds it up either.** `nodejs_als` exists to enable *only* that API, while `nodejs_compat`, which this project carries, includes it; and from a compatibility date of `2026-08-04` the runtime enables `nodejs_compat` by default, this project's date being `2026-09-01`. Taken from Cloudflare's live compatibility-flags and Node.js runtime documentation rather than recollection. Flagged as the softest leg: a reader whose knowledge predates that default cannot confirm it, and the conclusion is designed to survive it being wrong.
+
+Recorded in CLAUDE.md under ruling 549 so it need not be re-derived.
 
 ## Ruling 270: every arm that proves a fix, with its reverted baseline
 
@@ -319,8 +334,11 @@ Minted in review of the work, and each one is either implemented here or recorde
 | 553 | a migration reaches canonical by `supabase db push`, never the MCP's `apply_migration`; extends 269 | CLAUDE.md |
 | 554 | no push to a working branch while a calibration dispatch is in flight | CLAUDE.md |
 | 555 | a handoff names the outcome, the ruling and the proof owed, never an unread mechanism | CLAUDE.md |
+| 556 | the enforcing matrix runs on the final head and nothing is committed to the branch after it starts; sequences 554 | CLAUDE.md |
 
 545 is amended rather than absorbed: what shipped is a different architecture from the one it described, and 549 is where that is recorded.
+
+554 and 556 are both recorded against my own mistakes in this PR, and 556 is the sharper of the two. I pushed a documentation-only commit while an enforcing matrix was in flight, reasoning that it cost time and not validity. That was the wrong reading: the commit did not invalidate the run, it invalidated the run's subject, and run 194's result described a head that no longer existed. The rule that follows is to finish the branch — report and doctrine lines included — and only then let the run that will be cited start.
 
 ## Follow-ups, none of them in this PR
 
