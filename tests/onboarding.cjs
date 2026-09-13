@@ -635,9 +635,11 @@ async function runOnboardingFlows(browserType, bname, [w, h], theme) {
     for (const open of ["/connect", "/convene", "/password"]) {
       await page.goto(BASE + open, { waitUntil: "domcontentloaded" }).catch(() => undefined);
       await page.waitForSelector("header", { timeout: 15000 }).catch(() => undefined);
+      // The expanded tier mounts more than one header (the rail and the surface's own), so the
+      // control asserts the chrome is there at all, not how many pieces of it there are.
       record(
         tag + ": " + open + " opens for the same member once onboarded (ruling 459 control)",
-        pathOf(page) === open && (await page.locator("header").count()) === 1,
+        pathOf(page) === open && (await page.locator("header").count()) >= 1,
         pathOf(page) + " header=" + (await page.locator("header").count()),
       );
     }
