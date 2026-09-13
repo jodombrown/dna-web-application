@@ -1,6 +1,10 @@
 // One stub per C (/connect, /convene, /collaborate, /contribute, /convey) until its engine brief
 // ships: EmptyState in the C with "Back to Feed" (SPEC section 1). Renders inside the shell, never
 // its own chrome (ruling 69).
+//
+// Design pass 01, B10 item 6 with STRAND-CHANGES section 7 (W38, W48): a stub page's empty
+// treatment is EmptyState, never a placeholder card, and it fills the space the sticky bars leave
+// so it centres rather than sitting as a stub parked at the top of an empty scroller.
 import { createFileRoute, notFound, useNavigate } from "@tanstack/react-router";
 import { Button } from "@/components/strand/Button";
 import { EmptyState } from "@/components/strand/EmptyState";
@@ -21,6 +25,9 @@ function CStub() {
     <div data-testid="c-stub" data-c={active}>
       <EmptyState
         c={active}
+        fill
+        stickyTop={56}
+        stickyBottom={64}
         title={C_LABEL[active] + " is next."}
         body="This surface arrives with its own brief. Until then Feed is Home and the shell is the same everywhere."
         action={

@@ -1456,6 +1456,10 @@ function record(name, ok, detail = "", crashed = armCrashed()) {
   results.push({ name, ok, detail, arm: openArm ? openArm.arm : null, crashed });
   // Ruling 316: every failure carries the flag or its absence, in the line a reader sees first.
   if (!ok) console.log("FAIL", crashed ? "[CRASH]" : "[no crash]", name, detail);
+  // Ruling 292 asks for a changed count to be explained by name, and EXPECT=write only ever gives
+  // the number. DUMP_LABELS=1 prints every check as it is emitted, so two arms can be diffed
+  // label by label and the delta named rather than guessed at.
+  if (process.env.DUMP_LABELS) console.log("LABEL", openArm ? openArm.arm : "-", "::", name);
 }
 // ---------------------------------------------------------------------------
 // Ruling 317: the suite declares what each arm emits, or the count is not evidence.
@@ -1709,6 +1713,51 @@ async function noOverflow(page, label) {
   record(label + " no horizontal overflow", m.ok, m.detail);
 }
 
+/** Ruling 492's geometry can only be measured once the slide has finished, and a fixed sleep is a
+ *  race rather than a wait. The Sheet's resting transform is `none` and its in-flight transform is
+ *  an interpolated matrix, so poll for the resting value. A 500ms sleep against the 300ms slide
+ *  held on Chromium and lost on WebKit, which starts the transform a frame later and runs it slower
+ *  under CI load: the composer's publish row measured 189px below the viewport on a panel that was
+ *  still moving. */
+async function sheetSettled(page, selector) {
+  await page.waitForFunction(
+    (sel) => {
+      const el = document.querySelector(sel);
+      return !!el && getComputedStyle(el).transform === "none";
+    },
+    selector,
+    { timeout: 10000, polling: "raf" },
+  );
+}
+
+/** DIA's line is the composer's slowest signal and the one a whole arm hangs off, so when it does
+ *  not arrive the arm should say which limb failed rather than time out mutely. The app's own worst
+ *  case is INFER_DEBOUNCE + THINK_BUDGET; past that `infer` is aborted and the line settles at
+ *  nothing permanently, so a bare timeout cannot tell "the fetch was slow" from "the text never
+ *  reached React". Report what the textarea actually holds and what the line actually shows. */
+async function diaSettled(page, dialog, tag) {
+  try {
+    await dialog.locator('[data-dia="done"]').waitFor({ timeout: 5000 });
+  } catch (e) {
+    const state = await page
+      .evaluate(() => {
+        const ta = document.querySelector('textarea[aria-label="What is going on with you"]');
+        const line = document.querySelector("[data-dia]");
+        return {
+          textarea: ta ? ta.value : "(no textarea)",
+          dia: line ? line.getAttribute("data-dia") : "(no line)",
+        };
+      })
+      .catch(() => null);
+    record(
+      tag + " DIA resolved on the filled text",
+      false,
+      JSON.stringify(state) + " " + String(e).slice(0, 120),
+    );
+    throw e;
+  }
+}
+
 async function shot(page, name) {
   await page.screenshot({ path: path.join(OUT, name + ".png"), fullPage: false });
 }
@@ -1877,7 +1926,7 @@ async function runViewport(browserType, bname, [w, h], theme) {
     await page.click('[data-testid="compose"]');
     const dialog = page.locator('section[role="dialog"][aria-label="Compose"]');
     await dialog.waitFor({ timeout: 10000 });
-    await page.waitForTimeout(500); // let the 300ms slide (after two frames) settle before measuring
+    await sheetSettled(page, 'section[role="dialog"][aria-label="Compose"]');
     record(tag + " composer opens from the header pill", true);
     if (process.env.DEBUG)
       console.log(
@@ -1899,13 +1948,39 @@ async function runViewport(browserType, bname, [w, h], theme) {
           }),
         ),
       );
-    // Ruling 400: four chips, C order; the composer carries no Connect verb.
+    // Rulings 400, 417, 458, 498: four chips in C order, above the text area, visible before
+    // anything is typed, and no Connect chip. Connect has left the composer; making an intro is the
+    // request sheet's job (401).
     record(
-      tag + " four verb chips visible, no Connect (ruling 400)",
+      tag + " four verb chips in C order above the text area, and no Connect chip",
       (await dialog
         .locator('[role="radiogroup"][aria-label="What kind of post"] [role="radio"]')
         .count()) === 4 &&
-        (await dialog.locator('[role="radio"][aria-label^="Make an Intro"]').count()) === 0,
+        (await dialog.locator('[role="radio"][aria-label^="Make an Intro"]').count()) === 0 &&
+        (await dialog
+          .locator('[role="radiogroup"][aria-label="What kind of post"] [role="radio"]')
+          .first()
+          .getAttribute("aria-label")) === "Host an Event (Convene)" &&
+        (await dialog.evaluate(() => {
+          const row = document.querySelector("[data-verb-row]");
+          const ta = document.querySelector('[aria-label="What is going on with you"]');
+          return (
+            !!row && !!ta && !!(row.compareDocumentPosition(ta) & Node.DOCUMENT_POSITION_FOLLOWING)
+          );
+        })),
+    );
+    // Ruling 493: the chip row is one horizontal scroller at every tier, never a stack of four.
+    record(
+      tag + " the chip row is one horizontal scroller, never a stack",
+      await dialog.evaluate(() => {
+        const row = document.querySelector("[data-verb-row]");
+        if (!row) return false;
+        const cs = getComputedStyle(row);
+        const tops = new Set(
+          [...row.children].map((c) => Math.round(c.getBoundingClientRect().top)),
+        );
+        return cs.overflowX === "auto" && cs.flexWrap !== "wrap" && tops.size === 1;
+      }),
     );
     record(
       tag + " empty: no DiaLine, no preview, publish disabled",
@@ -1913,21 +1988,15 @@ async function runViewport(browserType, bname, [w, h], theme) {
         (await dialog.locator("article[aria-label='Preview of your post']").count()) === 0 &&
         (await dialog.getByRole("button", { name: "Publish" }).isDisabled()),
     );
-    // Drawer geometry (ruling 106): 80% bottom sheet under 640, 65% right drawer 640 to 1024,
-    // min(1000, 100%) drawer above.
+    // Ruling 492, superseding ruling 106's geometry: no sheet is full screen. A bottom sheet is 80
+    // percent tall on compact; a side sheet is 40 percent wide on medium and expanded, and the
+    // composer alone takes 50 percent for its stacked preview.
     const box = await dialog.boundingBox();
     record(
-      tag +
-        (w > 1024
-          ? " drawer at min(1000, 100%)"
-          : w >= 640
-            ? " medium: 65% right drawer"
-            : " compact: 80% bottom sheet"),
-      w > 1024
-        ? Math.abs(box.width - Math.min(1000, w)) < 2
-        : w >= 640
-          ? Math.abs(box.width - 0.65 * w) < 2 && Math.abs(box.x + box.width - w) < 2
-          : Math.abs(box.width - w) < 2 && Math.abs(box.height - 0.8 * h) < 2,
+      tag + (w >= 640 ? " composer: 50% side sheet" : " compact: 80% bottom sheet"),
+      w >= 640
+        ? Math.abs(box.width - 0.5 * w) < 2 && Math.abs(box.x + box.width - w) < 2
+        : Math.abs(box.width - w) < 2 && Math.abs(box.height - 0.8 * h) < 2,
       `box ${JSON.stringify(box)}`,
     );
     const pub = dialog.getByRole("button", { name: "Publish" });
@@ -2006,7 +2075,8 @@ async function runViewport(browserType, bname, [w, h], theme) {
         (await preview.getAttribute("data-c")) === "convey" &&
         (await preview.locator("h3").count()) === 0,
     );
-    // Previews via the four chips (ruling 400).
+    // Previews via the four chips (rulings 400, 417): four, not five. Connect left the composer
+    // with the Intro verb.
     for (const v of ["convene", "collaborate", "contribute", "convey"]) {
       if (!FULL_PREVIEW_AT.has(w) && v !== "contribute") continue;
       await ta.fill(SAMPLES[v]);
@@ -2059,9 +2129,21 @@ async function runViewport(browserType, bname, [w, h], theme) {
           log: db.log,
         }),
       );
+    // Ruling 497: the composer opens empty and offers "Continue your draft" with a discard. The
+    // draft itself, the autosave and the "Draft saved" trace are unchanged; what changed is that a
+    // half-finished draft no longer arrives unasked.
     record(
-      tag + " c keypress opens composer with restored draft",
+      tag + " c keypress opens the composer empty, with the draft offered",
+      (await ta.inputValue()) === "" &&
+        (await dialog.locator('[data-testid="continue-draft"]').count()) === 1 &&
+        (await dialog.locator('[data-testid="discard-draft"]').count()) === 1,
+    );
+    await dialog.locator('[data-testid="continue-draft"]').click();
+    await page.waitForTimeout(300);
+    record(
+      tag + " Continue your draft restores it, and Draft saved is still the only trace",
       /^(Three intros|We need a volunteer)/.test(await ta.inputValue()) &&
+        (await dialog.locator('[data-testid="continue-draft"]').count()) === 0 &&
         (await dialog.getByText("Draft saved").count()) === 1,
     );
     await page.keyboard.press("Escape");
@@ -2123,8 +2205,9 @@ async function runPublish(browserType, bname, [w, h], theme) {
     await page.click('[data-testid="compose"]');
     const dialog = page.locator('section[role="dialog"][aria-label="Compose"]');
     await dialog.waitFor();
+    await sheetSettled(page, 'section[role="dialog"][aria-label="Compose"]');
     await dialog.locator('textarea[aria-label="What is going on with you"]').fill(SAMPLES.convene);
-    await dialog.locator('[data-dia="done"]').waitFor({ timeout: 5000 });
+    await diaSettled(page, dialog, tag);
     // Link.
     await dialog.getByRole("button", { name: "Add a link" }).click();
     await dialog.locator('input[placeholder="https://"]').fill("https://nation.africa/summit");
@@ -2316,6 +2399,7 @@ async function runPublishGuards(browserType, bname, [w, h], theme) {
 
     await page.click('[data-testid="compose"]');
     await dialog.waitFor();
+    await sheetSettled(page, 'section[role="dialog"][aria-label="Compose"]');
     await textarea().fill("A draft with an autosave timer still in flight.");
     // Inside DRAFT_DEBOUNCE: the timer is armed and has not fired, so nothing is saved yet.
     await page.waitForTimeout(DRAFT_DEBOUNCE_MS - 200);
@@ -2597,11 +2681,27 @@ async function runShell(browserType, bname, [w, h]) {
     await list.waitFor({ timeout: 10000 });
     const row = list.locator('button[data-kind="connection_accepted"]');
     await row.waitFor({ timeout: 10000 });
+    // Design pass 01, B17: ruling 461 retitled the row now that making an intro has left the
+    // composer (417), and ruling 490 puts the destination in words on every row. Ruling 480 puts a
+    // hidden Unread label in a 24 hit area, so the dot is named rather than only coloured.
     record(
       tag + " list shows the real row with the Connect glyph, spec copy, and unread state",
       (await row.getAttribute("data-unread")) === "1" &&
         (await row.locator('[role="img"][aria-label="Connect"]').count()) === 1 &&
-        (await row.textContent()).includes("accepted your intro."),
+        (await row.textContent()).includes("accepted your connection request."),
+    );
+    record(
+      tag + " the row names its destination in words (ruling 490)",
+      (await row.getAttribute("data-destination")) === "Opens their profile" &&
+        (await row.locator("[data-destination-line]").innerText()) === "Opens their profile",
+    );
+    record(
+      tag + " the unread dot carries a hidden label in a 24 hit area (ruling 480)",
+      (await row.locator('[data-unread-dot][role="img"][aria-label="Unread"]').count()) === 1 &&
+        (await row.locator("[data-unread-dot]").evaluate((el) => {
+          const r = el.getBoundingClientRect();
+          return Math.round(r.width) >= 24 && Math.round(r.height) >= 24;
+        })),
     );
     await page.waitForTimeout(300);
     await shot(page, `${tag}-notifications`);
@@ -2701,32 +2801,56 @@ async function runTargeted(browserType, bname, [w, h]) {
     await page.mouse.move(scrimBox.x + 8, scrimBox.y + 8);
     for (let i = 0; i < 4; i++) await page.mouse.wheel(0, 300);
     await page.waitForTimeout(200);
-    const touchPrevented = await page.evaluate(() => {
-      const ta = document.querySelector('section[role="dialog"] textarea');
-      const mk = (target) => {
+    // Ruling 493 narrows the scroll lock: the scrim is cancelled, a vertical scroller inside is
+    // consumed at its edges as before, a horizontal scroller keeps its wheel, and touch is left to
+    // the browser. With showModal() the background is inert as well, so the page cannot move at all
+    // rather than being held still by a cancelled event; the outcome is what is asserted.
+    const lock = await page.evaluate(() => {
+      const dlg = document.querySelector('section[role="dialog"]');
+      const row = dlg.querySelector("[data-verb-row]");
+      const fire = (target, dx, dy) => {
+        const e = new WheelEvent("wheel", {
+          bubbles: true,
+          cancelable: true,
+          deltaX: dx,
+          deltaY: dy,
+        });
+        target.dispatchEvent(e);
+        return e.defaultPrevented;
+      };
+      const touch = (target) => {
         const e = new Event("touchmove", { bubbles: true, cancelable: true });
         target.dispatchEvent(e);
         return e.defaultPrevented;
       };
       const scrim = document.querySelector("[data-sheet-scrim]");
-      const dlg = document.querySelector('section[role="dialog"]');
-      const region = dlg.querySelector(
-        "div[style*='overflow-y: auto'], div[style*='overflow-y:auto']",
-      );
-      const edge = region || dlg;
-      edge.scrollTop = edge.scrollHeight;
       return {
-        scrim: mk(scrim),
-        textareaAtEnd: ((ta.scrollTop = ta.scrollHeight), mk(ta)),
-        header: mk(dlg.querySelector("header")),
+        // The scrim is the one thing the lock still cancels.
+        scrim: fire(scrim, 0, 300),
+        // The chip row keeps its wheel: the Sheet's lock leaves a horizontal scroller alone, and
+        // the row itself takes the vertical wheel sideways (ruling 493). The proof is the outcome,
+        // not the flag: a lock that swallowed the event would leave scrollLeft where it was.
+        chipRowMoved: row
+          ? (() => {
+              if (row.scrollWidth <= row.clientWidth) return true;
+              row.scrollLeft = 0;
+              fire(row, 0, 300);
+              return row.scrollLeft > 0;
+            })()
+          : true,
+        // Touch is the browser's.
+        touchInside: touch(dlg),
       };
     });
     const feedAfterWheel = await feedTop();
     record(
       tag +
-        " 1. composer open: wheel over the textarea, at its end, and over the scrim; touchmove on scrim and chrome cancelled; Feed did not move",
-      feedAfterWheel === feedBefore && touchPrevented.scrim && touchPrevented.header,
-      `feed ${feedBefore} -> ${feedAfterWheel} touch ${JSON.stringify(touchPrevented)}`,
+        " 1. composer open: the page cannot move behind it, the scrim is cancelled, the chip row keeps its wheel and touch is the browser's (ruling 493)",
+      feedAfterWheel === feedBefore &&
+        lock.scrim &&
+        lock.chipRowMoved &&
+        lock.touchInside === false,
+      `feed ${feedBefore} -> ${feedAfterWheel} lock ${JSON.stringify(lock)}`,
     );
 
     // 2. Armed drop state before the drop lands; drop adds; leaving clears.

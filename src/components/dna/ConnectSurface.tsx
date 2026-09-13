@@ -20,6 +20,7 @@ import {
 import { Avatar } from "@/components/strand/Avatar";
 import { Button } from "@/components/strand/Button";
 import { Chip } from "@/components/strand/Chip";
+import { CardFade } from "@/components/strand/CardFade";
 import { EmptyState } from "@/components/strand/EmptyState";
 import { Icon } from "@/components/strand/Icon";
 import { IconButton } from "@/components/strand/IconButton";
@@ -216,6 +217,18 @@ export function ConnectSurface({ member, search }: { member: Member; search: Con
   const navigate = useNavigate();
   const qc = useQueryClient();
   const lens: ConnectLens = search.lens ?? "members";
+  /**
+   * B16 item 2 (W38, W48): every Connect empty state centres in the space the sticky bars leave, so
+   * it is never clipped under the lens bar and never reads as a stub parked at the top of an empty
+   * scroller. The lens bar block is 44 of track plus its own padding; the dock is 64 below 1024.
+   */
+  const LENS_BLOCK = expanded ? 76 : 60;
+  const APP_HEADER = expanded ? 64 : 56;
+  const fillEmpty = {
+    fill: true,
+    stickyTop: APP_HEADER + LENS_BLOCK,
+    stickyBottom: expanded ? 0 : 64,
+  } as const;
   const filters = useMemo(() => filtersOf(search), [search]);
   const filtered = hasFilters(filters);
   const scopeOf = CONNECT_LENSES.find((l) => l.id === lens)?.scope;
@@ -391,24 +404,30 @@ export function ConnectSurface({ member, search }: { member: Member; search: Con
   const openProfile = (c: ConnectCard) =>
     void navigate({ to: "/m/$handle", params: { handle: c.handle }, search: {} });
 
+  /**
+   * Ruling 489: a card loses opacity across --fade-under-distance measured up from the sticky lens
+   * bar's bottom edge, on --fade-under-ease. Nothing translates and nothing scales; reduced motion
+   * holds it at 1. The bar is measured live, so the expanded and compact geometries need no branch.
+   */
   const card = (c0: ConnectCard, context: MemberCardContext) => {
     const c = view(c0);
     return (
-      <MemberCard
-        key={c.id}
-        member={toMember(c)}
-        rel={c.rel}
-        following={c.following}
-        context={context}
-        compact={compact}
-        pointer={pointer}
-        onOpen={() => openProfile(c)}
-        onConnect={() => openIntro(c)}
-        onAccept={() => onAccept(c)}
-        onDecline={() => onDecline(c)}
-        onFollow={() => onFollow(c)}
-        onDismiss={() => onDismiss(c)}
-      />
+      <CardFade key={c.id} stickySelector="[data-testid='lens-bar-wrap']" stickyBottom={0}>
+        <MemberCard
+          member={toMember(c)}
+          rel={c.rel}
+          following={c.following}
+          context={context}
+          compact={compact}
+          pointer={pointer}
+          onOpen={() => openProfile(c)}
+          onConnect={() => openIntro(c)}
+          onAccept={() => onAccept(c)}
+          onDecline={() => onDecline(c)}
+          onFollow={() => onFollow(c)}
+          onDismiss={() => onDismiss(c)}
+        />
+      </CardFade>
     );
   };
 
@@ -588,6 +607,7 @@ export function ConnectSurface({ member, search }: { member: Member; search: Con
               <EmptyState
                 c="connect"
                 pattern="kente"
+                {...fillEmpty}
                 title="Nobody matches these filters."
                 body="Clear one and try again."
                 action={
@@ -600,6 +620,7 @@ export function ConnectSurface({ member, search }: { member: Member; search: Con
               <EmptyState
                 c="connect"
                 pattern="kente"
+                {...fillEmpty}
                 title="Nobody here yet."
                 body="Members appear as they join. Yours is the first profile they will see."
                 action={
@@ -653,6 +674,7 @@ export function ConnectSurface({ member, search }: { member: Member; search: Con
           <EmptyState
             c="connect"
             pattern="kente"
+            {...fillEmpty}
             title="No suggestions with a real reason yet."
             body="DIA suggests someone when you share an event, a Space, a corridor, or a connection with them. Until then, this stays empty."
             action={
@@ -681,6 +703,7 @@ export function ConnectSurface({ member, search }: { member: Member; search: Con
       <EmptyState
         c="connect"
         pattern="kente"
+        {...fillEmpty}
         title="Your network starts here."
         body="Connections you make and members you follow gather here."
         action={
@@ -759,6 +782,7 @@ export function ConnectSurface({ member, search }: { member: Member; search: Con
       <EmptyState
         c="connect"
         pattern="kente"
+        {...fillEmpty}
         title="No country has reached the floor yet."
         body="Where shows a country once enough members are there to appear as a group, never as individuals."
       />
@@ -786,7 +810,11 @@ export function ConnectSurface({ member, search }: { member: Member; search: Con
         flex: "none",
       }}
     >
-      <span style={{ flex: 1, fontSize: 17, fontWeight: 700 }}>{title}</span>
+      {/* Ruling 480: focus lands on the heading, so the first thing read is the content and the
+          destructive control is never the default target. */}
+      <h2 data-sheet-heading style={{ flex: 1, margin: 0, fontSize: 17, fontWeight: 700 }}>
+        {title}
+      </h2>
       {extra}
       <IconButton name="x" label="Close" onClick={onClose} />
     </div>
@@ -862,9 +890,9 @@ export function ConnectSurface({ member, search }: { member: Member; search: Con
           open={filtersOpen}
           onClose={() => setFiltersOpen(false)}
           variant={sheetVariant}
-          width="65%"
+          // Ruling 492: one size on every sheet. 80 percent tall on compact, 40 percent wide on
+          // medium and expanded, and never full screen; the Sheet holds both defaults.
           label="Filters"
-          style={compact ? { height: "80%" } : undefined}
         >
           {sheetHead(
             "Filters",

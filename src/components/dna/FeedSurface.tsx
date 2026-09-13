@@ -11,6 +11,7 @@ import { useNavigate, useRouter, useSearch } from "@tanstack/react-router";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { PostCardRouter } from "@/components/dna/PostCardRouter";
 import { Button } from "@/components/strand/Button";
+import { CardFade } from "@/components/strand/CardFade";
 import { EmptyState } from "@/components/strand/EmptyState";
 import { Icon } from "@/components/strand/Icon";
 import { IconButton } from "@/components/strand/IconButton";
@@ -508,7 +509,9 @@ export function FeedSurface({ member, view }: { member: Member; view: FeedView }
                 >
                   {greeting}
                 </span>
-                <span style={{ fontSize: 13, color: "var(--ink-3)" }}>{today}</span>
+                {/* B14 item 1 (W32): the greeting date is --ink-2, never --ink-3 and never a
+                    literal, so it holds contrast on dark at every tier. */}
+                <span style={{ fontSize: 13, color: "var(--ink-2)" }}>{today}</span>
               </div>
             </>
           )}
@@ -555,8 +558,23 @@ export function FeedSurface({ member, view }: { member: Member; view: FeedView }
                 />
               </div>
             )}
+            {/* Ruling 489: opacity alone across --fade-under-distance up from the sticky bar's
+                bottom edge, on --fade-under-ease. Nothing translates, nothing scales, and reduced
+                motion holds it at 1. At expanded the bar is the column's own sticky block; below
+                1024 the header holds the lens bar past 72px, so the header is the edge. */}
             {posts &&
-              posts.map((p) => cardFor(p, { expanded: p.id === expandedId, inPlace: true }))}
+              posts.map((p) => (
+                <CardFade
+                  key={p.id}
+                  stickySelector={
+                    expandedTier ? "[data-lens-anchor][data-stuck='1']" : "[data-app-header]"
+                  }
+                  stickyBottom={0}
+                  scroller={scrollerRef.current}
+                >
+                  {cardFor(p, { expanded: p.id === expandedId, inPlace: true })}
+                </CardFade>
+              ))}
           </div>
         </>
       )}

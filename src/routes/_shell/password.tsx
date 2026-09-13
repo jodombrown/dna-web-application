@@ -4,8 +4,7 @@
 import { createFileRoute, useNavigate, useRouter } from "@tanstack/react-router";
 import { useState, type FormEvent } from "react";
 import { Button } from "@/components/strand/Button";
-import { Checkbox } from "@/components/strand/Checkbox";
-import { Input } from "@/components/strand/Input";
+import { PasswordField } from "@/components/strand/PasswordField";
 import { AuthAlert, AuthHeading, AuthLead, useHeadingFocus } from "@/components/dna/AuthSurface";
 import { useAuth } from "@/lib/auth";
 import {
@@ -31,7 +30,6 @@ function ChangePassword() {
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
   const [confirm, setConfirm] = useState("");
-  const [show, setShow] = useState(false);
   const [alert, setAlert] = useState<string | null>(null);
   const [flag, setFlag] = useState<Flag>(null);
   const [busy, setBusy] = useState(false);
@@ -130,35 +128,32 @@ function ChangePassword() {
       <AuthHeading headingRef={headingRef}>Change your password</AuthHeading>
       <AuthLead>Enter your current password, then the new one twice.</AuthLead>
       {alert && <AuthAlert>{alert}</AuthAlert>}
-      <Input
+      <PasswordField
         label="Current password"
-        type={show ? "text" : "password"}
         value={current}
-        onChange={(e) => setCurrent((e.target as HTMLInputElement).value)}
+        onChange={(e) => setCurrent(e.target.value)}
         autoComplete="current-password"
         aria-invalid={flag === "current"}
         required
       />
-      <Input
+      <PasswordField
         label="New password"
-        type={show ? "text" : "password"}
         value={next}
-        onChange={(e) => setNext((e.target as HTMLInputElement).value)}
+        onChange={(e) => setNext(e.target.value)}
         autoComplete="new-password"
         hint={COPY.passwordHint}
         aria-invalid={flag === "new"}
         required
       />
-      <Input
+      <PasswordField
         label="Confirm new password"
-        type={show ? "text" : "password"}
         value={confirm}
-        onChange={(e) => setConfirm((e.target as HTMLInputElement).value)}
+        onChange={(e) => setConfirm(e.target.value)}
         autoComplete="new-password"
         aria-invalid={flag === "confirm"}
         required
       />
-      <Checkbox label="Show passwords" checked={show} onChange={setShow} />
+      {/* Ruling 392: the eye toggle is inside each field; the Show passwords checkbox is gone. */}
       <div style={{ display: "flex", gap: 12 }}>
         <Button type="submit" disabled={busy}>
           {busy ? "Changing" : "Change password"}

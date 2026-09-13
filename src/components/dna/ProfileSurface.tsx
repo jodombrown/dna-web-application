@@ -36,6 +36,7 @@ import { LinkRow } from "@/components/strand/LinkRow";
 import { PatternPicker } from "@/components/strand/PatternPicker";
 import { ProfileHeader, type MastheadPattern } from "@/components/strand/ProfileHeader";
 import { RailWidget } from "@/components/strand/RailWidget";
+import { BackRow } from "@/components/strand/BackRow";
 import { SectionCard } from "@/components/strand/SectionCard";
 import { SegmentBlock, type Stance, type SegmentData } from "@/components/strand/SegmentBlock";
 import { Select } from "@/components/strand/Select";
@@ -255,6 +256,17 @@ function specs(v: Vocabularies | null): SectionSpec[] {
   ];
 }
 
+/**
+ * Ruling 499: a privacy change announces itself in its own words. Composed from the audience
+ * vocabulary the member just chose (VisibilitySelect's AUD), so the sentence names the state they
+ * set rather than reporting that something saved.
+ */
+const AUDIENCE_SAID: Record<Audience, string> = {
+  everyone: "This section is now open to everyone on DNA.",
+  connections: "This section is now open to your connections.",
+  anchored: "This section is now open to anchored members.",
+};
+
 const LINK_STYLE: CSSProperties = {
   all: "unset",
   cursor: "pointer",
@@ -327,7 +339,6 @@ export function ProfileSurface({ handle, edit, asPublic }: ProfileSurfaceProps) 
   // Drafts: per section, never one profile-wide form (ruling 126).
   const [drafts, setDrafts] = useState<Drafts>({});
   const [aboutOpen, setAboutOpen] = useState(false);
-  const [saving, setSaving] = useState<Partial<Record<EditableId, boolean>>>({});
   const [localVis, setLocalVis] = useState<Partial<Record<SectionKey, Audience>>>({});
   const vis = useMemo(
     () => ({ ...(profile?.visibility ?? {}), ...localVis }),
@@ -357,25 +368,18 @@ export function ProfileSurface({ handle, edit, asPublic }: ProfileSurfaceProps) 
     [profile, sectionSpecs],
   );
 
+  const committed = useRef<Partial<Record<EditableId, string>>>({});
   const startEdit = useCallback(
     (id: EditableId) => {
-      setDrafts((st) => (editMode ? st : ({ [id]: initDraft(id) } as Drafts)));
-    },
-    [editMode, initDraft],
-  );
-  const cancelEdit = useCallback(
-    (id: EditableId) => {
-      setDrafts((st) => {
-        const next = { ...st } as Record<string, unknown>;
-        if (editMode) next[id] = initDraft(id);
-        else delete next[id];
-        return next as Drafts;
-      });
+      const seed = initDraft(id);
+      committed.current[id] = JSON.stringify(seed);
+      setDrafts((st) => (editMode ? st : ({ [id]: seed } as Drafts)));
     },
     [editMode, initDraft],
   );
 
-  // Edit profile mode: every editable section opens at once, each with its own Save (ruling 126).
+  // Edit profile mode: every editable section opens at once (ruling 126), each autosaving on its
+  // own as the member leaves its fields (ruling 398).
   const enteredEdit = useRef(false);
   useEffect(() => {
     if (!editMode || !profile) {
@@ -385,7 +389,10 @@ export function ProfileSurface({ handle, edit, asPublic }: ProfileSurfaceProps) 
     if (enteredEdit.current) return;
     enteredEdit.current = true;
     const all: Record<string, unknown> = {};
-    for (const id of EDITABLE) all[id] = initDraft(id);
+    for (const id of EDITABLE) {
+      all[id] = initDraft(id);
+      committed.current[id] = JSON.stringify(all[id]);
+    }
     setDrafts(all as Drafts);
   }, [editMode, profile, initDraft]);
   const enterEdit = () =>
@@ -394,6 +401,23 @@ export function ProfileSurface({ handle, edit, asPublic }: ProfileSurfaceProps) 
     setDrafts({});
     void navigate({ to: "/m/$handle", params: { handle }, search: {} });
   };
+
+  // Ruling 398: the section head's one quiet word, Saving then Saved then nothing, is the only
+  // trace of a section write. The toast is kept for refusals and for the privacy actions (499).
+  const [saveWord, setSaveWord] = useState<Partial<Record<EditableId, "saving" | "saved" | null>>>(
+    {},
+  );
+  const wordTimers = useRef<Partial<Record<EditableId, number>>>({});
+  const word = useCallback((id: EditableId, w: "saving" | "saved" | null) => {
+    setSaveWord((st) => ({ ...st, [id]: w }));
+    const t = wordTimers.current[id];
+    if (t != null) window.clearTimeout(t);
+    if (w !== "saved") return;
+    wordTimers.current[id] = window.setTimeout(
+      () => setSaveWord((st) => ({ ...st, [id]: null })),
+      2400,
+    );
+  }, []);
 
   const saveMut = useMutation({
     mutationFn: async ({
@@ -405,25 +429,53 @@ export function ProfileSurface({ handle, edit, asPublic }: ProfileSurfaceProps) 
       section: string;
       payload: Record<string, Json | undefined>;
     }) => {
-      setSaving((s) => ({ ...s, [id]: true }));
-      try {
-        await saveSection(section, payload);
-      } finally {
-        setSaving((s) => ({ ...s, [id]: false }));
-      }
+      word(id, "saving");
+      await saveSection(section, payload);
       return id;
     },
     onSuccess: async (id) => {
+      // Ruling 398: the masthead re-reads on the same invalidation, so a write that touches name,
+      // headline or place updates the head in place with no reload (B12 item 2, W27).
       await invalidate();
-      setDrafts((st) => {
-        const next = { ...st } as Record<string, unknown>;
-        if (!editMode) delete next[id];
-        return next as Drafts;
-      });
-      toastMsg("Saved.");
+      word(id, "saved");
     },
-    onError: (e: Error) => toastMsg(e.message || "That did not save. Try again."),
+    onError: (e: Error, vars) => {
+      word(vars.id, null);
+      toastMsg(e.message || "That did not save. Try again.");
+    },
   });
+
+  /**
+   * Ruling 398: text, chips and selections write as the member leaves them. There is no Save
+   * button to press, so a field's blur is the trigger; the debounce coalesces tabbing from one
+   * field to the next in the same section into a single write. `save_profile_section` is unchanged
+   * (B11 item 2); only the trigger and the chrome moved.
+   */
+  const commitTimer = useRef<number | null>(null);
+  const commitSection = (id: EditableId, now = false) => {
+    const d = drafts[id];
+    // A blur that changed nothing is not a write. Without this every focus pass through a section
+    // would call save_profile_section and flash the word for a value nobody touched.
+    const shape = d === undefined ? undefined : JSON.stringify(d);
+    if (shape === undefined || committed.current[id] === shape) return;
+    if (commitTimer.current != null) window.clearTimeout(commitTimer.current);
+    const run = () => {
+      committed.current[id] = shape;
+      saveEdit(id);
+    };
+    if (now) run();
+    else commitTimer.current = window.setTimeout(run, 300);
+  };
+  /** Focus left the card. Flush the write, then close the editor unless Edit profile holds it open. */
+  const leaveSection = (id: EditableId) => {
+    commitSection(id, true);
+    if (editMode) return;
+    setDrafts((st) => {
+      const next = { ...st } as Record<string, unknown>;
+      delete next[id];
+      return next as Drafts;
+    });
+  };
 
   const saveEdit = (id: EditableId) => {
     const d = drafts[id];
@@ -471,9 +523,14 @@ export function ProfileSurface({ handle, edit, asPublic }: ProfileSurfaceProps) 
       toastMsg((e as Error).message || "That did not save. Try again.");
     }
   };
+  /**
+   * Ruling 499: a privacy change announces itself in its own words, never the quiet Saved. Audience,
+   * Private and Share still act on the tap itself (B11 item 3, ruling 397); what changed is that
+   * each says what it did rather than borrowing the section-write word.
+   */
   const setVisibility = (section: SectionKey, audience: Audience) => {
     setLocalVis((v) => ({ ...v, [section]: audience }));
-    void quickSave("visibility", { section, audience }, "");
+    void quickSave("visibility", { section, audience }, AUDIENCE_SAID[audience]);
   };
 
   // Media (ruling 424): the one client pipeline into the profile bucket, then the section save.
@@ -733,41 +790,19 @@ export function ProfileSurface({ handle, edit, asPublic }: ProfileSurfaceProps) 
         paddingTop: expanded && !publicView ? 24 : 0,
       }}
     >
+      {/* Rulings 396, 486: one Back row for every surface that has a parent. It names the parent,
+          sits in the content column, scrolls with the page and is never a banner. Compact and
+          medium only; above 1024 the profile has no back row at all. */}
       {!publicView && !expanded && profile && (
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 4,
-            minHeight: 44,
-            margin: "4px 0 -8px -10px",
-          }}
-        >
-          <IconButton
-            name="arrow-left"
-            label={owner ? "Back to Feed" : "Back to Connect"}
-            onClick={() =>
-              owner
-                ? void navigate({ to: "/feed", search: {} })
-                : void navigate({ to: "/$c", params: { c: "connect" } })
-            }
-          />
-          <button
-            type="button"
-            onClick={() =>
-              owner
-                ? void navigate({ to: "/feed", search: {} })
-                : void navigate({ to: "/$c", params: { c: "connect" } })
-            }
-            style={{
-              ...LINK_STYLE,
-              textDecoration: "none",
-              color: owner ? "var(--ink)" : "var(--c-connect-text)",
-            }}
-          >
-            {owner ? "Feed" : "Connect"}
-          </button>
-        </div>
+        <BackRow
+          label={owner ? "Feed" : "Connect"}
+          onClick={() =>
+            owner
+              ? void navigate({ to: "/feed", search: {} })
+              : void navigate({ to: "/$c", params: { c: "connect" } })
+          }
+          style={{ margin: "4px 0 -8px" }}
+        />
       )}
       {editMode && (
         <div
@@ -899,14 +934,14 @@ export function ProfileSurface({ handle, edit, asPublic }: ProfileSurfaceProps) 
           bleed={bleed}
           drafts={drafts}
           setDrafts={setDrafts}
-          saving={saving}
+          saveWord={saveWord}
           vis={vis}
           setVisibility={setVisibility}
           sectionSpecs={sectionSpecs}
           vocab={vocabQ.data ?? null}
           startEdit={startEdit}
-          cancelEdit={cancelEdit}
-          saveEdit={saveEdit}
+          commitSection={commitSection}
+          leaveSection={leaveSection}
           enterEdit={enterEdit}
           quickSave={quickSave}
           aboutOpen={aboutOpen}
@@ -949,9 +984,8 @@ export function ProfileSurface({ handle, edit, asPublic }: ProfileSurfaceProps) 
       open={!!cOpen}
       onClose={() => setCOpen(null)}
       variant={compact ? "sheet" : "drawer"}
-      width={560}
+      // Ruling 492: the canonical 40 percent side sheet, never a fixed 560.
       label={"About " + C_LABEL[lastC]}
-      style={compact ? { height: "85%" } : undefined}
     >
       <CSheetBody
         c={lastC}
@@ -1017,12 +1051,17 @@ export function ProfileSurface({ handle, edit, asPublic }: ProfileSurfaceProps) 
           display: "flex",
           alignItems: "center",
           height: expanded ? 64 : 56,
-          padding: expanded ? "0 32px" : "0 16px",
+          // Longhand, never the shorthand plus a longhand for the same value: paddingTop carries
+          // the safe-area inset and the sides change with the tier, and useTier flips from compact
+          // once on mount at every width, so the two forms would swap and React would warn.
+          paddingTop: "env(safe-area-inset-top)",
+          paddingBottom: 0,
+          paddingLeft: expanded ? 32 : 16,
+          paddingRight: expanded ? 32 : 16,
           borderBottom: "1px solid var(--line)",
           background: "var(--bg)",
           flex: "none",
           boxSizing: "border-box",
-          paddingTop: "env(safe-area-inset-top)",
         }}
       >
         <div
@@ -1133,14 +1172,14 @@ type BodyProps = {
   bleed: number;
   drafts: Drafts;
   setDrafts: (fn: (d: Drafts) => Drafts) => void;
-  saving: Partial<Record<EditableId, boolean>>;
+  saveWord: Partial<Record<EditableId, "saving" | "saved" | null>>;
   vis: Partial<Record<SectionKey, Audience>>;
   setVisibility: (section: SectionKey, audience: Audience) => void;
   sectionSpecs: SectionSpec[];
   vocab: Vocabularies | null;
   startEdit: (id: EditableId) => void;
-  cancelEdit: (id: EditableId) => void;
-  saveEdit: (id: EditableId) => void;
+  commitSection: (id: EditableId) => void;
+  leaveSection: (id: EditableId) => void;
   enterEdit: () => void;
   quickSave: (
     section: string,
@@ -1368,13 +1407,29 @@ function ProfileBody(p: BodyProps) {
             <Switch
               label="Private profile"
               checked={priv}
-              onChange={(v) => void p.quickSave("switches", { private: v })}
+              onChange={(v) =>
+                void p.quickSave(
+                  "switches",
+                  { private: v },
+                  v
+                    ? "Your profile is private. Members see your core row and nothing else."
+                    : "Your profile is open to members again.",
+                )
+              }
               style={{ fontSize: 15 }}
             />
             <Switch
               label="Share my profile"
               checked={shared}
-              onChange={(v) => void p.quickSave("switches", { shared: v })}
+              onChange={(v) =>
+                void p.quickSave(
+                  "switches",
+                  { shared: v },
+                  v
+                    ? "Your profile link now works for anyone."
+                    : "Your profile link no longer works outside DNA.",
+                )
+              }
               style={{ fontSize: 15, borderTop: "1px solid var(--line)" }}
             />
           </div>
@@ -1439,9 +1494,9 @@ function ProfileBody(p: BodyProps) {
         editing={editing}
         keepVisibility={editMode}
         onEdit={() => p.startEdit(id)}
-        onSave={() => p.saveEdit(id)}
-        onCancel={() => p.cancelEdit(id)}
-        saving={!!p.saving[id]}
+        onCommit={() => p.commitSection(id)}
+        onLeave={() => p.leaveSection(id)}
+        save={p.saveWord[id] ?? null}
         visibility={vis[id] ?? (id === "links" ? "connections" : "everyone")}
         onVisibility={owner ? (v) => p.setVisibility(id, v) : undefined}
         empty={isEmpty && !editing ? spec.emptyLine : null}
@@ -1576,9 +1631,9 @@ function ProfileBody(p: BodyProps) {
           editing={segEditing}
           keepVisibility={editMode}
           onEdit={() => p.startEdit("stance")}
-          onSave={() => p.saveEdit("stance")}
-          onCancel={() => p.cancelEdit("stance")}
-          saving={!!p.saving.stance}
+          onCommit={() => p.commitSection("stance")}
+          onLeave={() => p.leaveSection("stance")}
+          save={p.saveWord.stance ?? null}
           visibility={vis.stance ?? "everyone"}
           onVisibility={owner ? (v) => p.setVisibility("stance", v) : undefined}
           empty={
@@ -1762,9 +1817,9 @@ function ProfileBody(p: BodyProps) {
           owner
           editing
           testId="section-core"
-          saving={!!p.saving.core}
-          onSave={() => p.saveEdit("core")}
-          onCancel={() => p.cancelEdit("core")}
+          save={p.saveWord.core ?? null}
+          onCommit={() => p.commitSection("core")}
+          onLeave={() => p.leaveSection("core")}
         >
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             <Input

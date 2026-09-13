@@ -230,9 +230,9 @@ async function pageState(page) {
   try {
     return await page.evaluate(() => {
       const root = document.querySelector('[data-testid="profile"]');
-      const saves = [...document.querySelectorAll('[data-testid^="section-"]')].filter((n) =>
-        [...n.querySelectorAll("button")].some((b) => b.textContent.trim() === "Save"),
-      );
+      // Ruling 398: sections autosave, so there is no Save button to count. An open section is
+      // one whose editor is mounted, which the card marks with data-editing.
+      const saves = [...document.querySelectorAll('[data-testid^="section-"][data-editing="1"]')];
       return JSON.stringify({
         url: location.href,
         view: root && root.getAttribute("data-view"),
@@ -471,13 +471,17 @@ async function runOwner(browserType, bname, vp, theme) {
     await tap(page, '[data-testid="edit-profile"]');
     await page.waitForSelector('[data-testid="profile"][data-edit="1"]');
     await page.waitForTimeout(300);
-    const saveButtons = await page
-      .locator('[data-testid^="section-"] button:has-text("Save")')
-      .count();
+    // Ruling 398: the Save and Cancel footer is gone; an open section is marked data-editing.
+    const openSections = await page.locator('[data-testid^="section-"][data-editing="1"]').count();
     record(
       tag + ": edit mode opens every editable section at once (check 6)",
-      saveButtons >= 10,
-      "save buttons " + saveButtons,
+      openSections >= 10,
+      "open sections " + openSections,
+    );
+    record(
+      tag + ": ruling 398, no section carries a Save or a Cancel",
+      (await page.locator('[data-testid^="section-"] button:has-text("Save")').count()) === 0 &&
+        (await page.locator('[data-testid^="section-"] button:has-text("Cancel")').count()) === 0,
     );
     record(
       tag + ": sticky Done bar",
@@ -508,14 +512,16 @@ async function runOwner(browserType, bname, vp, theme) {
     const about = page.locator('[data-testid="section-about"]');
     await waitInteractive(page, about.locator("textarea"));
     await about.locator("textarea").fill(ABOUT);
-    await tap(page, about.locator('button:has-text("Save")'));
+    // Ruling 398: text writes as the member leaves it. Blurring the field is the trigger the Save
+    // button used to be.
+    await about.locator("textarea").blur();
     // The server refuses this one with a 400. Wait for that round trip rather than for a fixed
     // pause, then read the section back.
     await until(page, () => db.profile.attempts.includes("about"));
     const aboutStillEditing = await until(
       page,
       async () =>
-        (await about.locator('button:has-text("Save")').count()) === 1 &&
+        (await about.getAttribute("data-editing")) === "1" &&
         (await about.locator("textarea").inputValue()) === ABOUT,
     );
 
@@ -527,8 +533,7 @@ async function runOwner(browserType, bname, vp, theme) {
     const whereInput = await waitInteractive(page, where.locator("input").first());
     await whereInput.fill(WHERE);
     await until(page, async () => (await whereInput.inputValue()) === WHERE);
-    await waitInteractive(page, where.locator('button:has-text("Save")'));
-    await tap(page, where.locator('button:has-text("Save")'));
+    await whereInput.blur();
     const whereSaved =
       (await until(page, () => db.profile.saves.includes("where"))) &&
       // The section refetches after the save, so read through a fresh locator each time.
@@ -539,8 +544,8 @@ async function runOwner(browserType, bname, vp, theme) {
     const othersIntact = await until(
       page,
       async () =>
-        (await page.locator('[data-testid^="section-"] button:has-text("Save")').count()) ===
-        saveButtons,
+        (await page.locator('[data-testid^="section-"][data-editing="1"]').count()) ===
+        openSections,
     );
     record(
       tag + ": a failed save on one section leaves the others intact; each saves alone (check 6)",
@@ -895,13 +900,18 @@ async function runPublic(browserType, bname, vp, theme) {
       await page.waitForTimeout(500);
       const sheet = await page.locator('[data-testid="c-sheet"]').boundingBox();
       const dialog = await page.locator('[role="dialog"]').last().boundingBox();
+      // Ruling 492 supersedes B3's own size: one size on every sheet. 80 percent tall on compact,
+      // 40 percent wide on medium and expanded, never full screen. The type still fills whatever
+      // column that leaves.
       record(
-        tag + ": tap opens the sheet and the type fills the column (check 8)",
+        tag + ": tap opens the sheet at the canonical size and the type fills the column (check 8)",
         !!sheet &&
           !!dialog &&
-          sheet.width >= (compact ? w - 48 : 480) &&
-          dialog.y + dialog.height >= h - 2,
-        JSON.stringify({ sheet, dialog }),
+          (compact
+            ? Math.abs(dialog.width - w) < 2 && Math.abs(dialog.height - 0.8 * h) < 2
+            : Math.abs(dialog.width - 0.4 * w) < 2 && dialog.y + dialog.height >= h - 2) &&
+          sheet.width >= dialog.width - 48,
+        JSON.stringify({ sheet, dialog, w, h }),
       );
       record(
         tag + ": attestation rail in the sheet",

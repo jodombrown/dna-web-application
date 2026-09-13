@@ -88,9 +88,9 @@ export function IntroSheet({
       open={open}
       onClose={onClose}
       variant={compact ? "sheet" : "drawer"}
-      width="65%"
+      // Ruling 492: one size on every sheet, held by the Sheet's own defaults. The 65 percent
+      // drawer and the local 80 percent height are retired; nothing here restates a size.
       label={member ? "Introduce yourself to " + member.name : "Introduce yourself"}
-      style={compact ? { height: "80%" } : undefined}
     >
       {member && (
         <>

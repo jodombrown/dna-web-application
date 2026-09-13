@@ -7,10 +7,14 @@
 // This lives on the page, not in Strand (B4A section 4). Profile v3 has no masthead overflow, and
 // ruling 221 gives Strand a Menu component that has not landed. Until it does, this spec is
 // normative and this file is the implementation; when Menu ships, the panel below is what gets
-// swapped for it. Likewise the focus management: ruling 222 puts it in Strand's Sheet, the
-// amendment (STRAND-HANDOFF.md 3c.2) has not landed, and B4A section 11 requires Code to implement
-// and verify it here rather than inherit it, so `heading focus in, opener focus out, Tab trapped
-// while open` is done on this page and re-verified when the amendment arrives.
+// swapped for it.
+//
+// Design pass 01: the focus management this file carried has gone back to Strand. STRAND-HANDOFF
+// 3c.2 has landed, so the Sheet now owns `heading focus in, opener focus out, Tab trapped while
+// open` (rulings 222, 480, 499): the heading carries data-sheet-heading, the destructive confirm
+// carries data-destructive so it is never the default target, and the opener is named through
+// returnFocus. B4A section 11's requirement is met by the component rather than by a copy here,
+// which is what the amendment asked for.
 //
 // Copy is verbatim from B4A section 9 and carries no numerals, no toast and no word for the state
 // (B4A sections 5 and 13). Nothing here is written to or shown to the other party (ruling 198).
@@ -60,15 +64,6 @@ const ITEM: CSSProperties = {
   cursor: "pointer",
 };
 
-/** Focusable descendants, in document order, for the Tab trap (ruling 222). */
-function focusables(root: HTMLElement): HTMLElement[] {
-  return Array.from(
-    root.querySelectorAll<HTMLElement>(
-      'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
-    ),
-  );
-}
-
 export function ProfileBlockControl({
   first,
   name,
@@ -88,8 +83,8 @@ export function ProfileBlockControl({
   const [busy, setBusy] = useState(false);
   const wrap = useRef<HTMLDivElement>(null);
   const item = useRef<HTMLButtonElement>(null);
-  const heading = useRef<HTMLHeadingElement>(null);
-  const dialog = useRef<HTMLDivElement>(null);
+  /** The element the Sheet returns focus to. Captured when the sheet opens (rulings 222, 480). */
+  const opener = useRef<HTMLElement | null>(null);
   // Strand's IconButton is a ported function component that takes no ref (rulings 70, 72: system
   // changes happen in Strand first, so the page does not grow one here). The trigger is its own
   // button inside this wrapper, so the wrapper addresses it.
@@ -139,47 +134,9 @@ export function ProfileBlockControl({
     };
   }, [menu, closeMenu]);
 
-  // B4A section 11 and ruling 222: focus lands on the sheet's heading, which is what will happen
-  // rather than the control that does it. Strand's Sheet mounts its children from its own effect, a
-  // commit after `open` flips, so an effect here has no heading to focus yet; the callback ref
-  // fires when the element attaches, whenever that is.
-  const headingRef = useCallback((el: HTMLHeadingElement | null) => {
-    heading.current = el;
-    el?.focus();
-  }, []);
-
-  // Ruling 222: focus is trapped inside the dialog while it is open.
-  useEffect(() => {
-    if (!sheet) return;
-    const key = (e: KeyboardEvent) => {
-      if (e.key !== "Tab") return;
-      const root = dialog.current;
-      if (!root) return;
-      const items = focusables(root);
-      if (!items.length) return;
-      const firstEl = items[0] as HTMLElement;
-      const lastEl = items[items.length - 1] as HTMLElement;
-      const active = document.activeElement;
-      if (
-        e.shiftKey &&
-        (active === firstEl || active === heading.current || !root.contains(active))
-      ) {
-        e.preventDefault();
-        lastEl.focus();
-      } else if (!e.shiftKey && active === lastEl) {
-        e.preventDefault();
-        firstEl.focus();
-      }
-    };
-    window.addEventListener("keydown", key, true);
-    return () => window.removeEventListener("keydown", key, true);
-  }, [sheet]);
-
-  /** Every dismissal, and the confirm itself, returns focus to the ellipsis trigger. */
-  const closeSheet = useCallback(() => {
-    setSheet(null);
-    toTrigger();
-  }, [toTrigger]);
+  /** Every dismissal, and the confirm itself, returns focus to the ellipsis trigger: the Sheet
+   *  restores `returnFocus` after its exit finishes, so nothing here races it. */
+  const closeSheet = useCallback(() => setSheet(null), []);
 
   const confirm = async () => {
     if (busy) return;
@@ -195,7 +152,6 @@ export function ProfileBlockControl({
   const verb = blocked ? "Unblock" : "Block";
   const body = (
     <div
-      ref={dialog}
       style={{
         display: "flex",
         flexDirection: "column",
@@ -206,7 +162,7 @@ export function ProfileBlockControl({
       }}
     >
       <h2
-        ref={headingRef}
+        data-sheet-heading
         tabIndex={-1}
         style={{
           margin: 0,
@@ -251,6 +207,8 @@ export function ProfileBlockControl({
           variant={sheet === "unblock" ? "primary" : "danger"}
           onClick={() => void confirm()}
           disabled={busy}
+          // Ruling 222: a destructive action is never the sheet's default focus target.
+          data-destructive={sheet === "block" ? "" : undefined}
           data-testid="block-confirm"
         >
           {verb} {first}
@@ -286,6 +244,9 @@ export function ProfileBlockControl({
             type="button"
             role="menuitem"
             onClick={() => {
+              // The menu item unmounts with the menu, so the sheet returns focus to the trigger
+              // that opened the menu, which is the control the member last saw (ruling 222).
+              opener.current = triggerEl();
               setMenu(false);
               setSheet(blocked ? "unblock" : "block");
             }}
@@ -300,11 +261,9 @@ export function ProfileBlockControl({
         open={!!sheet}
         onClose={closeSheet}
         variant={compact ? "sheet" : "drawer"}
-        width={560}
+        returnFocus={opener}
+        // Ruling 492: the canonical 40 percent side sheet, never a fixed 560.
         label={`${verb} ${first}`}
-        // A confirm sheet hugs its content on compact; Strand's Sheet defaults a bottom sheet to
-        // the full frame, which is the composer's shape, not this one.
-        style={compact ? { height: "auto", maxHeight: "calc(100% - 24px)" } : undefined}
       >
         {body}
       </Sheet>

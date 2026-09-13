@@ -1,7 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   Outlet,
-  Link,
   createRootRouteWithContext,
   useLocation,
   useNavigate,
@@ -12,6 +11,8 @@ import {
 } from "@tanstack/react-router";
 import { useEffect, useRef, type ReactNode } from "react";
 
+import { Button } from "@/components/strand/Button";
+import { FooterLink, SystemPage } from "@/components/dna/AuthSurface";
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { AuthProvider, useAuth } from "../lib/auth";
@@ -25,26 +26,34 @@ import {
 import { useOnboardingState } from "../lib/onboarding-hooks";
 import { captureRecoveryFromUrl, recoveryPending } from "../lib/recovery";
 
+/**
+ * Design pass 01, B10: a system page is one AuthHead over one 480 column, centred in the viewport
+ * with auto margins, one act and a footer line at the bottom (rulings 487, 491). The tailwind-shaped
+ * default this replaced carried its own type scale, its own colours and a 7xl numeral.
+ *
+ * The copy is unchanged. B10 item 5 puts the new 404 and 500 lines in the pass's EXTRACTION.md,
+ * which did not arrive with this handoff; ruling 496 requires them verbatim, so they are not
+ * invented here. Reported as a gap.
+ */
 function NotFoundComponent() {
+  const navigate = useNavigate();
   return (
-    <div className="flex min-h-dvh items-center justify-center bg-background px-4">
-      <div className="max-w-md text-center">
-        <h1 className="text-7xl font-bold text-foreground">404</h1>
-        <h2 className="mt-4 text-xl font-semibold text-foreground">Page not found</h2>
-        <p className="mt-2 text-sm text-muted-foreground">
-          The page you're looking for doesn't exist or has been moved.
-        </p>
-        <div className="mt-6">
-          <Link
-            to="/feed"
-            search={{}}
-            className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-          >
-            Go home
-          </Link>
-        </div>
-      </div>
-    </div>
+    <SystemPage
+      data-testid="not-found"
+      heading="Page not found"
+      lead="The page you're looking for doesn't exist or has been moved."
+      footer={
+        <FooterLink
+          before="Lost your way?"
+          link="Go home"
+          onClick={() => void navigate({ to: "/feed", search: {} })}
+        />
+      }
+    >
+      <Button type="button" full onClick={() => void navigate({ to: "/feed", search: {} })}>
+        Go home
+      </Button>
+    </SystemPage>
   );
 }
 
@@ -55,34 +64,31 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
     reportLovableError(error, { boundary: "tanstack_root_error_component" });
   }, [error]);
 
+  // B10 item 3: one act. "Try again" is the act; "Go home" is the footer line.
   return (
-    <div className="flex min-h-dvh items-center justify-center bg-background px-4">
-      <div className="max-w-md text-center">
-        <h1 className="text-xl font-semibold tracking-tight text-foreground">
-          This page didn't load
-        </h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Something went wrong on our end. You can try refreshing or head back home.
-        </p>
-        <div className="mt-6 flex flex-wrap justify-center gap-2">
-          <button
-            onClick={() => {
-              router.invalidate();
-              reset();
-            }}
-            className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-          >
-            Try again
-          </button>
-          <a
-            href="/"
-            className="inline-flex items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent"
-          >
-            Go home
-          </a>
-        </div>
-      </div>
-    </div>
+    <SystemPage
+      data-testid="error-page"
+      heading="This page didn't load"
+      lead="Something went wrong on our end. You can try refreshing or head back home."
+      footer={
+        <FooterLink
+          before="Still stuck?"
+          link="Go home"
+          onClick={() => (window.location.href = "/")}
+        />
+      }
+    >
+      <Button
+        type="button"
+        full
+        onClick={() => {
+          router.invalidate();
+          reset();
+        }}
+      >
+        Try again
+      </Button>
+    </SystemPage>
   );
 }
 

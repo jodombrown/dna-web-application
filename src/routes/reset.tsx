@@ -8,11 +8,10 @@ import { useState, type FormEvent } from "react";
 import { Button } from "@/components/strand/Button";
 import { Input } from "@/components/strand/Input";
 import {
-  AnonAuthLayout,
   AuthAlert,
-  AuthHeading,
-  AuthLead,
+  AuthPage,
   CheckEmail,
+  FooterLink,
   useHeadingFocus,
 } from "@/components/dna/AuthSurface";
 import { COPY, REVEAL_MS, delay, isEmailShaped, recoveryRedirect } from "@/lib/auth-flow";
@@ -65,20 +64,36 @@ function ResetRequest() {
 
   if (sent !== null)
     return (
-      <AnonAuthLayout>
-        <CheckEmail
-          headingRef={headingRef}
-          heading="Check your email"
-          body={`If ${sent} has a DNA account, a link to set a new password is on its way. It works once and for one hour.`}
-          small="Nothing arrived after a few minutes? Check the address above and your spam folder, then request another."
-          onUseDifferent={() => setSent(null)}
-          onBackToSignIn={() => void navigate({ to: "/sign-in", search: {} })}
-        />
-      </AnonAuthLayout>
+      <CheckEmail
+        headingRef={headingRef}
+        heading="Check your email"
+        body={`If ${sent} has a DNA account, a link to set a new password is on its way. It works once and for one hour.`}
+        small="Nothing arrived after a few minutes? Check the address above and your spam folder, then request another."
+        onUseDifferent={() => setSent(null)}
+        // B10 item 3: one act. The way back to sign in is the footer line, not a second button.
+        footer={
+          <FooterLink
+            before="Remembered it?"
+            link="Back to sign in"
+            onClick={() => void navigate({ to: "/sign-in", search: {} })}
+          />
+        }
+      />
     );
 
   return (
-    <AnonAuthLayout>
+    <AuthPage
+      heading="Reset your password"
+      lead="Enter the email you use for DNA. If it has an account, we send a link to set a new password."
+      headingRef={headingRef}
+      footer={
+        <FooterLink
+          before="Remembered it?"
+          link="Back to sign in"
+          onClick={() => void navigate({ to: "/sign-in", search: {} })}
+        />
+      }
+    >
       <form
         onSubmit={(e) => void submit(e)}
         noValidate
@@ -86,11 +101,6 @@ function ResetRequest() {
         style={{ display: "flex", flexDirection: "column", gap: 14 }}
         data-testid="reset-request"
       >
-        <AuthHeading headingRef={headingRef}>Reset your password</AuthHeading>
-        <AuthLead>
-          Enter the email you use for DNA. If it has an account, we send a link to set a new
-          password.
-        </AuthLead>
         {alert && <AuthAlert>{alert}</AuthAlert>}
         <Input
           label="Email"
@@ -101,18 +111,11 @@ function ResetRequest() {
           aria-invalid={flag}
           required
         />
+        {/* B10 item 3: one act. The way back to sign in is the footer line. */}
         <Button type="submit" disabled={busy} full>
           {busy ? "Sending" : "Send reset link"}
         </Button>
-        <Button
-          variant="ghost"
-          type="button"
-          data-testid="back-to-sign-in"
-          onClick={() => void navigate({ to: "/sign-in", search: {} })}
-        >
-          Back to sign in
-        </Button>
       </form>
-    </AnonAuthLayout>
+    </AuthPage>
   );
 }

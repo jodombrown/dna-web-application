@@ -57,7 +57,19 @@ Member-written fields show a 14px `pen-line` glyph in `--ink-3` after the value 
 
 ## 4. States
 
-- Empty: text empty, five chips unselected, no DiaLine, no preview, Publish disabled. Looks like an ordinary composer.
+- Empty: text empty, four chips unselected, no DiaLine, no preview, Publish disabled. Looks like an
+  ordinary composer. Design pass 01, B13: the chip row sits directly above the text area and is
+  always visible, before anything is typed (458); it carries four chips in C order, Convene,
+  Collaborate, Contribute, Convey, because `connect` has left the composer and `VERB_SCHEMA` with it
+  (417, 498) and making an intro is the request sheet's job (401). The row is one horizontal scroller
+  at every tier, never a stack, with a `--surface` edge fade that appears only when there is more to
+  scroll, and a vertical wheel over it scrolls it sideways (493, W52).
+- Sheet geometry (ruling 492, superseding 106): 80 percent tall on compact; a 50 percent side sheet on
+  medium and expanded, with the preview stacked under the fields (`columns: 1`). B1's 1000px
+  two-column drawer is retired.
+- Drafts (ruling 497): autosave and "Draft saved" are unchanged, and ruling 287's clearing on publish
+  is unchanged. What changed is the return: the composer opens empty and offers "Continue your draft"
+  with a discard, so a half-finished draft never arrives unasked.
 - Thinking: fires 700ms after the last keystroke once trimmed text is 8+ characters and the member has not chosen a verb. `DiaLine state="thinking"`: 8px `--ink-3` dot breathing 0.25→1 opacity over 1.2s, "DIA is reading". Budget 2.5s (`THINK_BUDGET`); a slower resolve is dropped and the composer stays as it was. Newer keystrokes cancel older inferences (run counter).
 - Populated: DIA resolved `{ c, fields, line }`. The chip for `c` selects; fields not already written by the member fill with the DIA tag; the card assembles; `DiaLine state="done"` reads "DIA read this as an Event." (Intro, Space, Need, Story) with "Not this?".
 - Error-as-silence: inference null, timed out, threw, or below the confidence floor. Identical to populated-without-DIA: no chip selected unless the member chose one, no DiaLine, the card renders as an untyped Convey post from the text alone (plum frame, body only). No error UI, ever (ruling 54).

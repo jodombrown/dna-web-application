@@ -1053,10 +1053,16 @@ the rule rather than restating it. What the increment has to decide is only what
 like on a card that has no primary action slot, which is a Connect surface question and belongs to a
 Connect brief.
 
-## G9. Strand has no show-password affordance, no eye icon and no loading button (Brief 4B)
+## G9. Strand has no show-password affordance, no eye icon and no loading button (Brief 4B) — two of three closed (Design pass 01)
 
 **Severity: low. Not a merge blocker. Opened 10 September 2026 building Brief 4B, and recorded in
-the handoff (section 4) as gaps to be raised in Strand rather than patched locally.**
+the handoff (section 4) as gaps to be raised in Strand rather than patched locally. Two of the three
+closed on 13 September 2026 by Design pass 01: `PasswordField` and the two eye icons landed
+(rulings 392, 491), and `AuthHead` plus `AuthColumn` took the logo-and-heading pattern out of the
+page compositions (rulings 377, 390, 487, 491). The Show passwords checkbox is gone from
+`/reset/new` and `/password`; the eye toggle is inside each field. `Button` still has no `loading`
+prop, and the separator, the provider buttons and the focusable alert are still page-level
+compositions.**
 
 Three parts the auth surfaces needed and Strand does not carry. All three are worked around at page
 level in this build, and the workaround is what the handoff says to keep in Code:
@@ -1277,3 +1283,138 @@ Both ways out are decisions, not repairs to take unasked:
 
 Until one is taken, the canonical project is the only environment the tree describes, and a new
 environment is built by restoring from it rather than by replaying migrations.
+
+---
+
+## G18. Design pass 01 arrived without `EXTRACTION.md`, so four system-page strings are unwritten
+
+**Severity: low. Not a merge blocker. Opened 13 September 2026 building Design pass 01
+(rulings 90, 495, 496).**
+
+The pass was handed over as `HANDOFF.md`, `STRAND-CHANGES.md`, `STRAND-HANDOFF.md`, `APP-SPEC.md`
+and the register. `design-pass-01/EXTRACTION.md`, `design-pass-01/DP01-Design-Pass-01.dc.html` and
+`design-pass-01/strand-patch/*` did not. The divergence list is what Code builds from and it arrived
+with real content, so ruling 90's stop-and-report applies only to what is genuinely absent rather
+than to the pass:
+
+- **B10 item 5.** "Copy, new, awaiting a ruling: reset sent, 404, 500 and stub page lines are in
+  `EXTRACTION.md` under 'New copy'." Ruling 496 requires the new strings verbatim, so they were not
+  invented. Those four pages carry their existing copy on the pass's layout: one `AuthHead`, one 480
+  column, centred with auto margins, one act and a footer line. Items 1, 2, 3, 4 and 6 of B10 are
+  built; item 5 is the only one outstanding, and it is a copy change with no code shape behind it.
+- **The prototype page.** `DP01-Design-Pass-01.dc.html` is the exit check's visual reference
+  (handoff section D). Every state was built to the divergence list and the surface's own approved
+  page instead. A state-by-state probe against the prototype is owed once it lands.
+- **`strand-patch/*.jsx`.** The Strand parts were written from `STRAND-CHANGES.md`, which specifies
+  each one in prose, into this repo's TypeScript. Nothing was reconstructed from ruling summaries.
+
+## G19. Three notification kinds name a destination that has no surface yet
+
+**Severity: low. Not a merge blocker. Opened 13 September 2026 building Design pass 01 B17
+(rulings 462, 490).**
+
+Every row now names its destination in words before the tap. Two of the five have somewhere to go:
+`connection_accepted` opens the other member's profile and `connection_request` opens My Network's
+Requests. `attestation_received`, `space_role_approved` and `event_reminder` name "Opens the
+contribution", "Opens the Space" and "Opens the event"; none of those objects has a route, because
+Convene is Brief 6 and Collaborate and Contribute follow it. Those rows mark read on open and go
+nowhere. Grounded-or-empty applies to a route as much as to a count, so nothing is faked; the
+navigation lands with the engine that owns the object.
+
+Two related notes on the same rows:
+
+- `connection_request` is not yet in the `notification_kind` enum. Ruling 461 adds it and is Fix PR
+  03's scope, not this pass's; no migration was written here. The client carries the kind, its copy
+  and its destination, so the row renders correctly the moment the enum lands.
+- "Opens the event" is Code's wording. The handoff names four destinations verbatim (B17 item 1) and
+  `event_reminder` is not among them, so its line is written to the same shape and flagged here
+  rather than presented as ruling 496 copy.
+
+## G20. The branch's first Pages preview served static files and 404ed every route — closed, one-off
+
+**Severity: medium while it stood, and it blocked the exit check rather than the build. Opened and
+closed 13 September 2026 during Design pass 01 (rulings 61, 217). Closed by the next push: Pages run
+182 deployed the same branch, ruling 217's gate passed, and the live job ran its checks against the
+deployment. The deployment path is sound and the failure below was one bad deployment, not a
+reproducible fault. Left recorded because the symptom is worth recognising on sight and because the
+next occurrence has somewhere to start.**
+
+Pages run 181 deployed `8c41028` successfully and returned the alias
+`https://claude-dna-design-pass-01-wp.dna-web-application.pages.dev`. Ruling 217's gate then polled
+that deployment for seventeen minutes and got 404 on every route it opens (`/sign-in`, `/connect`,
+`/reset`, `/reset/new`, `/password`, `/welcome`, `/where`, `/relationship`,
+`/.well-known/security.txt`) while every static asset answered 200 (`/strand/logo.png`,
+`/favicon.png`, `/apple-touch-icon.png`, `/icon-192.png`, `/icon-512.png`,
+`/manifest.webmanifest`, `/strand/adinkra/mate-masie.svg`). Static files serving while every
+dynamic route 404s is the shape of a deployment whose worker is not being invoked, not of an
+application error, and all three jobs (chromium, webkit, live) failed at that gate with nothing
+tested.
+
+The build is not the cause, and that was measured rather than assumed. The same `dist/` was served
+locally through `wrangler pages dev` on the deployment's own compatibility date and flags, and every
+one of those paths answered 200, the new icons included. The tree also passes lint, `tsc`, the
+contact parity and no-literal scan and the token check.
+
+Two facts narrow it. The run immediately before it, run 180 on `claude/pr-02-dna-core-ewcqod`,
+deployed to the same Pages project eleven minutes earlier and its own gate passed, so the project
+itself was serving. And Cloudflare truncated this branch's alias to twenty-eight characters
+(`claude-dna-design-pass-01-wp` from `claude/dna-design-pass-01-wpwb8a`), which is the same length
+as that branch's alias; the aliases differ, but the truncation is worth ruling out before anything
+else.
+
+The redeploy settled it. The push carrying the Sheet and onboarding corrections triggered run 182 on
+the same branch and the same alias, and the gate passed on the first poll of every path. So: one bad
+deployment, not the branch, not the alias truncation, and not the build. If it recurs, redeploy
+first, and only if a second deployment 404s the same way pass `matrix.yml`'s `base_url` the
+deployment URL (`https://<hash>.dna-web-application.pages.dev`) instead of the alias.
+
+---
+
+## G21. WebKit runs only in CI, and design pass 01 proved that costs defects
+
+This container carries Chromium and no WebKit, so a local `node tests/matrix.cjs` proves the
+Chromium half of ruling 61's matrix and nothing else. Under ruling 228 every WebKit arm is therefore
+**unproven until the CI run reports it**, and a local green is never the exit check.
+
+That is not a theoretical cost. Run 183 on `128fff0` was green on Chromium — 76, 55 and 74 arms with
+no failing check, every failure ruling 292 count drift — and red on WebKit with two defects that
+Chromium could not have shown, each systematic rather than a flake:
+
+**The onboarding explainer's focus.** Eighteen arms, every viewport and both themes:
+`focus lands on the sheet heading (ruling 222)`. `ExplainerSheet` kept a private focus timer and a
+private Tab trap from before the pass rewrote `Sheet`, so two mechanisms competed for the same
+focus: the Sheet focuses on a frame after the dialog enters the top layer, the local copy focused on
+a 30ms timer, and whichever landed last won. Chromium's rAF fires inside 30ms and the heading won;
+WebKit's rAF inside a freshly opened `<dialog>` runs later, so the Sheet's fallback control won and
+focus never reached the heading. Fixed by deleting all three local copies — the timer, the trap and
+a hand-rolled focus restore — and marking the heading `data-sheet-heading`, which is the wiring the
+Sheet already reads. This is ruling 480 and 499's "one Sheet" holding: a second copy of the focus
+contract is not redundancy, it is a race.
+
+**The composer measured mid-slide.** One arm, `webkit-360x800-light publish within viewport`: the
+publish row sat at y 934 in an 800-tall viewport, on a panel whose top was 189px below its resting
+place. Not a layout defect — the harness waited a fixed 500ms for a 300ms slide, which holds on
+Chromium and loses on WebKit, where the transform starts a frame later and runs slower under CI
+load. The sibling check passed in the same breath because a translate does not change height. Fixed
+with `sheetSettled()`, which polls for the panel's resting `transform: none` instead of sleeping.
+
+**A fill against a moving sheet, run 184.** With both of those fixed, run 184's WebKit job came back
+4827 of 4831 with two arms incomplete: `webkit-1280x800-dark-publish` timed out waiting for DIA's
+line, and `webkit-1280x800-dark-guards` found Publish still disabled after thirty seconds. Publish
+is gated on `has` (text, media, link or a field), not on DIA, so a disabled button after a `fill()`
+means the text never reached React state; the same cause starves DIA, which is why one push produced
+both. The discriminator is not the engine, the viewport or the theme: the base arm at that same
+viewport, theme and engine passed in the same job, exercising the same composer and the same DIA.
+The one difference is that the base arm had just been given `sheetSettled()` and these two had not,
+so they filled the textarea while the sheet was still sliding — and Playwright's `fill()` checks
+visible, enabled and editable, but not stable. Both flows now settle the sheet before the first
+fill, and a DIA wait that fails reports what the textarea actually held and what the line actually
+showed, so a recurrence names its limb instead of timing out mutely.
+
+Confidence in that reading is **moderate, not proven**: WebKit cannot run here, so the mechanism is
+inferred from which arms passed rather than reproduced. The change is strictly safer either way, and
+the reporter is there precisely because the next occurrence should not need this reasoning again.
+
+The method note: a fixed sleep before a geometric assertion, a duplicated focus contract, and a fill
+against a moving element are all engine-dependent races. Each reads as green on the engine that
+happens to win. None is visible without the WebKit job.

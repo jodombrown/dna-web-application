@@ -1,18 +1,24 @@
 // Supabase Auth, email and password, plus Google and LinkedIn (rulings 233, 235). The one auth path
-// (CLAUDE.md). Sign-up asks for the address and a password only (ruling 432); the name is asked
-// once, on onboarding screen one (ruling 307). Brief 4B grafts onto the layout on main rather than re-laying it out
-// (handoff section 1): the logo, the fields, the submit and the mode-switch line are untouched
-// above and below the additions.
+// (CLAUDE.md). Sign-up asks for the address and a password only (rulings 432, 384); the name is
+// asked once, on onboarding screen one (ruling 307), so nothing is written to user metadata here
+// and the composer header and cards read the members row.
+//
+// Design pass 01, B8. The head is AuthHead, logo 48/56 top-aligned in the fixed band (377, 390,
+// 491), and the page's own 80px logo block is gone. The password field is Strand's PasswordField,
+// so the eye toggle sits inside the field (392) and a refusal renders in the field's own line,
+// carrying Fix PR 02's fault mapping (414). The column holds the top and never centres vertically;
+// the footer takes the bottom with an auto margin (487).
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState, type FormEvent } from "react";
 import { Button } from "@/components/strand/Button";
 import { Input } from "@/components/strand/Input";
-import { assetBase } from "@/components/strand/cmeta";
+import { PasswordField } from "@/components/strand/PasswordField";
 import {
   AuthAlert,
-  AuthHeading,
+  AuthPage,
   AuthStatus,
   CheckEmail,
+  FooterLink,
   OrSeparator,
   ProviderButtons,
 } from "@/components/dna/AuthSurface";
@@ -58,6 +64,9 @@ function SignIn() {
   const [busy, setBusy] = useState(false);
   const [waitingFor, setWaitingFor] = useState<Provider | null>(null);
   const [sent, setSent] = useState<string | null>(null);
+  // Ruling 392, B8 item 3: a password refusal renders in the field's own line, where the member is
+  // looking, rather than only in the alert block above the form.
+  const [refusal, setRefusal] = useState<string | null>(null);
 
   // A provider round trip that failed comes back here rather than to the Feed, so the two states
   // the copy names have somewhere to render (handoff section 2).
@@ -80,6 +89,7 @@ function SignIn() {
     setAlert(null);
     setStatus(null);
     setFlag(null);
+    setRefusal(null);
   };
 
   const onProvider = async (p: Provider) => {
@@ -106,7 +116,7 @@ function SignIn() {
     }
     if (mode === "up" && password.length < MIN_PASSWORD) {
       setFlag("password");
-      setAlert(COPY.tooShort);
+      setRefusal(COPY.tooShort);
       return;
     }
     setBusy(true);
@@ -119,6 +129,8 @@ function SignIn() {
           setAlert(COPY.mismatch);
         }
       } else {
+        // Ruling 384: no name is collected here, so none is written. Onboarding screen one is the
+        // one place a member's name is set (307, 469).
         const signUp = sb.auth.signUp({
           email,
           password,
@@ -135,9 +147,12 @@ function SignIn() {
           const fault = passwordFault(error);
           if (fault !== "other" || /password/i.test(error.message || "")) {
             setFlag("password");
-            setAlert(passwordFaultCopy(fault));
+            setRefusal(passwordFaultCopy(fault));
             return;
           }
+          // Ruling 496: the page could not create the account, and nothing typed is lost.
+          setAlert(COPY.signUpFailed);
+          return;
         }
         setSent(email);
       }
@@ -148,106 +163,58 @@ function SignIn() {
 
   if (sent !== null)
     return (
-      <div
-        style={{
-          minHeight: "100dvh",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          padding: 20,
-          background: "var(--bg)",
+      <CheckEmail
+        heading="Check your email"
+        body={`We sent a confirmation link to ${sent}. Open it to finish creating your account. It works once and for one hour.`}
+        small="Nothing arrived after a few minutes? Check the address above and your spam folder."
+        onUseDifferent={() => {
+          setSent(null);
+          setPassword("");
         }}
-      >
-        <div
-          style={{
-            width: "100%",
-            maxWidth: 400,
-            display: "flex",
-            flexDirection: "column",
-            gap: 14,
-          }}
-        >
-          <img
-            src={assetBase() + "logo.png"}
-            alt="DNA"
-            style={{ height: 80, width: "auto", alignSelf: "center", display: "block" }}
-          />
-          <CheckEmail
-            heading="Check your email"
-            body={
-              <>
-                We sent a confirmation link to {sent}. Open it to finish creating your account. It
-                works once and for one hour. If you already have an account,{" "}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSent(null);
-                    setMode("in");
-                    setPassword("");
-                  }}
-                  style={{
-                    all: "unset",
-                    cursor: "pointer",
-                    textDecoration: "underline",
-                    color: "inherit",
-                    font: "inherit",
-                  }}
-                >
-                  sign in
-                </button>{" "}
-                instead.
-              </>
-            }
-            small="Nothing arrived after a few minutes? Check the address above and your spam folder."
-            onUseDifferent={() => {
-              setSent(null);
-              setPassword("");
-            }}
-            onBackToSignIn={() => {
+        // Ruling 412 (B10 item 4), verbatim: the second act becomes the footer's linked sentence.
+        footer={
+          <FooterLink
+            before="If you already have an account,"
+            link="sign in"
+            after=" instead."
+            onClick={() => {
               setSent(null);
               setMode("in");
               setPassword("");
             }}
           />
-        </div>
-      </div>
+        }
+      />
     );
 
   const flagEmail = flag === "email" || flag === "both";
   const flagPassword = flag === "password" || flag === "both";
+  const up = mode === "up";
 
   return (
-    <div
-      style={{
-        minHeight: "100dvh",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: 20,
-        background: "var(--bg)",
-      }}
+    <AuthPage
+      heading={up ? "Create your account" : "Sign in"}
+      {...(up ? { lead: COPY.signUpLead } : {})}
+      footer={
+        <FooterLink
+          before={up ? "Already a member?" : "New here?"}
+          link={up ? "Sign in" : "Create an account"}
+          onClick={() => {
+            clear();
+            setMode(up ? "in" : "up");
+          }}
+        />
+      }
     >
-      {/* noValidate: the alert block is the one place an auth message is announced (handoff
-          section 2), so the browser's own validation bubble must not pre-empt it. */}
+      {/* noValidate: the alert block is the one place a form-level auth message is announced
+          (handoff section 2), so the browser's own validation bubble must not pre-empt it. A
+          password refusal is the exception ruling 392 names: it renders in the field's own line. */}
       <form
         onSubmit={(e) => void submit(e)}
         noValidate
         aria-busy={busy || waitingFor !== null}
-        style={{ width: "100%", maxWidth: 400, display: "flex", flexDirection: "column", gap: 14 }}
+        style={{ display: "flex", flexDirection: "column", gap: 14 }}
       >
-        {/* The live look carries no visible heading; the landmark still names itself (section 3). */}
-        <AuthHeading hidden>{mode === "in" ? "Sign in" : "Create your account"}</AuthHeading>
-        <img
-          src={assetBase() + "logo.png"}
-          alt="DNA"
-          style={{
-            height: 80,
-            width: "auto",
-            alignSelf: "center",
-            display: "block",
-            transform: "translateY(-44px)",
-          }}
-        />
         {alert && <AuthAlert>{alert}</AuthAlert>}
         {status && <AuthStatus>{status}</AuthStatus>}
         <Input
@@ -259,20 +226,19 @@ function SignIn() {
           aria-invalid={flagEmail}
           required
         />
-        <Input
+        <PasswordField
           label="Password"
-          type="password"
           value={password}
-          onChange={(e) => setPassword((e.target as HTMLInputElement).value)}
-          autoComplete={mode === "in" ? "current-password" : "new-password"}
+          onChange={(e) => setPassword(e.target.value)}
+          autoComplete={up ? "new-password" : "current-password"}
           aria-invalid={flagPassword}
-          {...(mode === "up" ? { hint: COPY.passwordHint } : {})}
+          {...(refusal ? { error: refusal } : up ? { hint: COPY.passwordHint } : {})}
           required
         />
         {/* Sign-in additions, in DOM order after the Password field (handoff section 1): the link
             first, left-aligned under the field; the separator and the provider buttons after the
             submit, which is where sign-up carries them too. */}
-        {mode === "in" && (
+        {!up && (
           <button
             type="button"
             data-testid="forgot-password"
@@ -283,7 +249,7 @@ function SignIn() {
               display: "flex",
               alignItems: "center",
               alignSelf: "flex-start",
-              minHeight: 44,
+              minHeight: "var(--target-primary)",
               fontSize: 15,
               fontWeight: 500,
               color: "var(--ink-2)",
@@ -293,13 +259,13 @@ function SignIn() {
           </button>
         )}
         <Button type="submit" disabled={busy || waitingFor !== null} full>
-          {mode === "in"
+          {up
             ? busy
-              ? "Signing in"
-              : "Sign in"
-            : busy
               ? "Creating your account"
-              : "Create account"}
+              : "Create account"
+            : busy
+              ? "Signing in"
+              : "Sign in"}
         </Button>
         <OrSeparator />
         <ProviderButtons
@@ -307,17 +273,7 @@ function SignIn() {
           disabled={busy || waitingFor !== null}
           onStart={(p) => void onProvider(p)}
         />
-        <Button
-          variant="ghost"
-          type="button"
-          onClick={() => {
-            clear();
-            setMode(mode === "in" ? "up" : "in");
-          }}
-        >
-          {mode === "in" ? "New here? Create an account" : "Already a member? Sign in"}
-        </Button>
       </form>
-    </div>
+    </AuthPage>
   );
 }

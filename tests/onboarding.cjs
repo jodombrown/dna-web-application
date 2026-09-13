@@ -17,6 +17,8 @@ const COPY = {
     heading: "Welcome to the Diaspora Network of Africa.",
     lead: "Your name, a username and a photo to begin. Where you are, and your relationship to the continent, come next.",
     nameHint: "As you'd like to be known here.",
+    // Ruling 411, verbatim: the hint names no count of changes. Fix PR 02's wording, which the
+    // surface carries.
     usernameHint: "We'll suggest one from your name. Pick one you'll keep.",
     tooLarge: "That photo is too large. Choose a smaller one and try again.",
     failed: "We couldn't add that photo just now. Nothing else you entered is lost. Try again.",
@@ -128,6 +130,18 @@ const pathOf = (page) => new URL(page.url()).pathname.replace(/\/$/, "");
 const mainText = (page) => page.locator("main").innerText();
 /** Ruling 308: no numeral on any screen. The hint's "twice" is a word. */
 const noNumeral = (text) => !/\d/.test(text);
+/**
+ * Ruling 434: a field's own line, the hint slot Strand's Input renders under the control. The
+ * refusal replaces the hint there, so reading the line reads whichever is showing.
+ */
+// Ruling 434: the reasons render as their own lines under the field, in the block Fix PR 02 built
+// for them, not inside the Input's single error slot. One slot can hold one string and a username
+// can fail several rules at once, so the block is what the arm reads.
+const usernameLine = (page) =>
+  page.evaluate(() => {
+    const b = document.querySelector('[data-testid="username-refusals"]');
+    return b ? (b.textContent ?? "").trim() : null;
+  });
 const alertText = async (page) => {
   const a = page.locator('[data-testid="auth-alert"]');
   return (await a.count()) ? (await a.innerText()).trim() : null;
@@ -167,26 +181,50 @@ async function runOnboardingLayout(browserType, bname, [w, h], theme) {
       noNumeral(text),
       text.replace(/\s+/g, " ").slice(0, 200),
     );
-    const logo = page.locator('main img[alt="DNA"]').first();
-    const lb = await logo.boundingBox();
+    // Ruling 491 (B9 item 5): onboarding is rebound to AuthHead, so the 80 leaves with it. The
+    // logo is 48 on compact and 56 above, top-aligned in a band whose height never changes.
+    const head = await page.evaluate(() => {
+      const band = document.querySelector(".strand-auth-head > div");
+      const img = band && band.querySelector("img");
+      const col = document.querySelector(".strand-auth-col");
+      return {
+        band: band ? Math.round(band.getBoundingClientRect().height) : 0,
+        logo: img ? Math.round(img.getBoundingClientRect().height) : 0,
+        centre: col ? col.getAttribute("data-centre") : "",
+      };
+    });
     record(
-      tag + ": the wordmark sits above the heading at 80 tall (ruling 184)",
-      !!lb && Math.round(lb.height) === 80,
-      lb ? String(lb.height) : "no logo",
+      tag + ": the wordmark is 48/56, top-aligned in the fixed band (ruling 491)",
+      head.band === (compact ? 84 : 100) && head.logo === (compact ? 48 : 56),
+      JSON.stringify(head),
+    );
+    record(
+      tag + ": onboarding holds the top and never centres vertically (ruling 487)",
+      head.centre === "0",
+      JSON.stringify(head),
+    );
+    // Ruling 413 (B9 item 1): a Sign out text link in the footer of every onboarding screen.
+    const so = page.locator('[data-testid="onboarding-sign-out"]');
+    const sob = await so.boundingBox();
+    record(
+      tag + ": a Sign out text link in the footer, 44 tall and underlined (ruling 413)",
+      (await so.count()) === 1 &&
+        !!sob &&
+        Math.round(sob.height) >= 44 &&
+        (await so.evaluate((el) => getComputedStyle(el).textDecorationLine)) === "underline",
+      sob ? String(Math.round(sob.height)) : "no link",
     );
     record(
       tag + ": no AppHeader, no dock, no rail on the auth layout (section 2)",
       (await page.locator("header").count()) === 0 &&
         (await page.locator('[data-testid="pulse-dock"]').count()) === 0,
     );
+    // B9 item 5: AuthHead owns the h1 and sits above the landmark, so the landmark names itself
+    // with the same words rather than pointing at an element outside it.
     record(
       tag + ": the landmark names itself by the heading",
-      (await page.locator("main[aria-labelledby]").count()) === 1 &&
-        (await page.evaluate(() => {
-          const m = document.querySelector("main");
-          const id = m?.getAttribute("aria-labelledby");
-          return !!id && document.getElementById(id)?.tagName === "H1";
-        })),
+      (await page.locator("main[aria-label]").count()) === 1 &&
+        (await page.locator("main").getAttribute("aria-label")) === COPY.who.heading,
     );
     const plate = await page.locator('[data-testid="photo-plate"] > *').first().boundingBox();
     record(
@@ -344,15 +382,17 @@ async function runOnboardingLayout(browserType, bname, [w, h], theme) {
       noNumeral(dtext) && !dtext.includes("Convene") && !dtext.includes("Collaborate"),
     );
     const db2 = await dlg.boundingBox();
+    // Ruling 492: one size on every sheet. 80 percent tall on compact, 40 percent wide above; the
+    // 65 percent drawers are retired.
     record(
       tag +
         (compact
           ? ": compact opens an 80 percent sheet"
-          : ": medium and expanded open a 65 percent drawer"),
+          : ": medium and expanded open a 40 percent side sheet"),
       !!db2 &&
         (compact
           ? Math.abs(db2.height - h * 0.8) < h * 0.05
-          : Math.abs(db2.width - w * 0.65) < w * 0.03),
+          : Math.abs(db2.width - w * 0.4) < w * 0.03),
       db2 ? `${Math.round(db2.width)}x${Math.round(db2.height)}` : "no dialog",
     );
     record(
@@ -366,10 +406,15 @@ async function runOnboardingLayout(browserType, bname, [w, h], theme) {
     await shot(page, `onboarding-explainer-${bname}-${w}-${theme}`);
     await page.keyboard.press("Escape");
     await page.waitForTimeout(SHEET_SETTLE);
+    const afterEsc = {
+      dialogs: await page.locator('section[role="dialog"]').count(),
+      active: await activeTestId(page),
+      activeTag: await page.evaluate(() => document.activeElement?.tagName ?? null),
+    };
     record(
       tag + ": Esc closes it and focus returns to the link",
-      (await page.locator('section[role="dialog"]').count()) === 0 &&
-        (await activeTestId(page)) === "explainer-link",
+      afterEsc.dialogs === 0 && afterEsc.active === "explainer-link",
+      JSON.stringify(afterEsc),
     );
   } catch (e) {
     await shot(page, `onboarding-layout-fail-${bname}-${w}-${theme}`).catch(() => undefined);
@@ -422,10 +467,12 @@ async function runOnboardingFlows(browserType, bname, [w, h], theme) {
     const name = page.locator('[data-testid="name"]');
     const username = page.locator('[data-testid="username"]');
     const cont = page.locator('[data-testid="continue"]');
+    // Ruling 469 (Design pass 01, B9 item 2): the name field starts empty and is never derived from
+    // the email local part, so the username has nothing to suggest from until the member types.
     record(
-      tag + ": the name field starts empty and suggests nothing (ruling 469)",
+      tag + ": the name field starts empty, and so does the suggestion (ruling 469)",
       (await name.inputValue()) === "" && (await username.inputValue()) === "",
-      JSON.stringify([await name.inputValue(), await username.inputValue()]),
+      JSON.stringify({ name: await name.inputValue(), username: await username.inputValue() }),
     );
     await name.fill("Thandiwe Dube");
     record(
@@ -514,17 +561,24 @@ async function runOnboardingFlows(browserType, bname, [w, h], theme) {
     });
     await page.waitForSelector('[data-testid="photo-change"]', { timeout: 15000 });
 
+    // Ruling 434 (Design pass 01, B9 item 4): a refused username shows the reason in the field's
+    // own line, where the member is looking, rather than in the alert block above the form.
     db.onboarding.taken = true;
     await cont.click();
     await page.waitForFunction(
-      (t) => document.querySelector('[data-testid="auth-alert"]')?.textContent?.trim() === t,
+      (t) => {
+        const b = document.querySelector('[data-testid="username-refusals"]');
+        return !!b && (b.textContent ?? "").trim() === t;
+      },
       COPY.who.taken,
       { timeout: 15000 },
     );
     record(
       tag +
-        ": username taken: the alert verbatim, the field in error, photo and name kept, no suffix appended",
+        ": username taken: the reason in the field's own line, the field in error, photo and name kept, no suffix appended",
       (await username.getAttribute("aria-invalid")) === "true" &&
+        (await usernameLine(page)) === COPY.who.taken &&
+        (await alertText(page)) === null &&
         (await username.inputValue()) === "thandi" &&
         (await name.inputValue()) === "Thandiwe D" &&
         (await page.locator('[data-testid="photo-plate"]').getAttribute("data-state")) ===

@@ -7,9 +7,11 @@ import { whenLabel } from "./when";
 
 export type NotificationRow = Tables<"notifications">;
 
-/** A row plus the words its copy needs: "{actor} accepted your intro.", "{object} starts {detail}." */
+/** A row plus the words its copy needs: "{actor} accepted your connection request.", "{object} starts {detail}." */
 export type NotificationView = NotificationRow & {
   actor?: string | undefined;
+  /** The actor's handle, when the actor is a member. Ruling 462: the row's destination needs it. */
+  actorHandle?: string | undefined;
   object?: string | undefined;
   detail?: string | undefined;
 };
@@ -46,8 +48,8 @@ export async function loadNotifications(memberId: string, limit = 50): Promise<N
       ? sb.from("opportunities").select("id,title").in("id", ids("opportunity"))
       : Promise.resolve({ data: [] as { id: string; title: string }[] }),
     memberActorIds.length
-      ? sb.from("members").select("id,name").in("id", memberActorIds)
-      : Promise.resolve({ data: [] as { id: string; name: string }[] }),
+      ? sb.from("members").select("id,name,handle").in("id", memberActorIds)
+      : Promise.resolve({ data: [] as { id: string; name: string; handle: string }[] }),
     ids("space").length
       ? sb
           .from("space_roles")
@@ -60,6 +62,7 @@ export async function loadNotifications(memberId: string, limit = 50): Promise<N
   const event = new Map((events.data ?? []).map((e) => [e.id, e]));
   const opp = new Map((opps.data ?? []).map((o) => [o.id, o.title]));
   const actorName = new Map((actors.data ?? []).map((a) => [a.id, a.name]));
+  const actorHandle = new Map((actors.data ?? []).map((a) => [a.id, a.handle]));
   const role = new Map((roles.data ?? []).map((r) => [r.space_id, r.role]));
 
   return rows.map((r): NotificationView => {
@@ -86,6 +89,8 @@ export async function loadNotifications(memberId: string, limit = 50): Promise<N
     return {
       ...r,
       actor: actor || "A member",
+      actorHandle:
+        r.actor_kind === "member" ? (actorHandle.get(r.actor_id ?? "") ?? undefined) : undefined,
       object: objectName || undefined,
       detail,
     };

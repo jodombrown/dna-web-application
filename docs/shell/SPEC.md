@@ -129,7 +129,16 @@ List (no route of its own; the URL bar keeps the host route):
 
 `NotificationListItem`: `CBadge` 32 in the writing engine's C (connection_accepted Connect, attestation_received Contribute, space_role_approved Collaborate, event_reminder Convene; this is inside the five-C ecosystem, ruling 66), text 15 (names 700; 500 weight while unread), time 13 `--ink-3`, 8px `--pulse-for-you` dot at right while unread. Row min 56, padding 12 16, `--bg-sunken` on hover. Tap marks read (`read_at = now()`); navigation to the object belongs to the engine that wrote the row.
 
-Copy by kind: "{actor} accepted your intro." / "{actor} attested your contribution to {object}." / "You are now {role} in {space}." / "{event} starts {Thu 16 Oct, 19:00}."
+Copy by kind (ruling 461 retitled the first, now that making an intro has left the composer):
+"{actor} accepted your connection request." / "{actor} wants to connect." / "{actor} attested your
+contribution to {object}." / "You are now {role} in {space}." / "{event} starts {Thu 16 Oct, 19:00}."
+
+Every row names its destination in words, under the copy, before the tap (rulings 462, 490):
+"Opens their profile" / "Opens My Network, Requests" / "Opens the contribution" / "Opens the Space" /
+"Opens the event". `connection_accepted` opens the other profile and `connection_request` opens My
+Network's Requests; the other three name their destination and mark read, and the navigation lands
+with the engine that owns the object. A row marks read on open. The unread dot carries a hidden
+"Unread" label in a 24 by 24 hit area (ruling 480).
 
 Empty: `EmptyState c="brand"` "Nothing yet." body "When a member accepts your intro, attests a contribution, approves your Space role, or an event you joined is near, it appears here." This is the launch state; the populated list is prototype demonstration only.
 
@@ -142,7 +151,9 @@ One mount point, the shell. The header pill and every empty-state act open the B
 One drawer, mounted once at the app root; the composer is only content and renders no chrome of its own (no header, close, scrim or sliding container). The drawer owns anchor edge, handedness mirror, slide and easing, scrim (`--scrim`, translucent), swipe to dismiss, header row, back button, focus trap and restore, Escape, Android back, safe areas, the single scroll region, scroll memory and reduced motion. Open state is a URL (`?drawer=composer`), never a boolean; browser back closes it.
 
 - Compact (< 640): bottom anchor, 80% of the viewport height (`80dvh`), top corners 14, drag handle; the top 20% of the page stays visible behind the translucent scrim.
-- Medium (640 to 1024): right anchor, 65% of the viewport width, full height, 1px `--line` on the left edge, translucent scrim over the rest. Left-handed members get the same panel mirrored to the left edge.
+- Touch (compact and medium): the standard Sheet at 80 percent, not a full-screen inset (ruling 492,
+  Design pass 01 B17 item 3), so it carries the same focus trap and restore as every other sheet (480).
+- Medium and expanded side sheets are 40 percent wide; the 65 percent drawer is retired (ruling 492).
 - Expanded (> 1024): right anchor as shipped, capped at 860 (`drawer-wide`; a 448 column is not a composing surface).
 
 Inside, in fixed order: verb rail, textarea (first, autofocused), DIA line, link preview, verb fields, then the sticky action bar with safe-area padding. The surface never declares its own overflow.
