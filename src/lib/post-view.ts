@@ -18,6 +18,8 @@ export type PostView = {
   verb: C | null;
   author_kind: "member" | "space";
   author_name: string;
+  /** Ruling 416: the handle line under the name, only when the viewer may see the core row. */
+  author_handle?: string | undefined;
   author_avatar?: string | undefined;
   body: string;
   anchor_name?: string | undefined;

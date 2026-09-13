@@ -262,7 +262,7 @@ drop policy if exists connection_requests_member_update on public.connection_req
 drop policy if exists connection_requests_member_delete on public.connection_requests;
 revoke update, delete on table public.connection_requests from authenticated;
 create policy connection_requests_recipient_select on public.connection_requests for select to authenticated
-using (to_member_id = (select auth.uid()) and status <> 'withdrawn');
+using (to_member_id = (select auth.uid()));
 
 -- member_follows: one write path (set_follow, through edges). The follower's own read stands.
 drop policy if exists member_follows_follower_insert on public.member_follows;

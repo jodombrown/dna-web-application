@@ -1,6 +1,6 @@
 // Supabase Auth, email and password, plus Google and LinkedIn (rulings 233, 235). The one auth path
-// (CLAUDE.md). Sign-up collects a display name into user metadata; the composer header and cards
-// read it from there. Brief 4B grafts onto the layout on main rather than re-laying it out
+// (CLAUDE.md). Sign-up asks for the address and a password only (ruling 432); the name is asked
+// once, on onboarding screen one (ruling 307). Brief 4B grafts onto the layout on main rather than re-laying it out
 // (handoff section 1): the logo, the fields, the submit and the mode-switch line are untouched
 // above and below the additions.
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
@@ -25,6 +25,7 @@ import {
   forgetProvider,
   isEmailShaped,
   passwordFault,
+  passwordFaultCopy,
   readProviderReturn,
   startProvider,
   stripAuthFragment,
@@ -51,7 +52,6 @@ function SignIn() {
   const [mode, setMode] = useState<"in" | "up">(join ? "up" : "in");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [name, setName] = useState("");
   const [alert, setAlert] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [flag, setFlag] = useState<Flag>(null);
@@ -122,22 +122,20 @@ function SignIn() {
         const signUp = sb.auth.signUp({
           email,
           password,
-          options: { data: { full_name: name }, emailRedirectTo: window.location.origin + "/feed" },
+          // Ruling 432 (U-A1): no display name here; onboarding screen one asks for it (ruling 307).
+          options: { emailRedirectTo: window.location.origin + "/feed" },
         });
         // Ruling 234: the state is identical whether or not the address already has an account, so
         // it reveals on a fixed delay and never on the shape of the answer. Only a password the
         // server refuses outright pulls the member back to the form.
         const [{ error }] = await Promise.all([signUp, delay(REVEAL_MS)]);
         if (error) {
+          // Ruling 414: every password refusal is named by its real reason. Anything that is not a
+          // password fault keeps the anti-enumeration state below (ruling 234).
           const fault = passwordFault(error);
-          if (fault === "breached") {
+          if (fault !== "other" || /password/i.test(error.message || "")) {
             setFlag("password");
-            setAlert(COPY.breached);
-            return;
-          }
-          if (fault === "short") {
-            setFlag("password");
-            setAlert(COPY.tooShort);
+            setAlert(passwordFaultCopy(fault));
             return;
           }
         }
@@ -176,7 +174,30 @@ function SignIn() {
           />
           <CheckEmail
             heading="Check your email"
-            body={`We sent a confirmation link to ${sent}. Open it to finish creating your account. It works once and for one hour.`}
+            body={
+              <>
+                We sent a confirmation link to {sent}. Open it to finish creating your account. It
+                works once and for one hour. If you already have an account,{" "}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSent(null);
+                    setMode("in");
+                    setPassword("");
+                  }}
+                  style={{
+                    all: "unset",
+                    cursor: "pointer",
+                    textDecoration: "underline",
+                    color: "inherit",
+                    font: "inherit",
+                  }}
+                >
+                  sign in
+                </button>{" "}
+                instead.
+              </>
+            }
             small="Nothing arrived after a few minutes? Check the address above and your spam folder."
             onUseDifferent={() => {
               setSent(null);
@@ -229,15 +250,6 @@ function SignIn() {
         />
         {alert && <AuthAlert>{alert}</AuthAlert>}
         {status && <AuthStatus>{status}</AuthStatus>}
-        {mode === "up" && (
-          <Input
-            label="Name"
-            value={name}
-            onChange={(e) => setName((e.target as HTMLInputElement).value)}
-            autoComplete="name"
-            required
-          />
-        )}
         <Input
           label="Email"
           type="email"

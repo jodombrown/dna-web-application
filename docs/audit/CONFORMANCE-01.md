@@ -271,7 +271,7 @@ invite boundary, or launch.
 
 | Ruling | Status | Evidence | Severity |
 | --- | --- | --- | --- |
-| 198 | Implemented and confirmed live. The trigger `on_member_block_revokes_relationship` revokes connect and follow edges, deletes adjacency and follow rows and rebuilds second degree; `profile_view` drops the blocked viewer to the anonymous rule and hides no page | live trigger list, `20260910120000_b4a_block_control_directional_scope.sql` | |
+| 198 | Implemented and confirmed live. The trigger `on_member_block_revokes_relationship` revokes connect and follow edges, deletes adjacency and follow rows and rebuilds second degree; `profile_view` drops the blocked viewer to the anonymous rule and hides no page | live trigger list, `20260910101135_b4a_block_control_directional_scope.sql` | |
 | 207 | Implemented. No report item, no placeholder | `ProfileBlockControl.tsx:284-296` (one menu item) | |
 | 208 | Implemented. Block and unblock in the visitor masthead overflow only | `ProfileSurface.tsx:1240-1247` | |
 | 209, 220 | Implemented. Attestations survive; Anchored sections survive for the blocker | `profile_view` body (B4A section 6) | |

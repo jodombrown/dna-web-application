@@ -124,6 +124,14 @@ export function MediaBlock({
         )}
       </div>
     );
+  // Ruling 439 (F20): a link card is an anchor only for a web address. Anything else renders the
+  // text without an anchor, so a javascript: or data: URL never becomes navigable in-origin.
+  if (kind === "link" && !/^https?:\/\//i.test(src || ""))
+    return (
+      <span style={{ ...frame, display: "block", padding: "12px 14px", color: "var(--ink-2)" }}>
+        {title || src}
+      </span>
+    );
   if (kind === "link")
     return (
       <a

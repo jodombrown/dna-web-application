@@ -37,6 +37,8 @@ export type PostCardLink = {
 export type PostCardProps = {
   c?: CardC;
   author?: string | undefined;
+  /** Ruling 416: the handle line, rendered under the name when the author's core row is visible. */
+  authorHandle?: string | undefined;
   authorKind?: "member" | "space";
   meta?: string | undefined;
   avatarSrc?: string | undefined;
@@ -78,6 +80,7 @@ export type PostCardProps = {
 export function PostCard({
   c = "connect",
   author,
+  authorHandle,
   authorKind = "member",
   meta,
   avatarSrc,
@@ -182,6 +185,20 @@ export function PostCard({
               {authorKind === "space" && (
                 <span style={{ fontWeight: 400, color: "var(--ink-3)" }}> · Space</span>
               )}
+            </div>
+          )}
+          {authorHandle && authorKind === "member" && (
+            <div
+              style={{
+                fontSize: 13,
+                color: "var(--ink-3)",
+                lineHeight: 1.4,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+            >
+              @{authorHandle}
             </div>
           )}
           {(meta || anchor || audience) && (

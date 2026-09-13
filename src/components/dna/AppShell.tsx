@@ -494,9 +494,6 @@ export function AppShell({
                 </Button>
               </div>
               <div style={{ padding: "16px", display: "flex", flexDirection: "column", gap: 16 }}>
-                {member.email && (
-                  <span style={{ fontSize: 15, color: "var(--ink-3)" }}>{member.email}</span>
-                )}
                 {member.handle && (
                   <div
                     style={{ display: "flex", flexDirection: "column", gap: 4, margin: "-4px 0" }}

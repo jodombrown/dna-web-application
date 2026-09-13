@@ -7,6 +7,7 @@ import type { FieldValues } from "@/components/strand/verb-schema";
 import type { Member } from "./auth";
 import type { Tables, Views } from "./database.types";
 import { signedMediaUrl } from "./dia";
+import { deliverImageUrl } from "./media";
 import type { LensId } from "./lens";
 import { domainOf, type PostView } from "./post-view";
 import { getSupabase, type Supabase } from "./supabase";
@@ -40,10 +41,19 @@ function mine(
   return { value, mine: true };
 }
 
+/** Ruling 416: the author's core row the view carries under private.can_see_core, or nothing. */
+type FeedAuthor = { name: string | null; handle: string | null; avatar_path: string | null };
+type FeedPost = PostRow & { feed_author?: FeedAuthor | undefined };
+
 /** The view's columns are nullable in the generated types; a published row always has these. */
-function asPost(r: FeedRow): PostRow | null {
+function asPost(r: FeedRow): FeedPost | null {
   if (!r.id || !r.author_kind || !r.author_id || !r.created_by || !r.c_category) return null;
   return {
+    feed_author: {
+      name: r.author_name ?? null,
+      handle: r.author_handle ?? null,
+      avatar_path: r.author_avatar_path ?? null,
+    },
     id: r.id,
     author_kind: r.author_kind,
     author_id: r.author_id,
@@ -65,7 +75,7 @@ function asPost(r: FeedRow): PostRow | null {
 export async function hydratePosts(
   sb: Supabase,
   member: Member,
-  posts: PostRow[],
+  posts: FeedPost[],
 ): Promise<PostView[]> {
   if (posts.length === 0) return [];
   const ids = posts.map((p) => p.id);
@@ -127,6 +137,17 @@ export async function hydratePosts(
     mediaUrls.set(m.post_id, list);
   }
   const linkMap = new Map((links.data ?? []).map((l) => [l.post_id, l]));
+  // Ruling 416: one signed delivery URL per author avatar the view admitted (never per post).
+  const avatarUrls = new Map<string, string | undefined>();
+  const NO_AUTHOR: FeedAuthor = { name: null, handle: null, avatar_path: null };
+  for (const p of posts) {
+    const path = (p.feed_author ?? NO_AUTHOR).avatar_path;
+    if (!path || avatarUrls.has(path)) continue;
+    avatarUrls.set(
+      path,
+      await deliverImageUrl("profile-media", path, { width: 80, height: 80, resize: "cover" }),
+    );
+  }
 
   return posts.map((p): PostView => {
     const verb = verbOf(p.created_object_kind);
@@ -185,21 +206,32 @@ export async function hydratePosts(
         : p.anchor_kind === "event"
           ? eventMap.get(p.anchor_id ?? "")?.title
           : undefined;
-    // Member display names come from auth metadata; only the signed-in member's own name is known here.
+    // Ruling 416: the feed view carries the author's name, handle and avatar path where
+    // private.can_see_core admits the author to this viewer; otherwise the three are null and the
+    // card renders the role word. A Space keeps its title (U-F9).
+    const fa = p.feed_author ?? NO_AUTHOR;
+    const seen = fa.name != null;
     const authorName =
       p.author_kind === "space"
         ? (authorSpace?.title ?? "Space")
-        : p.author_id === member.id
-          ? member.name
-          : "Member";
+        : seen
+          ? (fa.name as string)
+          : p.author_id === member.id
+            ? member.name
+            : "Member";
+    const avatarPath = p.author_kind === "member" ? fa.avatar_path : null;
     return {
       id: p.id,
       c_category: p.c_category,
       verb,
       author_kind: p.author_kind === "space" ? "space" : "member",
       author_name: authorName,
+      author_handle: p.author_kind === "member" && seen ? (fa.handle ?? undefined) : undefined,
       author_avatar:
-        p.author_kind === "member" && p.author_id === member.id ? member.avatar : undefined,
+        p.author_kind === "member"
+          ? ((avatarPath && avatarUrls.get(avatarPath)) ??
+            (p.author_id === member.id ? member.avatar : undefined))
+          : undefined,
       body: p.body,
       anchor_name: anchorName,
       audience: p.audience,

@@ -6,9 +6,107 @@
  * The webfont @import (tokens/fonts.css) is the first rule so browsers honour it. */
 
 /* ---- tokens/fonts.css ---- */
-/* Strand webfonts. No brand font binaries were supplied; Google Fonts stand in.
-   Bodoni Moda: high-contrast serif display. Alegreya Sans: humanist sans for body and UI. */
-@import url("https://fonts.googleapis.com/css2?family=Bodoni+Moda:ital,opsz,wght@0,6..96,400..700;1,6..96,400..700&family=Alegreya+Sans:ital,wght@0,400;0,500;0,700;1,400&display=swap");
+/* Strand webfonts, self-hosted (ruling 433, U-S10): no third party is contacted for type.
+   Bodoni Moda: high-contrast serif display, variable 400 to 700 with optical size, roman and
+   italic. Alegreya Sans: humanist sans for body and UI at 400, 500 and 700, italic 400. The
+   latin and latin-ext subsets the tree uses, as woff2 under public/strand/fonts, licensed under
+   the SIL Open Font License 1.1 (the OFL files sit beside them). font-display: swap throughout. */
+@font-face {
+  font-family: "Bodoni Moda";
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url("/strand/fonts/bodoni-moda-400-700-normal-latin-ext.woff2") format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: "Bodoni Moda";
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url("/strand/fonts/bodoni-moda-400-700-normal-latin.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "Bodoni Moda";
+  font-style: italic;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url("/strand/fonts/bodoni-moda-400-700-italic-latin-ext.woff2") format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: "Bodoni Moda";
+  font-style: italic;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url("/strand/fonts/bodoni-moda-400-700-italic-latin.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "Alegreya Sans";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/strand/fonts/alegreya-sans-400-normal-latin-ext.woff2") format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: "Alegreya Sans";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/strand/fonts/alegreya-sans-400-normal-latin.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "Alegreya Sans";
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/strand/fonts/alegreya-sans-400-italic-latin-ext.woff2") format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: "Alegreya Sans";
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/strand/fonts/alegreya-sans-400-italic-latin.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "Alegreya Sans";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("/strand/fonts/alegreya-sans-500-normal-latin-ext.woff2") format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: "Alegreya Sans";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("/strand/fonts/alegreya-sans-500-normal-latin.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "Alegreya Sans";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("/strand/fonts/alegreya-sans-700-normal-latin-ext.woff2") format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: "Alegreya Sans";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("/strand/fonts/alegreya-sans-700-normal-latin.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
 
 /* ---- tokens/colors.css ---- */
 :root {
@@ -73,8 +171,6 @@
   --info-tint: #e0eef1;
   --destructive: hsl(0 65% 45%);
   --destructive-tint: #f8dede;
-  --danger: var(--error);
-  --danger-tint: var(--error-tint); /* legacy alias */
   --focus: #4a8d77; /* emerald. Never blue. */
   --glow-dia:
     0 0 0 2px #faf7f2, 0 0 0 4px #e8b830, 0 0 18px rgba(232, 184, 48, 0.45); /* DIA only. Never on any other component. */
@@ -299,7 +395,7 @@ a:hover {
    prop, which would print the message a second time under the field. */
 input[aria-invalid="true"],
 textarea[aria-invalid="true"] {
-  border-color: var(--danger) !important;
+  border-color: var(--error) !important;
 }
 
 /* Hidden native file inputs (the composer triggers them from its own buttons). */

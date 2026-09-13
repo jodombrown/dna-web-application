@@ -551,22 +551,18 @@ revoke execute on function public.dismiss_suggestion(uuid) from public, anon;
 grant execute on function public.dismiss_suggestion(uuid) to authenticated, service_role;
 
 -- ---------------------------------------------------------------------------
--- connection_request_intros(ids): what a Connect post's card needs from its request (who, why) for
--- either party, with no status column. SECURITY DEFINER because the sender has no select on the
--- table (ruling 157); the WHERE clause is the whole audience. A function rather than a view so the
--- projection carries the same shape as every other RLS-crossing read (D089).
+-- connection_request_intros: what a Connect post's card needs from its request (who, why) for
+-- either party, with no status column. Owner-privileged view (not security_invoker) because the
+-- sender has no select on the table (ruling 157); the WHERE clause is the whole audience.
 -- ---------------------------------------------------------------------------
-create or replace function public.connection_request_intros(p_ids uuid[])
-returns table (id uuid, from_member_id uuid, to_member_id uuid, to_name text, why text, message text, created_at timestamptz)
-language sql stable security definer set search_path = ''
-as $$
+create or replace view public.connection_request_intros
+with (security_invoker = false)
+as
   select c.id, c.from_member_id, c.to_member_id, c.to_name, c.why, c.message, c.created_at
   from public.connection_requests c
-  where c.id = any (coalesce(p_ids, '{}'))
-    and (c.from_member_id = auth.uid() or c.to_member_id = auth.uid());
-$$;
-revoke execute on function public.connection_request_intros(uuid[]) from public, anon;
-grant execute on function public.connection_request_intros(uuid[]) to authenticated, service_role;
+  where c.from_member_id = auth.uid() or c.to_member_id = auth.uid();
+revoke all on public.connection_request_intros from anon, public;
+grant select on public.connection_request_intros to authenticated, service_role;
 
 -- ---------------------------------------------------------------------------
 -- profile_view: the relationship block now reads private.relationship_state (window included) and

@@ -62,6 +62,7 @@ batch has to be applied in pieces the repo carries the whole batch before the fi
 (ruling 225). Applying first leaves the canonical database ahead of every checkout, so a `db reset`
 reverts work nobody knew was there and a concurrent session audits a state no migration explains,
 which is exactly what happened on 9 September and became PASS-01's 18:30 addendum.
+A migration file is never amended after it is applied; a change is a new migration (ruling 466).
 
 A test arm that cannot run is reported as unproven, never as passing, and never folded into a
 passing count (ruling 228). An arm that silently vanishes reads as coverage the suite does not have.
@@ -106,7 +107,10 @@ through the `connect-suggest` Edge Function, which calls `connect_cards('suggest
 member's own JWT so nothing the member may not see becomes a fact DIA reasons over.
 
 Write paths: `send_introduction`, `respond_to_request`, `withdraw_request`, `set_follow`,
-`dismiss_suggestion`.
+`dismiss_suggestion`. `connection_requests` has one writer at the API as well as in the app
+(rulings 215, 415): `authenticated` holds no insert grant and no insert policy on the table;
+`send_introduction` is the only path in. The composer carries no Connect verb (ruling 400): a
+request is sent from Connect or from the profile's "Connect with" entry, never published.
 
 `private.relationship_state(viewer, target)` is the single source for none, sent, received,
 connected and window, on Connect and on Profile alike (ruling 188). Neither surface keeps a private

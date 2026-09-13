@@ -4,7 +4,7 @@
 // SECURITY DEFINER RPC under the member's own JWT and emits the company-facing signal (ruling 311)
 // where connect-suggest already logs.
 import type { Stance } from "@/components/strand/SegmentBlock";
-import { deliverImageUrl, extensionFor, normalizeImage } from "./media";
+import { deliverImageUrl, uploadImage, type ImageUpload } from "./media";
 import { functionsUrl, getSupabase, SUPABASE_PUBLISHABLE_KEY } from "./supabase";
 
 export type OnboardingScreen = "who" | "where" | "relationship";
@@ -197,75 +197,48 @@ export function usernameValid(u: string): boolean {
   );
 }
 
-/** The bucket ceiling, applied to what actually leaves the device after normalisation. */
-export const PHOTO_MAX_BYTES = 10 * 1024 * 1024;
+export type UsernameRefusal = "accented" | "characters" | "short" | "long" | "hyphen";
 
 /**
- * Ruling 345: the iOS camera hands the picker HEIC, and a HEIC never passed media-upload's sniff
- * (jpeg, png, webp only), so screen one's control sat disabled forever behind a request that could
- * not succeed. The mitigations, in order: normalise to JPEG in the browser first (the pipeline's
- * `normalizeImage`, rulings 346 and 347) so the default iPhone format uploads at all and a large
- * capture lands far under the bucket ceiling; and bound the request in time so a stalled mobile
- * connection resolves to the failed alert rather than a control that never comes back.
+ * Ruling 434 (W17, U-O2): every reason a username is refused, each its own line on the screen,
+ * so Continue never disables in silence. An accented letter that would fold away (José, Søren)
+ * is named as such; a character that is neither a letter, a digit nor a hyphen is named as such;
+ * length and the hyphen rule each have their own line. The numbers in the copy are words.
  */
-export const PHOTO_UPLOAD_TIMEOUT_MS = 30_000;
+export const USERNAME_REFUSAL: Record<UsernameRefusal, string> = {
+  accented:
+    "Accented and special letters do not fit a username. Use plain letters a to z, numbers and hyphens.",
+  characters: "Use lowercase letters, numbers and hyphens only.",
+  short: "A username needs at least three characters.",
+  long: "A username can be up to forty characters.",
+  hyphen: "A username cannot begin or end with a hyphen.",
+};
+
+export function usernameRefusals(u: string): UsernameRefusal[] {
+  const out: UsernameRefusal[] = [];
+  if (u === "") return out;
+  // eslint-disable-next-line no-control-regex
+  if (/[^\x00-\x7f]/.test(u)) out.push("accented");
+  else if (/[^a-z0-9-]/.test(u)) out.push("characters");
+  if (u.length < USERNAME_MIN) out.push("short");
+  if (u.length > USERNAME_MAX) out.push("long");
+  if (/^-|-$/.test(u)) out.push("hyphen");
+  return out;
+}
 
 /** The size the avatar renders at, delivered from the one master through a Storage transform. */
 export const AVATAR_DELIVERY_PX = 480;
 
-export type PhotoUpload =
-  { ok: true; path: string; previewUrl: string } | { ok: false; reason: "too_large" | "failed" };
+export type PhotoUpload = ImageUpload;
 
 /**
- * One step, no crop (ruling 324): the picked file is normalised by the shared media pipeline, sent
- * to the one write path (media-upload, kind avatar), and the master's storage path comes back for
- * onboard_who. Too large and failed are told apart because SPEC section 3 gives each its own alert.
- * The returned previewUrl is the object URL of the bytes actually uploaded, so screen one previews an
- * image every browser can render (never the raw HEIC it was handed); the caller owns revoking it.
+ * One step, no crop (ruling 324): the picked file goes through the one client half of the media
+ * pipeline (uploadImage in lib/media.ts, rulings 345, 346, 424), which converts, bounds the request
+ * and hands back the master's storage path for onboard_who. The profile's avatar and cover call
+ * the same helper, so there is one conversion, one mime rule and one timeout, not three.
  */
-export async function uploadOnboardingPhoto(file: File): Promise<PhotoUpload> {
-  const sb = getSupabase();
-  if (!sb) return { ok: false, reason: "failed" };
-  const { data } = await sb.auth.getSession();
-  const token = data.session?.access_token;
-  if (!token) return { ok: false, reason: "failed" };
-
-  // Convert and downscale before upload; on a decode failure fall back to the original bytes, which
-  // the server's own strip and validation still stand behind.
-  const normalized = await normalizeImage(file);
-  const upload = normalized
-    ? new File([normalized.blob], "avatar." + extensionFor(normalized.type), {
-        type: normalized.type,
-      })
-    : file;
-  if (upload.size > PHOTO_MAX_BYTES) return { ok: false, reason: "too_large" };
-
-  const form = new FormData();
-  form.append("file", upload);
-  form.append("slot", "avatar");
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), PHOTO_UPLOAD_TIMEOUT_MS);
-  try {
-    const res = await fetch(functionsUrl("media-upload"), {
-      method: "POST",
-      headers: { Authorization: "Bearer " + token, apikey: SUPABASE_PUBLISHABLE_KEY },
-      body: form,
-      signal: controller.signal,
-    });
-    if (res.status === 413) return { ok: false, reason: "too_large" };
-    if (!res.ok) return { ok: false, reason: "failed" };
-    const out = (await res.json()) as { storage_path?: string; error?: string };
-    if (out.error === "too_large") return { ok: false, reason: "too_large" };
-    return out.storage_path
-      ? { ok: true, path: out.storage_path, previewUrl: URL.createObjectURL(upload) }
-      : { ok: false, reason: "failed" };
-  } catch {
-    // A timeout abort, a network drop, a JSON parse failure: every rejection is the failed alert,
-    // never a control left mid-upload (ruling 345).
-    return { ok: false, reason: "failed" };
-  } finally {
-    clearTimeout(timer);
-  }
+export function uploadOnboardingPhoto(file: File): Promise<PhotoUpload> {
+  return uploadImage(file, "avatar");
 }
 
 /** A signed, delivery-sized URL for a stored avatar master, for the chosen state on resume. */

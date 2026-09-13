@@ -3,6 +3,7 @@ import "./lib/error-capture";
 import { consumeLastCapturedError } from "./lib/error-capture";
 import { renderErrorPage } from "./lib/error-page";
 import { SECURITY_TXT_PATH, securityTxt } from "./lib/contact";
+import { CSP_NONCE_HEADER, mintNonce, securityHeaders } from "./lib/csp";
 
 type ServerEntry = {
   fetch: (request: Request, env: unknown, ctx: unknown) => Promise<Response> | Response;
@@ -60,19 +61,40 @@ function securityTxtResponse(): Response {
   });
 }
 
+// Ruling 438 (F19): the six security headers on every response this worker produces, the CSP with
+// this response's nonce. The body streams through untouched; only the headers are re-built.
+function withSecurityHeaders(response: Response, nonce: string): Response {
+  const headers = new Headers(response.headers);
+  for (const [name, value] of securityHeaders(nonce)) headers.set(name, value);
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
-    if (new URL(request.url).pathname === SECURITY_TXT_PATH) return securityTxtResponse();
+    const nonce = mintNonce();
+    if (new URL(request.url).pathname === SECURITY_TXT_PATH)
+      return withSecurityHeaders(securityTxtResponse(), nonce);
     try {
       const handler = await getServerEntry();
-      const response = await handler.fetch(request, env, ctx);
-      return await normalizeCatastrophicSsrResponse(response);
+      // The router reads the nonce back from this header (src/lib/csp.ts) when it is created for
+      // the request, so every inline script TanStack Start emits carries it.
+      const headers = new Headers(request.headers);
+      headers.set(CSP_NONCE_HEADER, nonce);
+      const response = await handler.fetch(new Request(request, { headers }), env, ctx);
+      return withSecurityHeaders(await normalizeCatastrophicSsrResponse(response), nonce);
     } catch (error) {
       console.error(error);
-      return new Response(renderErrorPage(), {
-        status: 500,
-        headers: { "content-type": "text/html; charset=utf-8" },
-      });
+      return withSecurityHeaders(
+        new Response(renderErrorPage(), {
+          status: 500,
+          headers: { "content-type": "text/html; charset=utf-8" },
+        }),
+        nonce,
+      );
     }
   },
 };

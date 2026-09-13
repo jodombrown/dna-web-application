@@ -30,7 +30,7 @@ import { IconButton } from "./IconButton";
 import { Input } from "./Input";
 import { Sheet } from "./Sheet";
 import { Switch } from "./Switch";
-import { C_ORDER, type C } from "./cmeta";
+import { COMPOSER_VERBS, type ComposerVerb } from "./cmeta";
 import { VERB_ACT, VerbChip } from "./VerbChip";
 import {
   UNTYPED,
@@ -50,7 +50,7 @@ const DRAFT_DEBOUNCE = 800;
 const MIN_INFER_CHARS = 8;
 
 export type Inference = {
-  c: C;
+  c: ComposerVerb;
   fields: Partial<Record<FieldKey, string | boolean>>;
   line?: string | undefined;
   confidence?: number | undefined;
@@ -79,7 +79,7 @@ export type ComposerImage = {
 export type UploadedImage = { storage_path: string; width: number; height: number };
 
 export type DiaRecord = {
-  verb: C | null;
+  verb: ComposerVerb | null;
   confidence: number | null;
   proposed_fields: Partial<Record<FieldKey, string | boolean>>;
   accepted: boolean;
@@ -90,7 +90,7 @@ export type DiaRecord = {
 /** What the composer persists as a draft and hands back on publish. */
 export type ComposerState = {
   text: string;
-  verb: C | null;
+  verb: ComposerVerb | null;
   overridden: boolean;
   fields: FieldValues;
   images: ComposerImage[];
@@ -115,7 +115,7 @@ export type ComposerProps = {
   infer?: ((text: string) => Promise<Inference | null>) | undefined;
   unfurl?: ((url: string) => Promise<UnfurlMeta | null>) | undefined;
   upload?: ((file: File) => Promise<UploadedImage | null>) | undefined;
-  initialVerb?: C | null | undefined;
+  initialVerb?: ComposerVerb | null | undefined;
   initial?: ComposerSeed | null | undefined;
   draft?: ComposerSeed | null | undefined;
   onDraft?: ((state: ComposerState | null) => void) | undefined;
@@ -153,8 +153,8 @@ function useKeyboardHeight(active: boolean): number {
   return kb;
 }
 
-const DIA_LINE: Record<C, string> = {
-  connect: "DIA read this as an Intro.",
+// Ruling 400: no Connect line; the composer carries no Connect verb.
+const DIA_LINE: Record<ComposerVerb, string> = {
   convene: "DIA read this as an Event.",
   collaborate: "DIA read this as a Space.",
   contribute: "DIA read this as a Need.",
@@ -190,7 +190,7 @@ export function Composer({
     [initial, initialVerb, draft],
   );
   const [text, setText] = useState(seed.text || "");
-  const [verb, setVerb] = useState<C | null>(seed.verb || initialVerb || null);
+  const [verb, setVerb] = useState<ComposerVerb | null>(seed.verb || initialVerb || null);
   const [overridden, setOverridden] = useState(!!(seed.overridden || initialVerb));
   const [fv, setFv] = useState<FieldValues>(seed.fields || {});
   const [images, setImages] = useState<ComposerImage[]>(seed.images || []);
@@ -215,7 +215,7 @@ export function Composer({
   const taRef = useRef<HTMLTextAreaElement>(null);
   const run = useRef(0);
   const kb = useKeyboardHeight(open && touch && stacked);
-  const c: C = verb || "convey";
+  const c: ComposerVerb = verb || "convey";
   const schema = verb ? VERB_SCHEMA[verb] : UNTYPED;
   const uploading = images.some((i) => i.pending);
   const has =
@@ -349,7 +349,7 @@ export function Composer({
     );
     setDiaRecord((r) => (r ? { ...r, accepted: false, member_overrode: true } : r));
   };
-  const choose = (v: C) => {
+  const choose = (v: ComposerVerb) => {
     setOverridden(true);
     setVerb(v);
     setDia({ state: null });
@@ -844,7 +844,7 @@ export function Composer({
               : { display: "flex", gap: 8, flexWrap: "wrap" }
           }
         >
-          {C_ORDER.map((v) => (
+          {COMPOSER_VERBS.map((v) => (
             <VerbChip
               key={v}
               c={v}

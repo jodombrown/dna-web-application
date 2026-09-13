@@ -1,7 +1,7 @@
 {
   "name": "DNA",
   "short_name": "DNA",
-  "start_url": "/convene",
+  "start_url": "/feed",
   "display": "standalone",
   "background_color": "#faf7f2",
   "theme_color": "#faf7f2",

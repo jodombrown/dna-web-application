@@ -1,10 +1,9 @@
 // Ported from Strand components/dna/VerbChip.jsx. Behavior unchanged.
 import { useState, type CSSProperties } from "react";
 import { CBadge } from "./CBadge";
-import { C_LABEL, type C } from "./cmeta";
+import { C_LABEL, type ComposerVerb } from "./cmeta";
 
-export const VERB_ACT: Record<C, string> = {
-  connect: "Make an Intro",
+export const VERB_ACT: Record<ComposerVerb, string> = {
   convene: "Host an Event",
   collaborate: "Start a Space",
   contribute: "Post a Need",
@@ -12,7 +11,7 @@ export const VERB_ACT: Record<C, string> = {
 };
 
 export type VerbChipProps = {
-  c: C;
+  c: ComposerVerb;
   selected?: boolean | undefined;
   onClick?: (() => void) | undefined;
   compact?: boolean | undefined;

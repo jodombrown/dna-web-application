@@ -98,7 +98,7 @@ $$;
 -- other buckets' paths.
 create or replace function private.uuid_or_null(p text)
 returns uuid
-language sql immutable strict set search_path = ''
+language sql immutable strict
 as $$
   select case when p ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then p::uuid else null end;
 $$;

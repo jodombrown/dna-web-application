@@ -620,10 +620,7 @@ begin
   -- Activity (ruling 125): grounded-or-empty, projections over attestations, space_roles, stories.
   if v_owner or (not v_private and private.admit_section(m.id, 'convene', v_viewer)) then
     select coalesce(jsonb_agg(jsonb_build_object(
-      'title', e.title,
-      'sub', 'Attested by ' || private.third_party_label(am.id, a.attester_role, v_viewer is null)
-        || case when v_viewer is not null or private.named_publicly(am.id) then ', ' || a.attester_role else '' end,
-      'when', a.attested_at) order by a.attested_at desc), '[]'::jsonb)
+      'title', e.title, 'sub', 'Attested by ' || private.third_party_label(am.id, a.attester_role, v_viewer is null), 'when', a.attested_at) order by a.attested_at desc), '[]'::jsonb)
     into v_rows from public.attestations a
     join public.events e on e.id = a.object_id and a.object_kind = 'event'
     join public.members am on am.id = a.attester_member_id

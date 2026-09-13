@@ -727,13 +727,18 @@ async function runVisitor(browserType, bname, vp, theme, mode) {
         !CONNECTIONS_ONLY.some((t) => html.includes(t)) &&
           !ANCHORED_ONLY.some((t) => html.includes(t)),
       );
-      // Relationship states: none -> Connect with opens the composer; sent; received (Accept / Decline).
+      // Relationship states: none -> Connect with opens the introduction sheet (ruling 417 under
+      // 400: the composer carries no Connect verb; the message is optional, ruling 401); sent;
+      // received (Accept / Decline).
       await tap(page, '[data-testid="connect-with"]');
-      const dialog = page.locator('section[role="dialog"][aria-label="Compose"]');
+      const dialog = page.locator('[role="dialog"][aria-label^="Introduce yourself to"]');
       await dialog.waitFor({ timeout: 10000 });
       record(
-        tag + ": Connect with opens the composer seeded for a connect post",
-        (await dialog.count()) === 1,
+        tag +
+          ": Connect with opens the introduction sheet with Send enabled and no message (rulings 417, 401)",
+        (await dialog.count()) === 1 &&
+          (await dialog.locator('[data-testid="send-intro"]').isEnabled()) &&
+          (await dialog.locator('section[role="dialog"][aria-label="Compose"]').count()) === 0,
       );
       await page.keyboard.press("Escape");
       await page.waitForTimeout(400);

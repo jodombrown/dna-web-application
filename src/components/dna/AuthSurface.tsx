@@ -105,7 +105,7 @@ export function AuthAlert({ children }: { children: ReactNode }) {
         display: "flex",
         gap: 10,
         alignItems: "flex-start",
-        border: "1px solid var(--danger)",
+        border: "1px solid var(--error)",
         background: "var(--surface)",
         borderRadius: "var(--radius-m)",
         padding: "12px 14px",
@@ -115,7 +115,7 @@ export function AuthAlert({ children }: { children: ReactNode }) {
         outline: "none",
       }}
     >
-      <span style={{ color: "var(--danger)", display: "flex", flex: "none", paddingTop: 1 }}>
+      <span style={{ color: "var(--error)", display: "flex", flex: "none", paddingTop: 1 }}>
         <Icon name="info" size={18} />
       </span>
       <span>{children}</span>

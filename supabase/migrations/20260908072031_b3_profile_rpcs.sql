@@ -13,7 +13,7 @@
 
 create or replace function private.slugify(p text)
 returns text
-language sql immutable strict set search_path = ''
+language sql immutable strict
 as $$
   select nullif(trim(both '-' from regexp_replace(lower(p), '[^a-z0-9]+', '-', 'g')), '');
 $$;
@@ -135,7 +135,6 @@ language plpgsql
 security invoker
 set search_path = ''
 as $$
-#variable_conflict use_column
 declare
   v_uid uuid := auth.uid();
   p jsonb := coalesce(payload, '{}'::jsonb);

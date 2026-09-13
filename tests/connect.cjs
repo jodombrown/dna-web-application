@@ -2,8 +2,8 @@
 // rails and the relationship permutations at /connect, with the Supabase surface mocked by
 // tests/matrix.cjs so the real client code paths run against a deterministic projection. The named
 // checks that need a browser are here: filters change Members only (ruling 173); main precedes the
-// rails and a card's name precedes its actions (rulings 174, 180); the Corridor axis is absent while
-// corridors is empty (ruling 154); no number reaches the client except the character counter and
+// rails and a card's name precedes its actions (rulings 174, 180); the Corridor axis renders now
+// that corridors has its row (rulings 154, 436); no number reaches the client except the character counter and
 // dates. The RLS persona matrix runs in SQL against the live project (closing report).
 // Usage: BASE=https://<preview>.dna-web-application.pages.dev SPECIAL=connect WEBKIT=1 node tests/matrix.cjs
 const M = require("./matrix.cjs");
@@ -200,13 +200,17 @@ async function runConnect(browserType, bname, vp, theme) {
       );
       const controls = page.locator('aside[aria-label="Filters"] select');
       record(
-        tag + ": ten axes minus the empty Corridor axis (ruling 154)",
-        (await controls.count()) === 9,
+        tag +
+          ": ten axes, the Corridor axis included now that corridors has a row (rulings 154, 436)",
+        (await controls.count()) === 10,
         String(await controls.count()),
       );
       record(
-        tag + ": no Corridor control while corridors is empty",
-        (await page.locator('select[data-filter="corridor"]').count()) === 0,
+        tag + ": the Corridor control carries the one corridor and no count",
+        (await page.locator('select[data-filter="corridor"]').count()) === 1 &&
+          (await page.locator('select[data-filter="corridor"] option').allTextContents())
+            .join("|")
+            .includes("Los Angeles to Accra"),
       );
     } else {
       record(
@@ -291,8 +295,8 @@ async function runConnect(browserType, bname, vp, theme) {
       await tap(page, '[data-testid="open-filters"]');
       await page.waitForSelector('[role="dialog"][aria-label="Filters"]');
       record(
-        tag + ": filters sheet has no Corridor control",
-        (await page.locator('[role="dialog"] select[data-filter="corridor"]').count()) === 0,
+        tag + ": filters sheet carries the Corridor control (rulings 154, 436)",
+        (await page.locator('[role="dialog"] select[data-filter="corridor"]').count()) === 1,
       );
       await page.locator('[role="dialog"] select[data-filter="stance"]').selectOption("returnee");
       await tap(page, '[data-testid="show-members"]');

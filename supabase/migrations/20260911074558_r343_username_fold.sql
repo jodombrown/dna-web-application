@@ -1,31 +1,5 @@
--- ---------------------------------------------------------------------------
--- Ruling 343: the username derivation transliterates rather than deletes.
---
--- Committed before it is applied (ruling 225). Three function replacements, no table change.
---
--- The fold (mirrored exactly by deriveUsername in src/lib/onboarding.ts): trim, NFKD, strip
--- combining marks, then SPEC section 9's existing rules: lowercase, strip everything except
--- a-z 0-9 space and hyphen, spaces to hyphens, collapse runs, trim hyphens, cut to the handle
--- column's forty. "Jaûne" derives jaune where it derived jane; "José Núñez-Ålund" derives
--- jose-nunez-alund where it derived jos-nez-lund; "ﬁnn" (the ligature) derives finn; full-width
--- letters derive their ASCII letters.
---
--- Measured before this was written (ruling 242), against the canonical project with the exact
--- expression below: Jaûne -> jaune, Thandiwe Dube -> thandiwe-dube (unchanged), İbrahim Öztürk ->
--- ibrahim-ozturk, Søren Ødegård -> sren-degard, Straße -> strae, Łukasz -> ukasz, 王小明 -> null,
--- Кирилл -> null, أحمد -> null. Ø, ß, Ł and Æ have no canonical or compatibility decomposition, so
--- they still fall to the ASCII filter; a name in a non-Latin script folds to nothing. Both are
--- recorded as gap G15 in docs/GAPS.md, with the hint copy that promises a suggestion.
---
--- The combining-mark class is the five Unicode blocks of combining marks: Combining Diacritical
--- Marks, Extended, Supplement, for Symbols, and Half Marks. After NFKD every mark a Latin letter
--- carries is in the first block; the other four cost nothing and keep the fold honest for the
--- scripts that use them.
---
--- The 'member' fallback is gone from both readers of the derivation: a name that folds to nothing
--- leaves the suggestion null, the client leaves the field empty, and onboard_who refuses an
--- empty username as invalid rather than writing a placeholder nobody chose (ruling 343).
--- ---------------------------------------------------------------------------
+-- Ruling 343: the username derivation transliterates rather than deletes. Committed as
+-- supabase/migrations/20260911120000_r343_username_fold.sql before this apply (ruling 225).
 
 create or replace function private.derive_username(p_name text)
 returns text
@@ -38,7 +12,7 @@ as $$
           lower(
             regexp_replace(
               normalize(trim(p_name), NFKD),
-              '[\u0300-\u036F\u1AB0-\u1AFF\u1DC0-\u1DFF\u20D0-\u20FF\uFE20-\uFE2F]', '', 'g')),
+              '[̀-ͯ᪰-᫿᷀-᷿⃐-⃿︠-︯]', '', 'g')),
           '[^a-z0-9 -]', '', 'g'),
         ' ', '-', 'g'),
       '-+', '-', 'g'),
@@ -47,10 +21,6 @@ $$;
 revoke execute on function private.derive_username(text) from public, anon, authenticated;
 comment on function private.derive_username(text) is 'Ruling 343: trim, NFKD, strip combining marks, then SPEC section 9: lowercase, keep a-z 0-9 space hyphen, spaces to hyphens, collapse, trim hyphens, forty. Null when nothing survives. Mirrored by deriveUsername in src/lib/onboarding.ts.';
 
--- onboard_who, unchanged except: the suggestion may be null, an empty username is invalid rather
--- than 'member', and a typed username counts as a change away from the suggestion only when
--- there was a suggestion to change away from (the SPEC's "first deliberate choice is free" holds
--- either way; with no suggestion there is nothing the count could be relative to).
 create or replace function public.onboard_who(p_name text, p_username text default null, p_avatar_path text default null)
 returns jsonb
 language plpgsql
@@ -115,7 +85,6 @@ begin
 end;
 $$;
 
--- The read projection, unchanged except that the suggestion is the derivation or null.
 create or replace function public.onboarding_state()
 returns jsonb
 language plpgsql
