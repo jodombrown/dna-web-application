@@ -117,6 +117,10 @@ export async function hasUnread(memberId: string, limit = 50): Promise<boolean> 
     .select("id,kind")
     .eq("recipient_member_id", memberId)
     .is("read_at", null)
+    // Newest first, like the list, so the dot and the list read the same window: the kind cannot be
+    // filtered in the query (see above), and an unordered page of 50 could hold only suppressed rows
+    // while the list's own newest 50 holds one that renders.
+    .order("created_at", { ascending: false })
     .limit(limit);
   return (data ?? []).some((r) => isRenderedKind(r.kind));
 }
