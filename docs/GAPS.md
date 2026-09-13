@@ -1227,3 +1227,53 @@ written (ruling 242):
 
 The fold on both sides was checked against sixteen names, identical output on all sixteen; the
 matrix's onboarding-flows arm proves the client half on "Jaûne Ñoño-Ålund".
+
+## G16. The mosaic cannot show the ruling 459 exclusion at five members (rulings 459, 228)
+
+**Severity: low. Not a merge blocker. Recorded 13 September 2026 with the W49 amendment.**
+
+Ruling 459 excludes an account that has not finished onboarding from `connect_cards` in every lens,
+from `connect_where` and from `send_introduction`. Two of the three are measured on the deployment:
+the live arm clears `onboarded_at` inside a rolled-back transaction, reads `connect_cards` and calls
+`send_introduction`, and measures both against the same calls with `onboarded_at` set (ruling 270).
+
+`connect_where` cannot be measured the same way. It is the country mosaic, not a list of members: it
+returns the names of countries holding at least `private.setting_int('where_floor', 5)` admitted
+members, so it carries no member id and one member entering or leaving a country is observable only
+at that floor. The canonical project holds twelve members across two countries, four in the largest,
+so the mosaic is empty for every viewer and stays empty either way. The arm reads it both ways,
+reports that half UNPROVEN with that reason, and never folds it into the passing count (ruling 228).
+It becomes measurable once any country holds five members whose profiles admit the viewer; the arm
+already records a pass in that case without a change.
+
+What is proven meanwhile: `public.connect_where` reads `private.is_onboarded` in both its counting
+arms, asserted by the migration itself (`20260913072642`), and the predicate is the same one the
+measured `connect_cards` filters on.
+
+## G17. The migration tree records the project's history and no longer replays from zero (rulings 466, 444, 225)
+
+**Severity: medium for a new environment. Not a merge blocker, and not a defect on the canonical
+project. Recorded 13 September 2026 with the drift repair.**
+
+The second amendment restored the seventeen amended migration files to the statements the project
+recorded, byte for byte, so the tree and `supabase_migrations.schema_migrations` now agree row for
+row and the drift arm is green. The amendments that were removed had been carrying one change: the
+seven RLS helpers moved from `public` to `private` after `b1_rls` was applied. That change is now
+its own migration, `20260913065215_r466_private_helpers_recorded`, which necessarily sorts last.
+
+So a replay from an empty database in version order fails: `20260907010622_b2_notifications` creates
+policies calling `private.is_admin()`, which nothing before it creates, and nine further files down
+to `fix_pr_02` reference the same seven helpers in `private` before the migration that puts them
+there. `supabase db reset` against a local stack stops at the first of them.
+
+Both ways out are decisions, not repairs to take unasked:
+
+- a back-dated migration that creates the seven helpers in `private` immediately after `b1_rls`,
+  which puts a version in the tree that the project never recorded, exactly the divergence ruling
+  444's arm exists to catch; or
+- a squashed baseline: one migration holding the schema as it stands, with the history behind it
+  archived, which makes the tree replayable and ends the row-for-row correspondence with the
+  project's recorded history.
+
+Until one is taken, the canonical project is the only environment the tree describes, and a new
+environment is built by restoring from it rather than by replaying migrations.
