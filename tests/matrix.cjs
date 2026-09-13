@@ -1899,13 +1899,27 @@ async function runViewport(browserType, bname, [w, h], theme) {
           }),
         ),
       );
-    // Ruling 400: four chips, C order; the composer carries no Connect verb.
+    // Rulings 400, 417, 458, 498: four chips in C order, above the text area, visible before
+    // anything is typed, and no Connect chip. Connect has left the composer; making an intro is the
+    // request sheet's job (401).
     record(
-      tag + " four verb chips visible, no Connect (ruling 400)",
+      tag + " four verb chips in C order above the text area, and no Connect chip",
       (await dialog
         .locator('[role="radiogroup"][aria-label="What kind of post"] [role="radio"]')
         .count()) === 4 &&
-        (await dialog.locator('[role="radio"][aria-label^="Make an Intro"]').count()) === 0,
+        (await dialog.locator('[role="radio"][aria-label^="Make an Intro"]').count()) === 0 &&
+        (await dialog
+          .locator('[role="radiogroup"][aria-label="What kind of post"] [role="radio"]')
+          .first()
+          .getAttribute("aria-label")) === "Host an Event (Convene)" &&
+        (await dialog.evaluate(() => {
+          const row = document.querySelector("[data-verb-row]");
+          const ta = document.querySelector('[aria-label="What is going on with you"]');
+          return (
+            !!row && !!ta && !!(row.compareDocumentPosition(ta) & Node.DOCUMENT_POSITION_FOLLOWING)
+          );
+        })),
+    );
     );
     record(
       tag + " empty: no DiaLine, no preview, publish disabled",
@@ -1913,21 +1927,15 @@ async function runViewport(browserType, bname, [w, h], theme) {
         (await dialog.locator("article[aria-label='Preview of your post']").count()) === 0 &&
         (await dialog.getByRole("button", { name: "Publish" }).isDisabled()),
     );
-    // Drawer geometry (ruling 106): 80% bottom sheet under 640, 65% right drawer 640 to 1024,
-    // min(1000, 100%) drawer above.
+    // Ruling 492, superseding ruling 106's geometry: no sheet is full screen. A bottom sheet is 80
+    // percent tall on compact; a side sheet is 40 percent wide on medium and expanded, and the
+    // composer alone takes 50 percent for its stacked preview.
     const box = await dialog.boundingBox();
     record(
-      tag +
-        (w > 1024
-          ? " drawer at min(1000, 100%)"
-          : w >= 640
-            ? " medium: 65% right drawer"
-            : " compact: 80% bottom sheet"),
-      w > 1024
-        ? Math.abs(box.width - Math.min(1000, w)) < 2
-        : w >= 640
-          ? Math.abs(box.width - 0.65 * w) < 2 && Math.abs(box.x + box.width - w) < 2
-          : Math.abs(box.width - w) < 2 && Math.abs(box.height - 0.8 * h) < 2,
+      tag + (w >= 640 ? " composer: 50% side sheet" : " compact: 80% bottom sheet"),
+      w >= 640
+        ? Math.abs(box.width - 0.5 * w) < 2 && Math.abs(box.x + box.width - w) < 2
+        : Math.abs(box.width - w) < 2 && Math.abs(box.height - 0.8 * h) < 2,
       `box ${JSON.stringify(box)}`,
     );
     const pub = dialog.getByRole("button", { name: "Publish" });
@@ -2006,7 +2014,8 @@ async function runViewport(browserType, bname, [w, h], theme) {
         (await preview.getAttribute("data-c")) === "convey" &&
         (await preview.locator("h3").count()) === 0,
     );
-    // Previews via the four chips (ruling 400).
+    // Previews via the four chips (rulings 400, 417): four, not five. Connect left the composer
+    // with the Intro verb.
     for (const v of ["convene", "collaborate", "contribute", "convey"]) {
       if (!FULL_PREVIEW_AT.has(w) && v !== "contribute") continue;
       await ta.fill(SAMPLES[v]);
@@ -2059,9 +2068,21 @@ async function runViewport(browserType, bname, [w, h], theme) {
           log: db.log,
         }),
       );
+    // Ruling 497: the composer opens empty and offers "Continue your draft" with a discard. The
+    // draft itself, the autosave and the "Draft saved" trace are unchanged; what changed is that a
+    // half-finished draft no longer arrives unasked.
     record(
-      tag + " c keypress opens composer with restored draft",
+      tag + " c keypress opens the composer empty, with the draft offered",
+      (await ta.inputValue()) === "" &&
+        (await dialog.locator('[data-testid="continue-draft"]').count()) === 1 &&
+        (await dialog.locator('[data-testid="discard-draft"]').count()) === 1,
+    );
+    await dialog.locator('[data-testid="continue-draft"]').click();
+    await page.waitForTimeout(300);
+    record(
+      tag + " Continue your draft restores it, and Draft saved is still the only trace",
       /^(Three intros|We need a volunteer)/.test(await ta.inputValue()) &&
+        (await dialog.locator('[data-testid="continue-draft"]').count()) === 0 &&
         (await dialog.getByText("Draft saved").count()) === 1,
     );
     await page.keyboard.press("Escape");
@@ -2597,11 +2618,27 @@ async function runShell(browserType, bname, [w, h]) {
     await list.waitFor({ timeout: 10000 });
     const row = list.locator('button[data-kind="connection_accepted"]');
     await row.waitFor({ timeout: 10000 });
+    // Design pass 01, B17: ruling 461 retitled the row now that making an intro has left the
+    // composer (417), and ruling 490 puts the destination in words on every row. Ruling 480 puts a
+    // hidden Unread label in a 24 hit area, so the dot is named rather than only coloured.
     record(
       tag + " list shows the real row with the Connect glyph, spec copy, and unread state",
       (await row.getAttribute("data-unread")) === "1" &&
         (await row.locator('[role="img"][aria-label="Connect"]').count()) === 1 &&
-        (await row.textContent()).includes("accepted your intro."),
+        (await row.textContent()).includes("accepted your connection request."),
+    );
+    record(
+      tag + " the row names its destination in words (ruling 490)",
+      (await row.getAttribute("data-destination")) === "Opens their profile" &&
+        (await row.locator("[data-destination-line]").innerText()) === "Opens their profile",
+    );
+    record(
+      tag + " the unread dot carries a hidden label in a 24 hit area (ruling 480)",
+      (await row.locator('[data-unread-dot][role="img"][aria-label="Unread"]').count()) === 1 &&
+        (await row.locator("[data-unread-dot]").evaluate((el) => {
+          const r = el.getBoundingClientRect();
+          return Math.round(r.width) >= 24 && Math.round(r.height) >= 24;
+        })),
     );
     await page.waitForTimeout(300);
     await shot(page, `${tag}-notifications`);
@@ -2701,32 +2738,47 @@ async function runTargeted(browserType, bname, [w, h]) {
     await page.mouse.move(scrimBox.x + 8, scrimBox.y + 8);
     for (let i = 0; i < 4; i++) await page.mouse.wheel(0, 300);
     await page.waitForTimeout(200);
-    const touchPrevented = await page.evaluate(() => {
-      const ta = document.querySelector('section[role="dialog"] textarea');
-      const mk = (target) => {
+    // Ruling 493 narrows the scroll lock: the scrim is cancelled, a vertical scroller inside is
+    // consumed at its edges as before, a horizontal scroller keeps its wheel, and touch is left to
+    // the browser. With showModal() the background is inert as well, so the page cannot move at all
+    // rather than being held still by a cancelled event; the outcome is what is asserted.
+    const lock = await page.evaluate(() => {
+      const dlg = document.querySelector('section[role="dialog"]');
+      const row = dlg.querySelector("[data-verb-row]");
+      const fire = (target, dx, dy) => {
+        const e = new WheelEvent("wheel", {
+          bubbles: true,
+          cancelable: true,
+          deltaX: dx,
+          deltaY: dy,
+        });
+        target.dispatchEvent(e);
+        return e.defaultPrevented;
+      };
+      const touch = (target) => {
         const e = new Event("touchmove", { bubbles: true, cancelable: true });
         target.dispatchEvent(e);
         return e.defaultPrevented;
       };
       const scrim = document.querySelector("[data-sheet-scrim]");
-      const dlg = document.querySelector('section[role="dialog"]');
-      const region = dlg.querySelector(
-        "div[style*='overflow-y: auto'], div[style*='overflow-y:auto']",
-      );
-      const edge = region || dlg;
-      edge.scrollTop = edge.scrollHeight;
       return {
-        scrim: mk(scrim),
-        textareaAtEnd: ((ta.scrollTop = ta.scrollHeight), mk(ta)),
-        header: mk(dlg.querySelector("header")),
+        // The scrim is the one thing the lock still cancels.
+        scrim: fire(scrim, 0, 300),
+        // The chip row keeps its wheel: the Sheet leaves a horizontal scroller alone.
+        chipRow: row ? fire(row, 0, 300) : true,
+        // Touch is the browser's.
+        touchInside: touch(dlg),
       };
     });
     const feedAfterWheel = await feedTop();
     record(
       tag +
-        " 1. composer open: wheel over the textarea, at its end, and over the scrim; touchmove on scrim and chrome cancelled; Feed did not move",
-      feedAfterWheel === feedBefore && touchPrevented.scrim && touchPrevented.header,
-      `feed ${feedBefore} -> ${feedAfterWheel} touch ${JSON.stringify(touchPrevented)}`,
+        " 1. composer open: the page cannot move behind it, the scrim is cancelled, the chip row keeps its wheel and touch is the browser's (ruling 493)",
+      feedAfterWheel === feedBefore &&
+        lock.scrim &&
+        lock.chipRow === false &&
+        lock.touchInside === false,
+      `feed ${feedBefore} -> ${feedAfterWheel} lock ${JSON.stringify(lock)}`,
     );
 
     // 2. Armed drop state before the drop lands; drop adds; leaving clears.

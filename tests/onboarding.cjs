@@ -17,6 +17,8 @@ const COPY = {
     heading: "Welcome to the Diaspora Network of Africa.",
     lead: "Your name, a username and a photo to begin. Where you are, and your relationship to the continent, come next.",
     nameHint: "As you'd like to be known here.",
+    // Ruling 411, verbatim: the hint names no count of changes. Fix PR 02's wording, which the
+    // surface carries.
     usernameHint: "We'll suggest one from your name. Pick one you'll keep.",
     tooLarge: "That photo is too large. Choose a smaller one and try again.",
     failed: "We couldn't add that photo just now. Nothing else you entered is lost. Try again.",
@@ -167,26 +169,50 @@ async function runOnboardingLayout(browserType, bname, [w, h], theme) {
       noNumeral(text),
       text.replace(/\s+/g, " ").slice(0, 200),
     );
-    const logo = page.locator('main img[alt="DNA"]').first();
-    const lb = await logo.boundingBox();
+    // Ruling 491 (B9 item 5): onboarding is rebound to AuthHead, so the 80 leaves with it. The
+    // logo is 48 on compact and 56 above, top-aligned in a band whose height never changes.
+    const head = await page.evaluate(() => {
+      const band = document.querySelector(".strand-auth-head > div");
+      const img = band && band.querySelector("img");
+      const col = document.querySelector(".strand-auth-col");
+      return {
+        band: band ? Math.round(band.getBoundingClientRect().height) : 0,
+        logo: img ? Math.round(img.getBoundingClientRect().height) : 0,
+        centre: col ? col.getAttribute("data-centre") : "",
+      };
+    });
     record(
-      tag + ": the wordmark sits above the heading at 80 tall (ruling 184)",
-      !!lb && Math.round(lb.height) === 80,
-      lb ? String(lb.height) : "no logo",
+      tag + ": the wordmark is 48/56, top-aligned in the fixed band (ruling 491)",
+      head.band === (compact ? 84 : 100) && head.logo === (compact ? 48 : 56),
+      JSON.stringify(head),
+    );
+    record(
+      tag + ": onboarding holds the top and never centres vertically (ruling 487)",
+      head.centre === "0",
+      JSON.stringify(head),
+    );
+    // Ruling 413 (B9 item 1): a Sign out text link in the footer of every onboarding screen.
+    const so = page.locator('[data-testid="onboarding-sign-out"]');
+    const sob = await so.boundingBox();
+    record(
+      tag + ": a Sign out text link in the footer, 44 tall and underlined (ruling 413)",
+      (await so.count()) === 1 &&
+        !!sob &&
+        Math.round(sob.height) >= 44 &&
+        (await so.evaluate((el) => getComputedStyle(el).textDecorationLine)) === "underline",
+      sob ? String(Math.round(sob.height)) : "no link",
     );
     record(
       tag + ": no AppHeader, no dock, no rail on the auth layout (section 2)",
       (await page.locator("header").count()) === 0 &&
         (await page.locator('[data-testid="pulse-dock"]').count()) === 0,
     );
+    // B9 item 5: AuthHead owns the h1 and sits above the landmark, so the landmark names itself
+    // with the same words rather than pointing at an element outside it.
     record(
       tag + ": the landmark names itself by the heading",
-      (await page.locator("main[aria-labelledby]").count()) === 1 &&
-        (await page.evaluate(() => {
-          const m = document.querySelector("main");
-          const id = m?.getAttribute("aria-labelledby");
-          return !!id && document.getElementById(id)?.tagName === "H1";
-        })),
+      (await page.locator("main[aria-label]").count()) === 1 &&
+        (await page.locator("main").getAttribute("aria-label")) === COPY.who.heading,
     );
     const plate = await page.locator('[data-testid="photo-plate"] > *').first().boundingBox();
     record(
@@ -344,15 +370,17 @@ async function runOnboardingLayout(browserType, bname, [w, h], theme) {
       noNumeral(dtext) && !dtext.includes("Convene") && !dtext.includes("Collaborate"),
     );
     const db2 = await dlg.boundingBox();
+    // Ruling 492: one size on every sheet. 80 percent tall on compact, 40 percent wide above; the
+    // 65 percent drawers are retired.
     record(
       tag +
         (compact
           ? ": compact opens an 80 percent sheet"
-          : ": medium and expanded open a 65 percent drawer"),
+          : ": medium and expanded open a 40 percent side sheet"),
       !!db2 &&
         (compact
           ? Math.abs(db2.height - h * 0.8) < h * 0.05
-          : Math.abs(db2.width - w * 0.65) < w * 0.03),
+          : Math.abs(db2.width - w * 0.4) < w * 0.03),
       db2 ? `${Math.round(db2.width)}x${Math.round(db2.height)}` : "no dialog",
     );
     record(

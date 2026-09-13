@@ -1053,10 +1053,16 @@ the rule rather than restating it. What the increment has to decide is only what
 like on a card that has no primary action slot, which is a Connect surface question and belongs to a
 Connect brief.
 
-## G9. Strand has no show-password affordance, no eye icon and no loading button (Brief 4B)
+## G9. Strand has no show-password affordance, no eye icon and no loading button (Brief 4B) — two of three closed (Design pass 01)
 
 **Severity: low. Not a merge blocker. Opened 10 September 2026 building Brief 4B, and recorded in
-the handoff (section 4) as gaps to be raised in Strand rather than patched locally.**
+the handoff (section 4) as gaps to be raised in Strand rather than patched locally. Two of the three
+closed on 13 September 2026 by Design pass 01: `PasswordField` and the two eye icons landed
+(rulings 392, 491), and `AuthHead` plus `AuthColumn` took the logo-and-heading pattern out of the
+page compositions (rulings 377, 390, 487, 491). The Show passwords checkbox is gone from
+`/reset/new` and `/password`; the eye toggle is inside each field. `Button` still has no `loading`
+prop, and the separator, the provider buttons and the focusable alert are still page-level
+compositions.**
 
 Three parts the auth surfaces needed and Strand does not carry. All three are worked around at page
 level in this build, and the workaround is what the handoff says to keep in Code:
@@ -1277,3 +1283,49 @@ Both ways out are decisions, not repairs to take unasked:
 
 Until one is taken, the canonical project is the only environment the tree describes, and a new
 environment is built by restoring from it rather than by replaying migrations.
+
+---
+
+## G18. Design pass 01 arrived without `EXTRACTION.md`, so four system-page strings are unwritten
+
+**Severity: low. Not a merge blocker. Opened 13 September 2026 building Design pass 01
+(rulings 90, 495, 496).**
+
+The pass was handed over as `HANDOFF.md`, `STRAND-CHANGES.md`, `STRAND-HANDOFF.md`, `APP-SPEC.md`
+and the register. `design-pass-01/EXTRACTION.md`, `design-pass-01/DP01-Design-Pass-01.dc.html` and
+`design-pass-01/strand-patch/*` did not. The divergence list is what Code builds from and it arrived
+with real content, so ruling 90's stop-and-report applies only to what is genuinely absent rather
+than to the pass:
+
+- **B10 item 5.** "Copy, new, awaiting a ruling: reset sent, 404, 500 and stub page lines are in
+  `EXTRACTION.md` under 'New copy'." Ruling 496 requires the new strings verbatim, so they were not
+  invented. Those four pages carry their existing copy on the pass's layout: one `AuthHead`, one 480
+  column, centred with auto margins, one act and a footer line. Items 1, 2, 3, 4 and 6 of B10 are
+  built; item 5 is the only one outstanding, and it is a copy change with no code shape behind it.
+- **The prototype page.** `DP01-Design-Pass-01.dc.html` is the exit check's visual reference
+  (handoff section D). Every state was built to the divergence list and the surface's own approved
+  page instead. A state-by-state probe against the prototype is owed once it lands.
+- **`strand-patch/*.jsx`.** The Strand parts were written from `STRAND-CHANGES.md`, which specifies
+  each one in prose, into this repo's TypeScript. Nothing was reconstructed from ruling summaries.
+
+## G19. Three notification kinds name a destination that has no surface yet
+
+**Severity: low. Not a merge blocker. Opened 13 September 2026 building Design pass 01 B17
+(rulings 462, 490).**
+
+Every row now names its destination in words before the tap. Two of the five have somewhere to go:
+`connection_accepted` opens the other member's profile and `connection_request` opens My Network's
+Requests. `attestation_received`, `space_role_approved` and `event_reminder` name "Opens the
+contribution", "Opens the Space" and "Opens the event"; none of those objects has a route, because
+Convene is Brief 6 and Collaborate and Contribute follow it. Those rows mark read on open and go
+nowhere. Grounded-or-empty applies to a route as much as to a count, so nothing is faked; the
+navigation lands with the engine that owns the object.
+
+Two related notes on the same rows:
+
+- `connection_request` is not yet in the `notification_kind` enum. Ruling 461 adds it and is Fix PR
+  03's scope, not this pass's; no migration was written here. The client carries the kind, its copy
+  and its destination, so the row renders correctly the moment the enum lands.
+- "Opens the event" is Code's wording. The handoff names four destinations verbatim (B17 item 1) and
+  `event_reminder` is not among them, so its line is written to the same shape and flagged here
+  rather than presented as ruling 496 copy.

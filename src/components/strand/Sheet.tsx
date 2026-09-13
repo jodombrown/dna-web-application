@@ -288,7 +288,10 @@ export function Sheet({
     <dialog
       ref={dlg}
       className="strand-sheet"
-      aria-label={label}
+      // The top-layer element carries the scrim and the inert background; the panel inside carries
+      // the dialog itself. Presentational here so a screen reader announces one dialog, not two
+      // nested ones, and so every surface keeps selecting the panel it always selected.
+      role="presentation"
       data-sheet-scrim
       data-shown={shown ? "1" : "0"}
       onClick={(e) => {
@@ -310,7 +313,9 @@ export function Sheet({
     >
       <section
         ref={panel}
-        role="document"
+        role="dialog"
+        aria-modal="true"
+        aria-label={label}
         data-kb={keyboardHeight > 0 ? "1" : undefined}
         style={{
           background: "var(--surface)",

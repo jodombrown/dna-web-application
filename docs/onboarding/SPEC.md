@@ -26,7 +26,10 @@ Anonymous auth layout, identical to 4B sign-in: no `AppHeader`, no `PulseDock`, 
 | Medium 820 | 400, centred | `64px 32px` | 30 display, centred | page scrolls |
 | Expanded 1280 | 400, centred | `64px 32px` | 30 display, centred | screen three's card row bleeds to 1200 (section 6) |
 
-- Logo `assets/logo.png` at 80 tall, centred, above the heading, linked to nothing that leaves onboarding.
+- Head: Strand's `AuthHead` (Design pass 01, B9 item 5, rulings 377, 390, 491). Logo `assets/logo.png`
+  48 tall on compact and 56 above, top-aligned in an 84/100 band whose height never changes with
+  content, then `--auth-head-gap`, a centred heading and a centred lead. The 80 is retired; nothing
+  else sizes the wordmark. Onboarding holds the top of the column and never centres vertically (487).
 - `main aria-labelledby` the h1. DOM order on every screen: heading, lead, (chosen line), alert, form fields, primary control, Back (180). Back never precedes the heading.
 - Heading `--font-display` 400 30/1.15, centred, `text-wrap: balance`. Lead sans 17/1.5 `--ink-2`, centred. Section gap 24; form gap 24; control stack gap 12.
 - Ground `--bg`. Cards and panels `--surface`. No shadow. Both themes via tokens only.
@@ -37,7 +40,14 @@ Screen one (`/welcome`)
 - Heading: Welcome to the Diaspora Network of Africa.
 - Lead (328): Your name, a username and a photo to begin. Where you are, and your relationship to the continent, come next.
 - Name label: Your name. Hint: As you'd like to be known here.
-- Username label: Username. Hint (326): We'll suggest one from your name. You can change it twice after this, so pick one you'll keep.
+- Username label: Username. Hint (326, amended by ruling 411, Design pass 01 B9 item 3): We'll suggest one from your name.
+  The hint names no count of changes; the two-changes policy stands and is delivered by User Settings (37).
+- A refused username shows the reason in the field's own line and Continue never disables silently
+  (ruling 434, B9 item 4). Three reasons, ruling 496 verbatim: "Usernames use a to z, 0 to 9 and
+  hyphens. Remove the accents and try again." / "Usernames are at least three characters." /
+  "Usernames cannot start or end with a hyphen." The photo gate (324) still holds Continue.
+- The name field starts empty and is never derived from the email local part (ruling 469, B9 item 2).
+- A Sign out text link in the footer of every screen: 44 tall, `--ink-2`, underlined, offset 3 (413).
 - Photo label: Photo. Empty control: Add a photo. Chosen controls: Change photo, Remove.
 - Photo too large alert: That photo is too large. Choose a smaller one and try again.
 - Photo failed alert: We couldn't add that photo just now. Nothing else you entered is lost. Try again.
@@ -99,7 +109,10 @@ Three required controls, peers in one form, gap 24. Continue is live only when n
 
 ## 7. Explainer sheet (222, 248, 321)
 
-Strand `Sheet`, `label` "What these mean, and why we ask". Compact: `variant="sheet"`, height 80 percent of the viewport, radius 14 top. Medium and expanded: `variant="drawer"`, width 65 percent of the viewport. Scrim and Esc close.
+Strand `Sheet`, `label` "What these mean, and why we ask". Ruling 492: one size on every sheet.
+Compact: `variant="sheet"`, height 80 percent of the viewport, radius 14 top. Medium and expanded:
+`variant="drawer"`, width 40 percent of the viewport; the 65 percent drawer is retired. Scrim and
+Esc close, and the Sheet manages focus (heading in, opener out, trapped while open; rulings 222, 480).
 
 Focus (222): on open, focus moves to the sheet h2 (`tabIndex=-1`); on close, focus returns to the link that opened it.
 

@@ -7,7 +7,7 @@ import { whenLabel } from "./when";
 
 export type NotificationRow = Tables<"notifications">;
 
-/** A row plus the words its copy needs: "{actor} accepted your intro.", "{object} starts {detail}." */
+/** A row plus the words its copy needs: "{actor} accepted your connection request.", "{object} starts {detail}." */
 export type NotificationView = NotificationRow & {
   actor?: string | undefined;
   /** The actor's handle, when the actor is a member. Ruling 462: the row's destination needs it. */

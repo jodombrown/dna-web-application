@@ -141,7 +141,7 @@ Both mount Strand's `Sheet` (shell v3 form) inside the frame.
 | Tier                            | Variant          | Size              |
 | ------------------------------- | ---------------- | ----------------- |
 | Compact                         | `sheet` (bottom) | height 80 percent |
-| Medium, Expanded, Expanded-wide | `drawer` (right) | width 65 percent  |
+| Medium, Expanded, Expanded-wide | `drawer` (right) | width 40 percent (ruling 492; the 65 percent drawer is retired) |
 
 Both sheets: head row 56 tall with title 17/700 and an `x` IconButton "Close", 1px `--line` beneath; body scrolls; footer over a 1px `--line` with actions right-aligned, padding `12px 20px`, plus 42 bottom padding on compact for the home indicator. Esc, scrim tap and drag-down close.
 

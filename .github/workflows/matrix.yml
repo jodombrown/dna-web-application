@@ -103,6 +103,11 @@ jobs:
           echo "engines=$ENGINES" >> "$GITHUB_OUTPUT"
           echo "slug=$SLUG" >> "$GITHUB_OUTPUT"
           echo "Testing $URL in $ENGINES (artifact slug $SLUG)"
+      # Ruling 485, Design pass 01 B14 item 3: every token a surface cites resolves in both themes.
+      # Static, so it runs before the deployment is even reached and names the file that cites the
+      # token rather than leaving an unstyled value to be spotted in a screenshot.
+      - name: Every cited token resolves in both themes (ruling 485)
+        run: node scripts/token-check.mjs
       - name: The deployment serves every path the suites open (ruling 217)
         env:
           BASE: ${{ steps.target.outputs.url }}

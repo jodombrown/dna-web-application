@@ -80,7 +80,13 @@ export function AppHeader({
       style={{
         display: "flex",
         height: exp ? 64 : 56,
-        padding: exp ? "0 32px" : "0 8px 0 16px",
+        // Longhand, never the shorthand: the host supplies paddingTop, paddingLeft and paddingRight
+        // for the safe-area insets (ruling 344), and an element that carries both forms makes React
+        // warn every time the tier flips, which it does once on mount at every width above compact.
+        paddingTop: 0,
+        paddingBottom: 0,
+        paddingLeft: exp ? 32 : 16,
+        paddingRight: exp ? 32 : 8,
         background: "var(--bg)",
         borderBottom: "1px solid var(--line)",
         fontFamily: "var(--font-sans)",

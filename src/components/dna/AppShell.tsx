@@ -402,7 +402,11 @@ export function AppShell({
                   ? {
                       appearance: "none",
                       border: 0,
-                      padding: 0,
+                      // One shorthand, never the shorthand plus a longhand for the same value:
+                      // useTier starts compact, so on any viewport at 640 and above this element
+                      // rerenders from this branch to the other one, and React warns when the two
+                      // forms swap. The 6 is the same 6 paddingTop carried.
+                      padding: "6px 0 0",
                       margin: 0,
                       font: "inherit",
                       cursor: "pointer",
@@ -414,7 +418,6 @@ export function AppShell({
                       color: "var(--c-connect-ink)",
                       display: "inline-flex",
                       alignItems: "flex-start",
-                      paddingTop: 6,
                       boxSizing: "border-box",
                       justifyContent: "center",
                       transform: fabShown ? "translateY(0)" : "translateY(30px)",

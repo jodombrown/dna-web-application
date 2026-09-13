@@ -119,7 +119,24 @@ Every section has one (ruling 124, made canonical): About, segment, Origin and h
 
 Two ways in, one save model.
 - Section edit: the pencil (or the empty act) opens that section in place; one at a time, opening another closes the first without saving. Each section saves alone; the toast "Saved." confirms. Cancel restores the saved values.
-- Edit profile (owner button, and Edit profile in the avatar panel): every editable section (core, About, segment, Origin and heritage, Where I am, What I work on, Skills, Languages, What I am here for, Links) opens at once, each with its own Save and Cancel and its audience select still in the header. A sticky bar above the column reads "Editing your profile · Each section saves on its own. Nothing changes until you save it." with Done. Save keeps the section open in this mode; Done closes everything (unsaved edits are dropped, nothing is auto-saved). Activity sections are not editable; they show their audience select only.
+- Edit profile (owner button, and Edit profile in the avatar panel): every editable section (core,
+  About, segment, Origin and heritage, Where I am, What I work on, Skills, Languages, What I am here
+  for, Links) opens at once, with its audience select still in the header. Design pass 01, B11 item 2
+  (ruling 398): sections autosave. The Save and Cancel footer is gone; text, chips and selections
+  write as the member leaves them, and the only feedback is one quiet word in the section head,
+  Saving then Saved then nothing, announced once through a polite live region. `save_profile_section`
+  is unchanged; only the trigger and the chrome changed. Outside Edit profile mode, leaving the card
+  writes and closes the editor. The sticky bar reads "Editing your profile · Each section saves on its
+  own, as you leave it." with Done. Activity sections are not editable; they show their audience
+  select only.
+- Audience, Private and Share continue to act on the tap itself (397), and each announces itself in
+  its own words rather than the quiet Saved (ruling 499, B11 item 3).
+- Back row (rulings 396, 486, B11 item 1): Strand's `BackRow` in the content column, naming the
+  parent ("Feed" from the owner's own, "Connect" from a directory), scrolling with the page, never a
+  banner, 44 tall, compact and medium only. Above 1024 the profile has no back row.
+- The account panel carries no email address (ruling 428, B12 item 1); it belongs to User Settings (37).
+- The masthead re-reads after a section save with no reload: a write that touches name, headline or
+  place updates the head in place on the same invalidation (B12 item 2, W27).
 - Drafts are per section (`drafts[id]`), never one profile-wide form. Name is the only required field: saving an empty name toasts "A name is required." and stays in edit. Headline caps at 140 characters.
 - Avatar and cover use the composer's media path (Tinify). View my profile and Edit profile are the only profile items in the avatar panel.
 

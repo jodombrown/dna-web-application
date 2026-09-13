@@ -305,10 +305,11 @@ async function runAuthLayout(browserType, bname, [w, h], theme) {
           (await page.locator('[data-testid="provider-google"]').innerText()).includes("Google"),
       );
       record(
-        tag + ": a visually hidden h1 names the surface",
+        tag + ": the h1 names the surface",
         (await page.locator("h1").innerText()).trim() === "Sign in",
       );
-      // The Sign in page above the Password field is unchanged: logo, Email, Password, in that order.
+      // Design pass 01, B8 item 2: the head is AuthHead and the logo has left the form, so the
+      // form itself opens on Email and Password.
       const above = await page.evaluate(() => {
         const form = document.querySelector("form");
         return Array.from(form.querySelectorAll("img, input"))
@@ -316,9 +317,45 @@ async function runAuthLayout(browserType, bname, [w, h], theme) {
           .join(">");
       });
       record(
-        tag + ": nothing above the Password field moved",
-        above.startsWith("logo>email>password"),
+        tag + ": the form opens on Email then Password, with no logo inside it",
+        above.startsWith("email>password"),
         above,
+      );
+      // Ruling 491: the logo is 48 on compact and 56 above, top-aligned in a band whose height
+      // never changes with content, and the column under it never centres vertically.
+      const head = await page.evaluate(() => {
+        const band = document.querySelector(".strand-auth-head > div");
+        const img = band && band.querySelector("img");
+        const col = document.querySelector(".strand-auth-col");
+        const cs = band && getComputedStyle(band);
+        return {
+          band: band ? Math.round(band.getBoundingClientRect().height) : 0,
+          logo: img ? Math.round(img.getBoundingClientRect().height) : 0,
+          top: cs ? cs.paddingTop : "",
+          centre: col ? col.getAttribute("data-centre") : "",
+        };
+      });
+      const wide = w >= 640;
+      record(
+        tag + ": the auth head is a fixed band with the logo top-aligned at 48/56 (ruling 491)",
+        head.band === (wide ? 100 : 84) &&
+          head.logo === (wide ? 56 : 48) &&
+          head.top === (wide ? "20px" : "16px"),
+        JSON.stringify(head),
+      );
+      record(
+        tag + ": an auth column holds the top and never centres vertically (ruling 487)",
+        head.centre === "0",
+        JSON.stringify(head),
+      );
+      // Ruling 392: the eye toggle is inside the field, says what the tap will do, and there is no
+      // Show passwords checkbox anywhere.
+      record(
+        tag + ": the password field carries the in-field eye toggle (ruling 392)",
+        (await page.locator('[data-testid="password-eye"][aria-pressed="false"]').count()) === 1 &&
+          (await page.locator('[data-testid="password-eye"]').getAttribute("aria-label")) ===
+            "Show password" &&
+          (await page.getByText("Show passwords").count()) === 0,
       );
       await noOverflow(page, tag + ": sign-in");
 
@@ -560,8 +597,9 @@ async function runAuthFlows(browserType, bname, [w, h], theme) {
       try {
         auth.signupExisting = existing;
         await page.goto(BASE + "/sign-in?join=1", { waitUntil: "domcontentloaded" });
-        // Ruling 432: sign-up asks for the address and a password only.
-        await page.waitForSelector('input[type="email"]');
+        // Rulings 432 and 384: sign-up asks for the address and a password only. Name is
+        // collected on onboarding screen one (307), so the form opens on the email address.
+        await page.waitForSelector('input[autocomplete="email"]');
         await hydrated(page);
         await page.fill('input[type="email"]', "same@test.invalid");
         await page.fill('input[type="password"]', "correct horse battery");
@@ -587,17 +625,19 @@ async function runAuthFlows(browserType, bname, [w, h], theme) {
     try {
       auth.signupWeak = true;
       await page.goto(BASE + "/sign-in?join=1", { waitUntil: "domcontentloaded" });
-      await page.waitForSelector('input[type="email"]');
+      // Rulings 432, 384: no name field on sign-up.
+      await page.waitForSelector('input[autocomplete="email"]');
       await hydrated(page);
       await page.fill('input[type="email"]', "same@test.invalid");
       await page.fill('input[type="password"]', "password123456");
       await page.click('button[type="submit"]');
-      await page.waitForSelector('[data-testid="auth-alert"]');
+      // Rulings 392, 414, 496 (B8 items 3 and 5): the refusal renders in the field's own line,
+      // where the member is looking, and carries the pass's verbatim wording.
+      await page.waitForSelector('[data-testid="password-refusal"]');
       record(
-        tag + ": a breached password is named as one",
-        (await page.locator('[data-testid="auth-alert"]').innerText()).startsWith(
-          "This password appears in a known data breach",
-        ),
+        tag + ": a breached password is named as one, in the field's own line",
+        (await page.locator('[data-testid="password-refusal"]').innerText()).trim() ===
+          "This password has appeared in a data breach. Choose another one.",
       );
       record(
         tag + ": a refused password does not reach Check your email",

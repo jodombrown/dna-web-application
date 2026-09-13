@@ -189,23 +189,23 @@ export function OnboardingFrame({
 }) {
   const headingRef = useHeadingFocus(screen);
   return (
-    <AuthColumn data-testid={"onboarding-" + screen}>
-      {/* B9 item 5 with rulings 377, 390, 491: the same head as auth. The logo drops from 80 to
-          48/56, top-aligned in the fixed band, so it never moves because the screen under it grew.
-          Onboarding holds the top and never centres vertically (487). */}
-      <AuthHead
-        heading={heading}
-        lead={isResumedSession() ? COPY.resumeLead : lead}
-        headingRef={headingRef}
-      />
-      <main
-        aria-label={heading}
-        style={{ display: "flex", flexDirection: "column", gap: 24, paddingTop: 24 }}
-      >
+    <AuthColumn
+      data-testid={"onboarding-" + screen}
+      // Ruling 413 (B9 item 1): a Sign out text link in the footer of every onboarding screen.
+      footer={<OnboardingSignOut />}
+    >
+      <main aria-label={heading} style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+        {/* B9 item 5 with rulings 377, 390, 491: the same head as auth. The logo drops from 80 to
+            48/56, top-aligned in the fixed band, so it never moves because the screen under it
+            grew. Onboarding holds the top and never centres vertically (487). It sits inside the
+            landmark so the landmark's own name and its first heading are the same words. */}
+        <AuthHead
+          heading={heading}
+          lead={isResumedSession() ? COPY.resumeLead : lead}
+          headingRef={headingRef}
+        />
         {children}
       </main>
-      {/* Ruling 413 (B9 item 1): a Sign out text link in the footer of every onboarding screen. */}
-      <OnboardingSignOut />
     </AuthColumn>
   );
 }
@@ -223,7 +223,6 @@ function OnboardingSignOut() {
         alignSelf: "center",
         display: "inline-flex",
         alignItems: "center",
-        marginTop: "auto",
         minHeight: "var(--target-primary)",
         fontSize: 15,
         fontWeight: 500,

@@ -58,8 +58,7 @@ export const COPY = {
   /** Ruling 496, verbatim (B8 item 5): the lead on sign-up, now that the name field has gone. */
   signUpLead: "An email address and a password. Your name, a username and a photo come next.",
   /** Ruling 496, verbatim (B8 item 5): sign-up could not be created. */
-  signUpFailed:
-    "We couldn't create your account just now. Nothing you entered is lost. Try again.",
+  signUpFailed: "We couldn't create your account just now. Nothing you entered is lost. Try again.",
   providerError: (p: Provider) =>
     `${PROVIDER_LABEL[p]} could not sign you in just now. Try again, or use your email and password.`,
   providerCancelled: (p: Provider) =>
