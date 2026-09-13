@@ -7,14 +7,13 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState, type FormEvent } from "react";
 import { Button } from "@/components/strand/Button";
-import { Checkbox } from "@/components/strand/Checkbox";
-import { Input } from "@/components/strand/Input";
+import { PasswordField } from "@/components/strand/PasswordField";
 import {
-  AnonAuthLayout,
   AuthAlert,
-  AuthHeading,
-  AuthLead,
+  AuthPage,
   AuthSmall,
+  FooterLink,
+  SystemPage,
   useHeadingFocus,
 } from "@/components/dna/AuthSurface";
 import { useAuth } from "@/lib/auth";
@@ -44,7 +43,6 @@ function ResetLanding() {
   const [stage, setStage] = useState<Stage>("resolving");
   const [next, setNext] = useState("");
   const [confirm, setConfirm] = useState("");
-  const [show, setShow] = useState(false);
   const [alert, setAlert] = useState<string | null>(null);
   const [flag, setFlag] = useState<Flag>(null);
   const [busy, setBusy] = useState(false);
@@ -113,65 +111,63 @@ function ResetLanding() {
     }
   };
 
-  if (stage === "resolving") return <AnonAuthLayout>{null}</AnonAuthLayout>;
+  if (stage === "resolving") return <SystemPage heading="" />;
 
   if (stage === "expired")
     return (
-      <AnonAuthLayout>
-        <div
-          data-testid="reset-expired"
-          style={{ display: "flex", flexDirection: "column", gap: 14 }}
-        >
-          <AuthHeading headingRef={headingRef}>This link no longer works</AuthHeading>
-          <AuthLead>
-            Reset links work once and for one hour. This one has been used, or its hour has passed.
-          </AuthLead>
-          <AuthSmall>
-            Nothing about your account has changed. Your current password still works.
-          </AuthSmall>
-          <Button
-            type="button"
-            full
-            data-testid="request-new-link"
-            onClick={() => void navigate({ to: "/reset" })}
-          >
-            Request a new link
-          </Button>
-          <Button
-            variant="ghost"
-            type="button"
-            data-testid="back-to-sign-in"
+      <SystemPage
+        data-testid="reset-expired"
+        headingRef={headingRef}
+        heading="This link no longer works"
+        lead="Reset links work once and for one hour. This one has been used, or its hour has passed."
+        // B10 item 3: one act, and the footer line holds the bottom.
+        footer={
+          <FooterLink
+            before="Remembered it?"
+            link="Back to sign in"
             onClick={() => void navigate({ to: "/sign-in", search: {} })}
-          >
-            Back to sign in
-          </Button>
-        </div>
-      </AnonAuthLayout>
+          />
+        }
+      >
+        <AuthSmall>
+          Nothing about your account has changed. Your current password still works.
+        </AuthSmall>
+        <Button
+          type="button"
+          full
+          data-testid="request-new-link"
+          onClick={() => void navigate({ to: "/reset" })}
+        >
+          Request a new link
+        </Button>
+      </SystemPage>
     );
 
   if (stage === "done")
     return (
-      <AnonAuthLayout>
-        <div data-testid="reset-done" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-          <AuthHeading headingRef={headingRef}>You are signed in</AuthHeading>
-          <AuthLead>
-            Your new password is set and you are signed in here. Any other device signed in with the
-            old password has been signed out.
-          </AuthLead>
-          <Button
-            type="button"
-            full
-            data-testid="continue-to-dna"
-            onClick={() => void navigate({ to: "/feed", search: {} })}
-          >
-            Continue to DNA
-          </Button>
-        </div>
-      </AnonAuthLayout>
+      <SystemPage
+        data-testid="reset-done"
+        headingRef={headingRef}
+        heading="You are signed in"
+        lead="Your new password is set and you are signed in here. Any other device signed in with the old password has been signed out."
+      >
+        <Button
+          type="button"
+          full
+          data-testid="continue-to-dna"
+          onClick={() => void navigate({ to: "/feed", search: {} })}
+        >
+          Continue to DNA
+        </Button>
+      </SystemPage>
     );
 
   return (
-    <AnonAuthLayout>
+    <AuthPage
+      heading="Set a new password"
+      lead="You followed a reset link. Choose a new password to finish signing in."
+      headingRef={headingRef}
+    >
       <form
         onSubmit={(e) => void submit(e)}
         noValidate
@@ -179,35 +175,30 @@ function ResetLanding() {
         data-testid="reset-new"
         style={{ display: "flex", flexDirection: "column", gap: 14 }}
       >
-        <AuthHeading headingRef={headingRef}>Set a new password</AuthHeading>
-        <AuthLead>You followed a reset link. Choose a new password to finish signing in.</AuthLead>
         {alert && <AuthAlert>{alert}</AuthAlert>}
-        <Input
+        {/* Ruling 392: the eye toggle sits inside the field and the Show passwords checkbox is
+            gone. Each field carries its own toggle, so either can be revealed on its own. */}
+        <PasswordField
           label="New password"
-          type={show ? "text" : "password"}
           value={next}
-          onChange={(e) => setNext((e.target as HTMLInputElement).value)}
+          onChange={(e) => setNext(e.target.value)}
           autoComplete="new-password"
           hint={COPY.passwordHint}
           aria-invalid={flag === "new"}
           required
         />
-        <Input
+        <PasswordField
           label="Confirm new password"
-          type={show ? "text" : "password"}
           value={confirm}
-          onChange={(e) => setConfirm((e.target as HTMLInputElement).value)}
+          onChange={(e) => setConfirm(e.target.value)}
           autoComplete="new-password"
           aria-invalid={flag === "confirm"}
           required
         />
-        {/* Strand gap (handoff section 4): Input has no show-password affordance and no eye icon
-            exists, so the page uses a Checkbox. Staged for Strand, not patched locally. */}
-        <Checkbox label="Show passwords" checked={show} onChange={setShow} />
         <Button type="submit" disabled={busy} full>
           {busy ? "Setting your password" : "Set new password"}
         </Button>
       </form>
-    </AnonAuthLayout>
+    </AuthPage>
   );
 }

@@ -22,7 +22,7 @@ import { Icon } from "@/components/strand/Icon";
 import { Input } from "@/components/strand/Input";
 import { Select } from "@/components/strand/Select";
 import { Sheet, SHEET_DUR } from "@/components/strand/Sheet";
-import { assetBase } from "@/components/strand/cmeta";
+import { AuthColumn, AuthHead } from "@/components/strand/AuthHead";
 import type { Stance } from "@/components/strand/SegmentBlock";
 import { AuthAlert, useHeadingFocus } from "@/components/dna/AuthSurface";
 import {
@@ -36,6 +36,7 @@ import {
   USERNAME_REFUSAL,
   type OnboardingState,
 } from "@/lib/onboarding";
+import { getSupabase } from "@/lib/supabase";
 import { useTier, type Tier } from "@/lib/tier";
 
 // ---------------------------------------------------------------------------
@@ -48,7 +49,8 @@ export const COPY = {
     nameLabel: "Your name",
     nameHint: "As you'd like to be known here.",
     usernameLabel: "Username",
-    // Ruling 411: the hint names no count of changes.
+    // Ruling 411: the hint names no count of changes. The two-changes policy stands and is
+    // delivered by User Settings (37).
     usernameHint: "We'll suggest one from your name. Pick one you'll keep.",
     photoLabel: "Photo",
     photoAdd: "Add a photo",
@@ -58,6 +60,11 @@ export const COPY = {
     photoFailed:
       "We couldn't add that photo just now. Nothing else you entered is lost. Try again.",
     usernameTaken: "That username is taken. Choose another, or keep the one we suggest.",
+    // Ruling 496 (B9 item 4), verbatim: three reasons, each in the field's own line. Continue never
+    // disables silently; it submits and the field says why (434).
+    usernameCharset: "Usernames use a to z, 0 to 9 and hyphens. Remove the accents and try again.",
+    usernameShort: "Usernames are at least three characters.",
+    usernameHyphen: "Usernames cannot start or end with a hyphen.",
     continue: "Continue",
   },
   where: {
@@ -161,17 +168,6 @@ export const EXPLAINER = {
 // ---------------------------------------------------------------------------
 // The frame (SPEC section 2): logo, heading, lead, then the screen's own content.
 // ---------------------------------------------------------------------------
-const H1: CSSProperties = {
-  fontFamily: "var(--font-display)",
-  fontSize: 30,
-  lineHeight: 1.15,
-  fontWeight: 400,
-  color: "var(--ink)",
-  margin: 0,
-  textAlign: "center",
-  textWrap: "balance",
-  outline: "none",
-};
 const LEAD: CSSProperties = {
   fontSize: 17,
   lineHeight: 1.5,
@@ -191,48 +187,53 @@ export function OnboardingFrame({
   lead: string;
   children: ReactNode;
 }) {
-  const tier = useTier();
   const headingRef = useHeadingFocus(screen);
-  const id = useId();
-  const compact = tier === "compact";
   return (
-    <div
-      data-testid={"onboarding-" + screen}
-      data-tier={tier}
-      style={{
-        minHeight: "100dvh",
-        background: "var(--bg)",
-        display: "flex",
-        justifyContent: "center",
-      }}
-    >
+    <AuthColumn data-testid={"onboarding-" + screen}>
+      {/* B9 item 5 with rulings 377, 390, 491: the same head as auth. The logo drops from 80 to
+          48/56, top-aligned in the fixed band, so it never moves because the screen under it grew.
+          Onboarding holds the top and never centres vertically (487). */}
+      <AuthHead
+        heading={heading}
+        lead={isResumedSession() ? COPY.resumeLead : lead}
+        headingRef={headingRef}
+      />
       <main
-        aria-labelledby={id}
-        style={{
-          width: "100%",
-          maxWidth: compact ? 448 : 400,
-          boxSizing: compact ? "border-box" : "content-box",
-          padding: compact ? "32px 24px 64px" : "64px 32px",
-          display: "flex",
-          flexDirection: "column",
-          gap: 24,
-        }}
+        aria-label={heading}
+        style={{ display: "flex", flexDirection: "column", gap: 24, paddingTop: 24 }}
       >
-        {/* Ruling 184: the wordmark resolves by path and is sized by height, width auto. */}
-        <img
-          src={assetBase() + "logo.png"}
-          alt="DNA"
-          style={{ height: 80, width: "auto", alignSelf: "center", display: "block" }}
-        />
-        <h1 id={id} ref={headingRef} tabIndex={-1} style={H1}>
-          {heading}
-        </h1>
-        <p style={LEAD} data-testid="onboarding-lead">
-          {isResumedSession() ? COPY.resumeLead : lead}
-        </p>
         {children}
       </main>
-    </div>
+      {/* Ruling 413 (B9 item 1): a Sign out text link in the footer of every onboarding screen. */}
+      <OnboardingSignOut />
+    </AuthColumn>
+  );
+}
+
+/** Ruling 413: 44 tall, --ink-2, underlined, offset 3. A link, not a button. */
+function OnboardingSignOut() {
+  return (
+    <button
+      type="button"
+      data-testid="onboarding-sign-out"
+      onClick={() => void getSupabase()?.auth.signOut()}
+      style={{
+        all: "unset",
+        cursor: "pointer",
+        alignSelf: "center",
+        display: "inline-flex",
+        alignItems: "center",
+        marginTop: "auto",
+        minHeight: "var(--target-primary)",
+        fontSize: 15,
+        fontWeight: 500,
+        color: "var(--ink-2)",
+        textDecoration: "underline",
+        textUnderlineOffset: 3,
+      }}
+    >
+      Sign out
+    </button>
   );
 }
 
@@ -264,7 +265,9 @@ export type WhoSubmit = (input: {
 
 export function WhoScreen({ state, onSubmit }: { state: OnboardingState; onSubmit: WhoSubmit }) {
   const tier = useTier();
-  const [name, setName] = useState(state.who.name);
+  // B9 item 2, ruling 469: the field starts empty and is never derived from the email local part.
+  // A member who has already written screen one and come back still sees what they wrote.
+  const [name, setName] = useState(state.who.completed ? state.who.name : "");
   // The suggestion fills the field until the member types in it; typing replaces it (section 4).
   const [usernameTyped, setUsernameTyped] = useState(state.who.completed);
   const [username, setUsername] = useState(state.who.username ?? deriveUsername(state.who.name));
@@ -273,6 +276,7 @@ export function WhoScreen({ state, onSubmit }: { state: OnboardingState; onSubmi
   const [uploading, setUploading] = useState(false);
   const [alert, setAlert] = useState<string | null>(null);
   const [taken, setTaken] = useState(false);
+  /** Ruling 434 (B9 item 4): the reason a username was refused, in the field's own line. */
   const [busy, setBusy] = useState(false);
   const fileRef = useRef<HTMLInputElement | null>(null);
   // The object URL last handed to the preview, revoked whenever it is replaced so a rapid re-pick
@@ -337,17 +341,20 @@ export function WhoScreen({ state, onSubmit }: { state: OnboardingState; onSubmi
     }
   };
 
-  const ready =
-    name.trim().length > 0 &&
-    username.trim().length > 0 &&
-    usernameValid(username.trim()) &&
-    !!photoPath;
+  /**
+   * Ruling 434 (B9 item 4): Continue never disables silently. `ready` gates on the three things the
+   * screen asks for and never on whether the username will do, so a username that will not do is
+   * refused in words under the field rather than by a dead button nobody can interrogate. The photo
+   * gate (324) still holds Continue, because the screen says so.
+   */
+  const ready = name.trim().length > 0 && username.trim().length > 0 && !!photoPath;
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     if (!ready || busy || !photoPath) return;
     setAlert(null);
     setTaken(false);
+    if (refusals.length > 0) return;
     setBusy(true);
     try {
       const r = await onSubmit({
@@ -355,10 +362,10 @@ export function WhoScreen({ state, onSubmit }: { state: OnboardingState; onSubmi
         username: username.trim(),
         avatarPath: photoPath,
       });
-      if (r === "taken") {
-        setTaken(true);
-        setAlert(COPY.who.usernameTaken);
-      } else if (r === "failed") setAlert(COPY.saveFailed);
+      // Ruling 434: taken is a reason like any other, so it joins the lines under the field
+      // rather than the alert block at the top of the screen.
+      if (r === "taken") setTaken(true);
+      else if (r === "failed") setAlert(COPY.saveFailed);
     } finally {
       setBusy(false);
     }
@@ -400,7 +407,7 @@ export function WhoScreen({ state, onSubmit }: { state: OnboardingState; onSubmi
           data-testid="username"
           required
         />
-        {refusals.length > 0 && (
+        {(refusals.length > 0 || taken) && (
           <div
             role="status"
             data-testid="username-refusals"
@@ -417,6 +424,7 @@ export function WhoScreen({ state, onSubmit }: { state: OnboardingState; onSubmi
             {refusals.map((r) => (
               <span key={r}>{USERNAME_REFUSAL[r]}</span>
             ))}
+            {taken && <span>{COPY.who.usernameTaken}</span>}
           </div>
         )}
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>

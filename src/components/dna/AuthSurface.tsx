@@ -1,11 +1,13 @@
-// Brief 4B: the page-level compositions the auth surfaces share. Handoff section 4 records the
-// three Strand gaps these work around — Input has no show-password affordance and no eye icon
-// exists, Button has no loading prop, and the separator, the provider buttons and the focusable
-// alert are compositions rather than components. They are staged for Strand, not patched locally.
+// Brief 4B: the page-level compositions the auth surfaces share. Handoff section 4 recorded three
+// Strand gaps these worked around; Design pass 01 closes two of them. PasswordField is now a Strand
+// part with the eye toggle inside the field (ruling 392), and AuthHead plus AuthColumn are the one
+// logo-and-heading pattern for auth, onboarding, confirmation and system pages (rulings 377, 390,
+// 487, 491). Button still has no loading prop, and the separator, the provider buttons and the
+// focusable alert are still compositions rather than components.
 import { useEffect, useRef, type CSSProperties, type ReactNode } from "react";
+import { AuthColumn, AuthHead } from "@/components/strand/AuthHead";
 import { Button } from "@/components/strand/Button";
 import { Icon } from "@/components/strand/Icon";
-import { assetBase } from "@/components/strand/cmeta";
 import {
   PROVIDERS,
   PROVIDER_BUTTON_LABEL,
@@ -190,37 +192,108 @@ export function ProviderButtons({
   );
 }
 
-/** The anonymous auth layout: centred logo, 400-wide column, vertically centred (handoff section 1). */
-export function AnonAuthLayout({ children }: { children: ReactNode }) {
+/**
+ * Ruling 487: an auth form holds the top. The head sits at the top of the column, the form follows,
+ * and the footer line takes the bottom of the viewport with an auto margin. A page longer than the
+ * viewport scrolls and nothing is clipped, which is what centring a column inside a scroller broke.
+ */
+export function AuthPage({
+  heading,
+  lead,
+  headingRef,
+  footer,
+  children,
+  ...rest
+}: {
+  heading: ReactNode;
+  lead?: ReactNode;
+  headingRef?: React.RefObject<HTMLHeadingElement | null> | undefined;
+  footer?: ReactNode;
+  children: ReactNode;
+} & Omit<React.HTMLAttributes<HTMLDivElement>, "children">) {
   return (
-    <div
+    <AuthColumn {...(footer ? { footer } : {})} {...rest}>
+      <AuthHead
+        heading={heading}
+        {...(lead ? { lead } : {})}
+        {...(headingRef ? { headingRef } : {})}
+      />
+      {children}
+    </AuthColumn>
+  );
+}
+
+/**
+ * Ruling 487: a system or confirmation page centres in the viewport instead, with auto margins, so
+ * it still starts at the top and scrolls when it is longer than the frame. One act, never two
+ * (B10 item 3); the footer line holds the bottom.
+ */
+export function SystemPage({
+  heading,
+  lead,
+  headingRef,
+  footer,
+  children,
+  ...rest
+}: {
+  heading: ReactNode;
+  lead?: ReactNode;
+  headingRef?: React.RefObject<HTMLHeadingElement | null> | undefined;
+  footer?: ReactNode;
+  children?: ReactNode;
+} & Omit<React.HTMLAttributes<HTMLDivElement>, "children">) {
+  return (
+    <AuthColumn centre {...(footer ? { footer } : {})} {...rest}>
+      <AuthHead
+        heading={heading}
+        {...(lead ? { lead } : {})}
+        {...(headingRef ? { headingRef } : {})}
+      />
+      {children}
+    </AuthColumn>
+  );
+}
+
+/** The one linked sentence a system page's footer carries. */
+export function FooterLink({
+  onClick,
+  before,
+  link,
+  after,
+}: {
+  onClick: () => void;
+  before: string;
+  link: string;
+  after?: string;
+}) {
+  return (
+    <p
       style={{
-        minHeight: "100dvh",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: 20,
-        background: "var(--bg)",
+        margin: 0,
+        fontSize: 15,
+        lineHeight: 1.45,
+        color: "var(--ink-2)",
+        textAlign: "center",
       }}
     >
-      <div
+      {before}{" "}
+      <button
+        type="button"
+        onClick={onClick}
         style={{
-          width: "100%",
-          maxWidth: 400,
-          display: "flex",
-          flexDirection: "column",
-          gap: 14,
+          all: "unset",
+          cursor: "pointer",
+          color: "var(--ink)",
+          fontWeight: 500,
+          textDecoration: "underline",
+          textUnderlineOffset: 3,
+          minHeight: "var(--target-min)",
         }}
       >
-        {/* Ruling 184: the wordmark resolves by path and is sized by height, width auto. */}
-        <img
-          src={assetBase() + "logo.png"}
-          alt="DNA"
-          style={{ height: 80, width: "auto", alignSelf: "center", display: "block" }}
-        />
-        {children}
-      </div>
-    </div>
+        {link}
+      </button>
+      {after ?? ""}
+    </p>
   );
 }
 
@@ -229,26 +302,34 @@ export function AnonAuthLayout({ children }: { children: ReactNode }) {
  * already has an account) and by /reset (ruling 156 applied to auth: byte-identical for a known and
  * an unknown address). Neither caller branches on what the server answered, so there is one render
  * path and the markup cannot differ.
+ *
+ * Design pass 01, B10: it is a system page. One act, never two (item 3) — "Use a different address"
+ * — and the second control becomes the footer's linked sentence, which on sign-up is ruling 412's
+ * "If you already have an account, sign in instead." (item 4).
  */
 export function CheckEmail({
   heading,
   body,
   small,
   onUseDifferent,
-  onBackToSignIn,
+  footer,
   headingRef,
 }: {
   heading: string;
   body: ReactNode;
   small: string;
   onUseDifferent: () => void;
-  onBackToSignIn: () => void;
+  footer: ReactNode;
   headingRef?: React.RefObject<HTMLHeadingElement | null>;
 }) {
   return (
-    <div data-testid="check-email" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-      <AuthHeading {...(headingRef ? { headingRef } : {})}>{heading}</AuthHeading>
-      <AuthLead>{body}</AuthLead>
+    <SystemPage
+      data-testid="check-email"
+      heading={heading}
+      lead={body}
+      {...(headingRef ? { headingRef } : {})}
+      footer={footer}
+    >
       <AuthSmall>{small}</AuthSmall>
       <Button
         type="button"
@@ -259,9 +340,6 @@ export function CheckEmail({
       >
         Use a different address
       </Button>
-      <Button type="button" variant="ghost" data-testid="back-to-sign-in" onClick={onBackToSignIn}>
-        Back to sign in
-      </Button>
-    </div>
+    </SystemPage>
   );
 }

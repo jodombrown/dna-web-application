@@ -43,8 +43,8 @@ export const COPY = {
     "That email and password do not match an account. Check both and try again, or reset your password.",
   malformed: "Enter an email address, like name@example.com.",
   tooShort: "Use at least ten characters for your password.",
-  breached:
-    "This password appears in a known data breach, so it cannot protect your account. Choose a different one.",
+  // Ruling 496, verbatim from the Design pass 01 handoff (B8 item 5).
+  breached: "This password has appeared in a data breach. Choose another one.",
   differ: "The two passwords do not match. Type the new password the same way twice.",
   // Ruling 414 (W22): the server's refusals each get their own line. "Should be different from the
   // old password" used to match the too-short rule on the words "should be", so a sixteen-character
@@ -53,7 +53,13 @@ export const COPY = {
   passwordRefused: "That password was not accepted. Choose a different one and try again.",
   wrongCurrent:
     "That is not your current password. Check it and try again. If you have forgotten it, sign out and use Forgot your password.",
-  passwordHint: "At least ten characters. A phrase you can remember beats a word you will forget.",
+  /** Ruling 496, verbatim (B8 item 5). */
+  passwordHint: "At least ten characters.",
+  /** Ruling 496, verbatim (B8 item 5): the lead on sign-up, now that the name field has gone. */
+  signUpLead: "An email address and a password. Your name, a username and a photo come next.",
+  /** Ruling 496, verbatim (B8 item 5): sign-up could not be created. */
+  signUpFailed:
+    "We couldn't create your account just now. Nothing you entered is lost. Try again.",
   providerError: (p: Provider) =>
     `${PROVIDER_LABEL[p]} could not sign you in just now. Try again, or use your email and password.`,
   providerCancelled: (p: Provider) =>
