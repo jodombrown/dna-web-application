@@ -1330,10 +1330,14 @@ Two related notes on the same rows:
   `event_reminder` is not among them, so its line is written to the same shape and flagged here
   rather than presented as ruling 496 copy.
 
-## G18. The branch's first Pages preview served static files and 404ed every route
+## G18. The branch's first Pages preview served static files and 404ed every route — closed, one-off
 
-**Severity: medium, and it blocks the exit check rather than the build. Not a merge blocker on the
-code. Opened 13 September 2026 during Design pass 01 (rulings 61, 217).**
+**Severity: medium while it stood, and it blocked the exit check rather than the build. Opened and
+closed 13 September 2026 during Design pass 01 (rulings 61, 217). Closed by the next push: Pages run
+182 deployed the same branch, ruling 217's gate passed, and the live job ran its checks against the
+deployment. The deployment path is sound and the failure below was one bad deployment, not a
+reproducible fault. Left recorded because the symptom is worth recognising on sight and because the
+next occurrence has somewhere to start.**
 
 Pages run 181 deployed `8c41028` successfully and returned the alias
 `https://claude-dna-design-pass-01-wp.dna-web-application.pages.dev`. Ruling 217's gate then polled
@@ -1358,8 +1362,9 @@ itself was serving. And Cloudflare truncated this branch's alias to twenty-eight
 as that branch's alias; the aliases differ, but the truncation is worth ruling out before anything
 else.
 
-Next step is a redeploy: the push that carries the Sheet and onboarding corrections triggers one,
-and the gate names the URL it tried either way. If it 404s a second time the cause is reproducible
-and belongs to the deployment path rather than to this pass, and `matrix.yml`'s `base_url` input
-takes the deployment URL (`https://<hash>.dna-web-application.pages.dev`) instead of the alias.
+The redeploy settled it. The push carrying the Sheet and onboarding corrections triggered run 182 on
+the same branch and the same alias, and the gate passed on the first poll of every path. So: one bad
+deployment, not the branch, not the alias truncation, and not the build. If it recurs, redeploy
+first, and only if a second deployment 404s the same way pass `matrix.yml`'s `base_url` the
+deployment URL (`https://<hash>.dna-web-application.pages.dev`) instead of the alias.
 
