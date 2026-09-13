@@ -41,8 +41,7 @@ function walk(dir, out = []) {
     const p = path.join(dir, e.name);
     if (e.isDirectory()) {
       if (!EXCLUDE_DIRS.includes(p)) walk(p, out);
-    }
-    else if (EXT.has(path.extname(e.name)) && !EXCLUDE.has(p)) out.push(p);
+    } else if (EXT.has(path.extname(e.name)) && !EXCLUDE.has(p)) out.push(p);
   }
   return out;
 }
@@ -112,7 +111,9 @@ for (const { name, where } of lightOnlyDark)
   lines.push(`${name} is cited by ${where} and declared only under [data-theme="dark"]`);
 for (const name of darkOnly)
   if (!lines.some((l) => l.startsWith(name + " ")))
-    lines.push(`${name} is declared only under [data-theme="dark"] and resolves to nothing on light`);
+    lines.push(
+      `${name} is declared only under [data-theme="dark"] and resolves to nothing on light`,
+    );
 
 console.log(
   `token check (ruling 485): ${light.size} declared on :root, ${dark.size} overridden on dark, ` +
