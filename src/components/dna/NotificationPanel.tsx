@@ -172,7 +172,14 @@ export function NotificationPanel({
           </>
         )
       ) : (
-        <Sheet open={open} onClose={() => setOpen(false)} variant="sheet" label="Notifications">
+        // Ruling 492: 80 percent tall on compact, a 40 percent side sheet on medium. A full-width
+        // bottom sheet at 820 is the tablet full screen the ruling forbids.
+        <Sheet
+          open={open}
+          onClose={() => setOpen(false)}
+          variant={tier === "compact" ? "sheet" : "drawer"}
+          label="Notifications"
+        >
           {head}
           {rows}
         </Sheet>
