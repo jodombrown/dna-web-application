@@ -1920,6 +1920,18 @@ async function runViewport(browserType, bname, [w, h], theme) {
           );
         })),
     );
+    // Ruling 493: the chip row is one horizontal scroller at every tier, never a stack of four.
+    record(
+      tag + " the chip row is one horizontal scroller, never a stack",
+      await dialog.evaluate(() => {
+        const row = document.querySelector("[data-verb-row]");
+        if (!row) return false;
+        const cs = getComputedStyle(row);
+        const tops = new Set(
+          [...row.children].map((c) => Math.round(c.getBoundingClientRect().top)),
+        );
+        return cs.overflowX === "auto" && cs.flexWrap !== "wrap" && tops.size === 1;
+      }),
     );
     record(
       tag + " empty: no DiaLine, no preview, publish disabled",

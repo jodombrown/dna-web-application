@@ -268,8 +268,11 @@ export function WhoScreen({ state, onSubmit }: { state: OnboardingState; onSubmi
   // A member who has already written screen one and come back still sees what they wrote.
   const [name, setName] = useState(state.who.completed ? state.who.name : "");
   // The suggestion fills the field until the member types in it; typing replaces it (section 4).
+  // B9 item 2, ruling 469: with the name field starting empty the suggestion has nothing to derive
+  // from yet, so it starts empty too and follows the name as the member types it. Deriving it from
+  // the server's stored name would carry the email local part in through the back door.
   const [usernameTyped, setUsernameTyped] = useState(state.who.completed);
-  const [username, setUsername] = useState(state.who.username ?? deriveUsername(state.who.name));
+  const [username, setUsername] = useState(state.who.completed ? (state.who.username ?? "") : "");
   const [photoPath, setPhotoPath] = useState<string | null>(state.who.avatar_path);
   const [photoUrl, setPhotoUrl] = useState<string | undefined>(undefined);
   const [uploading, setUploading] = useState(false);

@@ -394,10 +394,15 @@ async function runOnboardingLayout(browserType, bname, [w, h], theme) {
     await shot(page, `onboarding-explainer-${bname}-${w}-${theme}`);
     await page.keyboard.press("Escape");
     await page.waitForTimeout(SHEET_SETTLE);
+    const afterEsc = {
+      dialogs: await page.locator('section[role="dialog"]').count(),
+      active: await activeTestId(page),
+      activeTag: await page.evaluate(() => document.activeElement?.tagName ?? null),
+    };
     record(
       tag + ": Esc closes it and focus returns to the link",
-      (await page.locator('section[role="dialog"]').count()) === 0 &&
-        (await activeTestId(page)) === "explainer-link",
+      afterEsc.dialogs === 0 && afterEsc.active === "explainer-link",
+      JSON.stringify(afterEsc),
     );
   } catch (e) {
     await shot(page, `onboarding-layout-fail-${bname}-${w}-${theme}`).catch(() => undefined);
@@ -450,10 +455,12 @@ async function runOnboardingFlows(browserType, bname, [w, h], theme) {
     const name = page.locator('[data-testid="name"]');
     const username = page.locator('[data-testid="username"]');
     const cont = page.locator('[data-testid="continue"]');
+    // Ruling 469 (Design pass 01, B9 item 2): the name field starts empty and is never derived from
+    // the email local part, so the username has nothing to suggest from until the member types.
     record(
-      tag + ": the name field starts empty and suggests nothing (ruling 469)",
+      tag + ": the name field starts empty, and so does the suggestion (ruling 469)",
       (await name.inputValue()) === "" && (await username.inputValue()) === "",
-      JSON.stringify([await name.inputValue(), await username.inputValue()]),
+      JSON.stringify({ name: await name.inputValue(), username: await username.inputValue() }),
     );
     await name.fill("Thandiwe Dube");
     record(

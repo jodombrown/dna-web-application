@@ -1329,3 +1329,37 @@ Two related notes on the same rows:
 - "Opens the event" is Code's wording. The handoff names four destinations verbatim (B17 item 1) and
   `event_reminder` is not among them, so its line is written to the same shape and flagged here
   rather than presented as ruling 496 copy.
+
+## G18. The branch's first Pages preview served static files and 404ed every route
+
+**Severity: medium, and it blocks the exit check rather than the build. Not a merge blocker on the
+code. Opened 13 September 2026 during Design pass 01 (rulings 61, 217).**
+
+Pages run 181 deployed `8c41028` successfully and returned the alias
+`https://claude-dna-design-pass-01-wp.dna-web-application.pages.dev`. Ruling 217's gate then polled
+that deployment for seventeen minutes and got 404 on every route it opens (`/sign-in`, `/connect`,
+`/reset`, `/reset/new`, `/password`, `/welcome`, `/where`, `/relationship`,
+`/.well-known/security.txt`) while every static asset answered 200 (`/strand/logo.png`,
+`/favicon.png`, `/apple-touch-icon.png`, `/icon-192.png`, `/icon-512.png`,
+`/manifest.webmanifest`, `/strand/adinkra/mate-masie.svg`). Static files serving while every
+dynamic route 404s is the shape of a deployment whose worker is not being invoked, not of an
+application error, and all three jobs (chromium, webkit, live) failed at that gate with nothing
+tested.
+
+The build is not the cause, and that was measured rather than assumed. The same `dist/` was served
+locally through `wrangler pages dev` on the deployment's own compatibility date and flags, and every
+one of those paths answered 200, the new icons included. The tree also passes lint, `tsc`, the
+contact parity and no-literal scan and the token check.
+
+Two facts narrow it. The run immediately before it, run 180 on `claude/pr-02-dna-core-ewcqod`,
+deployed to the same Pages project eleven minutes earlier and its own gate passed, so the project
+itself was serving. And Cloudflare truncated this branch's alias to twenty-eight characters
+(`claude-dna-design-pass-01-wp` from `claude/dna-design-pass-01-wpwb8a`), which is the same length
+as that branch's alias; the aliases differ, but the truncation is worth ruling out before anything
+else.
+
+Next step is a redeploy: the push that carries the Sheet and onboarding corrections triggers one,
+and the gate names the URL it tried either way. If it 404s a second time the cause is reproducible
+and belongs to the deployment path rather than to this pass, and `matrix.yml`'s `base_url` input
+takes the deployment URL (`https://<hash>.dna-web-application.pages.dev`) instead of the alias.
+

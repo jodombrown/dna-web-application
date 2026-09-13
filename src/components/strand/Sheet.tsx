@@ -158,19 +158,39 @@ export function Sheet({
     });
     return () => cancelAnimationFrame(id);
   }, [open, mounted, initialFocus]);
+  // The restore waits for the exit to finish, not merely for `open` to flip. While the dialog is
+  // still in the top layer the browser holds focus inside it, so a focus() call on the opener at
+  // that moment is a no-op and the member is left on the sheet's own last control. The showModal
+  // effect's cleanup closes the dialog on the same commit that clears `mounted`, and React runs
+  // every cleanup before every effect, so by the time this runs the top layer is gone.
+  const wasOpen = useRef(false);
   useEffect(() => {
-    if (open || !mounted) return;
+    if (open) wasOpen.current = true;
+  }, [open]);
+  useEffect(() => {
+    if (mounted || !wasOpen.current) return;
+    wasOpen.current = false;
     restore();
-  }, [open, mounted, restore]);
+  }, [mounted, restore]);
 
   // Esc, and the Tab trap. showModal() already traps, but `contained` does not, and the explicit
   // trap keeps one behaviour on both paths.
+  //
+  // `mounted` is in the deps because the dialog element does not exist on the commit where `open`
+  // first turns true: that render still returns null and only the effect below it sets `mounted`.
+  // Without it the cancel listener would be attached to nothing, Escape would close the dialog
+  // natively, and React would go on believing the sheet was open.
   useEffect(() => {
-    if (!open) return;
+    if (!open || !mounted) return;
     const d = dlg.current;
     const cancel = (e: Event) => {
       e.preventDefault();
       onClose?.();
+    };
+    // A close the component did not initiate (a native Escape that outran the listener, a form
+    // method="dialog") still has to reach the host, or the sheet lives on in React's state.
+    const closed = () => {
+      if (open) onClose?.();
     };
     const key = (e: KeyboardEvent) => {
       if (e.key === "Escape" && contained) {
@@ -198,12 +218,14 @@ export function Sheet({
       }
     };
     d?.addEventListener("cancel", cancel);
+    d?.addEventListener("close", closed);
     window.addEventListener("keydown", key, true);
     return () => {
       d?.removeEventListener("cancel", cancel);
+      d?.removeEventListener("close", closed);
       window.removeEventListener("keydown", key, true);
     };
-  }, [open, contained, onClose]);
+  }, [open, mounted, contained, onClose]);
 
   // Scroll lock, narrowed (ruling 493). The host does not scroll while the sheet is mounted and a
   // wheel that lands on the scrim is cancelled; inside the dialog a vertical scroller is consumed
