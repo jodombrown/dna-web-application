@@ -124,6 +124,8 @@ async function runLiveDbArms({ record, skip }) {
     accepted: "ruling 435: an attestation renders only once accepted",
     url: "ruling 439: publish_post refuses a link without an http or https scheme",
     rate: "ruling 442: the ceiling plus one call to onboard_who is refused in words",
+    onboarded:
+      "ruling 459 (W49): connect_cards and connect_where exclude an account that has not onboarded, and send_introduction refuses it",
   };
   if (process.env.SKIP_REST) {
     for (const n of Object.values(names)) skip(n, "SKIP_REST");
@@ -204,7 +206,14 @@ async function runLiveDbArms({ record, skip }) {
 
     const { owner, member } = await testAccounts(client);
     if (!owner || !member) {
-      for (const n of [names.ib18, names.feed, names.accepted, names.url, names.rate])
+      for (const n of [
+        names.ib18,
+        names.feed,
+        names.accepted,
+        names.url,
+        names.rate,
+        names.onboarded,
+      ])
         skip(n, "owner-test and member-test are not both present");
       return;
     }
@@ -449,6 +458,98 @@ async function runLiveDbArms({ record, skip }) {
         !peek.ok && peek.code === "42501",
         peek.ok ? "a member read the table" : peek.code,
       );
+    });
+
+    // ------------------------------------------------------------------------------------------
+    // 459 (W49). The arm builds its own fixture (ruling 241): it sets Member Test's onboarded_at
+    // inside the transaction, measures the two projections and the write path with it set, then
+    // clears it and measures the same three again. The pair with onboarded_at set is the negative
+    // control ruling 270 asks for, so each refusal is read against the behaviour it reverts to and
+    // not against nothing. The control write is taken inside a savepoint and rolled back, so the
+    // request row it creates cannot be the reason the gated attempt is refused.
+    // ------------------------------------------------------------------------------------------
+    await inTransaction(client, async () => {
+      const seen = async () => {
+        await actAs(client, owner.id);
+        const cards = await attempt(
+          client,
+          "select public.connect_cards('members', '{}'::jsonb, null, 200) as out",
+        );
+        const where = await attempt(client, "select public.connect_where() as out");
+        const has = (r) =>
+          JSON.stringify(r.ok && r.rows[0] ? r.rows[0].out : null).includes(member.id);
+        return {
+          inCards: cards.ok && has(cards),
+          inWhere: where.ok && has(where),
+          err: cards.ok ? (where.ok ? null : where.message) : cards.message,
+        };
+      };
+      const intro = async () => {
+        await actAs(client, owner.id);
+        await client.query("savepoint r459_intro");
+        const r = await attempt(client, "select public.send_introduction($1, $2) as id", [
+          member.id,
+          "Ruling 459 arm. Rolled back by the same run.",
+        ]);
+        await client.query("rollback to savepoint r459_intro");
+        return r;
+      };
+
+      await actAsSelf(client);
+      await client.query("update public.members set onboarded_at = now() where id = $1", [
+        member.id,
+      ]);
+      const control = await seen();
+      const controlIntro = await intro();
+
+      await actAsSelf(client);
+      await client.query("update public.members set onboarded_at = null where id = $1", [
+        member.id,
+      ]);
+      const gated = await seen();
+      const gatedIntro = await intro();
+
+      if (!control.inCards || !control.inWhere) {
+        skip(
+          names.onboarded,
+          control.err
+            ? "a projection could not be read: " + control.err
+            : "the onboarded member is not in the projections to begin with, so their absence proves nothing",
+        );
+      } else {
+        record(
+          names.onboarded,
+          !gated.inCards && !gated.inWhere,
+          gated.err
+            ? "a projection could not be read: " + gated.err
+            : "in connect_cards " + gated.inCards + ", in connect_where " + gated.inWhere,
+        );
+        record(
+          "ruling 459 control: the same member is in both projections while onboarded_at is set",
+          true,
+          "in connect_cards true, in connect_where true",
+        );
+      }
+
+      if (!controlIntro.ok && /not available/.test(controlIntro.message || "")) {
+        skip(
+          "ruling 459: send_introduction refuses a recipient who has not onboarded",
+          "the two test accounts are not strangers (a request is pending, they are connected, or one blocks the other), so the one write path refuses either way",
+        );
+      } else {
+        record(
+          "ruling 459: send_introduction refuses a recipient who has not onboarded",
+          !gatedIntro.ok && /send_introduction: not available/.test(gatedIntro.message || ""),
+          gatedIntro.ok ? "the write was accepted" : gatedIntro.code + " " + gatedIntro.message,
+        );
+        record(
+          "ruling 459 control: the same introduction is accepted while onboarded_at is set",
+          controlIntro.ok && !!controlIntro.rows[0] && !!controlIntro.rows[0].id,
+          controlIntro.ok
+            ? "request " + controlIntro.rows[0].id + ", rolled back"
+            : controlIntro.code + " " + controlIntro.message,
+        );
+      }
     });
   } finally {
     await client.end().catch(() => {});

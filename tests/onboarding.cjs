@@ -59,14 +59,18 @@ const PNG = Buffer.from(
   "base64",
 );
 
-/** A fresh member: name from the sign-up form or the provider, nothing else (SPEC section 1). */
+/**
+ * A fresh member (SPEC section 1). Ruling 469: onboarding_state returns no name and no suggestion
+ * until the Who screen is written, so the field starts empty and nothing is ever minted from the
+ * local part of an address.
+ */
 function freshState() {
   return {
     next: "who",
     who: {
-      name: "Amara Osei",
+      name: "",
       username: null,
-      suggestion: "amara-osei",
+      suggestion: null,
       avatar_path: null,
       completed: false,
     },
@@ -398,6 +402,20 @@ async function runOnboardingFlows(browserType, bname, [w, h], theme) {
       tag + ": a screen ahead of the next one redirects to the next one",
       pathOf(page) === "/welcome",
     );
+    // Ruling 459 (W49): the gate holds every member route, not the Feed alone, and the shell
+    // behind them never renders. The routes are children of one layout, so one gate covers all of
+    // them and no route can forget; these three are a C route, Connect and account settings. The
+    // negative control is the same three once onboarded_at is set, at the end of this pass.
+    for (const held of ["/connect", "/convene", "/password"]) {
+      await gotoRedirected(page, held, "**/welcome");
+      record(
+        tag + ": " + held + " is held while onboarded_at is null (ruling 459)",
+        pathOf(page) === "/welcome" &&
+          (await page.locator("header").count()) === 0 &&
+          (await page.locator('[data-testid="compose"]').count()) === 0,
+        pathOf(page) + " header=" + (await page.locator("header").count()),
+      );
+    }
     await page.waitForSelector('[data-testid="onboarding-who"]', { timeout: 15000 });
 
     // Screen one: prefill, suggestion, the photo and the username states.
@@ -405,8 +423,9 @@ async function runOnboardingFlows(browserType, bname, [w, h], theme) {
     const username = page.locator('[data-testid="username"]');
     const cont = page.locator('[data-testid="continue"]');
     record(
-      tag + ": the name is prefilled and the username suggested from it (SPEC section 9)",
-      (await name.inputValue()) === "Amara Osei" && (await username.inputValue()) === "amara-osei",
+      tag + ": the name field starts empty and suggests nothing (ruling 469)",
+      (await name.inputValue()) === "" && (await username.inputValue()) === "",
+      JSON.stringify([await name.inputValue(), await username.inputValue()]),
     );
     await name.fill("Thandiwe Dube");
     record(
@@ -611,6 +630,17 @@ async function runOnboardingFlows(browserType, bname, [w, h], theme) {
       tag + ": an onboarded member opening an onboarding route is sent to the Feed",
       pathOf(page) === "/feed",
     );
+    // Ruling 459 control: the three routes the gate held open for the same member now that
+    // onboarded_at is set, so their refusal above is measured against the behaviour it reverts to.
+    for (const open of ["/connect", "/convene", "/password"]) {
+      await page.goto(BASE + open, { waitUntil: "domcontentloaded" }).catch(() => undefined);
+      await page.waitForSelector("header", { timeout: 15000 }).catch(() => undefined);
+      record(
+        tag + ": " + open + " opens for the same member once onboarded (ruling 459 control)",
+        pathOf(page) === open && (await page.locator("header").count()) === 1,
+        pathOf(page) + " header=" + (await page.locator("header").count()),
+      );
+    }
   } catch (e) {
     await shot(page, `onboarding-flows-fail-${bname}-${w}-${theme}`).catch(() => undefined);
     record(

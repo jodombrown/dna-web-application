@@ -210,7 +210,7 @@ async function runConnect(browserType, bname, vp, theme) {
         (await page.locator('select[data-filter="corridor"]').count()) === 1 &&
           (await page.locator('select[data-filter="corridor"] option').allTextContents())
             .join("|")
-            .includes("Accra to Los Angeles"),
+            .includes("Los Angeles to Accra"),
       );
     } else {
       record(

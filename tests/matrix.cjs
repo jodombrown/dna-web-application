@@ -592,7 +592,7 @@ const CONNECT_OPTIONS = {
   ],
   // Ruling 436: the corridor row of ruling 243 exists on the live project, so the mock carries it
   // and the Corridor axis renders (ruling 154). The label is as connect_filter_options builds it.
-  corridors: [{ id: "los-angeles-accra-agriculture", label: "Accra to Los Angeles" }],
+  corridors: [{ id: "los-angeles-accra-agriculture", label: "Los Angeles to Accra" }],
   focus: [
     "Agriculture & Food Systems",
     "Technology & Innovation",
@@ -720,7 +720,7 @@ function makeMockDb() {
       whereEmpty: false,
       membersEmpty: false,
       suggestFail: false,
-      corridors: [{ id: "los-angeles-accra-agriculture", label: "Accra to Los Angeles" }],
+      corridors: [{ id: "los-angeles-accra-agriculture", label: "Los Angeles to Accra" }],
     },
   };
   return db;
@@ -3221,10 +3221,11 @@ async function runWidth(browserType, bname, [w, h]) {
   const page = await ctx.newPage();
   const db = makeMockDb();
   seedPosts(db, 3);
+  // Ruling 469: nothing is prefilled before the Who screen is written.
   const who = {
-    name: "Amara Osei",
+    name: "",
     username: null,
-    suggestion: "amara-osei",
+    suggestion: null,
     avatar_path: null,
     completed: false,
   };
