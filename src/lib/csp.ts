@@ -35,7 +35,7 @@ export function contentSecurityPolicy(nonce: string | undefined): string {
   return [
     "default-src 'self'",
     `connect-src 'self' ${SUPABASE} ${SUPABASE_WS} https://api.mapbox.com`,
-    `img-src 'self' data: blob: ${SUPABASE}`,
+    `img-src 'self' data: blob: https: ${SUPABASE}`,
     script,
     "style-src 'self' 'unsafe-inline'",
     "font-src 'self'",

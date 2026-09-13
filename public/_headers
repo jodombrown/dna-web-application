@@ -4,7 +4,7 @@
 # static copy carries no nonce because nothing served from here runs an inline script. Nitro
 # appends its own asset cache rules below at build time (dist/_headers).
 /*
-  Content-Security-Policy: default-src 'self'; connect-src 'self' https://dgspjevjoblujcoljvkn.supabase.co wss://dgspjevjoblujcoljvkn.supabase.co https://api.mapbox.com; img-src 'self' data: blob: https://dgspjevjoblujcoljvkn.supabase.co; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'
+  Content-Security-Policy: default-src 'self'; connect-src 'self' https://dgspjevjoblujcoljvkn.supabase.co wss://dgspjevjoblujcoljvkn.supabase.co https://api.mapbox.com; img-src 'self' data: blob: https: https://dgspjevjoblujcoljvkn.supabase.co; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'
   X-Frame-Options: DENY
   Referrer-Policy: strict-origin-when-cross-origin
   Strict-Transport-Security: max-age=31536000; includeSubDomains
