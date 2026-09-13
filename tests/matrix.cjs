@@ -1730,6 +1730,34 @@ async function sheetSettled(page, selector) {
   );
 }
 
+/** DIA's line is the composer's slowest signal and the one a whole arm hangs off, so when it does
+ *  not arrive the arm should say which limb failed rather than time out mutely. The app's own worst
+ *  case is INFER_DEBOUNCE + THINK_BUDGET; past that `infer` is aborted and the line settles at
+ *  nothing permanently, so a bare timeout cannot tell "the fetch was slow" from "the text never
+ *  reached React". Report what the textarea actually holds and what the line actually shows. */
+async function diaSettled(page, dialog, tag) {
+  try {
+    await dialog.locator('[data-dia="done"]').waitFor({ timeout: 5000 });
+  } catch (e) {
+    const state = await page
+      .evaluate(() => {
+        const ta = document.querySelector('textarea[aria-label="What is going on with you"]');
+        const line = document.querySelector("[data-dia]");
+        return {
+          textarea: ta ? ta.value : "(no textarea)",
+          dia: line ? line.getAttribute("data-dia") : "(no line)",
+        };
+      })
+      .catch(() => null);
+    record(
+      tag + " DIA resolved on the filled text",
+      false,
+      JSON.stringify(state) + " " + String(e).slice(0, 120),
+    );
+    throw e;
+  }
+}
+
 async function shot(page, name) {
   await page.screenshot({ path: path.join(OUT, name + ".png"), fullPage: false });
 }
@@ -2177,8 +2205,9 @@ async function runPublish(browserType, bname, [w, h], theme) {
     await page.click('[data-testid="compose"]');
     const dialog = page.locator('section[role="dialog"][aria-label="Compose"]');
     await dialog.waitFor();
+    await sheetSettled(page, 'section[role="dialog"][aria-label="Compose"]');
     await dialog.locator('textarea[aria-label="What is going on with you"]').fill(SAMPLES.convene);
-    await dialog.locator('[data-dia="done"]').waitFor({ timeout: 5000 });
+    await diaSettled(page, dialog, tag);
     // Link.
     await dialog.getByRole("button", { name: "Add a link" }).click();
     await dialog.locator('input[placeholder="https://"]').fill("https://nation.africa/summit");
@@ -2370,6 +2399,7 @@ async function runPublishGuards(browserType, bname, [w, h], theme) {
 
     await page.click('[data-testid="compose"]');
     await dialog.waitFor();
+    await sheetSettled(page, 'section[role="dialog"][aria-label="Compose"]');
     await textarea().fill("A draft with an autosave timer still in flight.");
     // Inside DRAFT_DEBOUNCE: the timer is armed and has not fired, so nothing is saved yet.
     await page.waitForTimeout(DRAFT_DEBOUNCE_MS - 200);

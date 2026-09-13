@@ -1398,6 +1398,23 @@ Chromium and loses on WebKit, where the transform starts a frame later and runs 
 load. The sibling check passed in the same breath because a translate does not change height. Fixed
 with `sheetSettled()`, which polls for the panel's resting `transform: none` instead of sleeping.
 
-The method note: a fixed sleep before a geometric assertion is an engine-dependent race, and a
-duplicated focus contract is an engine-dependent race. Both read as green on the engine that happens
-to win. Neither is visible without the WebKit job.
+**A fill against a moving sheet, run 184.** With both of those fixed, run 184's WebKit job came back
+4827 of 4831 with two arms incomplete: `webkit-1280x800-dark-publish` timed out waiting for DIA's
+line, and `webkit-1280x800-dark-guards` found Publish still disabled after thirty seconds. Publish
+is gated on `has` (text, media, link or a field), not on DIA, so a disabled button after a `fill()`
+means the text never reached React state; the same cause starves DIA, which is why one push produced
+both. The discriminator is not the engine, the viewport or the theme: the base arm at that same
+viewport, theme and engine passed in the same job, exercising the same composer and the same DIA.
+The one difference is that the base arm had just been given `sheetSettled()` and these two had not,
+so they filled the textarea while the sheet was still sliding — and Playwright's `fill()` checks
+visible, enabled and editable, but not stable. Both flows now settle the sheet before the first
+fill, and a DIA wait that fails reports what the textarea actually held and what the line actually
+showed, so a recurrence names its limb instead of timing out mutely.
+
+Confidence in that reading is **moderate, not proven**: WebKit cannot run here, so the mechanism is
+inferred from which arms passed rather than reproduced. The change is strictly safer either way, and
+the reporter is there precisely because the next occurrence should not need this reasoning again.
+
+The method note: a fixed sleep before a geometric assertion, a duplicated focus contract, and a fill
+against a moving element are all engine-dependent races. Each reads as green on the engine that
+happens to win. None is visible without the WebKit job.
