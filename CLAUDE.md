@@ -29,6 +29,13 @@ If a question comes up partway, first do everything that does not depend on the 
 ## Scope of changes
 If, while working or testing, you find a pre-existing bug, a performance concern, or behavior the task does not mention, do not fix, optimize, or extend it in this change unless the requested behavior cannot work without it; report it as a follow-up in your summary. Where the task is ambiguous, implement the reading its wording and the surrounding code most directly support, state that assumption, and do not build for the other readings. Commit tests only where the task asks for them or the repository already keeps tests for this kind of change, roughly one focused test per stated behavior. Do not turn scratch checks into permanent test files. Implement every behavior the task asks for, completely.
 
+## Dev commands (rulings 542, 545)
+`bun run dev` (`vite dev`) serves the app. It did not, between Fix PR 02 and Fix PR 03: the worker entry rebuilt the incoming request to carry the CSP nonce forward, and `new Request(request, { headers })` throws under the dev server's own Request implementation (ruling 542). Ruling 545 moved the nonce onto the response, so nothing on the SSR path constructs a Request and the dev server serves again.
+
+`wrangler pages dev dist`, after `bun run build`, serves the built worker, and it is the only local command that proves anything about the worker: the per-response CSP nonce, the six security headers, `_routes.json` and `/.well-known/security.txt` all come from `dist/_worker.js`, which `vite dev` never builds. Ruling 292's declaration is regenerated against this, never against `vite dev`.
+
+Neither is an exit criterion. Every exit criterion is checked on the deployed preview URL, because that is the only environment the founder tests in.
+
 ## Editing
 Minimize tokens spent editing files. When it will not affect the result, surgically edit a file rather than rewrite it.
 
@@ -63,6 +70,15 @@ batch has to be applied in pieces the repo carries the whole batch before the fi
 reverts work nobody knew was there and a concurrent session audits a state no migration explains,
 which is exactly what happened on 9 September and became PASS-01's 18:30 addendum.
 A migration file is never amended after it is applied; a change is a new migration (ruling 466).
+`tests/migration-lint.cjs` enforces 466 in the harness rather than by assertion: it compares the
+migration files at the merge base with the default branch against the ones at HEAD, keyed by version
+rather than by path, so a file that moves to another directory keeps passing and a file whose content
+changed after it was applied fails by name.
+
+Never force push to `main` (ruling 541) `[absolute]`. Force-with-lease is permitted on a Claude
+working branch, and only after a rebase that was instructed, pinned to the exact prior head. Plain
+force, without a lease, is refused everywhere. The reason is that Lovable syncs two ways on `main`
+(ruling 146): a force push there destroys the founder's visual commits, and they exist nowhere else.
 
 A test arm that cannot run is reported as unproven, never as passing, and never folded into a
 passing count (ruling 228). An arm that silently vanishes reads as coverage the suite does not have.

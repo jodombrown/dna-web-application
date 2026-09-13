@@ -19,7 +19,9 @@ The founder makes occasional surface-level visual and content edits through Lova
 
 ## Sync discipline
 
-Fetch and rebase on `origin/main` before creating a branch, and again before pushing. Never force-push, never rebase or amend published commits; it breaks Lovable's sync irrecoverably.
+Fetch and rebase on `origin/main` before creating a branch, and again before pushing. Never rebase or amend published commits on `main`; it breaks Lovable's sync irrecoverably.
+
+Never force push to `main` (ruling 541) `[absolute]`. Force-with-lease is permitted on a Claude working branch, and only after a rebase that was instructed, pinned to the exact prior head. Plain force, without a lease, is refused everywhere. The reason is that Lovable syncs two ways on `main`: a force push there destroys the founder's visual commits, and they exist nowhere else.
 
 If a push is rejected or a conflict arises with a `gpt-engineer-app[bot]` commit: preserve the founder's visual or content change, preserve the logic, structure, and types this repository's briefs established, and report the conflict and how you resolved it in the closing report. Never resolve a conflict by discarding either side silently.
 
