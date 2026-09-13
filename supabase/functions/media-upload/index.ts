@@ -278,9 +278,17 @@ Deno.serve(async (req: Request) => {
   const userClient = createClient(supabaseUrl, anonKey, {
     global: { headers: { Authorization: authHeader } },
   });
-  const { data: userData, error: userErr } = await userClient.auth.getUser();
-  if (userErr || !userData.user) return json({ error: "unauthorized" }, 401);
-  const uid = userData.user.id;
+  // Ruling 485: the server-side identity read is getClaims(), not getUser(). Where the token is
+  // signed with an asymmetric key, getClaims verifies the signature against the JWKS cached in this
+  // isolate and reads `sub` from the verified payload, so the upload path stops making a round trip
+  // to the Auth server per request. It is never the weaker check: for a symmetric token, or where
+  // WebCrypto is unavailable, getClaims calls getUser() itself before trusting a claim, so the floor
+  // is exactly what this line did before. The token is passed explicitly because this client holds
+  // the member's JWT as a request header and persists no session to read it back from.
+  const bearer = authHeader.replace(/^\s*Bearer\s+/i, "").trim();
+  const { data: claimsData, error: claimsErr } = await userClient.auth.getClaims(bearer);
+  const uid = typeof claimsData?.claims?.sub === "string" ? claimsData.claims.sub : "";
+  if (claimsErr || !uid) return json({ error: "unauthorized" }, 401);
 
   // Ruling 442 (F23): a ceiling per member on uploads, held in the database
   // (public.rate_limit_check, under the member's own JWT). The ceiling never reaches the client;
