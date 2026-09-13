@@ -1051,12 +1051,17 @@ export function ProfileSurface({ handle, edit, asPublic }: ProfileSurfaceProps) 
           display: "flex",
           alignItems: "center",
           height: expanded ? 64 : 56,
-          padding: expanded ? "0 32px" : "0 16px",
+          // Longhand, never the shorthand plus a longhand for the same value: paddingTop carries
+          // the safe-area inset and the sides change with the tier, and useTier flips from compact
+          // once on mount at every width, so the two forms would swap and React would warn.
+          paddingTop: "env(safe-area-inset-top)",
+          paddingBottom: 0,
+          paddingLeft: expanded ? 32 : 16,
+          paddingRight: expanded ? 32 : 16,
           borderBottom: "1px solid var(--line)",
           background: "var(--bg)",
           flex: "none",
           boxSizing: "border-box",
-          paddingTop: "env(safe-area-inset-top)",
         }}
       >
         <div

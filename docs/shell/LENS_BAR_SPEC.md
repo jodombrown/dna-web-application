@@ -28,13 +28,19 @@ Lens sets, canonical order:
 
 - Track: `--bg-sunken` fill, `--radius-m` (10), 4 padding, 2 gap, 44 tall at every breakpoint, bounded left and right so the row's start and end are visible. No border, no hairlines. Horizontal scroll only when the set cannot fit; nothing truncates or compresses.
 - Distribution: the active lens is content-sized (`flex: none`) and never stretches; inactive lenses share the remaining width equally (`flex: 1 1 0`), min 44 wide, 36 tall.
-- Active chip: one absolutely positioned `--surface` rounded rectangle (`--radius-badge`, 8) with `--shadow-1`, behind the active button, measured from its `offsetLeft`/`offsetWidth` in a layout effect (before paint) and re-measured when the track or the active button resizes. Moves by transform and width over `--dur-default` with `--ease`; no transition on first placement; instant under reduced motion. No border, no gradient, no ring.
+- Active chip (ruling 488, Design pass 01 item 6, closing W34): the active tab **is** the chip. It
+  carries the `--surface` ground (`--radius-badge`, 8) and `--shadow-1` as its own background, so the
+  indicator is painted on the first frame and on every resize and cannot be missing. The absolutely
+  positioned rectangle measured from `offsetLeft`/`offsetWidth` in a layout effect is gone, and
+  nothing about the indicator depends on a layout read any more. The ground transitions with the
+  colour over `--dur-default` with `--ease`; nothing moves under reduced motion. No border, no
+  gradient, no ring.
 - Active content: icon 20 plus label 15/700 `--ink`, at every breakpoint except the compact-tier header slot (icon only, the chip alone marks it). Icon colour is the surface's C brand rung (`--c-{c}`); on Feed, which is not a C, `--ink`.
 - Inactive lenses: bare icon 20 in `--ink-3`, `--ink` on hover; no background, no scale, no translate. Icon only below expanded (1024); icon plus label 15/500 at expanded and above. `title` carries the label when it is not shown.
 - Disabled lens: keeps its position, 1px dashed `--line-strong` outline, `--ink-4`, no fill, `aria-disabled`, `tabIndex -1`.
 - Focus: 2px `--focus` (emerald) outline, 2px offset, on every lens, both themes, never the C hue.
-- Descriptor: one line, sans italic 15, `--ink-3`, left aligned to the track, 12 below it. The same string is the accessible name's description. Collapses by max-height over `--dur-default` when the member scrolls down, latched; only tapping the active lens brings it back. Instant under reduced motion.
-- Compact variant (header slot on compact and medium tiers once the member has scrolled into the list): same track, no descriptor, inactive lenses min 32. Under 640 it is also `dense`: the active lens shows its name in place of its icon (the chip plus the word is the indicator), so logo and avatar keep their places.
+- Descriptor: one line, sans italic 15, `--ink-3`, left aligned to the track, 12 below it. The same string is the accessible name's description. Collapses by max-height over `--dur-default` when the member scrolls down, latched for the visit (ruling 405, 488): the first scroll the host reports collapses it and it stays collapsed; tapping the active lens brings it back, and that tap does not unlatch the scroll rule, so a later scroll never takes it away again. Instant under reduced motion.
+- Compact variant (header slot on compact and medium tiers once the member has scrolled into the list): the same sunken track at 44, at every tier (W35), no descriptor, inactive lenses min `--target-min` (ruling 498). Under 640 it is also `dense`: the active lens shows its name in place of its icon (the chip plus the word is the indicator), so logo and avatar keep their places.
 - Selecting a lens never moves the bar. The host swaps the list and sets its scroller so the new content starts directly beneath the bar.
 
 ## Composer entry, same language

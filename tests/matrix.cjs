@@ -2764,8 +2764,17 @@ async function runTargeted(browserType, bname, [w, h]) {
       return {
         // The scrim is the one thing the lock still cancels.
         scrim: fire(scrim, 0, 300),
-        // The chip row keeps its wheel: the Sheet leaves a horizontal scroller alone.
-        chipRow: row ? fire(row, 0, 300) : true,
+        // The chip row keeps its wheel: the Sheet's lock leaves a horizontal scroller alone, and
+        // the row itself takes the vertical wheel sideways (ruling 493). The proof is the outcome,
+        // not the flag: a lock that swallowed the event would leave scrollLeft where it was.
+        chipRowMoved: row
+          ? (() => {
+              if (row.scrollWidth <= row.clientWidth) return true;
+              row.scrollLeft = 0;
+              fire(row, 0, 300);
+              return row.scrollLeft > 0;
+            })()
+          : true,
         // Touch is the browser's.
         touchInside: touch(dlg),
       };
@@ -2776,7 +2785,7 @@ async function runTargeted(browserType, bname, [w, h]) {
         " 1. composer open: the page cannot move behind it, the scrim is cancelled, the chip row keeps its wheel and touch is the browser's (ruling 493)",
       feedAfterWheel === feedBefore &&
         lock.scrim &&
-        lock.chipRow === false &&
+        lock.chipRowMoved &&
         lock.touchInside === false,
       `feed ${feedBefore} -> ${feedAfterWheel} lock ${JSON.stringify(lock)}`,
     );
