@@ -1,24 +1,3 @@
--- B1 Composer: publish_post(payload jsonb) returns uuid.
--- One transaction: validate, re-check author rights, create the verb's object, insert the post
--- pointing at it, attach media, link and DIA record, delete the draft. SECURITY INVOKER, so every
--- write runs under the caller's RLS.
---
--- payload:
--- {
---   "id": uuid (optional; the client mints it so media can be uploaded under {member}/{post} first),
---   "verb": "connect"|"convene"|"collaborate"|"contribute"|"convey"|null   (null = untyped Convey),
---   "body": text,
---   "author_kind": "member"|"space", "author_id": uuid,
---   "anchor": {"kind": anchor_kind, "id": uuid} | null,
---   "audience": "everyone"|"connections"|"anchored",
---   "host_context": text,
---   "fields": {title, who, why, date, time, place, hybrid, ticket, category, roles, instrument, need, by},
---   "starts_at": timestamptz | null, "by_date": date | null   (client-parsed; raw text is kept),
---   "media": [{"storage_path", "width", "height", "position"}],
---   "link": {"url", "title", "description", "image_url"} | null,
---   "dia": {"verb", "confidence", "proposed_fields", "accepted", "member_overrode", "latency_ms"} | null
--- }
-
 create or replace function public.publish_post(payload jsonb)
 returns uuid
 language plpgsql
@@ -62,7 +41,7 @@ begin
   if v_author_kind is null or v_author_id is null or v_author_kind not in ('member', 'space') then
     raise exception 'publish_post: author required' using errcode = '22023';
   end if;
-  if not private.can_author_as(v_author_kind, v_author_id) then
+  if not public.can_author_as(v_author_kind, v_author_id) then
     raise exception 'publish_post: no right to author as this %', v_author_kind using errcode = '42501';
   end if;
   if (v_anchor_kind is null) <> (v_anchor_id is null) then
@@ -82,7 +61,6 @@ begin
   v_space_id := case when v_anchor_kind = 'space' then v_anchor_id else null end;
   v_event_id := case when v_anchor_kind = 'event' then v_anchor_id else null end;
 
-  -- The verb's object. Untyped posts (verb null) create nothing (ruling 68).
   if v_verb = 'connect' then
     insert into public.connection_requests (from_member_id, to_name, why, status)
     values (v_uid, coalesce(f ->> 'who', ''), coalesce(nullif(f ->> 'why', ''), nullif(v_body, '')), 'pending')
@@ -91,20 +69,19 @@ begin
 
   elsif v_verb = 'convene' then
     v_place := nullif(trim(f ->> 'place'), '');
-    v_mode := (case
+    v_mode := case
       when coalesce((f ->> 'hybrid')::boolean, false) then 'hybrid'
       when v_place ~* '^(https?://|www\.)' then 'virtual'
-      else 'in_person' end)::public.event_mode;
+      else 'in_person' end;
     insert into public.events (host_member_id, title, starts_at, when_text, mode, location, virtual_url, ticket_kind, space_id)
     values (
       v_uid, v_title,
       nullif(payload ->> 'starts_at', '')::timestamptz,
-      -- Raw date text on line 1 and raw time text on line 2, exactly as typed; nothing is normalised.
-      concat_ws(E'\n', nullif(trim(f ->> 'date'), ''), nullif(trim(f ->> 'time'), '')),
+      trim(concat_ws(' ', nullif(f ->> 'date', ''), nullif(f ->> 'time', ''))),
       v_mode,
       case when v_place is not null and v_mode <> 'virtual' then jsonb_build_object('text', v_place) else null end,
       case when v_mode = 'virtual' then v_place else null end,
-      (case when lower(coalesce(f ->> 'ticket', 'Free')) = 'paid' then 'paid' else 'free' end)::public.ticket_kind,
+      case when lower(coalesce(f ->> 'ticket', 'Free')) = 'paid' then 'paid' else 'free' end,
       v_space_id
     ) returning id into v_obj_id;
     v_obj_kind := 'event';
@@ -120,8 +97,8 @@ begin
     v_obj_kind := 'space';
 
   elsif v_verb = 'contribute' then
-    v_instrument := (case lower(coalesce(f ->> 'instrument', ''))
-      when 'skills' then 'skills' when 'in-kind' then 'in_kind' when 'in_kind' then 'in_kind' else 'time' end)::public.contribute_instrument;
+    v_instrument := case lower(coalesce(f ->> 'instrument', ''))
+      when 'skills' then 'skills' when 'in-kind' then 'in_kind' when 'in_kind' then 'in_kind' else 'time' end;
     insert into public.opportunities (receiver_member_id, title, instrument, need, by_date, by_text, space_id, event_id)
     values (
       v_uid, v_title, v_instrument,

@@ -1,40 +1,10 @@
--- ---------------------------------------------------------------------------
 -- Ruling 187: segment has one source.
---
--- What was established before changing anything (the audit the ruling asks for):
---
---   public.members.segment          the axis itself, enum public.member_segment. Written by
---                                   save_profile_section('segment'). Read by profile_view (all
---                                   three views), connect_cards, connect_where. One home already.
---   public.member_segment_details   ruling 122's per-variant block, keyed (member_id, segment).
---                                   It stores the variant's fields, not the member's segment; the
---                                   live variant is chosen by members.segment. Not a second home.
---   public.member_segments          (segment, label, position). No member_id column, so it cannot
---                                   hold an assignment. It is the label vocabulary, nothing more.
---
--- So the axis was never duplicated. What was duplicated is the label vocabulary: Connect read
--- labels from public.member_segments, while Profile read them from SEGMENT_LABEL and SEG[].label,
--- two hardcoded maps in src/components/strand/SegmentBlock.tsx. That is the named anti-pattern in
--- CLAUDE.md (fixed vocabularies are tables read at runtime, never arrays in a component) and the
--- drift ruling 187 is aimed at, one well-meant duplicate at a time.
---
--- The collapse: public.member_segments is the one label source for every surface. No data moves,
--- because no member row ever lived in it. Two projections gain the label so the client never needs
--- a map of its own:
---
---   profile_view().member.segment_label   the viewed member's own label. On the member object, so
---                                         it reaches the Public (signed-out) view too, where
---                                         profile_vocabularies is revoked from anon.
---   profile_vocabularies().segments       [{value,label}] in position order, for the owner's edit
---                                         chooser, which needs every label and not just their own.
---
--- Only these two function bodies change; no table, column, policy or grant is touched.
--- ---------------------------------------------------------------------------
+-- members.segment is the axis; member_segment_details holds ruling 122's per-variant fields;
+-- member_segments (segment, label, position) has no member_id and is the label vocabulary only.
+-- The axis was never duplicated. The label vocabulary was: Connect read it from the table while
+-- Profile read it from SEGMENT_LABEL and SEG[].label in SegmentBlock.tsx. The collapse makes
+-- public.member_segments the one label source; no data moves.
 
--- ---------------------------------------------------------------------------
--- profile_vocabularies(): unchanged but for 'segments'. security invoker, authenticated only,
--- so the edit chooser reads the same four rows Connect's filter reads.
--- ---------------------------------------------------------------------------
 create or replace function public.profile_vocabularies()
 returns jsonb
 language sql
@@ -65,10 +35,6 @@ $$;
 revoke execute on function public.profile_vocabularies() from public, anon;
 grant execute on function public.profile_vocabularies() to authenticated, service_role;
 
--- ---------------------------------------------------------------------------
--- profile_view(): the member object gains segment_label, resolved from public.member_segments.
--- Everything else in this function is the Brief 4 definition, carried forward unchanged.
--- ---------------------------------------------------------------------------
 create or replace function public.profile_view(p_handle text default null, p_as_public boolean default false)
 returns jsonb
 language plpgsql
