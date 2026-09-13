@@ -259,6 +259,7 @@ export function PostCard({
       >
         {kicker && (
           <div
+            data-kicker
             style={{
               fontSize: 13,
               letterSpacing: "0.06em",

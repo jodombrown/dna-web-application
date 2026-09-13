@@ -29,7 +29,10 @@ export type RouterOptions = {
   actions?: ReactNode;
 };
 
-/** Map a PostView to PostCard props. Untyped posts: convey frame, no kicker, no title, no action (ruling 68). */
+/**
+ * Map a PostView to PostCard props. Untyped posts take the convey frame and, under ruling 546 (W54),
+ * Convey's kicker; they still carry no title and no action (ruling 68). UNTYPED is that one row.
+ */
 export function postCardProps(view: PostView, opts: RouterOptions = {}): PostCardProps {
   const schema = view.verb ? CARD_SCHEMA[view.verb] : UNTYPED;
   const c = view.c_category;
