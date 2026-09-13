@@ -26,6 +26,8 @@ The user's request, or the brief they approved, sets the scope, and the scope is
 
 If a question comes up partway, first do everything that does not depend on the answer, then state the assumption you made, or put the question at the end of a turn that also delivers that progress. If one part is blocked, complete every other part in full and say exactly what you left out and why.
 
+A handoff names the outcome, the ruling and the proof owed; it does not name a mechanism whoever wrote it has not read in the tree (ruling 555). Three of Fix PR 03's twelve items carried a false premise about mechanism — a Pages middleware layer that cannot coexist with Nitro's `_worker.js`, an `expires_at` column that did not exist at all, and a scroll reset that was actually a scroll being copied forward — and in all three the repository disagreed with the handoff. So a mechanism a handoff asserts is a lead to verify, never a fact to build on: read it in the tree first, and when it is wrong, report that as the finding and build what the outcome and the ruling actually require. The stop-and-report clause is what turns each of those into evidence instead of a workaround.
+
 ## Scope of changes
 If, while working or testing, you find a pre-existing bug, a performance concern, or behavior the task does not mention, do not fix, optimize, or extend it in this change unless the requested behavior cannot work without it; report it as a follow-up in your summary. Where the task is ambiguous, implement the reading its wording and the surrounding code most directly support, state that assumption, and do not build for the other readings. Commit tests only where the task asks for them or the repository already keeps tests for this kind of change, roughly one focused test per stated behavior. Do not turn scratch checks into permanent test files. Implement every behavior the task asks for, completely.
 
@@ -71,9 +73,19 @@ reverts work nobody knew was there and a concurrent session audits a state no mi
 which is exactly what happened on 9 September and became PASS-01's 18:30 addendum.
 A migration file is never amended after it is applied; a change is a new migration (ruling 466).
 `tests/migration-lint.cjs` enforces 466 in the harness rather than by assertion: it compares the
-migration files at the merge base with the default branch against the ones at HEAD, keyed by version
-rather than by path, so a file that moves to another directory keeps passing and a file whose content
-changed after it was applied fails by name.
+migration files at the merge base with the default branch against the ones in the working tree, keyed
+by version rather than by path, so a file that moves to another directory keeps passing and a file
+whose content changed after it was applied fails by name.
+
+A migration reaches the canonical project by `supabase db push` from the founder's machine, and never
+by the Supabase MCP's `apply_migration` (ruling 553, extending 269). `apply_migration` mints its own
+version rather than honouring the file's: applying `20260913220000` through it recorded the statements
+byte-identically, md5 and all, under `20260913220047`. That trades one drift row for two and
+manufactures exactly the divergence ruling 444's arm exists to catch, and the only way back is hand
+editing `supabase_migrations.schema_migrations`, which is what PASS-01 was written about. Between the
+push and the merge, `main` carries no file for a version the project records, so the drift arm on
+`main` reads `FAIL … recorded on the project, no file in the tree` and exits 1. That window is
+expected and closes on merge; it is not an empty row, which means something else in that arm.
 
 Never force push to `main` (ruling 541) `[absolute]`. Force-with-lease is permitted on a Claude
 working branch, and only after a rebase that was instructed, pinned to the exact prior head. Plain
@@ -83,9 +95,36 @@ force, without a lease, is refused everywhere. The reason is that Lovable syncs 
 A test arm that cannot run is reported as unproven, never as passing, and never folded into a
 passing count (ruling 228). An arm that silently vanishes reads as coverage the suite does not have.
 
+Never push to a working branch while a calibration dispatch is in flight (ruling 554). `pages.yml`
+concurrency cancels the branch's matrix jobs on a push, and the push redeploys the preview underneath
+the arms that are still running: a Pages deploy retires the previous build's hashed asset URLs, so a
+page loading across the swap 404s. It cost one arm's page-error check during Fix PR 03's calibration,
+on one engine of two, and the tell was that only one of the eighteen connect arms failed when a real
+defect would have failed all eighteen. Wait for the dispatch, then push.
+
+The SSR nonce is held in `AsyncLocalStorage` (rulings 545, 549), which the Workers runtime provides
+under `nodejs_compat`; `nodejs_als` is the narrower flag for enabling only that API and is not what
+this depends on. `wrangler.jsonc` carries `nodejs_compat` and a compatibility date of `2026-09-01`, and
+for dates from `2026-08-04` the runtime enables `nodejs_compat` by default, so the flag is
+belt-and-braces rather than the thing holding it up. Nitro copies both into
+`dist/_worker.js/wrangler.json`, which travels with the upload, so production and preview cannot
+diverge: both are `wrangler pages deploy dist` of the same artifact. The dependency is not new either
+way — `@tanstack/start-server-core` runs every request through its own `AsyncLocalStorage`, so an
+environment without it would already serve nothing.
+
 Build order for any surface: schema and RLS, then Edge Functions, then UI. Confirm any design extraction arrived with real content before building from it; a missing or empty extraction is a stop-and-report condition, never a reason to reconstruct the prototype from ruling summaries (ruling 90). No surface is built without an approved Claude Design prototype (ruling 62); the extraction and SPEC.md are the visual contract, the brief is the behavior contract.
 Design tokens and components come from Strand via the extraction; never from shadcn, never from the old repo (rulings 70, 72).
 Exit check for every surface is the responsive test matrix on the deployed URL: 360, 390, 430, 744, 820, 1024 both orientations, 1280, 1536, both themes, Safari and Chrome (ruling 61).
+
+The shell owns one scroller per tier and the document never scrolls inside it (ruling 104), so the
+router's element scroll restoration is what governs a surface-to-surface navigation, not window scroll.
+Left alone it copies the outgoing location's scroller position onto a location it holds no entry for,
+which is how a profile opened from a Members card arrived already scrolled past its masthead (W58,
+ruling 552). The shell's scrollers are named in `scrollToTopSelectors` in `src/router.tsx` so they are
+excluded from that copy, and the shell settles the position in a layout effect keyed on the surface,
+because the router does its scroll work from an `onRendered` subscription that can land after a child's
+mount effect has measured. Every future surface inherits both. A `scrollTo` on a surface's own mount is
+not the fix: it papers over the copy and races the measurement.
 
 ## The Digital Trust Layer (rulings 139 to 141)
 

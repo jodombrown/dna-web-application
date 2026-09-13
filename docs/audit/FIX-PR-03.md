@@ -57,7 +57,14 @@ deployment, the 404 case by an arm written specifically for it.
    (md5 `a10dc390598f7ebcb660c32852f56089` on both sides), so only the version diverges — which is
    precisely the shape ruling 444's arm exists to catch, and correcting it afterwards would mean hand
    editing the migration ledger that PASS-01 was written about. The CLI records the file's own version
-   and leaves the drift arm green.
+   and leaves the drift arm green. Ruling 553 makes that the only route, extending 269.
+
+   **One consequence to accept rather than discover.** Between that push and the merge, canonical records
+   a version `main` has no file for, so the drift arm on `main` reads
+   `FAIL … recorded on the project, no file in the tree` and exits 1: `main`'s CI goes red for that
+   window. It is not a third `EMPTY` row — `EMPTY` means a recorded row whose `statements` array is
+   empty, which is the PASS-01 pair and a different condition. The window closes on merge, and what
+   canonical carries meanwhile is one nullable column nothing reads plus a nightly cron job.
 
    While applying it, decide the window. It is seeded as `private.connect_settings` key
    `introduction_expiry_days` at 30 days, because no ruling in the handoff supplies a number.
@@ -211,6 +218,16 @@ Merged into the doctrine already there rather than added beside it. `CLAUDE.md` 
 
 ---
 
+## The AsyncLocalStorage question, verified (ruling 549)
+
+Raised as a Moderate-confidence risk before merge: `AsyncLocalStorage` needs a compatibility flag, it demonstrably works on the preview, and whether production matches is invisible until the first production request — the failure mode being the nonce reading undefined while the policy blocks every script it was meant to allow. Verified rather than assumed, and settled rather than live, on three independent legs:
+
+1. **The flag is not what holds it up.** `nodejs_als` exists to enable *only* that API; `nodejs_compat`, which this project carries, includes it. And from a compatibility date of `2026-08-04` the runtime enables `nodejs_compat` by default — this project's date is `2026-09-01`. From Cloudflare's own compatibility-flags and Node.js runtime documentation, not recollection.
+2. **Production and preview cannot diverge.** Nitro writes both settings into `dist/_worker.js/wrangler.json` (`compatibility_date: 2026-09-01`, `compatibility_flags: ["nodejs_compat"]`), and that file is part of the uploaded artifact. Production and every preview are `wrangler pages deploy dist` of the same build from the same workflow job. There is no per-environment dashboard setting left to discover on a first production request.
+3. **The dependency predates this PR and is already load-bearing in production.** `@tanstack/start-server-core`'s `requestHandler` runs *every* request through `eventStorage.run(...)` against a module-scope `new AsyncLocalStorage()`, and that module is in the built worker (`dist/_worker.js/_ssr/ssr.mjs`, `_ssr/server-B3ynfjdi.mjs`). The built worker holds four ALS constructions; `main`'s `src/lib/csp.ts` held none. An environment without ALS would already be serving nothing, rather than newly breaking on this change.
+
+So the risk reads as settled. Recorded in CLAUDE.md under ruling 549 so it need not be re-derived.
+
 ## Ruling 270: every arm that proves a fix, with its reverted baseline
 
 Each pair was measured, not reasoned about. The reverted runs are Chromium against the built worker served by `wrangler pages dev dist`; the `ruling 292` accounting line is excluded from the counts below where the declaration was still stale at the time, and is stated separately.
@@ -288,6 +305,22 @@ Holding the push until both calibration runs had finished was the right sequenci
 | `7a0fe00` | the nonce channel is request scope, because a response header only covers a 2xx |
 | `bee195b` | the bell and the list read the same window |
 | `8ca4b07` | ruling 292's declaration, regenerated from a measured run of each engine |
+
+## Rulings this PR produced (549 to 555)
+
+Minted in review of the work, and each one is either implemented here or recorded in CLAUDE.md:
+
+| | | Where it lives |
+| --- | --- | --- |
+| 549 | amends 545: the nonce is minted and held in worker request scope in a server-only module, not Pages middleware | `src/server.ts`, `src/lib/csp-nonce.server.ts`, CLAUDE.md |
+| 550 | a non-2xx render carries the nonce in its policy as well as its markup | an arm in `tests/live-checks.cjs` |
+| 551 | `connection_requests.expires_at` is minted here; 482 described intended rather than built behaviour | `supabase/migrations/20260913220000_…` |
+| 552 | W58's cause is the router copying the outgoing scroller position forward | `src/router.tsx`, `src/components/dna/AppShell.tsx`, CLAUDE.md |
+| 553 | a migration reaches canonical by `supabase db push`, never the MCP's `apply_migration`; extends 269 | CLAUDE.md |
+| 554 | no push to a working branch while a calibration dispatch is in flight | CLAUDE.md |
+| 555 | a handoff names the outcome, the ruling and the proof owed, never an unread mechanism | CLAUDE.md |
+
+545 is amended rather than absorbed: what shipped is a different architecture from the one it described, and 549 is where that is recorded.
 
 ## Follow-ups, none of them in this PR
 
