@@ -1,4 +1,5 @@
-// The bell and its list (ruling 82, SPEC section 6). Dot only when a real unread row exists. The
+// The bell and its list (ruling 82, SPEC section 6). Dot only when a real unread row the list would
+// render exists (ruling 547). The
 // list has no route: pointer keeps the 380 popover under the bell; touch gets the standard Sheet at
 // 80 percent, not the full-screen inset B2 built (B17 item 3, ruling 492), so it carries the same
 // focus trap and restore as every other sheet (480). Every row is a link that names its destination
@@ -64,11 +65,13 @@ export function NotificationPanel({
     enabled: open,
   });
   /**
-   * Ruling 462: a row marks read on open and then goes where its line says it goes. Two of the five
-   * kinds have a surface today: connection_accepted opens the other member's profile, and
-   * connection_request opens My Network's Requests. The other three name their destination in words
-   * and mark read; the navigation lands with the engine that owns the object (Convene is Brief 6,
-   * Collaborate and Contribute follow). Grounded-or-empty applies to a route as much as to a count.
+   * Ruling 462: a row marks read on open and then goes where its line says it goes. Ruling 547
+   * leaves the registry holding only the kinds that have somewhere to go — connection_accepted opens
+   * the other member's profile, connection_request opens My Network's Requests — so every row this
+   * list renders has a destination and this function has no silent branch. The three kinds whose
+   * object has no route yet are suppressed upstream in loadNotifications and never reach here
+   * (Convene is Brief 6, Collaborate and Contribute follow). Grounded-or-empty applies to a route as
+   * much as to a count.
    */
   const go = (n: { kind: string; actorHandle?: string | undefined }) => {
     if (n.kind === "connection_accepted" && n.actorHandle) {

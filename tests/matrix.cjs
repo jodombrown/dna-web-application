@@ -2325,12 +2325,19 @@ async function runPublish(browserType, bname, [w, h], theme) {
         }),
       );
     }
+    // W54, ruling 546: a chipless post resolves to Convey and the card carries Convey's kicker, so
+    // it reads as labelled rather than sitting in a generic bucket. The preview is the same card, so
+    // what the member sees before publishing is what they get after.
+    const untypedPreview = dialog.locator("article[aria-label='Preview of your post']");
     record(
-      tag + " silence: untyped text -> no DiaLine, convey preview, no kicker",
+      tag + " silence: untyped text -> no DiaLine, convey preview carrying the Story kicker (546)",
       (await dialog.locator("[data-dia]").count()) === 0 &&
-        (await dialog
-          .locator("article[aria-label='Preview of your post']")
-          .getAttribute("data-c")) === "convey",
+        (await untypedPreview.getAttribute("data-c")) === "convey" &&
+        (await untypedPreview.locator("[data-kicker]").count()) === 1 &&
+        (await untypedPreview.locator("[data-kicker]").textContent()).trim() === "Story",
+      (await untypedPreview.locator("[data-kicker]").count()) === 1
+        ? (await untypedPreview.locator("[data-kicker]").textContent()).trim()
+        : "no kicker element",
     );
     await dialog.getByRole("button", { name: "Publish" }).click();
     await page.waitForSelector('section[role="dialog"][aria-label="Compose"]', {
@@ -2345,7 +2352,20 @@ async function runPublish(browserType, bname, [w, h], theme) {
         db.posts[0].c_category === "convey" &&
         db.posts[0].created_object_kind === null,
     );
-    await page.locator("main article[data-c='convey']").first().waitFor({ timeout: 10000 });
+    const untypedCard = page.locator("main article[data-c='convey']").first();
+    await untypedCard.waitFor({ timeout: 10000 });
+    // W54 on the Feed card itself, which is where the finding was seen. The kicker is there and the
+    // act is not: there is no story object behind an untyped post, so "Read the story" would lead
+    // nowhere and ruling 68's no-title, no-action half still stands.
+    record(
+      tag + " W54: the published chipless card carries the Story kicker and no act (546, 68)",
+      (await untypedCard.locator("[data-kicker]").count()) === 1 &&
+        (await untypedCard.locator("[data-kicker]").textContent()).trim() === "Story" &&
+        (await untypedCard.getByRole("button", { name: "Read the story" }).count()) === 0,
+      (await untypedCard.locator("[data-kicker]").count()) === 1
+        ? (await untypedCard.locator("[data-kicker]").textContent()).trim()
+        : "no kicker element",
+    );
   } catch (e) {
     record(tag + " flow", false, String(e).slice(0, 300));
     await page.screenshot({ path: path.join(OUT, `${tag}-ERROR.png`) }).catch(() => {});
@@ -2658,6 +2678,40 @@ async function runShell(browserType, bname, [w, h]) {
     await page.waitForSelector('[role="dialog"][aria-label="Notifications"]', {
       state: "detached",
     });
+    // Ruling 547: a kind whose destination has no surface is suppressed from the registry, and a row
+    // of that kind renders nothing and raises no dot. space_role_approved is one of G19's three: it
+    // is a real notification_kind in the database, so the row is as real as any other, and the point
+    // is that a member is never sent to a list with nothing in it.
+    db.notifications.push({
+      id: "n0",
+      recipient_member_id: UID,
+      kind: "space_role_approved",
+      c_category: "collaborate",
+      actor_kind: null,
+      actor_id: null,
+      object_kind: "space",
+      object_id: null,
+      read_at: null,
+      created_at: new Date(Date.now() - 9 * 60e3).toISOString(),
+    });
+    await page.reload({ waitUntil: "networkidle" });
+    await page.waitForTimeout(900);
+    record(
+      tag + " a destination-less kind raises no dot (ruling 547)",
+      (await page.locator('[data-testid="bell-dot"]').count()) === 0,
+    );
+    await page.click('[data-testid="bell"]');
+    await list.waitFor({ timeout: 10000 });
+    await list.locator('[data-testid="notifications-empty"]').waitFor({ timeout: 10000 });
+    record(
+      tag + " a destination-less kind renders no row (ruling 547, grounded-or-empty)",
+      (await list.locator("button[data-kind]").count()) === 0,
+    );
+    await page.keyboard.press("Escape");
+    await page.waitForSelector('[role="dialog"][aria-label="Notifications"]', {
+      state: "detached",
+    });
+    db.notifications.length = 0;
     db.notifications.push({
       id: "n1",
       recipient_member_id: UID,
