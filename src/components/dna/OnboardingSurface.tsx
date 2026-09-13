@@ -201,7 +201,9 @@ export function OnboardingFrame({
             landmark so the landmark's own name and its first heading are the same words. */}
         <AuthHead
           heading={heading}
-          lead={isResumedSession() ? COPY.resumeLead : lead}
+          lead={
+            <span data-testid="onboarding-lead">{isResumedSession() ? COPY.resumeLead : lead}</span>
+          }
           headingRef={headingRef}
         />
         {children}

@@ -130,6 +130,16 @@ const pathOf = (page) => new URL(page.url()).pathname.replace(/\/$/, "");
 const mainText = (page) => page.locator("main").innerText();
 /** Ruling 308: no numeral on any screen. The hint's "twice" is a word. */
 const noNumeral = (text) => !/\d/.test(text);
+/**
+ * Ruling 434: a field's own line, the hint slot Strand's Input renders under the control. The
+ * refusal replaces the hint there, so reading the line reads whichever is showing.
+ */
+const usernameLine = (page) =>
+  page.evaluate(() => {
+    const el = document.querySelector('[data-testid="username"]');
+    const line = el?.parentElement?.lastElementChild;
+    return line && line !== el ? (line.textContent ?? "").trim() : null;
+  });
 const alertText = async (page) => {
   const a = page.locator('[data-testid="auth-alert"]');
   return (await a.count()) ? (await a.innerText()).trim() : null;
@@ -549,17 +559,25 @@ async function runOnboardingFlows(browserType, bname, [w, h], theme) {
     });
     await page.waitForSelector('[data-testid="photo-change"]', { timeout: 15000 });
 
+    // Ruling 434 (Design pass 01, B9 item 4): a refused username shows the reason in the field's
+    // own line, where the member is looking, rather than in the alert block above the form.
     db.onboarding.taken = true;
     await cont.click();
     await page.waitForFunction(
-      (t) => document.querySelector('[data-testid="auth-alert"]')?.textContent?.trim() === t,
+      (t) => {
+        const el = document.querySelector('[data-testid="username"]');
+        const line = el?.parentElement?.lastElementChild;
+        return !!line && line !== el && (line.textContent ?? "").trim() === t;
+      },
       COPY.who.taken,
       { timeout: 15000 },
     );
     record(
       tag +
-        ": username taken: the alert verbatim, the field in error, photo and name kept, no suffix appended",
+        ": username taken: the reason in the field's own line, the field in error, photo and name kept, no suffix appended",
       (await username.getAttribute("aria-invalid")) === "true" &&
+        (await usernameLine(page)) === COPY.who.taken &&
+        (await alertText(page)) === null &&
         (await username.inputValue()) === "thandi" &&
         (await name.inputValue()) === "Thandiwe D" &&
         (await page.locator('[data-testid="photo-plate"]').getAttribute("data-state")) ===
