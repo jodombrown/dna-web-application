@@ -77,6 +77,30 @@ migration files at the merge base with the default branch against the ones in th
 by version rather than by path, so a file that moves to another directory keeps passing and a file
 whose content changed after it was applied fails by name.
 
+Adding a column with a default does not leave existing rows alone (ruling 563). Since Postgres 11 a
+default that is not volatile takes the fast path instead of rewriting the table: the expression is
+evaluated once and stored as the column's missing value, which every pre-existing row reads back.
+`now()` is STABLE, not volatile, so `add column expires_at timestamptz default (now() + ...)` in
+`20260913220000` stamped one timestamp onto all ten `connection_requests` rows while the file's own
+header said the column was nullable with no backfill. `pg_attribute` showed it plainly:
+`atthasmissing` true, `attmissingval` one value. Left alone it would have deleted the four pending rows
+the live arms depend on at the nightly purge, and emptied the who and why a published Connect card
+renders through `connection_request_intros` (ruling 157) — the outcome the header said the column
+existed to prevent. Restoring the rows by hand materialises a real null in every tuple, which makes the
+missing value unreachable rather than merely overridden: it stays in the catalog until some later table
+rewrite, and no insert can reach it, because an insert stores the default's evaluated value in the
+tuple.
+
+So a column that must be null on existing rows is added bare and given its default in a second
+statement (ruling 564): `add column c <type>;` then `alter column c set default (...)`. One statement
+backfills, two do not. `tests/migration-lint.cjs` flags the single-statement form in any newly added
+migration, unless the column is `not null`, where reaching every existing row is what makes the
+constraint hold, or the clause carries an explicit marker comment declaring that the backfill is
+intended. The marker exists because a linter cannot read intent, and a check that false-positives on a
+legitimate backfill is a check somebody disables, which is how a guardrail dies. Only added versions
+are scanned: an applied migration is never amended (466), so flagging one would be a gate nobody can
+pass.
+
 A migration reaches the canonical project by `supabase db push` from the founder's machine, and never
 by the Supabase MCP's `apply_migration` (ruling 553, extending 269). `apply_migration` mints its own
 version rather than honouring the file's: applying `20260913220000` through it recorded the statements

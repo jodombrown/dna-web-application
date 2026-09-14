@@ -25,11 +25,74 @@
 //
 // Usage: node tests/migration-lint.cjs
 //   MIGRATION_LINT_BASE=<ref>  compare against this ref instead of the discovered default branch.
+const fs = require("fs");
 const path = require("path");
 const { execFileSync } = require("child_process");
 
 const ROOT = path.join(__dirname, "..");
 const VERSIONED = /(^|\/)(\d{14})_[^/]+\.sql$/;
+
+// Ruling 564. `add column c <type> default (...)` does not leave existing rows alone: since Postgres 11
+// a default that is not volatile takes the fast path instead of rewriting the table, so the expression
+// is evaluated once, stored as the column's missing value, and read back by every pre-existing row.
+// `now()` is STABLE, which is how 20260913220000_r482_485_introduction_expiry_purge.sql stamped one
+// timestamp onto all ten connection_requests rows while its own header said the column was nullable
+// with no backfill (ruling 563). Splitting it leaves existing rows null:
+//
+//   alter table t add column c timestamptz;
+//   alter table t alter column c set default (now() + ...);
+//
+// A linter cannot read intent, so this does not try to. Either split the statement, or keep the single
+// statement and write the marker above it declaring that reaching existing rows is meant. The marker is
+// what stops a legitimate backfill from being a false positive, because a guardrail that cries wolf is
+// a guardrail somebody deletes.
+//
+// `not null default` is exempt: reaching every existing row is what makes the constraint hold, so the
+// single statement is right there. b4_connect_tables (`message text not null default ''`) and
+// b5_stance_onboarding (`username_changes smallint not null default 0`) are both that shape.
+//
+// Only versions added in this change are scanned. An applied migration is never amended (ruling 466),
+// so flagging one would be a gate nobody can pass, 20260913220000 being the example.
+const BACKFILL_MARKER = /ruling\s*564[^\n]*backfill\s+intended/i;
+const ADD_COLUMN = /\badd\s+column\s+(?:if\s+not\s+exists\s+)?("[^"]+"|[a-z_][a-z0-9_$]*)/gi;
+
+/** Blank the inside of dollar-quoted bodies, keeping newlines so line numbers still line up. */
+function blankDollarQuoted(sql) {
+  return sql.replace(/\$([a-z_]*)\$[\s\S]*?\$\1\$/gi, (body) => body.replace(/[^\n]/g, " "));
+}
+
+/** The clause at `from`, ending at the first comma or semicolon outside parentheses. */
+function clauseAt(sql, from) {
+  let depth = 0;
+  for (let i = from; i < sql.length; i++) {
+    const ch = sql[i];
+    if (ch === "(") depth++;
+    else if (ch === ")") depth--;
+    else if (depth === 0 && (ch === "," || ch === ";")) return sql.slice(from, i);
+  }
+  return sql.slice(from);
+}
+
+/** Every `add column` in this file that carries a default, is nullable, and is not marked. */
+function unmarkedNullableDefaults(file) {
+  const sql = blankDollarQuoted(fs.readFileSync(path.join(ROOT, file), "utf8"));
+  const lines = sql.split("\n");
+  const found = [];
+  ADD_COLUMN.lastIndex = 0;
+  let m;
+  while ((m = ADD_COLUMN.exec(sql)) !== null) {
+    const raw = clauseAt(sql, m.index);
+    const clause = raw.replace(/--[^\n]*/g, " ");
+    if (!/\bdefault\b/i.test(clause)) continue;
+    if (/\bnot\s+null\b/i.test(clause)) continue;
+    const line = sql.slice(0, m.index).split("\n").length;
+    // The marker sits on the clause itself or within the two lines above it.
+    const context = lines.slice(Math.max(0, line - 3), line).join("\n");
+    if (BACKFILL_MARKER.test(context) || BACKFILL_MARKER.test(raw)) continue;
+    found.push({ file, line, column: m[1].replace(/"/g, "") });
+  }
+  return found;
+}
 
 const results = [];
 const record = (name, ok, detail = "") => {
@@ -198,6 +261,23 @@ record(
   "no applied migration file was removed",
   removed === 0,
   removed ? `${removed} removed` : "none",
+);
+
+const unmarked = [];
+for (const v of added) unmarked.push(...unmarkedNullableDefaults(head.found.get(v).path));
+for (const u of unmarked)
+  record(
+    `${u.file}:${u.line} stamps ${u.column} onto existing rows (ruling 564)`,
+    false,
+    "a nullable column added with a default reaches every pre-existing row through the catalog's " +
+      "missing value; split the statement, or mark the backfill as intended above it",
+  );
+record(
+  "no new migration adds a nullable column with a default (ruling 564)",
+  unmarked.length === 0,
+  unmarked.length
+    ? `${unmarked.length} to split or mark`
+    : `${added.length} new migration(s) checked`,
 );
 
 console.log(
