@@ -4,8 +4,16 @@
 // expanded canvas as three independent scroll containers (ruling 104). Matches B2-Shell-Feed-v3
 // SPEC.md sections 1 and 2. The document never scrolls inside the shell: every tier scrolls its own
 // Feed column, and the 72px header swap plus the 2.5s floating composer entry read that scroller.
-import { useNavigate, useRouter } from "@tanstack/react-router";
-import { useCallback, useEffect, useRef, useState, type PointerEvent, type ReactNode } from "react";
+import { useLocation, useNavigate, useRouter } from "@tanstack/react-router";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type PointerEvent,
+  type ReactNode,
+} from "react";
 import { AppHeader } from "@/components/strand/AppHeader";
 import { Button } from "@/components/strand/Button";
 import { Icon } from "@/components/strand/Icon";
@@ -89,6 +97,26 @@ export function AppShell({
     scrollerRef.current = el;
   }, []);
   const { scrolled, moving, onScroll, scrollToTop } = useScrollState(scrollerRef);
+  // W58 (ruling 465) has two halves and this is the second one. The first is the cause and it is
+  // fixed in src/router.tsx: the router was carrying the outgoing location's scroller position onto
+  // the incoming one. The second is the order. The router applies its scroll work from an
+  // onRendered subscription, which can land after a child's mount effect has already measured, and
+  // ProfileSurface's condense effect measures scrollTop on mount (ruling 134). A measurement that
+  // reads the outgoing surface's offset condenses the masthead before the scroll is corrected, and
+  // that is the race three findings hit on WebKit this week.
+  //
+  // So the position is settled here, in a layout effect: after the new surface has committed and
+  // before any passive effect can read scrollTop. scrollToTop also re-derives `scrolled` and
+  // `moving` from 0, so the header does not keep the outgoing surface's swapped state. A back
+  // navigation still restores its saved position, because the router's restore runs after this.
+  //
+  // Feed and /posts/:id are one surface (ruling 105): expanding a card in place keeps the column's
+  // position, and a lens change keeps the same pathname, so neither resets.
+  const pathname = useLocation({ select: (l) => l.pathname });
+  const surface = feedView ? "feed" : pathname;
+  useLayoutEffect(() => {
+    scrollToTop();
+  }, [surface, scrollToTop]);
   // Proof the shell mounted once: the stamp is set on mount and never changes across routes.
   const mounted = useRef<string>("");
   if (!mounted.current) mounted.current = String(Date.now());

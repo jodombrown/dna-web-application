@@ -1330,6 +1330,31 @@ Two related notes on the same rows:
   `event_reminder` is not among them, so its line is written to the same shape and flagged here
   rather than presented as ruling 496 copy.
 
+**Addendum, Fix PR 03 (ruling 547).** The three kinds are now suppressed from the registry rather
+than rendered with a destination that leads nowhere. `NOTIFICATION_REGISTRY` in
+`src/components/strand/NotificationListItem.tsx` holds only `connection_accepted` and
+`connection_request`; `loadNotifications` drops a row whose kind the registry does not hold and
+`hasUnread` will not raise the bell's dot for one, so a member is never sent to a list with nothing
+in it. `tests/notifications.cjs` asserts the contract and names the suppressed kinds on every run, so
+the register does not become the only place they are recorded. Ruling 547's reason for suppressing
+rather than exempting: an exemption list is a second place where the contract lives and it outlives
+the reason it was written.
+
+The three kinds keep their approved words here until their surface ships and they rejoin the
+registry: `attestation_received` is "Opens the contribution", `space_role_approved` is "Opens the
+Space", `event_reminder` is "Opens the event" (the last still Code's wording, per the note above).
+Two consequences worth naming rather than fixing here:
+
+- `connection_request` is still absent from the `notification_kind` enum. The note above records it as
+  Fix PR 03's scope, but the Fix PR 03 handoff's twelve items do not name it and DONE MEANS allows no
+  schema beyond what the scope names, so no migration was written. `tests/notifications.cjs` prints
+  it as "in the registry, not yet in the database enum" on every run. It needs a ruling that puts it
+  in a PR, not a decision taken inside one.
+- The notification list's empty state still says rows appear "when a member accepts your connection
+  request, attests a contribution, approves your Space role, or an event you joined is near". Two of
+  those four can no longer appear. It is approved copy and no ruling supplies a replacement, so it
+  was left exactly as it is (G18's lesson); it needs a ruling, not a rewrite.
+
 ## G20. The branch's first Pages preview served static files and 404ed every route — closed, one-off
 
 **Severity: medium while it stood, and it blocked the exit check rather than the build. Opened and
@@ -1418,3 +1443,77 @@ the reporter is there precisely because the next occurrence should not need this
 The method note: a fixed sleep before a geometric assertion, a duplicated focus contract, and a fill
 against a moving element are all engine-dependent races. Each reads as green on the engine that
 happens to win. None is visible without the WebKit job.
+
+## G22. Ruling 410's auth mail templates are console work whose copy the repo does not carry
+
+**Severity: low. Not a merge blocker. Opened 13 September 2026 building Fix PR 03 item 12
+(rulings 410, 496, 548).**
+
+The code half is already standing. `src/lib/contact.ts` exports `AUTH_SENDER` as `accounts@` with
+Reply-To `support@` and a display name of DNA, mirrored value-for-value at
+`supabase/functions/_shared/contact.ts`, and `tests/contact.cjs` fails the build if either address
+appears anywhere else. There is nothing to change in the repository: Supabase Auth's templates and its
+SMTP sender live in the Supabase console, which is why the handoff calls this "console plus template
+work, no code seam".
+
+What is outstanding, and why it was not written here:
+
+- **The sender pair.** Set the Auth SMTP sender and its Reply-To to exactly the two addresses
+  `AUTH_SENDER` declares, with its display name. Read them from `src/lib/contact.ts`
+  (`CONTACT.authSender.address` and `CONTACT.support.address`); they are not repeated here, because
+  the ruling 387 absolute bars an address literal from a document as much as from a surface, and the
+  scan arm of `tests/contact.cjs` enforces it. Mechanical: ruling 387 already decided both values.
+- **The three copy changes (W6, W21, W24): the reset footer, the password-changed heading once rather
+  than twice, and a support line on every template.** These are member-facing strings and the Fix PR
+  03 handoff does not carry ruling 410's approved text. Ruling 496 requires approved strings verbatim,
+  so they were not invented; G18 records what happened the one time a string was needed and no ruling
+  supplied it. This needs ruling 410's text pasted into the console, not a draft from here.
+
+Nothing in the deployed app changes when this lands, so no arm can prove it from the repository. The
+proof is a reset mail received from the `authSender` address, replied to, and arriving at the
+`support` one.
+
+**Status, 13 September 2026.** Drafts for all three strings now exist and are awaiting the founder's
+approval by number under ruling 496; they are deliberately not quoted here, because copy that has not
+been approved should not sit in the repository looking as though it has. Two notes carried with them:
+
+- The draft footer omits the reset link's expiry duration on purpose. Nobody has read the value
+  configured in Supabase, and a number written into approved copy without reading it off the console is
+  the same failure this gap exists to record. If it is wanted in the line, the configured value comes
+  first and the line is redrafted after.
+- The support line necessarily contains an address. It is approved and pasted into the Supabase console,
+  which the ruling 387 scan does not read — but it must never be quoted into a repository file, including
+  this one. `tests/contact.cjs` fails the build if it is, which is the absolute working rather than an
+  inconvenience: the addresses live in `src/lib/contact.ts` and its Deno mirror, and nowhere else.
+
+## G23. The introduction expiry window is a seeded default, not a ruled number
+
+**Severity: low. Not a merge blocker, and nothing expires until the migration is applied. Opened
+13 September 2026 building Fix PR 03 item 7 (rulings 482, 485).**
+
+Fix PR 03's item 7 asks for "the `expires_at` purge". At `b4b21ab` no table in `public` or `private`
+carried an `expires_at` column and nothing in the schema treated a pending introduction as expiring;
+the only trace of ruling 482 in the tree was the Sent empty state, which already tells a member their
+introductions wait "until they are accepted, or until they quietly expire".
+`supabase/migrations/20260913220000_r482_485_introduction_expiry_purge.sql` is what makes that true:
+the column, a nightly `pg_cron` job, and `private.purge_expired_introductions()`, which deletes the
+pending rows past their window. Deletion is ruling 482's silence — no declined row, so no decline
+window starts and the pair returns to `none`, which is what reopens requesting immediately — and it
+needed no read projection to change, which is what kept it out of Fix PR 05's territory.
+
+Two things still need the founder:
+
+- **The window.** No ruling in the handoff supplies a number, so it is seeded as
+  `private.connect_settings` key `introduction_expiry_days` at 30 rather than written into a
+  predicate. One `update private.connect_settings set value_int = <days> where key =
+  'introduction_expiry_days';` changes it, with no migration. Thirty is deliberately shorter than the
+  90-day decline window, because silence should clear faster than a refusal blocks, but it is a
+  product decision taken as a default and not as a ruling.
+- **Applying it.** The migration is committed and not applied (ruling 225: the repo carries it first).
+  Until it is applied, ruling 444's drift arm reports it as "in the tree, not recorded on the
+  project", which is the correct reading of that state and not a failure of the arm.
+
+Rows written before the column existed carry a null `expires_at` and are never purged. That is
+deliberate: ruling 400 removed Connect from the composer, so the only `connection_requests` a
+published Feed post can point at are older ones, and purging those would empty the who and why such a
+card renders through `connection_request_intros` (ruling 157).

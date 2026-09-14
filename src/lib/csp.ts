@@ -3,28 +3,43 @@
 // The Content-Security-Policy keeps script-src at 'self' plus a per-response nonce. TanStack
 // Start's SSR emits two inline scripts (the scroll-restoration bootstrap and the router's
 // dehydrated state behind the stream barrier), and their content changes per request, so a hash
-// cannot cover them and 'unsafe-inline' is the thing this policy exists to refuse. The nonce is
-// minted in src/server.ts, handed to the router through a request header (never a global), set
-// on `ssr.nonce` so every inline script the router emits carries it, and echoed in the shell as
-// `<meta property="csp-nonce">` so the client-side router reads the same value at hydration.
+// cannot cover them and 'unsafe-inline' is the thing this policy exists to refuse.
+//
+// Rulings 542 and 545: one value, two layers, and no HTMLRewriter pass over the body. The worker
+// entry mints it and owns it, so every response it builds carries the matching policy; the render
+// reads the same value out of request scope and stamps it on `ssr.nonce`, so every inline script the
+// router emits carries it, and echoes it in the shell as `<meta property="csp-nonce">` for the
+// client-side router at hydration.
+//
+// The channel is AsyncLocalStorage rather than a header, and that is the one place this departs from
+// ruling 545's letter. Two constraints close off the alternatives:
+//
+//   * Forward on a request header means rebuilding the incoming Request, and
+//     `new Request(request, { headers })` is what ruling 542 names: the dev server's Request is not
+//     the global constructor's, so undici reads its internals as undefined and throws before any
+//     route renders. Nothing on this path constructs a Request any more.
+//   * Back on a response header does work, but only for a 2xx. h3 merges the request event's headers
+//     onto a returned Response only when that Response is ok, so a 404 arrived with the nonce stamped
+//     in its markup and absent from its policy, which blocks the very scripts the policy exists to
+//     allow. Measured on the built worker, not reasoned about.
+//
+// The store itself lives in src/lib/csp-nonce.server.ts, not here: this module is imported by the
+// router and so ships to the client, and `node:async_hooks` cannot be constructed in a browser
+// bundle. The import below is reached only from the `.server()` branch, which the isomorphic split
+// strips from the client build along with what it imports.
 //
 // Static assets never run an inline script; their copy of these headers is public/_headers, which
 // carries the same policy with script-src 'self' and no nonce.
 import { createIsomorphicFn } from "@tanstack/react-start";
-import { getRequestHeader } from "@tanstack/react-start/server";
+import { nonceInScope } from "./csp-nonce.server";
 
-/** The request header the worker entry uses to hand the nonce to the router. Internal only. */
-export const CSP_NONCE_HEADER = "x-dna-csp-nonce";
-
-/** The nonce for this request on the server; undefined on the client, where the meta tag carries it. */
+/**
+ * This response's nonce on the server; undefined on the client, where the meta tag carries it, and
+ * undefined outside a request (a build-time render), where the policy falls back to script-src
+ * 'self' with no inline script to cover.
+ */
 export const cspNonce = createIsomorphicFn()
-  .server((): string | undefined => {
-    try {
-      return getRequestHeader(CSP_NONCE_HEADER) || undefined;
-    } catch {
-      return undefined;
-    }
-  })
+  .server((): string | undefined => nonceInScope())
   .client((): string | undefined => undefined);
 
 const SUPABASE = "https://dgspjevjoblujcoljvkn.supabase.co";

@@ -33,6 +33,10 @@ on:
         description: Ruling 292; set to "write" to regenerate tests/expected-counts.json from this run instead of enforcing it.
         required: false
         default: ""
+      dump_labels:
+        description: Ruling 292; set to "1" to print every check label as it is emitted, so a changed count can be named rather than only counted.
+        required: false
+        default: ""
       probe:
         description: Ruling 200 diagnostic; compositing, appearance or color-scheme. Empty runs the control.
         required: false
@@ -164,6 +168,9 @@ jobs:
           ONLY: ${{ inputs.only }}
           THEME: ${{ inputs.theme }}
           EXPECT: ${{ inputs.expect }}
+          # Ruling 292: EXPECT=write only ever gives the number. This names the checks behind it, which
+          # is what makes a changed count explainable by arm group rather than merely different.
+          DUMP_LABELS: ${{ inputs.dump_labels }}
           RULING200_PROBE: ${{ inputs.probe }}
         run: |
           set -o pipefail

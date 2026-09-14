@@ -26,8 +26,17 @@ The user's request, or the brief they approved, sets the scope, and the scope is
 
 If a question comes up partway, first do everything that does not depend on the answer, then state the assumption you made, or put the question at the end of a turn that also delivers that progress. If one part is blocked, complete every other part in full and say exactly what you left out and why.
 
+A handoff names the outcome, the ruling and the proof owed; it does not name a mechanism whoever wrote it has not read in the tree (ruling 555). Three of Fix PR 03's twelve items carried a false premise about mechanism — a Pages middleware layer that cannot coexist with Nitro's `_worker.js`, an `expires_at` column that did not exist at all, and a scroll reset that was actually a scroll being copied forward — and in all three the repository disagreed with the handoff. So a mechanism a handoff asserts is a lead to verify, never a fact to build on: read it in the tree first, and when it is wrong, report that as the finding and build what the outcome and the ruling actually require. The stop-and-report clause is what turns each of those into evidence instead of a workaround.
+
 ## Scope of changes
 If, while working or testing, you find a pre-existing bug, a performance concern, or behavior the task does not mention, do not fix, optimize, or extend it in this change unless the requested behavior cannot work without it; report it as a follow-up in your summary. Where the task is ambiguous, implement the reading its wording and the surrounding code most directly support, state that assumption, and do not build for the other readings. Commit tests only where the task asks for them or the repository already keeps tests for this kind of change, roughly one focused test per stated behavior. Do not turn scratch checks into permanent test files. Implement every behavior the task asks for, completely.
+
+## Dev commands (rulings 542, 545)
+`bun run dev` (`vite dev`) serves the app. It did not, between Fix PR 02 and Fix PR 03: the worker entry rebuilt the incoming request to carry the CSP nonce forward, and `new Request(request, { headers })` throws under the dev server's own Request implementation (ruling 542). Ruling 545 moved the nonce onto the response, so nothing on the SSR path constructs a Request and the dev server serves again.
+
+`wrangler pages dev dist`, after `bun run build`, serves the built worker, and it is the only local command that proves anything about the worker: the per-response CSP nonce, the six security headers, `_routes.json` and `/.well-known/security.txt` all come from `dist/_worker.js`, which `vite dev` never builds. Ruling 292's declaration is regenerated against this, never against `vite dev`.
+
+Neither is an exit criterion. Every exit criterion is checked on the deployed preview URL, because that is the only environment the founder tests in.
 
 ## Editing
 Minimize tokens spent editing files. When it will not affect the result, surgically edit a file rather than rewrite it.
@@ -63,13 +72,80 @@ batch has to be applied in pieces the repo carries the whole batch before the fi
 reverts work nobody knew was there and a concurrent session audits a state no migration explains,
 which is exactly what happened on 9 September and became PASS-01's 18:30 addendum.
 A migration file is never amended after it is applied; a change is a new migration (ruling 466).
+`tests/migration-lint.cjs` enforces 466 in the harness rather than by assertion: it compares the
+migration files at the merge base with the default branch against the ones in the working tree, keyed
+by version rather than by path, so a file that moves to another directory keeps passing and a file
+whose content changed after it was applied fails by name.
+
+A migration reaches the canonical project by `supabase db push` from the founder's machine, and never
+by the Supabase MCP's `apply_migration` (ruling 553, extending 269). `apply_migration` mints its own
+version rather than honouring the file's: applying `20260913220000` through it recorded the statements
+byte-identically, md5 and all, under `20260913220047`. That trades one drift row for two and
+manufactures exactly the divergence ruling 444's arm exists to catch, and the only way back is hand
+editing `supabase_migrations.schema_migrations`, which is what PASS-01 was written about.
+
+Between that push and the merge, the project records a version the branch has no file for, and the
+drift arm reads `FAIL … recorded on the project, no file in the tree` and exits 1. That is not an
+`EMPTY` row: the arm reaches `EMPTY` only at `if (!row.n)`, a recorded row whose `statements` array is
+empty, which is the PASS-01 pair and nothing else. The two conditions are deliberately separate and
+only one of them is red.
+
+On `main` the FAIL is latent rather than manifest. No workflow here carries a `schedule`; `pages.yml`
+runs on `push: branches: ["**"]` and `workflow_dispatch`, so `main` has no run of its own during the
+window, and the merge is itself the push that triggers one — by which point the file is in the tree and
+the run is green. **The exposure is every other branch**, because `migration-drift.cjs` reads
+`supabase/migrations` from the running checkout and the `live` job runs on every branch: during the
+window any branch that does not carry the file goes red at step 8 for a reason that has nothing to do
+with it. So the ordering is not "push then merge promptly" but: `db push` immediately before merging,
+and cut or push nothing else in between. The window should be minutes, and its cost falls on other
+people's branches rather than on the one being merged.
+
+Never force push to `main` (ruling 541) `[absolute]`. Force-with-lease is permitted on a Claude
+working branch, and only after a rebase that was instructed, pinned to the exact prior head. Plain
+force, without a lease, is refused everywhere. The reason is that Lovable syncs two ways on `main`
+(ruling 146): a force push there destroys the founder's visual commits, and they exist nowhere else.
 
 A test arm that cannot run is reported as unproven, never as passing, and never folded into a
 passing count (ruling 228). An arm that silently vanishes reads as coverage the suite does not have.
 
+Never push to a working branch while a calibration dispatch is in flight (ruling 554). `pages.yml`
+concurrency cancels the branch's matrix jobs on a push, and the push redeploys the preview underneath
+the arms that are still running: a Pages deploy retires the previous build's hashed asset URLs, so a
+page loading across the swap 404s. It cost one arm's page-error check during Fix PR 03's calibration,
+on one engine of two, and the tell was that only one of the eighteen connect arms failed when a real
+defect would have failed all eighteen. Wait for the dispatch, then push.
+
+The enforcing matrix runs on the final head, and nothing is committed to the branch after it starts
+(ruling 556, which sequences 554 rather than amending it). A commit arriving mid-run does not invalidate
+the run, it invalidates the run's subject: an enforcing run on a head that is about to be superseded
+proves nothing whatever it reports, however green. So finish the branch first — including the report and
+any doctrine lines — and only then let the run that will be cited start. "It is documentation only, so it
+costs time and not validity" is the wrong reading, and it is the one taken during Fix PR 03: a doc-only
+push superseded run 194 and its result described a head that no longer existed.
+
+The SSR nonce is held in `AsyncLocalStorage` (rulings 545, 549), which the Workers runtime provides
+under `nodejs_compat`; `nodejs_als` is the narrower flag for enabling only that API and is not what
+this depends on. `wrangler.jsonc` carries `nodejs_compat` and a compatibility date of `2026-09-01`, and
+for dates from `2026-08-04` the runtime enables `nodejs_compat` by default, so the flag is
+belt-and-braces rather than the thing holding it up. Nitro copies both into
+`dist/_worker.js/wrangler.json`, which travels with the upload, so production and preview cannot
+diverge: both are `wrangler pages deploy dist` of the same artifact. The dependency is not new either
+way — `@tanstack/start-server-core` runs every request through its own `AsyncLocalStorage`, so an
+environment without it would already serve nothing.
+
 Build order for any surface: schema and RLS, then Edge Functions, then UI. Confirm any design extraction arrived with real content before building from it; a missing or empty extraction is a stop-and-report condition, never a reason to reconstruct the prototype from ruling summaries (ruling 90). No surface is built without an approved Claude Design prototype (ruling 62); the extraction and SPEC.md are the visual contract, the brief is the behavior contract.
 Design tokens and components come from Strand via the extraction; never from shadcn, never from the old repo (rulings 70, 72).
 Exit check for every surface is the responsive test matrix on the deployed URL: 360, 390, 430, 744, 820, 1024 both orientations, 1280, 1536, both themes, Safari and Chrome (ruling 61).
+
+The shell owns one scroller per tier and the document never scrolls inside it (ruling 104), so the
+router's element scroll restoration is what governs a surface-to-surface navigation, not window scroll.
+Left alone it copies the outgoing location's scroller position onto a location it holds no entry for,
+which is how a profile opened from a Members card arrived already scrolled past its masthead (W58,
+ruling 552). The shell's scrollers are named in `scrollToTopSelectors` in `src/router.tsx` so they are
+excluded from that copy, and the shell settles the position in a layout effect keyed on the surface,
+because the router does its scroll work from an `onRendered` subscription that can land after a child's
+mount effect has measured. Every future surface inherits both. A `scrollTo` on a surface's own mount is
+not the fix: it papers over the copy and races the measurement.
 
 ## The Digital Trust Layer (rulings 139 to 141)
 

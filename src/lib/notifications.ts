@@ -1,6 +1,7 @@
 // The minimum notification system (ruling 82): real rows only, recipient-scoped by RLS. Reads the
 // member's rows, resolves the names the row copy needs under the caller's RLS, and marks one read.
 // Nothing here sends anything. No engine writes rows yet, so the empty list is the launch state.
+import { isRenderedKind } from "@/components/strand/NotificationListItem";
 import type { Tables } from "./database.types";
 import { getSupabase } from "./supabase";
 import { whenLabel } from "./when";
@@ -25,7 +26,12 @@ export async function loadNotifications(memberId: string, limit = 50): Promise<N
     .eq("recipient_member_id", memberId)
     .order("created_at", { ascending: false })
     .limit(limit);
-  const rows = data ?? [];
+  // Ruling 547: a kind whose destination has no surface is suppressed from the registry, and
+  // grounded-or-empty then applies to the row itself: it cannot go anywhere, so it does not render.
+  // Filtered here rather than in the query because the registry is the client's contract and a kind
+  // it holds need not yet exist in the database's own enum; sending one to `in` would be an error
+  // rather than an empty result. The name resolution below sees only the rows that survive.
+  const rows = (data ?? []).filter((r) => isRenderedKind(r.kind));
   if (rows.length === 0) return [];
 
   const ids = (kind: NotificationRow["object_kind"]) =>
@@ -97,17 +103,26 @@ export async function loadNotifications(memberId: string, limit = 50): Promise<N
   });
 }
 
-/** Whether at least one unread row exists. Existence only: the bell shows a dot, never a numeral. */
-export async function hasUnread(memberId: string): Promise<boolean> {
+/**
+ * Whether at least one unread row the panel would render exists. Existence only: the bell shows a
+ * dot, never a numeral. Ruling 547: a suppressed kind does not raise the dot either, or the bell
+ * would send a member to a list with nothing in it. The kind comes back with the row and is
+ * filtered here, for the same reason loadNotifications does not filter in the query.
+ */
+export async function hasUnread(memberId: string, limit = 50): Promise<boolean> {
   const sb = getSupabase();
   if (!sb) return false;
   const { data } = await sb
     .from("notifications")
-    .select("id")
+    .select("id,kind")
     .eq("recipient_member_id", memberId)
     .is("read_at", null)
-    .limit(1);
-  return (data ?? []).length > 0;
+    // Newest first, like the list, so the dot and the list read the same window: the kind cannot be
+    // filtered in the query (see above), and an unordered page of 50 could hold only suppressed rows
+    // while the list's own newest 50 holds one that renders.
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  return (data ?? []).some((r) => isRenderedKind(r.kind));
 }
 
 export async function markRead(id: string): Promise<void> {

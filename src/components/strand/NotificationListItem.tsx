@@ -1,4 +1,5 @@
-// Design pass 01, B17 (rulings 462, 480, 490). Two changes on the B2-Shell-Feed row:
+// Design pass 01, B17 (rulings 462, 480, 490), with ruling 547's registry. Two changes on the
+// B2-Shell-Feed row:
 // 1. Every row names its destination in words, so the member can read where the tap goes before
 //    taking it (490). DESTINATION is the closed map; the row is a link in behaviour and the
 //    destination line is part of its accessible name.
@@ -8,60 +9,62 @@ import { useState, type CSSProperties, type ReactNode } from "react";
 import { CBadge } from "./CBadge";
 import type { C } from "./cmeta";
 
-export type NotificationKind =
-  | "connection_accepted"
-  | "connection_request"
-  | "attestation_received"
-  | "space_role_approved"
-  | "event_reminder";
-
-/** Which engine wrote the row: its C glyph marks the row (ruling 66). */
-export const KIND_C: Record<NotificationKind, C> = {
-  connection_accepted: "connect",
-  connection_request: "connect",
-  attestation_received: "contribute",
-  space_role_approved: "collaborate",
-  event_reminder: "convene",
-};
-
 /**
- * Ruling 490: a notification row names its destination in words. Four of these are the handoff's
- * own strings (B17 item 1); event_reminder's is written to the same shape, because the handoff
- * lists destinations for the four kinds it names and this kind also has one.
+ * The registry (rulings 462, 490, 547): the notification kinds this app renders, each with the
+ * engine whose C glyph marks the row (ruling 66) and the destination its line names in words.
+ *
+ * Ruling 547: a kind is in the registry only while its destination has a surface. G19's three
+ * destination-less kinds are not here — `attestation_received`, `space_role_approved` and
+ * `event_reminder` name the contribution, the Space and the event, and none of those objects has a
+ * route yet, because Convene is Brief 6 and Collaborate and Contribute follow it. They are
+ * suppressed rather than exempted: an exemption list would be a second place where this contract
+ * lives and it would outlive the reason it was written. Their ruling 490 words are not reinvented
+ * when they come back; they are recorded in docs/GAPS.md under G19.
+ *
+ * Grounded-or-empty applies directly: a row whose kind is not in this registry cannot go anywhere,
+ * so it does not render and it does not raise the bell's dot (src/lib/notifications.ts).
+ *
+ * This object is the only source for both maps below, so a kind can never carry a glyph without a
+ * destination; tests/notifications.cjs is the check that says so in the harness.
  */
-export const DESTINATION: Record<NotificationKind, string> = {
-  connection_accepted: "Opens their profile",
-  connection_request: "Opens My Network, Requests",
-  attestation_received: "Opens the contribution",
-  space_role_approved: "Opens the Space",
-  event_reminder: "Opens the event",
-};
+export const NOTIFICATION_REGISTRY = {
+  connection_accepted: { c: "connect", destination: "Opens their profile" },
+  connection_request: { c: "connect", destination: "Opens My Network, Requests" },
+} as const satisfies Record<string, { c: C; destination: string }>;
+
+export type NotificationKind = keyof typeof NOTIFICATION_REGISTRY;
+
+/** Whether a `notifications.kind` value from the database is one this app renders (ruling 547). */
+export function isRenderedKind(kind: string): kind is NotificationKind {
+  return Object.prototype.hasOwnProperty.call(NOTIFICATION_REGISTRY, kind);
+}
+
+/** Which engine wrote the row: its C glyph marks the row (ruling 66). Derived from the registry. */
+export const KIND_C: Record<NotificationKind, C> = Object.fromEntries(
+  Object.entries(NOTIFICATION_REGISTRY).map(([kind, row]) => [kind, row.c]),
+) as Record<NotificationKind, C>;
+
+/** Ruling 490: a notification row names its destination in words. Derived from the registry. */
+export const DESTINATION: Record<NotificationKind, string> = Object.fromEntries(
+  Object.entries(NOTIFICATION_REGISTRY).map(([kind, row]) => [kind, row.destination]),
+) as Record<NotificationKind, string>;
 
 type Part = string | [string, 1];
 
-function parts({
-  kind,
-  actor,
-  object,
-  detail,
-}: {
+function parts(row: {
   kind: NotificationKind;
   actor?: string | undefined;
+  /** The object's name and its qualifier. The registry's two kinds name neither; the kinds ruling
+   *  547 suppressed read them when their surface ships and they rejoin the registry. */
   object?: string | undefined;
   detail?: string | undefined;
 }): Part[] {
-  switch (kind) {
+  switch (row.kind) {
     case "connection_accepted":
       // Ruling 461: the intro wording left with the composer's Connect verb (417).
-      return [[actor ?? "", 1], " accepted your connection request."];
+      return [[row.actor ?? "", 1], " accepted your connection request."];
     case "connection_request":
-      return [[actor ?? "", 1], " wants to connect."];
-    case "attestation_received":
-      return [[actor ?? "", 1], " attested your contribution to ", [object ?? "", 1], "."];
-    case "space_role_approved":
-      return ["You are now ", detail ?? "", " in ", [object ?? "", 1], "."];
-    case "event_reminder":
-      return [[object ?? "", 1], " starts ", detail ?? "", "."];
+      return [[row.actor ?? "", 1], " wants to connect."];
     default:
       return [""];
   }

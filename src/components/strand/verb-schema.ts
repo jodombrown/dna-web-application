@@ -78,8 +78,20 @@ export const VERB_SCHEMA: Record<ComposerVerb, VerbSchema> = {
   },
 };
 
-/** Untyped member posts fall back to Convey with no kicker, title, or action (ruling 68). */
-export const UNTYPED: VerbSchema = { kicker: null, action: null, fields: [] };
+/**
+ * Untyped member posts fall back to Convey (ruling 68), and ruling 546 (W54) settles what that
+ * looks like on the card: the kicker is Convey's own, so a post published with no verb chip reads
+ * as labelled rather than sitting in a generic bucket, which is what doctrine forbids. It is read
+ * from the Convey row rather than written again here, so the two can never drift. There is still no
+ * story object behind an untyped post, so it carries no title, no field rows and no action: "Read
+ * the story" would lead nowhere. The composer keeps no required chip (546): a gate on publishing is
+ * the one thing the composer may not grow.
+ */
+export const UNTYPED: VerbSchema = {
+  kicker: VERB_SCHEMA.convey.kicker,
+  action: null,
+  fields: [],
+};
 
 /**
  * Ruling 400: the composer no longer offers Connect, so no new connection_request post is created.

@@ -26,6 +26,10 @@ jobs:
       CF_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          # The migration lint below measures this change against its merge base with the default
+          # branch, so the job needs the history, not just the tip.
+          fetch-depth: 0
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
@@ -37,6 +41,19 @@ jobs:
       # Ruling 387: the two contact modules agree, and no company email literal is anywhere else.
       - name: Contact constants parity and the no-literal scan (ruling 387)
         run: ARMS=parity,scan node tests/contact.cjs
+      # Ruling 485, Fix PR 03 item 9: the token check was reachable only by dispatching the
+      # responsive matrix, so on a push nothing ran it. A guardrail the harness enforces beats one
+      # that is asserted, which is the lesson ruling 539 was built on. Static, no deployment needed.
+      - name: Every cited token resolves in both themes (ruling 485)
+        run: node scripts/token-check.mjs
+      # Ruling 547, Fix PR 03 item 6: every kind in the notification registry resolves to a
+      # destination, and the kinds whose destination has no surface are named rather than exempted.
+      - name: Every notification kind resolves to a destination (rulings 485, 547)
+        run: node tests/notifications.cjs
+      # Ruling 466, Fix PR 03 item 10: no migration file is amended after it is applied. Keyed on the
+      # version and not the path, so the G17 baseline PR's directory move passes without editing it.
+      - name: No applied migration file was amended (ruling 466)
+        run: node tests/migration-lint.cjs
       - run: bun run build
       - name: Cloudflare secrets missing
         if: ${{ env.CF_API_TOKEN == '' || env.CF_ACCOUNT_ID == '' }}

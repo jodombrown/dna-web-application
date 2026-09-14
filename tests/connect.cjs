@@ -498,6 +498,65 @@ async function runConnect(browserType, bname, vp, theme) {
     );
     record(tag + ": picking a tile opens Members filtered to that country", true);
     await noOverflow(page, tag + " where");
+
+    // W58 (ruling 465): a profile opened from a Members card lands at the top of the scroller, with
+    // the masthead unstarted rather than condensed. The shell owns one scroller across every route
+    // inside it, so before this was fixed at the cause the profile inherited Connect's scroll offset
+    // and the condense effect measured that offset on mount. The precondition is the scroll: the list
+    // is deliberately pushed well past the condense threshold first, and the assertion is geometric
+    // rather than a screenshot, so it holds on both engines without a reference image.
+    await openConnect(page, "");
+    const scrolledTo = await page.evaluate(() => {
+      const sc = document.querySelector('[data-scroller="feed"]');
+      if (!sc) return -1;
+      sc.scrollTop = Math.max(400, sc.scrollHeight - sc.clientHeight);
+      return Math.round(sc.scrollTop);
+    });
+    await page.waitForTimeout(400);
+    record(
+      tag + ": W58 precondition, Connect's list is scrolled past the condense threshold",
+      scrolledTo > 120,
+      "scrollTop " + scrolledTo,
+    );
+    // The masthead's banner bleeds up under the header by design, so the top edge is not at the
+    // scroller's own top in absolute terms. The reference is therefore the same profile reached
+    // directly, on a fresh document: arriving from a Members card has to look exactly like that, and
+    // the comparison calibrates itself rather than hardcoding a tier's offset.
+    const mastGeometry = () =>
+      page.evaluate(() => {
+        const sc = document.querySelector('[data-scroller="feed"]');
+        const mast = document.querySelector('[data-testid="masthead"]');
+        if (!sc || !mast) return null;
+        return {
+          scrollTop: Math.round(sc.scrollTop),
+          offset: Math.round(mast.getBoundingClientRect().top - sc.getBoundingClientRect().top),
+          condensed: mast.getAttribute("data-condensed"),
+        };
+      });
+    const lastCard = page.locator('[data-testid="member-card"]').last();
+    await lastCard.locator("button.strand-mc-name").click({ timeout: 15000 });
+    await page.waitForURL((u) => u.pathname.startsWith("/m/"), { timeout: 20000 });
+    await page.locator('[data-testid="masthead"]').first().waitFor({ timeout: 20000 });
+    await page.waitForTimeout(600);
+    const fromCard = await mastGeometry();
+    const profileUrl = page.url();
+    await shot(page, `connect-w58-landing-${bname}-${w}-${theme}`);
+    await page.goto(profileUrl, { waitUntil: "networkidle" });
+    await page.locator('[data-testid="masthead"]').first().waitFor({ timeout: 20000 });
+    await page.waitForTimeout(600);
+    const direct = await mastGeometry();
+    record(
+      tag + ": W58, a profile opened from a Members card lands where a direct visit does (465)",
+      !!fromCard &&
+        !!direct &&
+        fromCard.scrollTop === 0 &&
+        direct.scrollTop === 0 &&
+        fromCard.condensed === "0" &&
+        direct.condensed === "0" &&
+        Math.abs(fromCard.offset - direct.offset) <= 2,
+      "from the card " + JSON.stringify(fromCard) + " direct " + JSON.stringify(direct),
+    );
+
     record(tag + ": no page errors", errors.length === 0, errors.slice(0, 3).join(" | "));
   } catch (e) {
     record(tag + ": flow completed", false, String(e && e.message ? e.message : e).slice(0, 300));

@@ -3,7 +3,8 @@ import "./lib/error-capture";
 import { consumeLastCapturedError } from "./lib/error-capture";
 import { renderErrorPage } from "./lib/error-page";
 import { SECURITY_TXT_PATH, securityTxt } from "./lib/contact";
-import { CSP_NONCE_HEADER, mintNonce, securityHeaders } from "./lib/csp";
+import { mintNonce, securityHeaders } from "./lib/csp";
+import { withCspNonce } from "./lib/csp-nonce.server";
 
 type ServerEntry = {
   fetch: (request: Request, env: unknown, ctx: unknown) => Promise<Response> | Response;
@@ -63,6 +64,18 @@ function securityTxtResponse(): Response {
 
 // Ruling 438 (F19): the six security headers on every response this worker produces, the CSP with
 // this response's nonce. The body streams through untouched; only the headers are re-built.
+//
+// Ruling 545: one value across both layers. This entry mints it and holds it, so the policy on every
+// response it builds is this response's own, whatever the status; the render reads the same value from
+// request scope (src/lib/csp.ts) and stamps it on the inline scripts it emits. A response that never
+// reached the render (security.txt, the error page below) carries the nonce in its policy and no
+// inline script, which is harmless; the alternative, deriving the policy from what the render
+// reported, left a 404's scripts blocked by their own policy.
+//
+// Cloudflare Pages serves this worker in advanced mode (Nitro emits dist/_worker.js), which is why
+// the minting does not sit in a functions/_middleware.ts: a _worker.js makes Pages ignore the
+// functions directory entirely, so a middleware layer there would never run. This entry is the
+// outermost layer the deployment has.
 function withSecurityHeaders(response: Response, nonce: string): Response {
   const headers = new Headers(response.headers);
   for (const [name, value] of securityHeaders(nonce)) headers.set(name, value);
@@ -80,11 +93,10 @@ export default {
       return withSecurityHeaders(securityTxtResponse(), nonce);
     try {
       const handler = await getServerEntry();
-      // The router reads the nonce back from this header (src/lib/csp.ts) when it is created for
-      // the request, so every inline script TanStack Start emits carries it.
-      const headers = new Headers(request.headers);
-      headers.set(CSP_NONCE_HEADER, nonce);
-      const response = await handler.fetch(new Request(request, { headers }), env, ctx);
+      // The incoming request is passed through exactly as it arrived: ruling 542, rebuilding it to
+      // carry the nonce forward is what broke `vite dev`. The nonce travels in request scope instead,
+      // opened here and read by the router when it is created for this request.
+      const response = await withCspNonce(nonce, () => handler.fetch(request, env, ctx));
       return withSecurityHeaders(await normalizeCatastrophicSsrResponse(response), nonce);
     } catch (error) {
       console.error(error);

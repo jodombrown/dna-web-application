@@ -845,8 +845,15 @@ async function get(url, headers = {}) {
   // -----------------------------------------------------------------------------------------
   // Ruling 438 (F19): the six security headers on the deployment, read on the Feed route. The
   // Content-Security-Policy is per response because the shell's SSR inline scripts carry a nonce
-  // (TanStack Start's ssr.nonce, minted in src/server.ts); script-src never widens to
-  // 'unsafe-inline'. The static-asset copy is public/_headers; this reads the worker's.
+  // (TanStack Start's ssr.nonce); script-src never widens to 'unsafe-inline'. The static-asset copy
+  // is public/_headers; this reads the worker's.
+  //
+  // Ruling 545 (Fix PR 03 item 4) is what the nonce arms below prove: one value across two layers.
+  // The render mints it, stamps it on every inline script it emits and records it on an internal
+  // response header; src/server.ts builds this response's policy from that header and strips it. So
+  // the assertion is not "a nonce is present in each place" but "it is the same nonce, on the same
+  // response" — the failure the old shape could have had is two layers each minting their own, which
+  // renders as a policy that blocks the very scripts it was meant to allow.
   // -----------------------------------------------------------------------------------------
   {
     const feedRes = await get(BASE + "/feed");
@@ -887,6 +894,70 @@ async function get(url, headers = {}) {
         /geolocation=\(\)/.test(h("permissions-policy")) &&
         /microphone=\(\)/.test(h("permissions-policy")),
       h("permissions-policy"),
+    );
+
+    // Ruling 545: the nonce in the header is the nonce in the markup, on this one response.
+    const headerNonce = (csp.match(/'nonce-([A-Za-z0-9+/=_-]+)'/) || [])[1] || "";
+    const markupNonces = [...feedRes.text.matchAll(/<script[^>]*\snonce="([^"]+)"/g)].map(
+      (m) => m[1],
+    );
+    const metaNonce =
+      (feedRes.text.match(/property="csp-nonce"[^>]*content="([^"]+)"/) || [])[1] ||
+      (feedRes.text.match(/content="([^"]+)"[^>]*property="csp-nonce"/) || [])[1] ||
+      "";
+    record(
+      "ruling 545: the SSR'd script tags carry a nonce",
+      markupNonces.length > 0,
+      markupNonces.length + " nonced script tag(s)",
+    );
+    record(
+      "ruling 545: every nonce in the markup is the one in the Content-Security-Policy header",
+      !!headerNonce && markupNonces.length > 0 && markupNonces.every((n) => n === headerNonce),
+      "header " +
+        headerNonce.slice(0, 12) +
+        " markup " +
+        [...new Set(markupNonces)].join(",").slice(0, 40),
+    );
+    record(
+      "ruling 545: the shell's csp-nonce meta carries the same value, so hydration reads it back",
+      !!metaNonce && metaNonce === headerNonce,
+      "meta " + metaNonce.slice(0, 12),
+    );
+    // The case that nearly shipped. Deriving the policy from what the render reported works for a 2xx
+    // and silently fails for anything else: h3 merges a request event's headers onto a returned
+    // Response only when that Response is ok, so a 404 arrived with the nonce stamped in its markup
+    // and absent from its policy, blocking the very scripts the policy exists to allow. The worker
+    // entry owns the value now, so a non-2xx render is covered too, and this is the arm that says so.
+    const missing = await get(BASE + "/this-route-does-not-exist");
+    const missingCsp = missing.headers.get("content-security-policy") || "";
+    const missingHeaderNonce = (missingCsp.match(/'nonce-([A-Za-z0-9+/=_-]+)'/) || [])[1] || "";
+    const missingMarkupNonces = [...missing.text.matchAll(/<script[^>]*\snonce="([^"]+)"/g)].map(
+      (m) => m[1],
+    );
+    record(
+      "ruling 545: a non-2xx render carries the nonce in its policy as well as its markup",
+      missing.status === 404 &&
+        !!missingHeaderNonce &&
+        missingMarkupNonces.length > 0 &&
+        missingMarkupNonces.every((n) => n === missingHeaderNonce),
+      "status " +
+        missing.status +
+        " header " +
+        missingHeaderNonce.slice(0, 12) +
+        " markup " +
+        [...new Set(missingMarkupNonces)].join(",").slice(0, 40),
+    );
+    // Per response, not per deployment: a nonce reused across responses is a nonce an attacker can
+    // read off one page and reuse on the next, which is the whole point of minting it per render.
+    const feedAgain = await get(BASE + "/feed");
+    const againNonce =
+      ((feedAgain.headers.get("content-security-policy") || "").match(
+        /'nonce-([A-Za-z0-9+/=_-]+)'/,
+      ) || [])[1] || "";
+    record(
+      "ruling 545: a second response carries a different nonce",
+      !!againNonce && againNonce !== headerNonce,
+      "first " + headerNonce.slice(0, 12) + " second " + againNonce.slice(0, 12),
     );
   }
 
