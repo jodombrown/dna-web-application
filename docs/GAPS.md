@@ -1256,6 +1256,14 @@ What is proven meanwhile: `public.connect_where` reads `private.is_onboarded` in
 arms, asserted by the migration itself (`20260913072642`), and the predicate is the same one the
 measured `connect_cards` filters on.
 
+**Ruling 559 makes this a cold-start gap rather than a standing asterisk.** The arm reports UNPROVEN
+because the cohort is too small for the mosaic to name any country, which is correct under ruling 228
+but means the surface stays unexercised until the corridor fills. The close condition is five members
+sharing a country whose profiles admit the viewer — not a code change, and specifically not lowering
+`private.connect_settings` key `where_floor` to make the arm run, which would change product behaviour
+to make a test pass. Recorded as 559 so that a permanently unproven arm is read as a cold start rather
+than as noise.
+
 ## G17. The migration tree records the project's history and no longer replays from zero (rulings 466, 444, 225)
 
 **Severity: medium for a new environment. Not a merge blocker, and not a defect on the canonical
@@ -1283,6 +1291,14 @@ Both ways out are decisions, not repairs to take unasked:
 
 Until one is taken, the canonical project is the only environment the tree describes, and a new
 environment is built by restoring from it rather than by replaying migrations.
+
+**Ruling 563 adds one requirement to whichever way out is taken: the baseline must be dumped after the
+14 September correction.** It has to capture `public.connection_requests` with a null `expires_at` on
+all ten rows, not the single timestamp the column default wrote through the catalog's missing value
+(G23). A dump taken before that correction would bake the defect into the one artefact a new
+environment is built from, and the false header in `20260913220000` would then be describing the
+baseline as well as the file. Ruling 544 keeps the baseline itself out of Fix PR 03's line of work, so
+this is the requirement recorded rather than the dump performed.
 
 ---
 
@@ -1488,8 +1504,8 @@ been approved should not sit in the repository looking as though it has. Two not
 
 ## G23. The introduction expiry window is a seeded default, not a ruled number
 
-**Severity: low. Not a merge blocker, and nothing expires until the migration is applied. Opened
-13 September 2026 building Fix PR 03 item 7 (rulings 482, 485).**
+**Severity: low. Not a merge blocker. Opened 13 September 2026 building Fix PR 03 item 7
+(rulings 482, 485); applied and amended with ruling 563 on 14 September 2026.**
 
 Fix PR 03's item 7 asks for "the `expires_at` purge". At `b4b21ab` no table in `public` or `private`
 carried an `expires_at` column and nothing in the schema treated a pending introduction as expiring;
@@ -1501,19 +1517,84 @@ pending rows past their window. Deletion is ruling 482's silence — no declined
 window starts and the pair returns to `none`, which is what reopens requesting immediately — and it
 needed no read projection to change, which is what kept it out of Fix PR 05's territory.
 
-Two things still need the founder:
+**Applied.** `supabase db push` recorded it on the canonical project on 14 September 2026 under the
+file's own version, and ruling 444's drift arm reads `37 matched, 0 drift, 2 empty`. Ruling 553 records
+why the CLI and never the MCP: applying this same file through `apply_migration` on a throwaway branch
+recorded the statements byte-identically, md5 `a10dc390598f7ebcb660c32852f56089` on both sides, but
+under the version the tool minted for itself, `20260913220047`, which trades one drift row for two.
 
-- **The window.** No ruling in the handoff supplies a number, so it is seeded as
-  `private.connect_settings` key `introduction_expiry_days` at 30 rather than written into a
-  predicate. One `update private.connect_settings set value_int = <days> where key =
-  'introduction_expiry_days';` changes it, with no migration. Thirty is deliberately shorter than the
-  90-day decline window, because silence should clear faster than a refusal blocks, but it is a
-  product decision taken as a default and not as a ruling.
-- **Applying it.** The migration is committed and not applied (ruling 225: the repo carries it first).
-  Until it is applied, ruling 444's drift arm reports it as "in the tree, not recorded on the
-  project", which is the correct reading of that state and not a failure of the arm.
+**The window is a seeded default, and ruling 557 keeps it at 30.** No ruling in the handoff supplied a
+number, so it is `private.connect_settings` key `introduction_expiry_days` rather than a constant in a
+predicate: `update private.connect_settings set value_int = <days> where key =
+'introduction_expiry_days';` changes it, with no migration. Thirty is deliberately shorter than the
+90-day decline window, because silence should clear faster than a refusal blocks. Ruling 557 settles it
+on a narrower argument than that: expiry is silence (ruling 482), the sender is never told it happened
+and simply regains the ability to ask, so the whole cost of a longer window falls on the sender's
+patience and produces no signal to anyone, while a shorter one mostly raises the rate at which a
+recipient who is deliberately not answering gets asked again.
 
-Rows written before the column existed carry a null `expires_at` and are never purged. That is
-deliberate: ruling 400 removed Connect from the composer, so the only `connection_requests` a
-published Feed post can point at are older ones, and purging those would empty the who and why such a
-card renders through `connection_request_intros` (ruling 157).
+One consequence of the asymmetry below is worth stating with it: a recipient who declines buys 90 days
+of quiet, and one who ignores buys 30. Under ruling 157 the sender cannot tell the two apart, so
+declining is strictly the better move for a recipient who wants to stop being asked, and it costs them
+nothing socially. The asymmetry nudges toward the cheaper, signal-free action rather than toward
+silence.
+
+**Changing the number is forward-only, unlike the decline window.** The two settings live in the same
+table and are read through the same helper, and they behave in opposite ways:
+
+| Setting | Read | Effect of changing it |
+| --- | --- | --- |
+| `decline_window_days` (90) | per call, inside the RPCs, against `responded_at` | retroactive: every existing declined pair is re-windowed at once |
+| `introduction_expiry_days` (30) | once, at insert, as the `expires_at` column default | forward only: rows already pending keep the window they were stamped with |
+
+`private.purge_expired_introductions()` compares the stored `expires_at`, never a recomputed window,
+which is what makes that so, and the semantics are right this way round: the Sent empty state promises
+a member their introductions wait "until they are accepted, or until they quietly expire", and a live
+predicate would move that promise under them whenever the setting moved. But a wrong guess is then
+correctable only going forward, and re-windowing rows already in flight would be a data `update` on
+`public.connection_requests` rather than a settings change. Thirty was free to revise until the first
+introduction was sent after the push, because every row that existed then carried a null `expires_at`.
+
+### Ruling 563: the column default reached every pre-existing row, and this migration's header says it does not
+
+`alter table public.connection_requests add column expires_at timestamptz default (now() +
+make_interval(...))` does not leave existing rows alone. Since Postgres 11 a default that is not
+volatile takes the fast path instead of rewriting the table: the expression is evaluated **once** and
+stored as the column's missing value, which every pre-existing row then reads back. `now()` is STABLE,
+not volatile, so that is the path taken, and the effect is indistinguishable from a backfill.
+
+Read from the catalog after the push, `pg_attribute` for the column showed `atthasmissing = true` and
+`attmissingval = {"2026-10-14 02:35:25.485652+00"}`: one timestamp, read by all ten rows, across
+`pending`, `accepted`, `declined` and `withdrawn` alike.
+
+**What it would have cost.** The four pending rows the live arms depend on would have been deleted by
+the nightly purge on 14 October, and a published Connect post rendering through
+`connection_request_intros` would have quietly lost the who and why it shows (ruling 157) — the exact
+outcome the paragraph below says the nullable column exists to prevent.
+
+**Corrected, and verified.** The rows were restored to null by hand in the SQL Editor on 14 September
+2026; reading the project afterwards gives 10 rows, **0 carrying an `expires_at`**, 4 pending, 0
+pending with an expiry. The update writes a real null into every tuple, so the missing value is
+unreachable rather than merely overridden: it stays in the catalog until some later table rewrite, and
+no new row can read it, because an insert stores the default's evaluated value in the tuple itself.
+
+**The file cannot be fixed, which is why this is written here.** Its header says "the column is
+nullable with no backfill, so every row written before this migration has a null `expires_at` and can
+never be purged". Ruling 466 forbids amending an applied migration. The claim's conclusion now holds,
+but only because 563 was found and corrected, not because the migration left those rows alone.
+
+**A clean replay is safe, by ordering rather than by design.** No migration seeds rows into
+`connection_requests`: every `insert into public.connection_requests` in the tree sits inside a
+function body. So on a fresh replay the table is empty when this migration runs, and the missing value
+has no tuple to reach. That is the whole reason an un-amendable file with a false header is survivable
+here, and it is fragile in one specific way — anyone who later adds a seed migration with an earlier
+version arms the trap without touching the file. Ruling 564 puts the general rule in
+`tests/migration-lint.cjs`: in a new migration, `add column` on a nullable column carrying a `default`
+is flagged unless it is split into two statements or carries an explicit marker comment declaring that
+reaching existing rows is intended. `not null default` is exempt, because reaching every row is what
+makes that constraint hold.
+
+**What was always deliberate, and still is.** Rows written before the column existed carry a null
+`expires_at` and are never purged. Ruling 400 removed Connect from the composer, so the only
+`connection_requests` a published Feed post can point at are older ones, and purging those would empty
+the who and why such a card renders through `connection_request_intros` (ruling 157).

@@ -9,7 +9,9 @@ Eleven of the twelve scope items are landed with a named proof. The twelfth, rul
 templates, is console work whose approved copy the repository does not carry, and it is reported rather
 than invented. Two items were verify-first and one of them turned out already built; one was already
 built in substance and needed only the crash beside it removed. Three things the scope assumed were not
-true, and each is reported in place rather than worked around.
+true, and each is reported in place rather than worked around. Three defects in this work's own output
+are recorded too: two caught by re-reading the diff against the built worker, and a third — ruling 563 —
+caught only after the migration had reached the canonical project.
 
 The three that were not true:
 
@@ -174,7 +176,7 @@ There was no `expires_at`. At `b4b21ab` no table in `public` or `private` carrie
 
 Deletion is ruling 482's silence, and it is why no read projection changed. No declined row is written, so no decline window starts; the pending unique index is free again, so `send_introduction` accepts the next one; `private.relationship_state` finds no row and answers `none` through the one source ruling 188 names. A status value would have taught every projection a new state, which is the shape ruling 544 moved out of this PR.
 
-Rows written before the column exists carry a null window and are never purged. Ruling 400 removed Connect from the composer, so the only `connection_requests` a published Feed post can point at are older ones, and purging those would empty the who and why such a card renders through `connection_request_intros` (ruling 157).
+Rows written before the column exists are *meant* to carry a null window and never be purged. Ruling 400 removed Connect from the composer, so the only `connection_requests` a published Feed post can point at are older ones, and purging those would empty the who and why such a card renders through `connection_request_intros` (ruling 157). The intent was right and the migration did not achieve it: see ruling 563 below, which is why that sentence is true of the project today only because it was corrected by hand.
 
 **Proof:** a write proof on a throwaway Supabase branch under ruling 269 (`erpcofqbxkemkicyyqus`), deleted afterwards and verified gone — `list_branches` returns only `main`, and the canonical project still shows 38 recorded migrations, one cron job and no `expires_at`. Six arms, all passing, every row rolled back:
 
@@ -188,6 +190,14 @@ Rows written before the column exists carry a null window and are never purged. 
 | a second purge removes nothing: idempotent | PASS — returned 0 |
 
 One thing the branch could not give, and it is G17 rather than a fault here: a fresh branch replayed only the six `b1` migrations, because the tree cannot replay from zero. G17 says so in terms — "a replay from an empty database in version order fails … the canonical project is the only environment the tree describes". So the preconditions the migration depends on (`private.connect_settings`, `private.setting_int`, `connection_requests`' `message` and `responded_at`, the pending unique index) were built on the branch as a fixture, to the canonical project's own definitions read from it directly, and the migration file was then applied verbatim. The proof is therefore fixture-backed rather than replay-backed, and that is named here rather than presented as more than it is.
+
+**Applied on 14 September 2026, and the drift arm is green.** `supabase db push` recorded the file on the canonical project under its own version, taking it from 38 rows to 39, and ruling 444's arm then read `repo tree: 39 migrations`, `live schema_migrations: 39 rows`, `PASS 20260913220000 r482_485_introduction_expiry_purge`, `37 matched, 0 drift, 2 empty` — the two empties being the pre-existing PASS-01 pair. The check went green without a new commit: only the failed `live` job was re-run on run 34788775088, so `deploy` and both `matrix` jobs kept their original timestamps and the enforcing verdict still rests on the jobs that produced it. `live` re-checked out the same SHA against the same deployment and ran in full — the deployment-serves preflight, 8 of 8 contact checks, 102 of 102 live arms, then the drift arm.
+
+**Ruling 563: the column default reached every pre-existing row, and this migration's header says it does not.** `add column expires_at timestamptz default (now() + make_interval(...))` does not leave existing rows alone. Since Postgres 11 a default that is not volatile takes the fast path instead of rewriting the table: the expression is evaluated **once** and stored as the column's missing value, which every pre-existing row reads back. `now()` is STABLE, not volatile, so that is the path taken, and the effect is indistinguishable from a backfill. Read from the catalog after the push, `pg_attribute` showed `atthasmissing = true` and `attmissingval = {"2026-10-14 02:35:25.485652+00"}`: one timestamp, read by all ten rows, across `pending`, `accepted`, `declined` and `withdrawn` alike.
+
+It would have cost the four pending rows the live arms depend on, deleted by the nightly purge on 14 October, and a published Connect post rendering through `connection_request_intros` would have quietly lost the who and why it shows — the exact outcome the header claims the nullable column prevents. Corrected by hand in the SQL Editor and verified from the project: 10 rows, 0 carrying an `expires_at`, 4 pending, 0 pending with an expiry. The update writes a real null into every tuple, so the missing value is unreachable rather than merely overridden.
+
+Two things follow, and both are recorded rather than patched into the file, because ruling 466 forbids amending an applied migration. The full account, including why a clean replay is safe by ordering rather than by design, is G23. And the general rule is now in `tests/migration-lint.cjs` as ruling 564: in a new migration, `add column` on a nullable column carrying a `default` is flagged unless the statement is split or carries an explicit marker declaring the reach is intended; `not null default` is exempt, because reaching every row is what makes that constraint hold. Its ruling 270 pair is in the table above.
 
 ### 8. The aria-live region and the unread dot label — verify first: already built, not rebuilt
 
@@ -256,10 +266,13 @@ Each pair was measured, not reasoned about. The reverted runs are Chromium again
 | Ruling 466, `tests/migration-lint.cjs` (a line appended to an applied migration) | 3 of 3 — the false green that made me fix the lint; after the fix, 2 of 4, naming `20260906173303_b1_enums.sql` | 3 of 3 clean |
 | Ruling 485, `scripts/token-check.mjs` (a surface citing `--bg-sunken-does-not-exist`) | FAIL, naming the file that cites it | every cited token resolves in both themes |
 | Ruling 482, the purge, on the throwaway branch | 0 of 2 — the lapsed row stays pending past its window and the pair is refused a second introduction by `connection_requests_pending_uidx` | 6 of 6 |
+| Ruling 564, `tests/migration-lint.cjs` (four fixture migrations, one violating) | 3 of 3, exit 0 — the violating fixture sails through and the build stays green | 3 of 5, exit 1 — `29990101000001_fixture_violation.sql:2 stamps probe_a onto existing rows` |
 
 **Items 3 and 4 are stated differently on purpose.** Four of the five nonce arms pass on `main`'s shape too, because that shape also carried one value across two layers — it just did it on a request header. Presenting them as this change's negative control would be false. What this change fixed is the dev server, and the honest pair is: `vite dev` on `/sign-in` returned **500** with the undici `TypeError` before, and returns **200** with the surface rendered after. The fifth arm is different: `a non-2xx render carries the nonce in its policy as well as its markup` has a real reverted baseline, because it fails against the response-header channel I tried first — 404 markup carrying a nonce with `script-src 'self'` in the policy. That arm exists because the shape it tests broke, which is the only kind of coverage worth adding.
 
 ---
+
+Ruling 564's pair used four throwaway migrations in the working tree, removed afterwards, because the pattern it catches cannot be demonstrated on the tree itself: the one real instance is `20260913220000`, which is applied and therefore un-amendable, and the check is deliberately scoped to versions *added* in a change so that it is never a gate nobody can pass. The four were a nullable column with a multi-line default (must fail), two `not null default` clauses in one statement (must pass, and these are the shapes `b4_connect_tables` and `b5_stance_onboarding` already carry), a nullable default with the marker comment above it (must pass), and the split form (must pass). Only the first was flagged.
 
 ## Ruling 292: the declaration
 
@@ -288,6 +301,19 @@ The added and removed `record()` calls in the diff account for each net exactly 
 
 Holding the push until both calibration runs had finished was the right sequencing and I did not do it; the cost was one arm's page-error check, and the remedy was already built into the merge rule.
 
+### The enforcing run, on the final head
+
+Run 196 (workflow run 34788775088) on `af667ba`, dispatched once the branch was finished so nothing could supersede its subject:
+
+| Engine | Checks | Arms | With a failing check | Lost a web process | Unclassified |
+| --- | --- | --- | --- | --- | --- |
+| chromium | **4926 of 4926** | 205 (76 compact, 55 medium, 74 expanded) | 0 | 0 | 0 |
+| webkit | **4926 of 4926** | 205 (76 compact, 55 medium, 74 expanded) | 0 | 0 | 0 |
+
+The arithmetic is what turns "both engines passed" into "every arm emitted exactly its declared count". Calibration reported 4721 checks per engine; enforcement reports 4926. The difference is exactly 205 — one `ruling 292 | <arm>: emitted every check it declares` check per arm, which `EXPECT=write` skips and enforcement adds. 4721 + 205 = 4926 on both engines: no `DRIFT`, no `INCOMPLETE`, no `MISSING`, and nothing else could produce that number twice independently.
+
+**The chromium arm did not recur.** `chromium 390x844 light connect: no page errors` passes here, which closes it as the asset swap under my own mid-run push rather than a defect in the W58 arm. The diagnosis above was the argument; this run is the confirmation.
+
 ---
 
 ## Guardrails, absolutes and the environment
@@ -295,7 +321,7 @@ Holding the push until both calibration runs had finished was the right sequenci
 - **Identities on `main`, read through the API rather than the git author string (ruling 379).** `b4b21ab` is authored by `jodombrown` with `web-flow` as the merge committer; `b3cae4d` back to `3484eed` are all `claude` (id 81847). **Nothing by app id 159125892 (`gpt-engineer-app[bot]`).** `origin/main` was still `b4b21ab` at the fetch before branching, at the fetch before the first push, and at the fetch before the second, so there was nothing to rebase onto and no Lovable commit to preserve.
 - **Never force push to `main`.** Not done, and now written into both files as item 11.
 - **No migration file amended.** The lint proves it, and it is the only new file under `supabase/migrations/`. Nothing pre-empts the G17 baseline's directory move: the lint keys on version, not path.
-- **No write proof on `dgspjevjoblujcoljvkn`.** The write proof ran on branch `erpcofqbxkemkicyyqus`, which is deleted and verified gone. The canonical project was read for definitions and for verification only, and still reports 38 recorded migrations, one cron job and no `expires_at`.
+- **No write proof on `dgspjevjoblujcoljvkn`.** The write proof ran on branch `erpcofqbxkemkicyyqus`, which is deleted and verified gone. The canonical project was read for definitions and for verification only, and reported 38 recorded migrations, one cron job and no `expires_at` throughout. It reached 39 rows and gained the column only by the founder's deliberate `supabase db push` after the PR was green, which is ruling 225's ordering rather than a write proof.
 - **No second framework, client or auth path.** One Supabase client, one auth path, one router, one worker entry. The nonce change removes a construction rather than adding a layer.
 - **No numeric renders.** Nothing added renders a count, score or percentage. The purge returns a row count to an operator; nothing surfaces it, and the notification bell still shows a dot rather than a numeral.
 - **Out of scope and not pre-empted (ruling 544).** No `private.visible_to`, no predicate rewrite, no delete-and-purge path (460, 478), and no G17 baseline work.
@@ -321,7 +347,7 @@ Holding the push until both calibration runs had finished was the right sequenci
 | `bee195b` | the bell and the list read the same window |
 | `8ca4b07` | ruling 292's declaration, regenerated from a measured run of each engine |
 
-## Rulings this PR produced (549 to 555)
+## Rulings this PR produced (549 to 564)
 
 Minted in review of the work, and each one is either implemented here or recorded in CLAUDE.md:
 
@@ -335,6 +361,11 @@ Minted in review of the work, and each one is either implemented here or recorde
 | 554 | no push to a working branch while a calibration dispatch is in flight | CLAUDE.md |
 | 555 | a handoff names the outcome, the ruling and the proof owed, never an unread mechanism | CLAUDE.md |
 | 556 | the enforcing matrix runs on the final head and nothing is committed to the branch after it starts; sequences 554 | CLAUDE.md |
+| 557 | `introduction_expiry_days` stays at 30: expiry is silence, so the whole cost of a longer window is the sender's patience | `docs/GAPS.md` G23 |
+| 558 | ruling 410's three strings, approved, with the support line carried as a token rather than a literal address | `docs/GAPS.md` G22 |
+| 559 | the `connect_where` UNPROVEN arm is a cold-start gap, not a standing asterisk | `docs/GAPS.md` G16 |
+| 563 | a non-volatile column default reaches every pre-existing row through the catalog's missing value | `docs/GAPS.md` G23 |
+| 564 | a nullable column is added bare and given its default second, or the backfill is marked; `not null default` exempt | `tests/migration-lint.cjs`, CLAUDE.md |
 
 545 is amended rather than absorbed: what shipped is a different architecture from the one it described, and 549 is where that is recorded.
 
@@ -344,7 +375,8 @@ Minted in review of the work, and each one is either implemented here or recorde
 
 - **G19:** `connection_request` is still absent from the `notification_kind` enum. G19 recorded that as this PR's scope; the handoff's twelve items do not name it and DONE MEANS allows no schema beyond what the scope names. `tests/notifications.cjs` prints it on every run.
 - **G19:** the notification list's empty state still promises two kinds that can no longer appear. Approved copy, no ruling supplies a replacement, left exactly as it is.
-- **G22:** ruling 410's three template strings.
-- **G23:** the expiry window, and applying the migration.
+- **G22:** ruling 410's three template strings, approved as ruling 558 and owed the console paste.
+- **G23:** the expiry window, settled at 30 by ruling 557. The migration is applied and the drift arm is green.
+- **G17, and new with ruling 563:** whichever way out of G17 is taken, the baseline must be dumped *after* the 14 September correction, or it bakes the stamped `expires_at` into the one artefact a new environment is built from. Ruling 544 keeps the baseline out of this line of work, so the requirement is recorded and not performed.
 - **G17, unchanged and load-bearing here:** a fresh Supabase branch replays only the six `b1` migrations, so item 7's write proof is fixture-backed rather than replay-backed. Named in that item rather than presented as more than it is.
 - `hasUnread` and `loadNotifications` both read the newest fifty rows and filter the kind client-side, because the registry can hold a kind the database enum does not. Beyond fifty unread suppressed rows the bell and the list agree with each other but not with the whole table. Consistent, bounded, and recorded here rather than fixed on my own initiative.
