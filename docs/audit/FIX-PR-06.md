@@ -202,6 +202,26 @@ total. An arm that asserted a mid-fade there would be asserting the fixture.
 
 ## Ruling 292: the declaration
 
+Regenerated from measured runs against the deployed preview, one dispatched `EXPECT=write` run per
+engine under ruling 283's split, with `DUMP_LABELS=1`: chromium **run 51** and webkit **run 52**, both
+on `6673a1e`. The declaration is then confirmed a second time, independently, by `pages.yml` **run
+200**'s own enforcing-mode matrix on the same head and the same preview, which reports every changed
+arm by name as a `DRIFT` line. Both engines' numbers agree exactly across the two methods.
+
+| Engine   | Calibration | Enforcing-mode cross-check (run 200) | Checks       | Arms                                     | Arms with a failing check | Lost a web process |
+| -------- | ----------- | ------------------------------------ | ------------ | ---------------------------------------- | ------------------------- | ------------------ |
+| chromium | run 51      | `matrix (chromium)`                  | 4946 of 4968 | 205 (76 compact, 55 medium, 74 expanded) | 0                         | 0                  |
+| webkit   | run 52      | `matrix (webkit)`                    | 4946 of 4968 | 205 (76 compact, 55 medium, 74 expanded) | 0                         | 0                  |
+
+**The 22 red checks per engine in run 200 are the declaration records themselves and nothing else.**
+They sit outside every arm, because `tests/matrix.cjs` emits each `ruling 292 | <arm>` record after
+`armClose()`, which is why all 205 arms read as having no failing check while 22 checks fail. The part
+that makes this evidence rather than a headline is what is **absent**: no `INCOMPLETE`, which is what a
+count _falling_ looks like; no `UNDECLARED`, which is a new arm nobody declared; and no `MISSING`, which
+is ruling 228's vanished arm. Their absence across both engines is the enforcing gate's own verdict that
+every one of the 410 declared arms outside these 44 is still exactly right, which an `EXPECT=write` dump
+cannot tell you.
+
 Two arm groups changed, both of them groups this PR added checks to. The added `record()` calls in the
 diff account for each net exactly, so the numbers explain themselves rather than being asserted:
 
@@ -210,9 +230,40 @@ diff account for each net exactly, so the numbers explain themselves rather than
 | `targeted` | 4 (390x844, 820x1180, 1280x800, 1536x960) | 9 -> 10, 8 -> 9, 10 -> 12, 10 -> 12 | added item 12, the 588 fade arm, at every tier; added item 13, the 589 clearance arm, in the expanded branch only, which is why the two expanded stops move by 2 and the others by 1                     |
 | `connect`  | 18 (9 viewports x 2 themes)               | 47 -> 49, 53 -> 55                  | added the 405 descriptor latch and the 588 fade arm; the 181 ground record is _retargeted_ to 590 rather than added, and the third clause rides the existing card-style record, so neither moves a count |
 
-44 arms change in total, 22 on each engine. No other group moves and no count falls. The `shell` group
-is unchanged at 31 and is named here because an earlier draft put the fade arm in it by mistake; it was
-moved to `targeted`, which is where the Feed's scroll and sticky-block behaviour is already asserted.
+44 arms change in total, 22 on each engine, and the two engines' 22 are the same 22 at the same numbers.
+No other group moves and no count falls. The `shell` group is unchanged at 31 and is named here because
+an earlier draft put the fade arm in it by mistake; it was moved to `targeted`, which is where the Feed's
+scroll and sticky-block behaviour is already asserted.
+
+The committed file is the prior declaration with those 44 counts raised and nothing else touched: 44
+insertions, 44 deletions, no line in the diff that is not one of those counts, and 410 arms before and
+after. That is the same function the harness applies to itself — `EXPECT=write` merges upward,
+`Math.max(prior[arm] || 0, n)` per arm, so "a declared number only ever falls by a deliberate edit" —
+and the script that wrote it refuses any value lower than the one it replaces, for the same reason.
+
+### Webkit's calibration lost an arm, and it is reported rather than absorbed
+
+Run 52 finished at **4761 of 4763** with two failures, and neither is this PR's:
+
+- `webkit-1024x1366-dark` **lost a web process** — G5, ruling 200's crash. The run's own core-dump
+  apparatus caught it and extracted the faulting thread: a recursive cycle inside `libWPEWebKit-2.0.so.1`,
+  the same three offsets repeating 9, 8 and 8 times. The arm aborted while waiting for the Compose dialog
+  to detach, which is composer teardown and nothing this change touches.
+- `webkit-390x844-light-silence` timed out after 3000ms waiting for `[data-dia="thinking"]`, the DIA
+  indicator in the composer. Also untouched here, and a 3s wait against a deployed preview with four
+  matrix jobs sharing runners is the tightest deadline in the suite.
+
+Neither could corrupt the declaration, and that is by design rather than by luck: both arms aborted into
+their catch blocks and so emitted fewer checks than they owe, and `EXPECT=write`'s upward merge holds them
+at their prior declared values (32 and 2) instead of baking the short count in. The comment on that line
+in `tests/matrix.cjs` describes this exact case.
+
+**Neither recurred, and the confirmation cost nothing.** Run 200's `matrix (webkit)` job drove the same
+suite on the same head against the same preview over an overlapping window, and reported **205 arms, all
+clean, 0 that lost a web process**. So the one re-run the CI rules allow for a crash was already spent, in
+parallel, by a run dispatched for another purpose — which is the strongest form the evidence could take,
+because nothing was re-run in order to get a better answer. G5 remains an open intermittent under ruling
+200; this is one more sighting for it, not a finding against this change.
 
 ### The enforcing run, and why its numbers are not in this file
 
