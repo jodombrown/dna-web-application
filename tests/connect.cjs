@@ -8,8 +8,19 @@
 // Usage: BASE=https://<preview>.dna-web-application.pages.dev SPECIAL=connect WEBKIT=1 node tests/matrix.cjs
 const M = require("./matrix.cjs");
 
-const { launch, makeMockDb, seedPosts, mockSupabase, signIn, record, shot, noOverflow, BASE, SB } =
-  M;
+const {
+  launch,
+  makeMockDb,
+  seedPosts,
+  mockSupabase,
+  signIn,
+  record,
+  shot,
+  noOverflow,
+  fadeProbe,
+  BASE,
+  SB,
+} = M;
 const SB_RE = SB.replace(/\./g, "\\.");
 const CANCELLED_MOCK_FETCH = new RegExp(
   `(?:^|[\\s/])${SB_RE}\\S*\\s+due to access control checks\\.?$`,
@@ -124,25 +135,131 @@ async function runConnect(browserType, bname, vp, theme) {
         "Members: Every member you can reach, found by attribute.",
     );
 
-    // Ground (ruling 181): the lens column sits on --bg-sunken, cards on --surface with no shadow.
+    // Ground (ruling 590, which revokes 181): the column sits on --bg like every other list
+    // surface, so the LensBar's own --bg-sunken track reads as a track instead of disappearing
+    // into a column painted the same colour. Asserted on what is painted, not only on the
+    // column's own background property: the column now declares none and shows the shell's ground
+    // through it, exactly as the Feed's column does, so a computed-style equality alone would
+    // read "rgba(0, 0, 0, 0)" and prove nothing about what the reader sees. The track and the
+    // ground beside it are sampled off a real screenshot and must differ.
     const ground = await page.evaluate((exp) => {
-      const el = exp
+      const rgb = (c) => {
+        const s = document.createElement("span");
+        s.style.color = c;
+        document.body.appendChild(s);
+        const v = getComputedStyle(s).color;
+        s.remove();
+        return v;
+      };
+      const cs = getComputedStyle(document.documentElement);
+      const col = exp
         ? document.querySelector("main")
         : document.querySelector('[data-scroller="feed"]');
-      return getComputedStyle(el).backgroundColor;
+      const tr = document
+        .querySelector('[role="tablist"][aria-label="Connect lens"]')
+        .getBoundingClientRect();
+      const wrap = document.querySelector('[data-testid="lens-bar-wrap"]').getBoundingClientRect();
+      return {
+        column: getComputedStyle(col).backgroundColor,
+        wrap: getComputedStyle(document.querySelector('[data-testid="lens-bar-wrap"]'))
+          .backgroundColor,
+        track: getComputedStyle(
+          document.querySelector('[role="tablist"][aria-label="Connect lens"]'),
+        ).backgroundColor,
+        bg: rgb(cs.getPropertyValue("--bg").trim()),
+        sunken: rgb(cs.getPropertyValue("--bg-sunken").trim()),
+        at: {
+          trackX: Math.round(tr.left + tr.width / 2),
+          trackY: Math.round(tr.top + tr.height / 2),
+          groundX: Math.round(tr.left + tr.width / 2),
+          groundY: Math.round(wrap.top + 2),
+        },
+      };
     }, expanded);
-    const sunken = await page.evaluate(() =>
-      getComputedStyle(document.documentElement).getPropertyValue("--bg-sunken").trim(),
+    const painted = async (x, y) => {
+      const b64 = (await page.screenshot({ clip: { x, y, width: 1, height: 1 } })).toString(
+        "base64",
+      );
+      return page.evaluate(async (png) => {
+        const img = new Image();
+        img.src = "data:image/png;base64," + png;
+        await img.decode();
+        const c = document.createElement("canvas");
+        c.width = 1;
+        c.height = 1;
+        const g = c.getContext("2d");
+        g.drawImage(img, 0, 0);
+        const d = g.getImageData(0, 0, 1, 1).data;
+        return `rgb(${d[0]}, ${d[1]}, ${d[2]})`;
+      }, b64);
+    };
+    const groundPx = await painted(ground.at.groundX, ground.at.groundY);
+    const trackPx = await painted(ground.at.trackX, ground.at.trackY);
+    // Compared per channel with a tolerance rather than as strings: a screenshot goes through the
+    // engine's own colour handling, and an exact match would be asserting WebKit's rounding rather
+    // than the design. The tolerance is far tighter than the step between --bg and --bg-sunken,
+    // which is what the third clause turns into the check that actually matters.
+    const near = (a, b, tol = 4) => {
+      const ch = (s) => (String(s).match(/\d+/g) || []).slice(0, 3).map(Number);
+      const [x, y] = [ch(a), ch(b)];
+      return x.length === 3 && y.length === 3 && x.every((v, i) => Math.abs(v - y[i]) <= tol);
+    };
+    record(
+      tag + ": lens column on --bg, the LensBar track on --bg-sunken and reading as a track (590)",
+      (ground.column === ground.bg || ground.column === "rgba(0, 0, 0, 0)") &&
+        ground.wrap === ground.bg &&
+        ground.track === ground.sunken &&
+        near(groundPx, ground.bg) &&
+        near(trackPx, ground.sunken) &&
+        !near(groundPx, trackPx),
+      JSON.stringify({ ...ground, at: undefined, groundPx, trackPx }),
     );
-    const sunkenRgb = await page.evaluate((c) => {
-      const s = document.createElement("span");
-      s.style.color = c;
-      document.body.appendChild(s);
-      const v = getComputedStyle(s).color;
-      s.remove();
-      return v;
-    }, sunken);
-    record(tag + ": lens column on --bg-sunken", ground === sunkenRgb, ground + " vs " + sunkenRgb);
+
+    // Ruling 590 edit B: 405's latched collapse reaches Connect. FeedSurface passed `collapsed` to
+    // LensBar and this surface passed nothing, so the scope line never left. Read before anything
+    // in this flow scrolls, because the latch is spent by the first reported scroll and cannot be
+    // re-armed for the visit.
+    const scopeOpen = () => page.locator("[data-lens-scope]").getAttribute("data-open");
+    const setTop = (y) =>
+      page.evaluate((v) => {
+        document.querySelector('[data-scroller="feed"]').scrollTop = v;
+      }, y);
+    const sc0 = await scopeOpen();
+    await setTop(320);
+    await page.waitForTimeout(450);
+    const sc1 = await scopeOpen();
+    await setTop(0);
+    await page.waitForTimeout(450);
+    const sc2 = await scopeOpen();
+    await (await lensTab(page, "Members")).click({ timeout: 15000 });
+    await page.waitForTimeout(450);
+    const sc3 = await scopeOpen();
+    await setTop(640);
+    await page.waitForTimeout(450);
+    const sc4 = await scopeOpen();
+    record(
+      tag +
+        ": descriptor open, collapses on the first scroll, latches, returns on a tap of the active" +
+        " lens and does not re-collapse (405, 488, 590)",
+      sc0 === "1" && sc1 === "0" && sc2 === "0" && sc3 === "1" && sc4 === "1",
+      JSON.stringify({ sc0, sc1, sc2, sc3, sc4 }),
+    );
+
+    // Ruling 588 reaches Connect through the same CardFade. The fade also needs the shell's own
+    // scroller: the column scrolls, not the document, and a scroll event on an element never
+    // reaches window, so registered against window this repainted only on mount and on resize.
+    await setTop(0);
+    await page.waitForTimeout(200);
+    const fade = await fadeProbe(page, "[data-testid='lens-bar-wrap']");
+    record(
+      tag +
+        ": no member card is invisible while any part of it is below the lens bar, none fades" +
+        " early, and the outgoing tail overlaps the next card's arrival (588)",
+      fade.ok,
+      JSON.stringify(fade.detail),
+    );
+    await setTop(0);
+    await page.waitForTimeout(200);
     const cards = page.locator('[data-testid="member-card"]');
     record(
       tag + ": Members renders the cohort",
@@ -153,15 +270,41 @@ async function runConnect(browserType, bname, vp, theme) {
       const cs = getComputedStyle(el);
       // A data attribute, not the serialised inline style: WebKit writes grid-area as longhands.
       const portrait = el.querySelector('[data-testid="portrait"]');
+      const rgb = (c) => {
+        const s = document.createElement("span");
+        s.style.color = c;
+        document.body.appendChild(s);
+        const v = getComputedStyle(s).color;
+        s.remove();
+        return v;
+      };
+      const root = getComputedStyle(document.documentElement);
       return {
         shadow: cs.boxShadow,
         radius: cs.borderRadius,
         portrait: portrait ? portrait.getBoundingClientRect().width : 0,
+        borderWidth: cs.borderTopWidth,
+        borderStyle: cs.borderTopStyle,
+        borderColor: cs.borderTopColor,
+        line: rgb(root.getPropertyValue("--line").trim()),
+        lineStrong: rgb(root.getPropertyValue("--line-strong").trim()),
       };
     });
+    // Ruling 590's third clause: 181's outcome outlives its mechanism. On --bg the card is
+    // separated by the 1px --line hairline it already carried, never by a resting shadow, so the
+    // ground change cannot have quietly moved the separation onto one. --line-strong is accepted
+    // because it is the hover state of the same hairline, and the pointer may be over the card by
+    // the time this arm reads it.
     record(
-      tag + ": card carries no resting shadow, radius 16",
-      cardStyle.shadow === "none" && cardStyle.radius === "16px",
+      tag +
+        ": card carries no resting shadow, radius 16, and a 1px --line hairline as its separation" +
+        " on --bg (590, third clause)",
+      cardStyle.shadow === "none" &&
+        cardStyle.radius === "16px" &&
+        cardStyle.borderWidth === "1px" &&
+        cardStyle.borderStyle === "solid" &&
+        (cardStyle.borderColor === cardStyle.line ||
+          cardStyle.borderColor === cardStyle.lineStrong),
       JSON.stringify(cardStyle),
     );
     record(

@@ -497,7 +497,16 @@ export function FeedSurface({ member, view }: { member: Member; view: FeedView }
               <div
                 ref={greetRef}
                 data-greeting
-                style={{ display: "flex", flexDirection: "column", gap: 4, padding: "8px 0 4px" }}
+                // Ruling 589: the greeting owns the clearance beneath it. The lens anchor below is
+                // sticky with `padding: 12px 0; margin: -12px 0` and `boxShadow: 0 -12px 0 0
+                // var(--bg)`, all of which satisfy 104 and do not change. The negative top margin
+                // cancels this column's own `gap: 12` exactly (measured: the anchor's border box
+                // begins on the greeting's bottom edge, not 12px above it), so the overlap is the
+                // shadow alone: 12px of --bg painted over the greeting's bottom edge, of which the
+                // block had only 4px of padding to give, and the date's descender row went under
+                // it. 12 to clear the date's whole line box plus the 4 the block already had. Keyed
+                // on the line box rather than the glyphs, so it holds for any display font metrics.
+                style={{ display: "flex", flexDirection: "column", gap: 4, padding: "8px 0 16px" }}
               >
                 <span
                   style={{
@@ -558,17 +567,20 @@ export function FeedSurface({ member, view }: { member: Member; view: FeedView }
                 />
               </div>
             )}
-            {/* Ruling 489: opacity alone across --fade-under-distance up from the sticky bar's
-                bottom edge, on --fade-under-ease. Nothing translates, nothing scales, and reduced
-                motion holds it at 1. At expanded the bar is the column's own sticky block; below
-                1024 the header holds the lens bar past 72px, so the header is the edge. */}
+            {/* Rulings 489, 588: opacity alone across --fade-under-distance, measured from the
+                card's bottom edge against the sticky bar's bottom edge, on --fade-under-ease.
+                Nothing translates, nothing scales, and reduced motion holds it at 1. At expanded
+                the bar is the column's own sticky block; below 1024 the header holds the lens bar
+                past 72px, so the header is the edge. The anchor is sticky in both of its expanded
+                states and its live bottom is correct in both, so the selector carries no
+                [data-stuck] qualifier (ruling 588): with one, it failed to resolve until the
+                greeting had left and bar.current() fell back to stickyBottom = 0, the top of the
+                window rather than the bar. */}
             {posts &&
               posts.map((p) => (
                 <CardFade
                   key={p.id}
-                  stickySelector={
-                    expandedTier ? "[data-lens-anchor][data-stuck='1']" : "[data-app-header]"
-                  }
+                  stickySelector={expandedTier ? "[data-lens-anchor]" : "[data-app-header]"}
                   stickyBottom={0}
                   scroller={scrollerRef.current}
                 >

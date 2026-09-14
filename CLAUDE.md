@@ -1,9 +1,11 @@
 # DNA repository instructions
 
 ## Stack
+
 Supabase (Postgres, Auth, RLS, Storage, Realtime, Edge Functions), Cloudflare (Pages, Workers, R2, Images), TypeScript throughout, Stripe, Resend, Mapbox. Source of truth for specs and doctrine is Notion; the brief you were handed is the scope.
 
 ## Operating mode
+
 You are operating autonomously. The user is not watching in real time and cannot answer questions mid-task, so asking "Want me to?" or "Shall I?" will block the work. For reversible actions that follow from the original request, proceed without asking. Stop only for destructive actions or genuine scope changes the user must decide. Offering follow-ups after the task is done is fine; asking permission before doing the work is not.
 
 Exception: when the user is describing a problem, asking a question, or thinking out loud rather than requesting a change, the deliverable is your assessment. Report your findings and stop. Do not apply a fix until they ask for one.
@@ -13,6 +15,7 @@ Before ending your turn, check your last paragraph. If it is a plan, an analysis
 Before running a command that changes system state (restarts, deletes, config edits, migrations against a remote database), check that the evidence supports that specific action. A signal that pattern-matches to a known failure may have a different cause.
 
 ## Permissions and credentials (rulings 371, 378, 382)
+
 An agent never writes its own permission rules, at any scope. Permissions change only by the
 founder's hand or through a PR the founder approves (ruling 378). A tool-level permission block
 means stop and report, never route around it through another tool (ruling 371).
@@ -22,6 +25,7 @@ canonical project, granted only what the arms need. Never the Management API tok
 service role key (ruling 382).
 
 ## Delivering work
+
 The user's request, or the brief they approved, sets the scope, and the scope is the deliverable: do not quietly narrow, widen, or swap it. Make routine judgment calls yourself; check in only when different readings would lead to materially different work. If you see a real problem with the task as specified, say so in a sentence or two and keep building under stated assumptions; if the user reaffirms, deliver the full request.
 
 If a question comes up partway, first do everything that does not depend on the answer, then state the assumption you made, or put the question at the end of a turn that also delivers that progress. If one part is blocked, complete every other part in full and say exactly what you left out and why.
@@ -29,9 +33,11 @@ If a question comes up partway, first do everything that does not depend on the 
 A handoff names the outcome, the ruling and the proof owed; it does not name a mechanism whoever wrote it has not read in the tree (ruling 555). Three of Fix PR 03's twelve items carried a false premise about mechanism — a Pages middleware layer that cannot coexist with Nitro's `_worker.js`, an `expires_at` column that did not exist at all, and a scroll reset that was actually a scroll being copied forward — and in all three the repository disagreed with the handoff. So a mechanism a handoff asserts is a lead to verify, never a fact to build on: read it in the tree first, and when it is wrong, report that as the finding and build what the outcome and the ruling actually require. The stop-and-report clause is what turns each of those into evidence instead of a workaround.
 
 ## Scope of changes
+
 If, while working or testing, you find a pre-existing bug, a performance concern, or behavior the task does not mention, do not fix, optimize, or extend it in this change unless the requested behavior cannot work without it; report it as a follow-up in your summary. Where the task is ambiguous, implement the reading its wording and the surrounding code most directly support, state that assumption, and do not build for the other readings. Commit tests only where the task asks for them or the repository already keeps tests for this kind of change, roughly one focused test per stated behavior. Do not turn scratch checks into permanent test files. Implement every behavior the task asks for, completely.
 
 ## Dev commands (rulings 542, 545)
+
 `bun run dev` (`vite dev`) serves the app. It did not, between Fix PR 02 and Fix PR 03: the worker entry rebuilt the incoming request to carry the CSP nonce forward, and `new Request(request, { headers })` throws under the dev server's own Request implementation (ruling 542). Ruling 545 moved the nonce onto the response, so nothing on the SSR path constructs a Request and the dev server serves again.
 
 `wrangler pages dev dist`, after `bun run build`, serves the built worker, and it is the only local command that proves anything about the worker: the per-response CSP nonce, the six security headers, `_routes.json` and `/.well-known/security.txt` all come from `dist/_worker.js`, which `vite dev` never builds. Ruling 292's declaration is regenerated against this, never against `vite dev`.
@@ -39,15 +45,19 @@ If, while working or testing, you find a pre-existing bug, a performance concern
 Neither is an exit criterion. Every exit criterion is checked on the deployed preview URL, because that is the only environment the founder tests in.
 
 ## Editing
+
 Minimize tokens spent editing files. When it will not affect the result, surgically edit a file rather than rewrite it.
 
 ## Batching
+
 First privately list what you need next; then request every item that does not depend on another's result in this one response.
 
 ## Progress
+
 Before you start, say in one line what you are about to do. Brief updates while you work. Close with a short recap that stands on its own: what you found, what you did, what is next, and the deployed URL where the result can be checked. Never claim done against a local run; exit criteria are checked against the deployed URL.
 
 ## Absolutes
+
 [absolute] No destructive schema change against the production database without an explicit instruction naming the table.
 [absolute] No sending to real recipients (email, push, message) from any environment other than production, and only when the brief names it.
 [absolute] No second framework, second auth path, or second payment rail without a brief that names it.
@@ -61,6 +71,7 @@ Before you start, say in one line what you are about to do. Brief updates while 
 [absolute] Company email addresses come from `src/lib/contact.ts` or its Deno mirror `supabase/functions/_shared/contact.ts`, never a literal in a surface, an edge function, a document or a test; the DNA Email Directory in Notion is the source of truth for every address and where it is published; `noreply@` is retired and nothing sends from it; the app subdomain is never an email domain; every outbound sender carries Reply-To `support@` through the module's sender pairings (ruling 387, which supersedes ruling 385 in full).
 
 ## Doctrine that affects code
+
 Every post, thread, and notification carries a C tag or the system category; the column is NOT NULL.
 Polymorphic references (author, anchor, notification object) use the shared anchor type; do not invent a second one.
 Counts shown to a viewer are computed within that viewer's RLS scope and render nothing below five.
@@ -171,6 +182,20 @@ because the router does its scroll work from an `onRendered` subscription that c
 mount effect has measured. Every future surface inherits both. A `scrollTo` on a surface's own mount is
 not the fix: it papers over the copy and races the measurement.
 
+Every list surface's content column sits on `--bg` (ruling 590, which revokes 181). Connect asked the
+shell for a `--bg-sunken` ground under 181 so that its `--surface` cards would read as raised without a
+shadow, and the cost was the `LensBar`'s own `--bg-sunken` track disappearing into a column painted the
+same colour: measured on the deployed build, track and column were both `rgb(242, 237, 229)`, so the
+track did not read as a track. 181's outcome outlives its mechanism (590's third clause): a card is
+separated by a hairline border, `MemberCard`'s 1px `--line` and `PostCard`'s 1.5px C frame, and never by
+a resting shadow, which is why removing the ground costs the separation nothing.
+
+What is left of that flag is `setColumnPad` in `src/lib/rail-store.ts`, and it carries Connect's own
+0/24/48 column padding (Connect SPEC 2) and nothing about colour. It was renamed rather than deleted
+because the shell read the one flag for two unrelated things, so deleting the colour would have taken
+the padding silently with it: a flag that answers two questions is a flag whose second answer nobody
+remembers. One axis, one meaning.
+
 ## The Digital Trust Layer (rulings 139 to 141)
 
 Member-authorized visibility is DNA's Digital Trust Layer, governed by DNA's Terms and Privacy Policy and built to GDPR and equivalent standards. Three rules bind every surface that shows one member's data to another:
@@ -237,14 +262,14 @@ Scope that enters through a build is scope nobody decided.
 The swap is a file replacement, never a code change. Every logo and icon resolves by path from this
 contract, so the next wordmark lands by overwriting files in one directory plus a cache bust:
 
-| Path | Use |
-| --- | --- |
-| `public/strand/logo.png` | wordmark: `AppHeader`, public profile chrome, sign-in (660 wide) |
-| `public/strand/logo-dark.png` | dark-theme wordmark, if the redesign needs one |
-| `public/favicon.png` | browser tab, and the square master every other icon derives from |
-| `public/favicon.ico` | browser tab, legacy, 32 and 16 (arrives with the wordmark redesign) |
-| `public/apple-touch-icon.png` | iOS home screen, 180 |
-| `public/icon-192.png`, `public/icon-512.png` | PWA manifest, maskable safe area |
+| Path                                         | Use                                                                 |
+| -------------------------------------------- | ------------------------------------------------------------------- |
+| `public/strand/logo.png`                     | wordmark: `AppHeader`, public profile chrome, sign-in (660 wide)    |
+| `public/strand/logo-dark.png`                | dark-theme wordmark, if the redesign needs one                      |
+| `public/favicon.png`                         | browser tab, and the square master every other icon derives from    |
+| `public/favicon.ico`                         | browser tab, legacy, 32 and 16 (arrives with the wordmark redesign) |
+| `public/apple-touch-icon.png`                | iOS home screen, 180                                                |
+| `public/icon-192.png`, `public/icon-512.png` | PWA manifest, maskable safe area                                    |
 
 No component may import a logo as a module, inline it as SVG, or hardcode a dimension that assumes
 the current wordmark's aspect ratio. Size by height, width auto.
