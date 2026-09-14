@@ -26,7 +26,7 @@ import type { Member } from "@/lib/auth";
 import { openComposer, useComposerState } from "@/lib/composer-store";
 import type { FeedView } from "@/lib/feed-view";
 import { LENSES, type LensId } from "@/lib/lens";
-import { useLeftRail, useRightRail, useSurfaceGround } from "@/lib/rail-store";
+import { useColumnPad, useLeftRail, useRightRail } from "@/lib/rail-store";
 import { ShellScrollProvider, useScrollState } from "@/lib/shell-scroll";
 import { getSupabase } from "@/lib/supabase";
 import { useTheme, useTier, useWide } from "@/lib/tier";
@@ -85,8 +85,10 @@ export function AppShell({
   const composer = useComposerState();
   const leftRail = useLeftRail();
   const rightRail = useRightRail();
-  // Brief 4 (ruling 181): a surface may ask for the lens column to sit on --bg-sunken.
-  const sunken = useSurfaceGround() === "sunken";
+  // Brief 4: a surface may ask for the content column's own padding (Connect's 0/24/48, SPEC 2).
+  // It asked for a --bg-sunken ground with it until ruling 590 revoked 181; the column now keeps
+  // the shell's own ground on every surface, so nothing here paints one.
+  const inset = useColumnPad() === "inset";
   const expanded = tier === "expanded";
   const compact = tier === "compact";
   const scrollerRef = useRef<HTMLElement | null>(null);
@@ -289,9 +291,8 @@ export function AppShell({
                 gap: 12,
                 // No top padding of its own: the composer control's wrapper carries it (SPEC 3.0).
                 // The bottom pad keeps a short list able to hold the pinned block's scroll position.
-                // A sunken surface (Connect) carries its own padding: 0 24 48 (Connect SPEC 2).
-                padding: sunken ? "0 24px 48px" : "0 0 calc(100dvh - 240px)",
-                background: sunken ? "var(--bg-sunken)" : undefined,
+                // An inset surface (Connect) carries its own padding: 0 24 48 (Connect SPEC 2).
+                padding: inset ? "0 24px 48px" : "0 0 calc(100dvh - 240px)",
               }}
             >
               {children}
@@ -346,7 +347,6 @@ export function AppShell({
               ...column,
               flex: 1,
               WebkitOverflowScrolling: "touch",
-              background: sunken ? "var(--bg-sunken)" : undefined,
             }}
           >
             <main

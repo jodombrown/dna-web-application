@@ -3141,6 +3141,50 @@ async function runTargeted(browserType, bname, [w, h]) {
         geo0.stuck === "0" && pinned(g1) && pinned(g2) && pinned(g3),
         JSON.stringify({ geo0, g1, g2, g3 }),
       );
+
+      // 13. Ruling 589: the greeting owns the clearance beneath it. The anchor's own ground begins
+      // 12px above its border box, because `boxShadow: 0 -12px 0 0 var(--bg)` paints that band, and
+      // the anchor's zIndex puts it over the static greeting. Its `margin: -12px 0` does not add to
+      // that: it cancels the column's own `gap: 12` exactly, so the border box begins on the
+      // greeting's bottom edge rather than 12px above it. The greeting's bottom padding therefore
+      // has to clear the shadow's band, and the assertion is on the date's line box rather than on
+      // its glyphs, so it does not depend on the display font's metrics. Read at scroll 0 and
+      // mid-scroll, because the anchor is sticky in both states.
+      const clearance = async () =>
+        page.evaluate(() => {
+          const gr = document.querySelector("[data-greeting]");
+          const a = document.querySelector("[data-feed] [data-lens-anchor]");
+          if (!gr || !a) return null;
+          const date = gr.lastElementChild.getBoundingClientRect();
+          // The band is read off the shadow rather than hardcoded, so the arm follows the anchor if
+          // the offset ever changes. rgb(...) carries no px, so the four px values are the
+          // shadow's own offsets and blur; index 1 is the y offset, -12.
+          const shadow = getComputedStyle(a).boxShadow;
+          const px = (shadow.match(/-?\d+(?:\.\d+)?px/g) || []).map(parseFloat);
+          const band = Math.abs(px[1] || 0);
+          return {
+            clearance: Math.round(a.getBoundingClientRect().top - band - date.bottom),
+            padBottom: getComputedStyle(gr).paddingBottom,
+            gapToAnchor: Math.round(
+              a.getBoundingClientRect().top - gr.getBoundingClientRect().bottom,
+            ),
+            band,
+          };
+        });
+      await setFeedTop(0);
+      await page.waitForTimeout(200);
+      const c0 = await clearance();
+      await setFeedTop(40);
+      await page.waitForTimeout(200);
+      const c1 = await clearance();
+      record(
+        tag +
+          " 13. the greeting's date renders whole: its line box clears the lens anchor's painted ground at scroll 0 and mid-scroll (589)",
+        !!c0 && !!c1 && c0.clearance >= 0 && c1.clearance >= 0,
+        JSON.stringify({ c0, c1 }),
+      );
+      await setFeedTop(0);
+      await page.waitForTimeout(150);
     }
 
     // 7. Read more expands in place; Show less and browser back collapse; scroll unchanged.
@@ -3349,6 +3393,28 @@ async function runTargeted(browserType, bname, [w, h]) {
         : !head.home && head.logoHref === "/feed" && head.slots === 0,
       JSON.stringify(head),
     );
+
+    // 12. Ruling 588: the fade is measured from the card's bottom edge. At expanded the bar is the
+    // column's own sticky anchor, which is sticky in both of its states, so the selector carries no
+    // [data-stuck] qualifier; below 1024 the header holds the lens bar past 72px and is the edge.
+    //
+    // Back to All first: items 9 and 11 leave the column on Saved, which is empty by design, and a
+    // fade arm with nothing to fade would pass by having nothing to look at.
+    await page.goto(BASE + "/feed", { waitUntil: "networkidle" });
+    await page.locator("[data-feed] article[data-c]").first().waitFor({ timeout: 15000 });
+    await setFeedTop(0);
+    await page.waitForTimeout(250);
+    const fade = await fadeProbe(
+      page,
+      tier === "expanded" ? "[data-lens-anchor]" : "[data-app-header]",
+    );
+    record(
+      tag +
+        " 12. no card is invisible while any part of it is below the bar, none fades before the bar" +
+        " is within reach, and the outgoing tail overlaps the next card's arrival (588)",
+      fade.ok,
+      JSON.stringify(fade.detail),
+    );
   } catch (e) {
     record(tag + " flow", false, String(e).slice(0, 400));
     await shot(page, `${tag}-ERROR`).catch(() => {});
@@ -3369,6 +3435,106 @@ const TARGETED_VIEWPORTS = [
 ];
 
 // Silence when DIA times out or errors: identical to no DIA.
+// ---------------------------------------------------------------------------
+// Ruling 588: the fade's measured edge, asserted from geometry rather than from a fixed scroll.
+//
+// The rule is one sentence: a card holds opacity 1 until its BOTTOM edge is within
+// FADE_UNDER_DISTANCE of the sticky bar's bottom edge, and reaches 0 only once that edge has
+// passed under it. Measuring the top edge, as CardFade did until 588, took a tall card to 0 while
+// most of it was still on screen holding its full layout box, which is the blank region between
+// the bar and the first legible card that this arm exists to catch.
+//
+// The scroll target is derived from the live geometry (put the first card's bottom `under` px
+// below the bar) rather than hardcoded, because one number cannot be inside the fade window at
+// 390 and at 1536 alike. A column too short to scroll that far reports reachable: false and is
+// judged on the invariant alone: nothing has reached the bar, so nothing may be faded. That is the
+// real state at 744 and 820 with the seeded fixture, where the whole list fits the viewport.
+// ---------------------------------------------------------------------------
+const FADE_UNDER_DISTANCE = 96;
+
+async function fadeProbe(page, barSelector, under = 48) {
+  const raw = await page.evaluate(
+    async ({ sel, under }) => {
+      const twoFrames = () =>
+        new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+      const sc = document.querySelector('[data-scroller="feed"]');
+      const barBottom = () => {
+        const el = document.querySelector(sel);
+        return el ? el.getBoundingClientRect().bottom : null;
+      };
+      const read = () =>
+        [...document.querySelectorAll("[data-card-fade]")].map((el) => {
+          const r = el.getBoundingClientRect();
+          return {
+            top: Math.round(r.top),
+            bottom: Math.round(r.bottom),
+            h: Math.round(r.height),
+            op: Number(getComputedStyle(el).opacity),
+          };
+        });
+      if (!sc) return { err: "no [data-scroller=feed]" };
+      if (barBottom() === null) return { err: "the bar selector did not resolve: " + sel };
+      if (read().length === 0) return { err: "no [data-card-fade] on the surface" };
+      // Converged rather than solved in one step: the bar itself moves as the column scrolls. At
+      // expanded the anchor starts in flow below the composer and the greeting and only then
+      // becomes sticky at the column top, so a target computed from where the bar was is wrong by
+      // however far the bar has since travelled. Four steps settle it at every tier; a column too
+      // short to reach the target clamps and is reported as not reachable.
+      const max = sc.scrollHeight - sc.clientHeight;
+      let needed = sc.scrollTop;
+      for (let i = 0; i < 4; i++) {
+        needed = sc.scrollTop + (read()[0].bottom - barBottom()) - under;
+        sc.scrollTop = Math.min(max, Math.max(0, needed));
+        await twoFrames();
+        if (Math.abs(read()[0].bottom - barBottom() - under) <= 2) break;
+      }
+      await twoFrames();
+      const scr = sc.getBoundingClientRect();
+      return {
+        reachable: needed >= -2 && needed <= max + 2,
+        scrollTop: Math.round(sc.scrollTop),
+        max: Math.round(max),
+        bar: Math.round(barBottom()),
+        scTop: Math.round(scr.top),
+        scBottom: Math.round(scr.bottom),
+        cards: read(),
+      };
+    },
+    { sel: barSelector, under },
+  );
+  if (raw.err) return { ok: false, detail: raw };
+  const vis = raw.cards.filter((c) => c.bottom > raw.scTop && c.top < raw.scBottom);
+  // Invisible while any part of it is still below the bar: the 588 defect itself, and with it the
+  // blank region, since the card that painted nothing is the one that held the gap.
+  const invisibleWhileBelow = vis.find((c) => c.bottom > raw.bar + 1 && c.op <= 0.001) || null;
+  // Wholly clear of the fade window, so 489's curve has not started.
+  const fadedTooEarly =
+    vis.find((c) => c.bottom - raw.bar >= FADE_UNDER_DISTANCE + 1 && c.op < 0.999) || null;
+  const first = raw.cards[0];
+  const next = raw.cards[1];
+  const midFade = !!first && first.op > 0.002 && first.op < 0.998;
+  // The overlap 588 asks for: the outgoing card's tail is still painting while the next card is
+  // fully opaque, rather than one going before the other arrives.
+  const overlaps = !raw.reachable || (midFade && !!next && next.op > 0.998);
+  return {
+    ok:
+      !invisibleWhileBelow &&
+      !fadedTooEarly &&
+      (!raw.reachable || midFade) &&
+      overlaps &&
+      (raw.reachable || raw.cards.every((c) => c.op > 0.998)),
+    detail: {
+      reachable: raw.reachable,
+      scrollTop: raw.scrollTop,
+      max: raw.max,
+      bar: raw.bar,
+      cards: raw.cards.map((c) => ({ ...c, op: Number(c.op.toFixed(3)) })),
+      invisibleWhileBelow,
+      fadedTooEarly,
+    },
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Ruling 344: the width arm. One arm per engine and viewport, light theme (width does not depend
 // on the palette), walking every surface the suites open in the states that change its layout:
@@ -3584,6 +3750,8 @@ module.exports = {
   shot,
   noOverflow,
   measureWidth,
+  fadeProbe,
+  FADE_UNDER_DISTANCE,
   BASE,
   OUT,
   VIEWPORTS,

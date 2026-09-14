@@ -12,7 +12,13 @@
 // top-right on the name line (ruling 176). DOM order is name and meta first, then the body, then the
 // portrait, then the actions (ruling 180, the 174 principle): the visual arrangement is produced by
 // grid placement, never by source order. Not a PostCard: 1px --line border, never a C frame, no
-// shadow (ruling 181: the lens column sits on --bg-sunken so --surface cards read as raised).
+// shadow. PostCard's own frame is 1.5px in its C colour (--line-strong for the system category), so
+// the two cards separate differently on purpose and this one is the hairline.
+//
+// Ruling 590's third clause: 181's outcome outlives its mechanism. 181 explained the separation by
+// the column's --bg-sunken ground making a --surface card read as raised; 590 revokes that ground
+// and the column sits on --bg, where this hairline is what separates the card, still never a
+// resting shadow. --line-strong on hover is the same hairline, not a second treatment.
 // Rulings 117 to 120, 157, 161, 168.
 import { useState, type CSSProperties, type ReactNode } from "react";
 import { Avatar } from "./Avatar";

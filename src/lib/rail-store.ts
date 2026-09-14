@@ -7,16 +7,23 @@
 // no landmark at all: the column stays reserved by a bare div with no role, name or content, so the
 // reading column never shifts on a lens change (ruling 170).
 //
-// The surface may also ask for the lens column's ground (ruling 181): "sunken" puts the content
-// column on --bg-sunken so --surface cards read as raised without a shadow.
+// The surface may also ask the shell for the content column's own padding: "inset" is Connect's
+// 0/24/48 (Connect SPEC 2) in place of the Feed's zero-inset column with its tall bottom pad.
+//
+// This axis used to be a ground colour, `setSurfaceGround("sunken")` under ruling 181, and the
+// shell read it for two unrelated things: the column's background AND that padding. Ruling 590
+// revokes 181, so the colour half is gone and Connect's column sits on --bg like every other list
+// surface. The padding half is Connect's own layout and outlives 181, so the axis is named for
+// what is left of it rather than deleted with the colour (ruling 555: the mechanism is what the
+// tree holds, not what a name remembers).
 import { useSyncExternalStore, type ReactNode } from "react";
 
 export type RailSlot = { label: string | null; node: ReactNode } | null;
-export type SurfaceGround = "sunken" | null;
+export type ColumnPad = "inset" | null;
 
-type State = { left: RailSlot; right: RailSlot; ground: SurfaceGround };
+type State = { left: RailSlot; right: RailSlot; pad: ColumnPad };
 
-let state: State = { left: null, right: null, ground: null };
+let state: State = { left: null, right: null, pad: null };
 const listeners = new Set<() => void>();
 
 function emit() {
@@ -39,8 +46,8 @@ export function setRightRail(slot: RailSlot) {
   emit();
 }
 
-export function setSurfaceGround(ground: SurfaceGround) {
-  state = { ...state, ground };
+export function setColumnPad(pad: ColumnPad) {
+  state = { ...state, pad };
   emit();
 }
 
@@ -65,10 +72,10 @@ export function useRightRail(): RailSlot {
   );
 }
 
-export function useSurfaceGround(): SurfaceGround {
+export function useColumnPad(): ColumnPad {
   return useSyncExternalStore(
     subscribe,
-    () => state.ground,
+    () => state.pad,
     () => null,
   );
 }

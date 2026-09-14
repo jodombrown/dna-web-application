@@ -3,7 +3,10 @@
 // nothing, ruling 113), My Network (Requests, Sent, Connections, Following) and Where (country tiles
 // above the floor, nobody plotted, rulings 158, 159). Cards, skeleton and tiles mount from
 // src/components/strand/MemberCard.tsx and PlaceTile.tsx (ruling 179). The lens column sits on
-// --bg-sunken (ruling 181). Rails: Filters on Members, DIA once per screen (rulings 162, 167, 170).
+// --bg, like every other list surface (ruling 590, which revokes 181): the LensBar's own
+// --bg-sunken track then reads as a track instead of disappearing into a column painted the same
+// colour, and MemberCard's --surface fill keeps its --line frame to separate it, exactly as
+// PostCard does on the Feed. Rails: Filters on Members, DIA once per screen (rulings 162, 167, 170).
 // Nothing here computes eligibility, counts or scores: the projection decides and this renders it.
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
@@ -40,6 +43,7 @@ import { Toast } from "@/components/strand/Toast";
 import { toastStyle } from "@/components/dna/FeedSurface";
 import { IntroSheet } from "@/components/dna/IntroSheet";
 import type { Member } from "@/lib/auth";
+import { useShellScroll } from "@/lib/shell-scroll";
 import {
   CONNECT_LENSES,
   FILTER_AXES,
@@ -63,7 +67,7 @@ import {
   type FilterKey,
   type FilterOptions,
 } from "@/lib/connect";
-import { setLeftRail, setRightRail, setSurfaceGround } from "@/lib/rail-store";
+import { setColumnPad, setLeftRail, setRightRail } from "@/lib/rail-store";
 import { useMode, useTier, useWide } from "@/lib/tier";
 
 const TOAST_MS = 2400;
@@ -214,6 +218,12 @@ export function ConnectSurface({ member, search }: { member: Member; search: Con
   const pointer = mode === "pointer";
   const compact = tier === "compact";
   const expanded = tier === "expanded";
+  // Ruling 590 edit B: 405's latched collapse was dead on Connect, because FeedSurface passes
+  // `collapsed` to LensBar and this surface passed nothing, so the scope line never left. Connect's
+  // bar is sticky at top 0 at every tier with no greeting above it, so the first reported scroll is
+  // the signal. `scrollerRef` is the shell's own scroller (ruling 104), which CardFade needs too:
+  // the column scrolls, not the document, and a scroll event on an element never reaches window.
+  const { scrollerRef, scrolled } = useShellScroll();
   const navigate = useNavigate();
   const qc = useQueryClient();
   const lens: ConnectLens = search.lens ?? "members";
@@ -274,10 +284,11 @@ export function ConnectSurface({ member, search }: { member: Member; search: Con
   );
   const clearFilters = useCallback(() => go(lens === "members" ? {} : { lens }), [lens, go]);
 
-  // Ground (ruling 181), for the whole life of the surface.
+  // The column's own padding (Connect SPEC 2), for the whole life of the surface. Ruling 590
+  // revokes 181's sunken ground; this flag carried both, and only the padding survives.
   useEffect(() => {
-    setSurfaceGround("sunken");
-    return () => setSurfaceGround(null);
+    setColumnPad("inset");
+    return () => setColumnPad(null);
   }, []);
 
   // Reads. Every list is the projection's answer; nothing is filtered here.
@@ -412,7 +423,12 @@ export function ConnectSurface({ member, search }: { member: Member; search: Con
   const card = (c0: ConnectCard, context: MemberCardContext) => {
     const c = view(c0);
     return (
-      <CardFade key={c.id} stickySelector="[data-testid='lens-bar-wrap']" stickyBottom={0}>
+      <CardFade
+        key={c.id}
+        stickySelector="[data-testid='lens-bar-wrap']"
+        stickyBottom={0}
+        scroller={scrollerRef.current}
+      >
         <MemberCard
           member={toMember(c)}
           rel={c.rel}
@@ -854,7 +870,9 @@ export function ConnectSurface({ member, search }: { member: Member; search: Con
           position: "sticky",
           top: 0,
           zIndex: 3,
-          background: "var(--bg-sunken)",
+          // Ruling 590: the column's ground, so cards pass under an opaque bar, and the track's
+          // own --bg-sunken reads against it.
+          background: "var(--bg)",
           padding: expanded ? "24px 0 8px" : "8px 0",
           marginBottom: -8,
         }}
@@ -867,6 +885,7 @@ export function ConnectSurface({ member, search }: { member: Member; search: Con
           c="connect"
           label="Connect lens"
           labels={expanded}
+          collapsed={scrolled}
         />
       </div>
       {body}

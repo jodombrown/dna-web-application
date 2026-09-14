@@ -1,7 +1,12 @@
 // Design pass 01, strand-patch/CardFade.jsx plus two tokens (W37, ruling 489). A card loses opacity
-// across --fade-under-distance, measured up from the sticky bar's bottom edge, on --fade-under-ease.
-// Nothing translates and nothing scales, so the list does not appear to move under the reader.
-// Reduced motion holds opacity at 1, because the fade is decoration. Applied on Connect and on Feed.
+// across --fade-under-distance, on --fade-under-ease. The measured edge is the card's BOTTOM edge
+// against the sticky bar's bottom edge (ruling 588, extending 489 rather than replacing it: the
+// distance and the curve are still 489's). Measuring the top edge, as this did until 588, took a
+// card to opacity 0 as soon as its top passed 96px under the bar, so the remaining 500 to 800px of
+// a Feed card with an image held its full layout box while painting nothing: a blank region between
+// the bar and the first legible card. Nothing translates and nothing scales, so the list does not
+// appear to move under the reader. Reduced motion holds opacity at 1, because the fade is
+// decoration. Applied on Connect and on Feed.
 //
 // The fade is scroll-driven, so it cannot be a CSS transition: one shared rAF loop per scroller
 // writes opacity straight onto each registered element. No React state, no per-card listener.
@@ -41,9 +46,15 @@ function groupFor(scroller: HTMLElement | null): Group {
     queued = false;
     for (const e of entries) {
       const bar = e.top();
-      const y = e.el.getBoundingClientRect().top;
-      const d = y - bar;
-      const p = d >= 0 ? 1 : d <= -FADE_UNDER_DISTANCE ? 0 : 1 + d / FADE_UNDER_DISTANCE;
+      const r = e.el.getBoundingClientRect();
+      // Ruling 588: the measured edge is the card's bottom, not its top. A card holds 1 until its
+      // bottom is FADE_UNDER_DISTANCE below the bar and reaches 0 exactly as that edge passes
+      // under, so the previous card's tail goes as the next card's head arrives. Clamped to the
+      // card's own height, because a card shorter than the distance would otherwise begin fading
+      // while it is entirely on screen.
+      const dist = Math.min(FADE_UNDER_DISTANCE, r.height || FADE_UNDER_DISTANCE);
+      const d = r.bottom - bar;
+      const p = d >= dist ? 1 : d <= 0 ? 0 : d / dist;
       e.el.style.opacity = String(ease(p));
     }
   };
