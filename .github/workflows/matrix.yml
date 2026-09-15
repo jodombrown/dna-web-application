@@ -49,6 +49,14 @@ on:
         description: Brief 5, Done Means 8; set to "1" to onboard the two ruling 218 test accounts through the deployed surface instead of running the matrix. Idempotent.
         required: false
         default: ""
+      dia_latency:
+        description: Ruling 74; set to "1" to measure the composer's Anthropic call against the deployed function instead of running the matrix. Measures only.
+        required: false
+        default: ""
+      sample:
+        description: Ruling 74; how many sequential calls the latency arm makes. Empty is 80.
+        required: false
+        default: ""
 
 jobs:
   # Brief 5, Done Means 8: the two ruling 218 test accounts complete onboarding once, through the
@@ -77,8 +85,77 @@ jobs:
           MEMBER_EMAIL: ${{ secrets.MEMBER_EMAIL }}
           MEMBER_PASSWORD: ${{ secrets.MEMBER_PASSWORD }}
         run: node tests/onboard-test-accounts.cjs
+  # Ruling 74's proof, dispatch only. Convene Pass 1 owes a measured composer latency under 62, and
+  # the estimate it must not rest on (1,794ms) is another model on another provider. A runner is the
+  # only place that can produce the number: it has egress to the deployed function and the ruling 218
+  # credentials the function's verify_jwt requires. The arm makes N sequential calls with a member's
+  # own JWT, the way the composer fires one inference per debounce, and prints p50 and p95 for the
+  # function's own latency_ms and for client wall time. It changes nothing, asserts nothing and gates
+  # nothing, so it never runs on a push and an over-budget percentile is a number rather than a red
+  # check: moving the budget is a ruling, not an arm's decision.
+  dia-latency:
+    if: ${{ inputs.dia_latency == '1' || inputs.special == 'dia-latency' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Resolve the deployment whose endpoint is measured
+        id: target
+        env:
+          BASE_URL: ${{ inputs.base_url }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -uo pipefail
+          URL="$BASE_URL"
+          if [ -z "$URL" ]; then URL="https://${REF_NAME}.dna-web-application.pages.dev"; fi
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+          echo "Reading the endpoint out of the deployment at $URL, then measuring it"
+      - name: Measure the composer's Anthropic call (ruling 74)
+        env:
+          BASE: ${{ steps.target.outputs.url }}
+          # Ruling 218's seeded accounts. The function verifies the JWT, so without these the arm
+          # reports unproven (ruling 228) rather than measuring nothing and passing.
+          MEMBER_EMAIL: ${{ secrets.MEMBER_EMAIL }}
+          MEMBER_PASSWORD: ${{ secrets.MEMBER_PASSWORD }}
+          OWNER_EMAIL: ${{ secrets.OWNER_EMAIL }}
+          OWNER_PASSWORD: ${{ secrets.OWNER_PASSWORD }}
+          N: ${{ inputs.sample }}
+          OUT: ${{ github.workspace }}/dia-out
+        run: |
+          set -o pipefail
+          mkdir -p "$OUT"
+          node tests/dia-latency.cjs 2>&1 | tee "$OUT/dia-latency.log"
+      - name: The numbers, in the tail and the job summary (ruling 267)
+        if: always()
+        env:
+          OUT: ${{ github.workspace }}/dia-out
+        run: |
+          set -uo pipefail
+          log="$OUT/dia-latency.log"
+          if [ ! -s "$log" ]; then
+            echo "The measurement step produced no output; it did not reach tests/dia-latency.cjs."
+            exit 0
+          fi
+          tail=$(sed -n '/=== REPORT (ruling 74)/,$p' "$log")
+          [ -n "$tail" ] || tail=$(tail -40 "$log")
+          echo "=== ruling 74: the measured numbers, re-emitted ==="
+          printf '%s\n' "$tail"
+          {
+            echo "### Ruling 74: the composer's Anthropic call, measured"
+            echo '```'
+            printf '%s\n' "$tail"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload the per-call record
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dia-latency-${{ github.run_number }}
+          path: dia-out
+          if-no-files-found: warn
+
   matrix:
-    if: ${{ inputs.onboard == '' }}
+    if: ${{ inputs.onboard == '' && inputs.dia_latency != '1' && inputs.special != 'dia-latency' }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
