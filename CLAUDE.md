@@ -34,7 +34,7 @@ A handoff names the outcome, the ruling and the proof owed; it does not name a m
 
 ## Scope of changes
 
-If, while working or testing, you find a pre-existing bug, a performance concern, or behavior the task does not mention, do not fix, optimize, or extend it in this change unless the requested behavior cannot work without it; report it as a follow-up in your summary. Where the task is ambiguous, implement the reading its wording and the surrounding code most directly support, state that assumption, and do not build for the other readings. Commit tests only where the task asks for them or the repository already keeps tests for this kind of change, roughly one focused test per stated behavior. Do not turn scratch checks into permanent test files. Implement every behavior the task asks for, completely.
+If, while working or testing, you find a pre-existing bug, a performance concern, or behavior the task does not mention, do not fix, optimize, or extend it in this change unless the requested behavior cannot work without it; report it as a follow-up in your summary, and write it into `docs/GAPS.md` as a numbered gap: a follow-up found during a PR earns a G number, not a PR comment (ruling 597), because a comment dies with the thread and the register is what the next reader opens. The number is assigned by writing the entry into that file and is never reserved in a report, a PR body or a chat message (ruling 638). Where the task is ambiguous, implement the reading its wording and the surrounding code most directly support, state that assumption, and do not build for the other readings. Commit tests only where the task asks for them or the repository already keeps tests for this kind of change, roughly one focused test per stated behavior. Do not turn scratch checks into permanent test files. Implement every behavior the task asks for, completely.
 
 ## Dev commands (rulings 542, 545)
 
@@ -182,6 +182,13 @@ because the router does its scroll work from an `onRendered` subscription that c
 mount effect has measured. Every future surface inherits both. A `scrollTo` on a surface's own mount is
 not the fix: it papers over the copy and races the measurement.
 
+A component that takes a scroller never defaults to `window`, and a scroll-driven effect with no
+scroller throws (ruling 595). Under 104 the document does not scroll inside the shell, so a `window`
+fallback is a listener that never fires: the effect attaches, nothing raises, and the decoration sits at
+whatever value it was first given. `CardFade`'s `scroller ?? window` is the standing instance, logged as
+gap G26. Throwing is the whole point — a scroller that is missing is a wiring mistake, and the only
+cheap moment to learn that is the mount.
+
 Every list surface's content column sits on `--bg` (ruling 590, which revokes 181). Connect asked the
 shell for a `--bg-sunken` ground under 181 so that its `--surface` cards would read as raised without a
 shadow, and the cost was the `LensBar`'s own `--bg-sunken` track disappearing into a column painted the
@@ -283,3 +290,10 @@ Commit identity is checked by the GitHub account login or app id from the API, n
 author name or email string (ruling 379). The permitted identities are `jodombrown`, `claude`,
 `gpt-engineer-app[bot]` and `region17gh`, the founder's Region 17 Claude Code seat (ruling 369).
 Any other identity is reported at session open.
+
+That check is an allowlist of ids, never a denylist of names (ruling 598): `214720153`
+(`jodombrown`), `81847` (`claude`), `319149162` (`region17gh`). A git author name or email is free
+text the committer sets, which is why 379 reads the API at all, so a denylist fails open on precisely
+the identity nobody anticipated while an allowlist fails closed and names it. Lovable's app id
+`159125892` stays handled by 146: expected, reported, rebased onto. Nothing in the harness enforces
+any of this yet, which is gap G28.
