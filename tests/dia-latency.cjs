@@ -114,18 +114,45 @@ async function confirmDeployedEndpoint() {
     record(`endpoint: the served HTML carries ${SUPABASE_URL}`);
     return true;
   }
-  const scripts = [...html.matchAll(/<script[^>]+src="([^"]+)"/g)].map((m) => m[1]).slice(0, 8);
-  for (const src of scripts) {
-    const url = src.startsWith("http") ? src : BASE + (src.startsWith("/") ? src : "/" + src);
+  // The entry script does not carry the client, it imports it: the project URL lives in a lazily
+  // imported chunk two hops down the graph, which is why reading only the <script src> tags of the
+  // served HTML reported "not found" for a build that plainly carries it. So walk the graph, breadth
+  // first and bounded, seeded from every module the document names.
+  const seeds = new Set();
+  for (const m of html.matchAll(/<script[^>]+src="([^"]+)"/g)) seeds.add(m[1]);
+  for (const m of html.matchAll(/<link[^>]+rel="modulepreload"[^>]+href="([^"]+)"/g))
+    seeds.add(m[1]);
+  for (const m of html.matchAll(/["'(]([^"'()\s]*\/[\w.-]+\.m?js)["')]/g)) seeds.add(m[1]);
+
+  const absolute = (ref, from) => {
+    if (ref.startsWith("http")) return ref;
+    if (ref.startsWith("/")) return BASE + ref;
+    const dir = from.slice(0, from.lastIndexOf("/") + 1);
+    return new URL(ref, dir).toString();
+  };
+
+  const queue = [...seeds].map((s) => absolute(s, BASE + "/"));
+  const seen = new Set();
+  const CAP = 40;
+  while (queue.length && seen.size < CAP) {
+    const url = queue.shift();
+    if (!url.startsWith(BASE) || seen.has(url)) continue;
+    seen.add(url);
     const js = await fetch(url).then((r) => (r.ok ? r.text() : ""));
+    if (!js) continue;
     if (js.includes(SUPABASE_URL)) {
-      record(`endpoint: ${url.replace(BASE, "")} carries ${SUPABASE_URL}`);
+      record(
+        `endpoint: ${url.replace(BASE, "")} carries ${SUPABASE_URL} (${seen.size} modules read)`,
+      );
       if (js.includes(PUBLISHABLE_KEY)) record("endpoint: and the same publishable key");
       return true;
     }
+    for (const m of js.matchAll(/["'(]([^"'()\s]*[\w.-]+\.m?js)["')]/g)) {
+      queue.push(absolute(m[1], url));
+    }
   }
   record(
-    `endpoint: ${SUPABASE_URL} was not found in the served HTML or its ${scripts.length} module scripts`,
+    `endpoint: ${SUPABASE_URL} was not found in ${seen.size} modules reached from the document`,
   );
   return false;
 }
