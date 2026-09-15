@@ -16,12 +16,12 @@ Container by tier:
 
 Scrim `--scrim`. Shadow `--shadow-stack` (the one permitted use besides Dialog). Esc closes; scrim tap closes; drag handle released past 120px closes. Closing with content keeps the draft.
 
-## 2. Layout and order (identical at every tier, ruling 59)
+## 2. Layout and order (identical at every tier, ruling 59; the order amended by rulings 640 and 641)
 
 1. Header: author `Avatar` 32 (rounded square 6 when a Space), author name or Space dropdown (`<select>`, 44 tall, when the member holds a role in any Space; ruling 56), "in {anchor}" in `--ink-3` when anchored, spacer, "Draft saved" (13px `--ink-3`, only when a draft exists), Close `IconButton`.
-2. Text field. Plain `textarea`, no border or fill, 19px / 1.5 `--font-sans`, `--ink`, placeholder "What is going on with you?" in the browser placeholder color (`--ink-3` equivalent). 4 rows compact, 6 expanded, grows with content. Pointer mode: drop target for images. Autofocus in pointer mode only (touch keeps the keyboard down until the member taps).
-3. Verb row: five `VerbChip`s in C order, `role="radiogroup"`. Compact: horizontal scroll bleeding 20px into the gutters. Expanded: wraps to a second line so all five stay visible. Always visible (ruling 53).
-4. `DiaLine` directly under the chips. Renders nothing when DIA has nothing.
+2. Verb row: five `VerbChip`s in C order, `role="radiogroup"`. It sits above the text field at every tier and precedes it in the DOM (rulings 458, 640, 641); section 4 carries the four-chip row rulings 417 and 498 leave. Compact: horizontal scroll bleeding 20px into the gutters. Expanded: wraps to a second line so all five stay visible. Always visible (ruling 53).
+3. `DiaLine` directly under the chips, and above the text field in the DOM with them (ruling 641). Renders nothing when DIA has nothing.
+4. Text field. Plain `textarea`, no border or fill, 19px / 1.5 `--font-sans`, `--ink`, placeholder "What is going on with you?" in the browser placeholder color (`--ink-3` equivalent). 4 rows compact, 6 expanded, grows with content. Pointer mode: drop target for images. It takes focus when the composer opens, by an explicit focus call targeting it rather than by being first in the DOM (ruling 641); pointer mode only, since touch keeps the keyboard down until the member taps.
 5. Verb fields (only when a verb is set): a 1px `--line` rule, then a 13px caps label in the C color with the act name, then the fields from `VERB_SCHEMA[c]`:
    - connect: Who (text), Why (2-row text)
    - convene: Title, Date, Time, Location or link, Hybrid (Switch), Ticket (Free | Paid segment)
@@ -33,6 +33,8 @@ Scrim `--scrim`. Shadow `--shadow-stack` (the one permitted use besides Dialog).
 7. `AudienceSelect`: "Who sees this", pills Everyone on DNA, My connections, and the anchor name only when anchored (rulings 56, 27). Ink fill for the selected pill; audience is not a C.
 8. Preview (compact): caps label "How it will appear" then the `PostCard`. Expanded: the right column, no label. **Renders only when the member has typed, attached, or filled a field.** Empty composer = no card, no placeholder.
 9. Publish `Button` in the post's C color (`c={verb}`), ink when untyped. Full width compact. Disabled until there is content. Label is always "Publish" for every verb (confirmed in v1 review).
+
+DOM order is this order (ruling 641): nothing in the column carries an `order` property, so the reading and focus sequence is the visual sequence. Tab order follows the DOM — Shift+Tab from the text field reaches the chips, Tab moves on into the verb fields — and that is what 641 puts in place of 640's clause that the field keeps first position in tab order, because chips first visually and field first in tab order cannot both hold in a native document without breaking the WCAG conformance rulings 480 and 610 bind. The field still acts first, by focus rather than by position, and the chips are still seen first and tappable first by choice. Ruling 641 lands in Strand's Composer and re-syncs here, so nothing in this repository is edited locally for it.
 
 Spacing: sheet gutters 20 (compact) and 24 (expanded); section gap 24; field gap 14; chip gap 8. Type: `--text-l` for the text field, `--text-m` body, `--text-s` labels and chips, `--text-xs` caps. All touch targets 44 (chips, pills, icon buttons, "Not this?", remove buttons, select).
 
