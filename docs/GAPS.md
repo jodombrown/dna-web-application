@@ -1598,3 +1598,87 @@ makes that constraint hold.
 `expires_at` and are never purged. Ruling 400 removed Connect from the composer, so the only
 `connection_requests` a published Feed post can point at are older ones, and purging those would empty
 the who and why such a card renders through `connection_request_intros` (ruling 157).
+
+## G24. Warm-on-open is unbuilt, and the composer's cold path is accepted silence until it is
+
+**Severity: low. Not a merge blocker. Opened 15 September 2026 under ruling 637, filed under ruling
+597, from the ruling 74 measurement (PR #38).**
+
+**What ruling 637 decided.** The composer's cold path is accepted at launch as designed silence under
+rulings 52 and 54. A DIA read that does not resolve inside the budget renders nothing and the composer
+stays as it was; that is the behaviour ruling 54 specified and ruling 52 requires, not a failure of it.
+So the cold path is recorded here as accepted rather than as a defect, and **warm-on-open is not built
+now**.
+
+**What was measured, so the acceptance rests on numbers rather than on an estimate.** Dispatched runs
+[53](https://github.com/jodombrown/dna-web-application/actions/runs/34932032166) and
+[54](https://github.com/jodombrown/dna-web-application/actions/runs/34933023641) of `matrix.yml`, job
+`dia-latency`, against the deployed `dia-compose-read` (version 11) on `claude-sonnet-5`:
+
+|                                       | n   | p50  | p95  | max  |
+| ------------------------------------- | --- | ---- | ---- | ---- |
+| the function's own `latency_ms`, warm | 77  | 2045 | 2672 | 3009 |
+| client wall, warm                     | 77  | 2242 | 2851 | 3189 |
+
+Warm, nothing came near the 3400 ms abort: 728 ms of headroom at p95 server-side, 649 ms under the
+composer's 3500 ms budget. Cold is the whole of the exposure. Run 53's first three calls were 3411,
+3405 and 3403 ms and returned null; run 54's first was 3108 ms and returned an inference. Three
+breaches in 83 calls, every one an opening call against a cold isolate, and the ephemeral prompt cache
+had expired between the two runs. So the cold path sits at the edge of the budget and crosses it
+sometimes, which is a different thing to decide about than a deterministic breach — and what a member
+sees when it crosses is one DIA line that never appears.
+
+**The mechanism to prove before density, and why it is deferred rather than dismissed.** Warm-on-open
+is the candidate: a request issued when the composer mounts, so the isolate is booted and the system
+prompt is in the ephemeral cache by the time the member's first 700 ms debounce fires. It is deferred
+because the cost curve runs the right way. An isolate retires after a short idle, so at launch volumes
+most composes start cold; as composing traffic rises the isolate is already warm and the opening-call
+penalty is paid by fewer and fewer members. Density makes this cheaper, not dearer, which is why
+building it now would be paying for a problem that shrinks on its own.
+
+**Unasserted until the arm is re-run against it (ruling 228).** `tests/dia-latency.cjs` proves nothing
+about warm-on-open today: no run has ever exercised it, because it does not exist. Whoever builds it
+owes the same arm re-run against a genuinely cold isolate — dispatch `matrix.yml` with
+`dia_latency: "1"` after a long enough idle — showing the opening call inside the 3400 ms abort. Until
+that run exists, no claim that warm-on-open closes this may appear in a report, a ruling summary or
+this file.
+
+## G25. Every ruling 74 number was measured from North America, and the West African edge is unmeasured
+
+**Severity: medium at the continental invite boundary. Not a merge blocker. Opened 15 September 2026
+under ruling 637, filed under ruling 597.**
+
+**Proof owed: the same arm, unchanged, run from the closest available West African region, before
+invites reach the continental side.**
+
+**What the existing sample does and does not cover.** The two dispatched runs measured two different
+edge regions, and neither is near a member the continental invites are for. Run 53 was served from
+`us-east-2` (`cf-ray …-ORD`, runner in Azure `eastus`); run 54, eight minutes later against the same
+deployment and the same function, from `us-west-1` (`cf-ray …-LAX`, runner in `westus3`). That pair is
+the finding: the region follows the caller, so `us-east-2` is where run 53's calls ran and not a
+property of the function.
+
+Two consequences, stated separately because they have different causes:
+
+- **The client wall figure does not travel.** It carries the caller-to-edge leg, so the 649 ms of
+  headroom under the composer's 3500 ms budget is headroom for a North American caller. A member in
+  Accra or Lagos has less, by an amount nobody here has measured.
+- **The server-side figure may not travel either.** `latency_ms` is the Anthropic hop measured inside
+  the function, which is independent of the caller's distance but not of the edge region the call runs
+  in. Both samples measured that hop from North America. Which region Supabase routes a West African
+  caller to is unmeasured, and this file does not guess at it: the arm prints `x-sb-edge-region` from
+  the response for exactly this reason, so the run names the region rather than the reader assuming
+  one.
+
+**What the run needs, and the one open question in it.** `tests/dia-latency.cjs` takes `BASE` and the
+ruling 218 credentials from the environment and needs nothing else, so it runs anywhere with Node 20
+or later and egress to the deployment. What it does not have is a vantage point: GitHub-hosted runners
+offer no West African region, so this needs a host in or near the region — a self-hosted runner, or a
+single attended run from a machine there — and choosing which is a decision rather than a task. The
+arm itself does not change; if it did, the comparison with runs 53 and 54 would be worth less than the
+new numbers.
+
+**What it settles when it lands.** Whether the 3.5 s client budget holds for a continental member with
+their own leg included, and which edge region their calls are served from. Until then, ruling 74's
+budget is proven for North American callers and unproven for the members the continental invites are
+addressed to.
