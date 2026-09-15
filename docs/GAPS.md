@@ -1598,3 +1598,224 @@ makes that constraint hold.
 `expires_at` and are never purged. Ruling 400 removed Connect from the composer, so the only
 `connection_requests` a published Feed post can point at are older ones, and purging those would empty
 the who and why such a card renders through `connection_request_intros` (ruling 157).
+
+## G24. Warm-on-open is unbuilt, and the composer's cold path is accepted silence until it is
+
+**Severity: low. Not a merge blocker. Opened 15 September 2026 under ruling 637, filed under ruling
+597, from the ruling 74 measurement (PR #38).**
+
+**What ruling 637 decided.** The composer's cold path is accepted at launch as designed silence under
+rulings 52 and 54. A DIA read that does not resolve inside the budget renders nothing and the composer
+stays as it was; that is the behaviour ruling 54 specified and ruling 52 requires, not a failure of it.
+So the cold path is recorded here as accepted rather than as a defect, and **warm-on-open is not built
+now**.
+
+**What was measured, so the acceptance rests on numbers rather than on an estimate.** Dispatched runs
+[53](https://github.com/jodombrown/dna-web-application/actions/runs/34932032166) and
+[54](https://github.com/jodombrown/dna-web-application/actions/runs/34933023641) of `matrix.yml`, job
+`dia-latency`, against the deployed `dia-compose-read` (version 11) on `claude-sonnet-5`:
+
+|                                       | n   | p50  | p95  | max  |
+| ------------------------------------- | --- | ---- | ---- | ---- |
+| the function's own `latency_ms`, warm | 77  | 2045 | 2672 | 3009 |
+| client wall, warm                     | 77  | 2242 | 2851 | 3189 |
+
+Warm, nothing came near the 3400 ms abort: 728 ms of headroom at p95 server-side, 649 ms under the
+composer's 3500 ms budget. Cold is the whole of the exposure. Run 53's first three calls were 3411,
+3405 and 3403 ms and returned null; run 54's first was 3108 ms and returned an inference. Three
+breaches in 83 calls, every one an opening call against a cold isolate, and the ephemeral prompt cache
+had expired between the two runs. So the cold path sits at the edge of the budget and crosses it
+sometimes, which is a different thing to decide about than a deterministic breach — and what a member
+sees when it crosses is one DIA line that never appears.
+
+**The mechanism to prove before density, and why it is deferred rather than dismissed.** Warm-on-open
+is the candidate: a request issued when the composer mounts, so the isolate is booted and the system
+prompt is in the ephemeral cache by the time the member's first 700 ms debounce fires. It is deferred
+because the cost curve runs the right way. An isolate retires after a short idle, so at launch volumes
+most composes start cold; as composing traffic rises the isolate is already warm and the opening-call
+penalty is paid by fewer and fewer members. Density makes this cheaper, not dearer, which is why
+building it now would be paying for a problem that shrinks on its own.
+
+**Unasserted until the arm is re-run against it (ruling 228).** `tests/dia-latency.cjs` proves nothing
+about warm-on-open today: no run has ever exercised it, because it does not exist. Whoever builds it
+owes the same arm re-run against a genuinely cold isolate — dispatch `matrix.yml` with
+`dia_latency: "1"` after a long enough idle — showing the opening call inside the 3400 ms abort. Until
+that run exists, no claim that warm-on-open closes this may appear in a report, a ruling summary or
+this file.
+
+## G25. Every ruling 74 number was measured from North America, and the West African edge is unmeasured
+
+**Severity: medium at the continental invite boundary. Not a merge blocker. Opened 15 September 2026
+under ruling 637, filed under ruling 597.**
+
+**Proof owed: the same arm, unchanged, run from the closest available West African region, before
+invites reach the continental side.**
+
+**What the existing sample does and does not cover.** The two dispatched runs measured two different
+edge regions, and neither is near a member the continental invites are for. Run 53 was served from
+`us-east-2` (`cf-ray …-ORD`, runner in Azure `eastus`); run 54, eight minutes later against the same
+deployment and the same function, from `us-west-1` (`cf-ray …-LAX`, runner in `westus3`). That pair is
+the finding: the region follows the caller, so `us-east-2` is where run 53's calls ran and not a
+property of the function.
+
+Two consequences, stated separately because they have different causes:
+
+- **The client wall figure does not travel.** It carries the caller-to-edge leg, so the 649 ms of
+  headroom under the composer's 3500 ms budget is headroom for a North American caller. A member in
+  Accra or Lagos has less, by an amount nobody here has measured.
+- **The server-side figure may not travel either.** `latency_ms` is the Anthropic hop measured inside
+  the function, which is independent of the caller's distance but not of the edge region the call runs
+  in. Both samples measured that hop from North America. Which region Supabase routes a West African
+  caller to is unmeasured, and this file does not guess at it: the arm prints `x-sb-edge-region` from
+  the response for exactly this reason, so the run names the region rather than the reader assuming
+  one.
+
+**What the run needs, and the one open question in it.** `tests/dia-latency.cjs` takes `BASE` and the
+ruling 218 credentials from the environment and needs nothing else, so it runs anywhere with Node 20
+or later and egress to the deployment. What it does not have is a vantage point: GitHub-hosted runners
+offer no West African region, so this needs a host in or near the region — a self-hosted runner, or a
+single attended run from a machine there — and choosing which is a decision rather than a task. The
+arm itself does not change; if it did, the comparison with runs 53 and 54 would be worth less than the
+new numbers.
+
+**What it settles when it lands.** Whether the 3.5 s client budget holds for a continental member with
+their own leg included, and which edge region their calls are served from. Until then, ruling 74's
+budget is proven for North American callers and unproven for the members the continental invites are
+addressed to.
+
+## G26. `CardFade` takes an optional scroller and falls back to `window`, which never scrolls
+
+**Severity: low, latent. Not a merge blocker. Opened 15 September 2026 under ruling 595, filed under
+ruling 597.**
+
+**What ruling 595 requires.** A component that takes a scroller never defaults to `window`, and a
+scroll-driven effect with no scroller throws rather than attaching to something that will not fire.
+
+**What the tree does instead, read rather than assumed.** `src/components/strand/CardFade.tsx` declares
+`scroller?: HTMLElement | null | undefined` and its own doc comment says "Omitted means the page";
+`groupFor` then does `const target: EventTarget = scroller ?? window` and attaches the shared rAF
+loop's `scroll` listener to that target. Under ruling 104 the shell owns one scroller per tier and the
+document never scrolls inside it, so `window` is precisely the target whose `scroll` event never fires.
+The failure is silent by construction: a card registered against `window` keeps whatever opacity it was
+first given instead of raising anything.
+
+**Both call sites pass a scroller, so this is a signature rather than a sighting.** `ConnectSurface`
+(the `CardFade` around `MemberCard`) and `FeedSurface` (the one around the post cards) both pass
+`scroller={scrollerRef.current}`. What makes the default reachable anyway is that `scrollerRef.current`
+is null until the shell's scroller mounts, and the effect is keyed on `[scroller]` — a ref's `.current`
+changing does not re-render the parent, so a first registration made while it is still null persists
+until the parent re-renders for some other reason. No misattached card has been observed on the
+deployment, and this entry does not claim one; it records the signature ruling 595 forbids and the
+reason the forbidding is not academic.
+
+**What is owed.** Make `scroller` required and throw when it is absent, in that one file. The two call
+sites already pass it, so the cost is the file plus whatever the throw surfaces about the null window
+between mount and scroller — which is the point of throwing.
+
+## G27. Ruling 597's own instance: the ruling 74 follow-ups were comments before they were gaps
+
+**Severity: none as a defect; recorded as the register's own audit trail. Opened 15 September 2026 under
+ruling 597.**
+
+**The rule.** A follow-up found during a PR earns a G number, not a comment. Ruling 638 completes it: a
+G number is assigned only by writing the entry into this file, never reserved in a PR body, a report or
+a chat message.
+
+**The instance, which is this one.** The ruling 74 measurement (PR #38, merged as `23c2979`) produced
+two follow-ups — warm-on-open and the West African edge measurement — and both were first written as
+comments on that PR, where they read as finished thoughts about a merged change. They became gaps only
+when ruling 637 sent them here as G24 and G25. Nothing was lost, because the same session wrote both;
+the failure mode is the one where it is not the same session, and a merged PR's comment thread is not
+where anyone looks for the register.
+
+**Why a comment cannot stand in for an entry.** A PR comment is addressed to that PR's reviewers and
+dies with the thread; a gap entry is addressed to whoever reads this codebase next and has to survive
+the PR entirely. The two artefacts also fail differently: a comment nobody reads costs nothing visible,
+while a missing gap entry is rediscovered as a surprise, which is the cost this file exists to avoid.
+So the test for "does this need a G number" is not severity — G24 is severity low and G27 is not a
+defect at all — but whether an absence would otherwise have to be inferred.
+
+## G28. The session-open commit check is a discipline with no arm, and its shape is an id allowlist
+
+**Severity: medium. Not a merge blocker. Opened 15 September 2026 under ruling 598, filed under ruling
+597.**
+
+**The shape, which ruling 598 fixes.** The check is an allowlist of GitHub account and app ids, never a
+denylist of names. The ids are `214720153` (`jodombrown`), `81847` (`claude`) and `319149162`
+(`region17gh`, the Region 17 seat under ruling 369). The reasoning is ruling 379's: a git author name or
+email is free text that the committer sets, so a denylist of names fails open on exactly the identity
+nobody anticipated, while an allowlist of ids read from the API fails closed on anything unrecognised
+and names it.
+
+**What the repository does not have.** Nothing in `tests/`, `scripts/` or `.github/` references any of
+those ids, or app id `159125892`. The check is performed by a session reading `main`'s recent commits
+through the API at session open and reporting what it finds; a session that skips it fails nothing, and
+no run records that it happened. That is the gap. It was performed for PR #38 and the result written
+into that PR's body, which under G27's own reasoning is the weaker of the two places to put it.
+
+**One question this entry does not settle.** CLAUDE.md's permitted-identity list also carries
+`gpt-engineer-app[bot]`, app id `159125892` (rulings 146, 286), which is Lovable committing straight to
+`main` and which ruling 146 requires be reported and rebased onto rather than merely tolerated. Ruling
+598's allowlist names three ids and not that one. Whether the Lovable app id belongs inside the
+allowlist or stays outside it as an expected-and-reported identity is the founder's call; a session
+reading the allowlist today should treat a `159125892` commit as expected, report it, and rebase, which
+is what ruling 146 already says.
+
+## G29. `tests/auth.cjs` section 7 waits fifteen seconds on a render instead of on the mock
+
+**Severity: low. Not a merge blocker. Opened 15 September 2026 under ruling 574, filed under ruling
+597.**
+
+**The arm and the wait.** Section 7 of `tests/auth.cjs` proves that sign-up's "Check your email" state
+is byte-identical whether or not the address already has an account (rulings 432, 384). It fills the
+form, clicks submit, and then does `page.waitForSelector('[data-testid="check-email"]', { timeout:
+15000 })` — fifteen seconds of patience for a rendered state, with no signal that the request it depends
+on was even served. Ruling 574 records that it fails roughly one WebKit run in eighteen. That rate is
+574's figure and was not re-measured here.
+
+**The fix ruling 574 names.** Key the wait off a signal from the mock rather than off the render.
+`mockAuth` in the same file already intercepts `**/<project-ref>/auth/v1/**` and fulfils the sign-up
+call itself, so the arm can wait for that response — or for a flag the route handler sets when it serves
+it — and only then assert the state. A wait that resolves on a response the test itself produced cannot
+be slow for a reason the test does not control, which is what makes fifteen seconds unnecessary rather
+than merely generous.
+
+**The same shape appears fourteen times in the file, and that is not this gap's scope.** Every
+`waitForSelector` in `tests/auth.cjs` carries `timeout: 15000`. Ruling 574 names section 7's, which is
+the one with a measured failure rate; the others are the same pattern and become work when one of them
+earns it.
+
+## G30. Ruling 605's Sheet migration is unstarted, and its mapping leaves one question open
+
+**Severity: medium at the invite boundary. Not a merge blocker, by ruling 605. Opened 15 September 2026,
+filed under ruling 597.**
+
+**What ruling 605 asks for.** `variant` and `width` out of Strand's `Sheet`, `tier` and `size` in, with
+`variant="sheet"` becoming `tier="compact"` and `variant="drawer"` becoming `tier="medium"`.
+
+**What the repository carries now.** `src/components/strand/Sheet.tsx` declares
+`variant?: "sheet" | "drawer"` defaulting to `"sheet"`, and `width?: number | string`, used as
+`const sheet = variant === "sheet"` and `const w = sheet ? "100%" : len(width ?? SHEET_WIDTH)` against
+`SHEET_WIDTH = "40%"` and `COMPOSER_SHEET_WIDTH = "50%"`. Seven Strand call sites pass `variant`:
+`ProfileSurface`, `OnboardingSurface`, `IntroSheet`, `ConnectSurface` (through its own `sheetVariant`),
+`ProfileBlockControl`, `NotificationPanel` and `Composer`. Exactly one passes `width`: the composer, at
+`COMPOSER_SHEET_WIDTH`.
+
+**The migration is mostly the deletion of a conversion the call sites already perform.** Every one of
+the seven computes the variant from a tier it is already holding — `compact ? "sheet" : "drawer"`, or
+`tier === "compact" ? "sheet" : "drawer"` in the composer and the notification panel. Ruling 605 lets
+them pass the tier they have instead of converting it down and letting `Sheet` convert it back.
+
+**The open question, which is why this is not a mechanical rename.** The shell's tier vocabulary is
+three values, `compact | medium | expanded`, and the call sites' own prop types say so. Ruling 605's
+mapping is two-to-two: `"drawer"` covers both medium and expanded today and maps to `tier="medium"`. So
+either `Sheet`'s `tier` takes all three values and the expanded call sites pass `"expanded"` — which
+needs a decision about whether expanded behaves as medium does — or it takes two and its name collides
+with the shell's three-value tier, which is the kind of one-flag-two-meanings collision ruling 590 was
+written about. `size` has the smaller version of the same question: only the composer needs a
+non-default today, so the vocabulary has to cover the canonical 40 percent and the composer's 50 and
+nothing else until something asks.
+
+**Not in scope when it lands.** `src/components/ui/sheet.tsx` and `src/components/ui/sidebar.tsx` are a
+different, shadcn `Sheet` with a `side` prop, untouched by this and its own question under rulings 70
+and 72.
