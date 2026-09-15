@@ -1819,3 +1819,55 @@ nothing else until something asks.
 **Not in scope when it lands.** `src/components/ui/sheet.tsx` and `src/components/ui/sidebar.tsx` are a
 different, shadcn `Sheet` with a `side` prop, untouched by this and its own question under rulings 70
 and 72.
+
+## G31. A chromium sighting on the public profile at 1280 by 800, seen once and not reproduced
+
+**Severity: none as a defect; recorded as a sighting, so that a second one has a first to sit beside.
+Opened 15 September 2026, filed under ruling 597.**
+
+**What was seen.** Run
+[207](https://github.com/jodombrown/dna-web-application/actions/runs/34935945656) of `pages.yml`,
+attempt 1, job `matrix (chromium)` on `ee05a0b`, failed two arms and only two, both at 1280x800 and both
+the signed-out public profile. `chromium-1280x800-light profile public` threw `page.goto: Timeout
+30000ms exceeded` navigating to `/m/thandiwe-dube` on the branch preview under `waitUntil: "networkidle"`,
+and `chromium-1280x800-dark profile public` threw `page.waitForSelector: Timeout 20000ms exceeded`
+waiting for `[data-testid="profile"]:not([data-view="loading"])` at the same path. Both landed in
+`runPublic`'s catch in `tests/profile.cjs` as one `profile public flow` record each, and the page state
+the catch dumps with them reads `view: null` — the profile element was not in the document at all, rather
+than present and still loading.
+
+**The other four failures are ruling 292's accounting, not four more defects.** The job reported 4930 of
+4936 checks, over 76 compact arms clean, 55 medium clean, 72 of 74 expanded clean, 0 that lost a web
+process and 6 unclassified. Four of the six are INCOMPLETE records: `profile public` emitted 1 of 16 in
+each theme, which is the catch's own record and nothing else, and `profile owner` emitted 32 of 33 in
+each theme. The owner arm's missing check is a coupling rather than a second failure, and it is worth
+naming because the log does not. Its thirty-third record is "View as public matches the signed-out page
+section for section (check 5)", which `tests/profile.cjs` guards with `if (pubRun !== undefined)` against
+the section list the public arm stores in `seenPublic`; the public arm timed out before it reached that
+`set`, so the comparison was skipped rather than failed. One arm's failure shortens another arm's
+declared count, silently but for 292.
+
+**Why it is recorded as transient.** Attempt 2 of the same run re-ran the chromium job alone and reported
+4968 of 4968 with 74 of 74 expanded arms clean and 0 unclassified. 4968 − 4936 = 32 is exactly the
+15 + 1 + 15 + 1 checks the four INCOMPLETE records name, so the two attempts differ by the failure and
+its consequences and by nothing else. The re-run drove the same head and the same artefact: GitHub re-ran
+only the failed job, `deploy` did not re-execute (its attempt 2 record carries attempt 1's 06:13:12 to
+06:13:54 timestamps), and both attempts read the same branch preview from the same `BASE`. WebKit drove
+the same widths in the same run's attempt 1 and was clean at 1280x800 in both themes, and run
+[208](https://github.com/jodombrown/dna-web-application/actions/runs/34941026322) drove the same tree on
+`main` after the merge and was green. Under ruling 228 it is attempt 2, not attempt 1's pass count, that
+proves those 32 checks on that head.
+
+**Ruling 554 is not the explanation, and that was checked rather than assumed.** 554's signature is a push
+landing under running arms and retiring the preview's hashed assets. Nothing was pushed to the branch
+between `ee05a0b` at 06:12:49, the push that created run 207, and the merge at 07:18:20, which created
+run 208. Attempt 1's arms ran 06:14:22 to 06:41:05 and attempt 2's 06:51:15 to 07:17:29, both inside that
+window, and the branch's only deploy finished at 06:13:51 before either. So the cause is unattributed,
+which is the whole of what this entry claims.
+
+**What is owed.** Nothing, unless it recurs. Both failures are on the navigation leg to the deployed
+preview rather than inside an assertion, so there is nothing in a surface or an arm to fix from one
+sighting, and a fix guessed from one is a change nobody can later attribute. A second sighting is what
+would earn the work, and the first is recorded here because the pair is the evidence, not either half:
+run 207's artefacts `matrix-chromium-run-207` hold both attempts, attempt 1 as artifact 10384635140 and
+attempt 2 as 10385176388, with the arm's screenshots.
