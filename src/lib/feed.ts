@@ -154,22 +154,11 @@ export async function hydratePosts(
     const fields: FieldValues = {};
     const oid = p.created_object_id ?? "";
     if (verb === "convene") {
+      // Convene Pass 1 (PR 1): events.location and events.virtual_url are gone and VERB_SCHEMA
+      // carries no convene rows, so the card renders the title; the meta line and Convene's rows
+      // arrive with the surface (PR 3, SPEC section 2).
       const e = eventMap.get(oid);
-      if (e) {
-        const [date, ...rest] = e.when_text.split("\n");
-        const loc =
-          e.location && typeof e.location === "object" && !Array.isArray(e.location)
-            ? (e.location as { text?: string }).text
-            : undefined;
-        Object.assign(fields, {
-          title: mine(e.title),
-          date: mine(date),
-          time: mine(rest.join("\n")),
-          place: mine(e.virtual_url ?? loc ?? undefined),
-          hybrid: mine(e.mode === "hybrid"),
-          ticket: mine(e.ticket_kind === "paid" ? "Paid" : "Free"),
-        });
-      }
+      if (e) Object.assign(fields, { title: mine(e.title) });
     } else if (verb === "collaborate") {
       const s = spaceMap.get(oid);
       if (s) {

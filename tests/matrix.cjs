@@ -2300,20 +2300,26 @@ async function runPublish(browserType, bname, [w, h], theme) {
         payload.dia &&
         payload.dia.verb === "convene" &&
         payload.dia.accepted === true &&
-        typeof payload.starts_at === "string" &&
-        payload.starts_at.length > 0,
+        // Ruling 681: the instants travel inside `fields` as convene.* from the Convene form;
+        // the chassis stand-in that parsed date and time here is retired, so this is null.
+        payload.starts_at === null,
       JSON.stringify(payload).slice(0, 300),
     );
     await page.getByText("Published. It is in the Feed.").waitFor({ timeout: 3000 });
     const card = page.locator("main article[data-c='convene']").first();
     await card.waitFor({ timeout: 10000 });
+    // Rulings 579, 671: the card's action row is the fixed vocabulary; no RSVP, so no "Get a
+    // ticket" anywhere in the card.
     record(
-      tag + " feed card rendered by the router with kicker Event, title, its own act, icon actions",
+      tag +
+        " feed card rendered by the router with kicker Event, title, fixed icon actions, no RSVP",
       (await card.textContent()).includes("Event") &&
         (await card.textContent()).includes("Diaspora Builders Dinner") &&
-        (await card.textContent()).includes("Get a ticket") &&
+        !(await card.textContent()).includes("Get a ticket") &&
         (await card.locator('[data-testid="react"]').count()) === 1 &&
-        (await card.locator('[data-testid="respond"]').count()) === 1,
+        (await card.locator('[data-testid="respond"]').count()) === 1 &&
+        (await card.locator('[data-testid="save"]').count()) === 1 &&
+        (await card.locator('[data-testid="share"]').count()) === 1,
     );
     record(
       tag + " feed card carries media and link",

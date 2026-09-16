@@ -27,8 +27,6 @@ const DATE_FORMATS = [
   "d/M/yyyy",
   "d/M",
 ];
-const TIME_FORMATS = ["HH:mm", "H:mm", "h:mm a", "h:mma", "h a", "ha", "hh:mm a"];
-
 function clean(s: string): string {
   return s
     .replace(/,/g, " ")
@@ -54,33 +52,11 @@ export function parseDateText(text: string, now = new Date()): Date | null {
   return null;
 }
 
-/** Combine parsed date with raw time text into an ISO timestamp in the member's local zone. */
-export function parseStartsAt(
-  dateText: string | undefined,
-  timeText: string | undefined,
-  now = new Date(),
-): string | null {
-  const d = dateText ? parseDateText(dateText, now) : null;
-  if (!d) return null;
-  const tt = clean((timeText ?? "").toLowerCase());
-  let h = 0;
-  let m = 0;
-  if (tt) {
-    let ok = false;
-    for (const f of TIME_FORMATS) {
-      const p = parse(tt, f, now);
-      if (isValid(p)) {
-        h = p.getHours();
-        m = p.getMinutes();
-        ok = true;
-        break;
-      }
-    }
-    if (!ok) return null;
-  }
-  const out = new Date(d.getFullYear(), d.getMonth(), d.getDate(), h, m, 0, 0);
-  return out.toISOString();
-}
+// Convene Pass 1 (rulings 664, 681): parseStartsAt, the chassis stand-in that combined the
+// convene `date` and `time` fields in the browser's zone, is retired. The Convene form parses the
+// member's words in the event's own time zone (src/lib/when.ts) and hands the instants over as
+// namespaced `convene.starts_at`, `convene.ends_at` and `convene.doors_at`; publish_post validates
+// them and never parses. Only Contribute's by-date still parses here.
 
 export function parseByDate(text: string | undefined, now = new Date()): string | null {
   const d = text ? parseDateText(text, now) : null;
@@ -128,7 +104,9 @@ export function buildPayload(state: ComposerState, ctx: PublishContext): Record<
     audience: state.audience,
     host_context: ctx.hostContext,
     fields: fields as Json,
-    starts_at: state.verb === "convene" ? parseStartsAt(asStr("date"), asStr("time")) : null,
+    // Convene's instants travel inside `fields` as `convene.starts_at` etc. (681); nothing here
+    // parses them.
+    starts_at: null,
     by_date: state.verb === "contribute" ? parseByDate(asStr("by")) : null,
     media,
     link: state.link

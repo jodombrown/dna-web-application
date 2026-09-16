@@ -1542,9 +1542,9 @@ silence.
 **Changing the number is forward-only, unlike the decline window.** The two settings live in the same
 table and are read through the same helper, and they behave in opposite ways:
 
-| Setting | Read | Effect of changing it |
-| --- | --- | --- |
-| `decline_window_days` (90) | per call, inside the RPCs, against `responded_at` | retroactive: every existing declined pair is re-windowed at once |
+| Setting                         | Read                                                | Effect of changing it                                                     |
+| ------------------------------- | --------------------------------------------------- | ------------------------------------------------------------------------- |
+| `decline_window_days` (90)      | per call, inside the RPCs, against `responded_at`   | retroactive: every existing declined pair is re-windowed at once          |
 | `introduction_expiry_days` (30) | once, at insert, as the `expires_at` column default | forward only: rows already pending keep the window they were stamped with |
 
 `private.purge_expired_introductions()` compares the stored `expires_at`, never a recomputed window,
@@ -1737,8 +1737,7 @@ defect at all — but whether an absence would otherwise have to be inferred.
 
 ## G28. The session-open commit check is a discipline with no arm, and its shape is an id allowlist
 
-**Severity: medium. Not a merge blocker. Opened 15 September 2026 under ruling 598, filed under ruling
-597.**
+**Severity: medium. Not a merge blocker. Opened 15 September 2026 under ruling 598, filed under ruling 597.**
 
 **The shape, which ruling 598 fixes.** The check is an allowlist of GitHub account and app ids, never a
 denylist of names. The ids are `214720153` (`jodombrown`), `81847` (`claude`) and `319149162`
@@ -1763,8 +1762,7 @@ is what ruling 146 already says.
 
 ## G29. `tests/auth.cjs` section 7 waits fifteen seconds on a render instead of on the mock
 
-**Severity: low. Not a merge blocker. Opened 15 September 2026 under ruling 574, filed under ruling
-597.**
+**Severity: low. Not a merge blocker. Opened 15 September 2026 under ruling 574, filed under ruling 597.**
 
 **The arm and the wait.** Section 7 of `tests/auth.cjs` proves that sign-up's "Check your email" state
 is byte-identical whether or not the address already has an account (rulings 432, 384). It fills the
@@ -1871,3 +1869,77 @@ sighting, and a fix guessed from one is a change nobody can later attribute. A s
 would earn the work, and the first is recorded here because the pair is the evidence, not either half:
 run 207's artefacts `matrix-chromium-run-207` hold both attempts, attempt 1 as artifact 10384635140 and
 attempt 2 as 10385176388, with the arm's screenshots.
+
+## G32. The composer's `created_object` assembly against the namespaced store is flat, dotted keys; the app assembles none
+
+**Severity: low, a contract note. Not a merge blocker. Opened 16 September 2026 by the Convene Pass
+1 handoff (section 0, G32 owed), filed under ruling 638: the number is assigned by this entry.**
+
+**What the handoff says.** Pass 1's host "builds the card from `created_object.convene.*`" (3.2), and
+the prototype's `publishedCard` does exactly that. The handoff asked Code to confirm the assembly
+before PR 3 built on it.
+
+**What the bundle does, read rather than assumed.** Strand's Composer at `v1789537371639386`
+assembles `post.created_object` as
+`Object.fromEntries(Object.entries(fv).map(([k, v]) => [k, v.value]))` whenever a verb is active. It
+is the whole field store flattened: every key of every verb that ever held a value, with the supplied
+form's keys under their dotted names (`"convene.title"`, `"convene.meta"`, `"convene.place_query"`),
+not nested under `convene`. Nothing in the bundle nests, filters by the active verb, or drops the
+preview-only keys. `created_object.convene.*` in the handoff therefore means "the entries whose key
+starts with `convene.`", which is how the prototype reads it (`k.startsWith('convene.')`), and not a
+`created_object.convene` object.
+
+**What the app does instead.** The app's Composer hands the host `ComposerState.fields`, the store
+itself, and assembles no `created_object`. `src/lib/publish.ts` flattens that store into
+`payload.fields` for `publish_post`, dotted keys included, and the function is the only reader of
+them (20260916120200). The published card is not built by the host from the store at all: on
+`onClose('published')` the shell invalidates the Feed read and the card renders from the rows the
+one projection returns, which is what the one-read-projection absolute asks for and what the
+prototype's timer-based `publish` stood in for. So there is no host-side assembly for PR 3 to build
+on, and none is needed: the meta line the prototype computed from `created_object` is the same line
+`src/lib/feed.ts` computes from `events` and `event_delivery`.
+
+**What is owed.** Nothing in code. If a later surface needs the Composer to hand over an assembled
+object rather than the store, it takes the bundle's shape: flat, dotted, unfiltered, and the host
+filters by prefix. This entry exists so the next reader does not look for a nested object the bundle
+never produces.
+
+## G33. Two `live` jobs on different branches share one project and two test accounts, and one run's fixture can be read by the other's arm
+
+**Severity: low, a harness gap. Not a merge blocker. Opened 16 September 2026 during Convene Pass 1's
+PR 1, filed under ruling 597: a follow-up found during a PR earns a G number, not a PR comment. The
+number is assigned by this entry (ruling 638).**
+
+**What was seen.** Pages run 223 on `1e34082` (PR 1) and run 224 on `85fadea` (PR 2) started within a
+minute of each other after a merge forward. Their `live` jobs ran against the same canonical project
+with the same OWNER and MEMBER test accounts. PR 2's F3 arm set the owner's Private switch at
+19:40:08.96 UTC and restored it at 19:40:09.47, both committed through REST. PR 1's ruling 416 arm
+read the owner's post from `public.feed` as the member at 19:40:09.37, inside that window, and got
+`author_name null`: `private.can_see_core` reads `members.profile_private`, which the other run had
+just set. The arm recorded `FAIL ruling 416` (98 of 99) on a head whose diff was two policy lines in a
+migration file. PR 2's own run, five seconds later, read 99 of 99, and every run before it that day
+read 99 of 99 on the same arm.
+
+**Why the transaction wrapper does not cover it.** `tests/live-db.cjs` runs its arms on one pg client
+inside a transaction it rolls back, so nothing an arm writes reaches another run. `tests/live-checks.cjs`
+F3 and F4 are REST arms: they change the owner's switches and the block row through PostgREST as the
+signed-in accounts, commit, and restore a moment later. The restore is part of the same run's sequence,
+not of the database's isolation, so a concurrent reader on another branch sees the interim state.
+`pages.yml`'s `concurrency` group is per ref, which serialises runs of one branch and nothing across
+branches, and the stacked Convene PRs push three branches at once by design.
+
+**What it costs.** A red `live` job that is nobody's, on whichever branch's arm happened to read during
+another branch's fixture window, at a rate set by how often two branches push together. Under the CI
+rules it is a re-run once identified, and a re-run passes; the cost is the identification, which took
+reading two logs side by side, and a red check on a PR that was green.
+
+**The fix this entry names.** One of two shapes, and not both. Either the REST fixtures move inside the
+same rolled-back transaction as the live-db arms (F3's switch and F4's block are one `update` and one
+`insert` under the caller's role, which `actAs` already provides), so no run commits fixture state at
+all; or the `live` job takes a cross-branch concurrency group (`live-${{ github.repository }}`, not
+cancelling in progress), so two runs never overlap the project. The first removes the window; the
+second only serialises it, and the first is the one that also holds for a founder's own test on the
+project during a run.
+
+**Not this gap's scope.** The arms' assertions and counts stay as they are; the 416 arm was right to
+read null, since the owner was Private at that instant.
