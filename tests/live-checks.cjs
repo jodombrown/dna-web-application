@@ -355,11 +355,17 @@ async function get(url, headers = {}) {
         skip("ruling 218: every signed-in arm", "sign-in did not return an access token");
 
       // -------------------------------------------------------------------------------------
-      // Convene Pass 1, PR 2: place-resolve, one check per state (the handoff's four calls). The
-      // function reaches the project by the founder's `supabase functions deploy`, so a 404 from
+      // Convene Pass 1, PR 2: place-resolve, one check per state and per anchor (the handoff's
+      // four calls, plus Session 23's unavailable state and place anchoring). The function
+      // reaches the project by the founder's deploy from the Supabase dashboard, so a 404 from
       // the gateway means it is not deployed yet and the arms report unproven (ruling 228), never
       // passing and never failing on an absence. A 401 without a token is asserted first because
       // it needs no deployment secret to be true once the function is there.
+      // What these arms cannot prove: a Mapbox outage, a bad token or a timeout on the deployed
+      // function, because breaking the founder's secret is not a test. The transport half of the
+      // unavailable state (a non-200 from the gateway) is proven here as the 400 an invalid
+      // session_token earns, which the client maps to `unavailable`; the function's own
+      // `unavailable` body is proven on the unanchored call it refuses.
       // -------------------------------------------------------------------------------------
       if (ownerToken) {
         const fn = SUPABASE_URL + "/functions/v1/place-resolve";
@@ -381,13 +387,15 @@ async function get(url, headers = {}) {
           return { status: r.status, body: parsed, text, retryAfter: r.headers.get("retry-after") };
         };
         const session = "live-" + Date.now().toString(36) + "-arms";
+        const ACCRA = { lng: -0.187, lat: 5.6037 };
+        const NAIROBI = { lng: 36.8219, lat: -1.2921 };
         const probe = await call(
-          { action: "suggest", q: "Front Room", session_token: session },
+          { action: "suggest", q: "Front Room", session_token: session, proximity: ACCRA },
           ownerToken,
         );
         if (probe.status === 404) {
           skip(
-            "place-resolve: the four handoff calls (one, several, none, 401)",
+            "place-resolve: the handoff calls (one, several, none, unavailable, 401)",
             "function not deployed on the project (gateway 404)",
           );
         } else {
@@ -397,50 +405,49 @@ async function get(url, headers = {}) {
             noJwt.status === 401,
             "status " + noJwt.status,
           );
-          const nairobi = await call(
-            {
-              action: "suggest",
-              q: "Front Room",
-              session_token: session,
-              proximity: { lng: 36.8219, lat: -1.2921 },
-            },
-            ownerToken,
-          );
-          const accra = await call(
-            {
-              action: "suggest",
-              q: "Front Room",
-              session_token: session,
-              proximity: { lng: -0.187, lat: 5.6037 },
-            },
-            ownerToken,
-          );
-          const states = ["one", "several", "none"];
+          // A Mapbox answer: one, several or none. `unavailable` here means the deployed function
+          // got no answer, which is a real failure and reads as one.
+          const answered = ["one", "several", "none"];
           const typed = (r) =>
             r.status === 200 &&
             r.body &&
-            states.includes(r.body.state) &&
+            answered.includes(r.body.state) &&
             (r.body.state !== "several" || Array.isArray(r.body.places));
+          const placesOf = (r) =>
+            r.body && r.body.state === "one"
+              ? [r.body.place]
+              : r.body && r.body.state === "several"
+                ? r.body.places
+                : [];
+          const firstOf = (r) =>
+            placesOf(r)
+              .map((p) => p.place_id)
+              .join(",");
+          const brief = (r) => r.status + " " + r.text.slice(0, 60);
+
+          // Proof 1: a home chosen. Front Room near Accra is the founder's own case.
+          const nairobi = await call(
+            { action: "suggest", q: "Front Room", session_token: session, proximity: NAIROBI },
+            ownerToken,
+          );
+          const accra = probe;
           record(
-            "place-resolve: Front Room near Nairobi and near Accra both answer in a typed state",
+            "place-resolve: Front Room near Nairobi and near Accra both answer (one, several or none)",
             typed(nairobi) && typed(accra),
-            "nairobi " +
-              nairobi.status +
-              " " +
-              nairobi.text.slice(0, 60) +
-              " | accra " +
-              accra.status +
-              " " +
-              accra.text.slice(0, 60),
+            "nairobi " + brief(nairobi) + " | accra " + brief(accra),
+          );
+          record(
+            "place-resolve: a resolved row carries the place and the zone (proof 1)",
+            placesOf(accra)
+              .concat(placesOf(nairobi))
+              .some((p) => p && p.place_id && p.label) &&
+              (accra.body.state !== "one" ||
+                (typeof accra.body.place.timezone === "string" &&
+                  Number.isFinite(accra.body.place.lng))),
+            "accra " + brief(accra),
           );
           // 633: a home narrows the lookup. Two proximities give two orderings, unless Mapbox knew
           // no such place near either, in which case both are `none` and the narrowing is unproven.
-          const firstOf = (r) =>
-            r.body && r.body.state === "one"
-              ? r.body.place.place_id
-              : r.body && r.body.state === "several"
-                ? r.body.places.map((p) => p.place_id).join(",")
-                : "";
           if (
             nairobi.body &&
             accra.body &&
@@ -457,21 +464,117 @@ async function get(url, headers = {}) {
                 " | accra " +
                 firstOf(accra).slice(0, 40),
             );
-          const noPlace = await call(
-            { action: "suggest", q: "xq7zv plk9 wmmt", session_token: session },
+
+          // Proof 2: no home, a stated country. The name is what public.members.current_country
+          // stores (a public.world_countries name); the function resolves it to alpha-2 through ICU
+          // and sends Search Box `country`. Every place that comes back is in that country. Ghana
+          // is the founder's case; Search Box carries no POI for Ghana (docs/GAPS.md G35), so the
+          // honest Ghana answer is `none`, and the filter itself is shown on a country it does
+          // cover.
+          const inCountry = (r, name) => typed(r) && placesOf(r).every((p) => p.country === name);
+          const ghana = await call(
+            { action: "suggest", q: "Front Room", session_token: session, country_name: "Ghana" },
             ownerToken,
           );
           record(
-            "place-resolve: a nonsense string returns none",
-            noPlace.status === 200 && noPlace.body && noPlace.body.state === "none",
-            "status " + noPlace.status + " " + noPlace.text.slice(0, 60),
+            "place-resolve: no home, stated country Ghana: a Mapbox answer with nothing outside Ghana (proof 2)",
+            inCountry(ghana, "Ghana"),
+            brief(ghana),
           );
+          const uk = await call(
+            {
+              action: "suggest",
+              q: "Front Room",
+              session_token: session,
+              country_name: "United Kingdom",
+            },
+            ownerToken,
+          );
+          record(
+            "place-resolve: stated country United Kingdom: results, all in the United Kingdom (the country filter and the ICU conversion)",
+            inCountry(uk, "United Kingdom") && placesOf(uk).length > 0,
+            brief(uk),
+          );
+          // Home wins over country: with both sent, proximity is the anchor and the country is
+          // not a filter on top, so the near-Nairobi answer is the same as without the country.
+          const both = await call(
+            {
+              action: "suggest",
+              q: "Front Room",
+              session_token: session,
+              proximity: NAIROBI,
+              country_name: "United Kingdom",
+            },
+            ownerToken,
+          );
+          record(
+            "place-resolve: a home wins over the stated country, which is never a second filter",
+            typed(both) && firstOf(both) === firstOf(nairobi),
+            "both " + firstOf(both).slice(0, 40) + " | nairobi " + firstOf(nairobi).slice(0, 40),
+          );
+          // A stored name ICU does not carry falls to case 3, never to a guess.
+          const unresolvable = await call(
+            {
+              action: "suggest",
+              q: "Front Room",
+              session_token: session,
+              country_name: "Cabo Verde",
+            },
+            ownerToken,
+          );
+          record(
+            "place-resolve: a country name ICU does not resolve falls to case 3 (unavailable), never a guess",
+            unresolvable.status === 200 &&
+              unresolvable.body &&
+              unresolvable.body.state === "unavailable",
+            brief(unresolvable),
+          );
+
+          // Proof 3: nonsense, anchored, is Mapbox's own zero: `none`.
+          const noPlace = await call(
+            {
+              action: "suggest",
+              q: "xq7zv plk9 wmmt",
+              session_token: session,
+              proximity: ACCRA,
+            },
+            ownerToken,
+          );
+          record(
+            "place-resolve: a nonsense string returns none (proof 3)",
+            noPlace.status === 200 && noPlace.body && noPlace.body.state === "none",
+            brief(noPlace),
+          );
+
+          // Proof 4: a deliberately broken call. An invalid session_token is refused before Mapbox
+          // with a 400, which the client reads as `unavailable`; the function's own `unavailable`
+          // body is the unanchored call (case 3, withheld: never the Edge node's IP).
+          const badSession = await call(
+            { action: "suggest", q: "Front Room", session_token: "no", proximity: ACCRA },
+            ownerToken,
+          );
+          record(
+            "place-resolve: an invalid session_token is a 400 with an unavailable body, never none (proof 4)",
+            badSession.status === 400 && badSession.body && badSession.body.state === "unavailable",
+            brief(badSession),
+          );
+          const unanchored = await call(
+            { action: "suggest", q: "Front Room", session_token: session },
+            ownerToken,
+          );
+          record(
+            "place-resolve: no home and no country is unavailable without a call (never the Edge node's IP)",
+            unanchored.status === 200 && unanchored.body && unanchored.body.state === "unavailable",
+            brief(unanchored),
+          );
+
+          // Proof 5: under three characters is `none` before anchoring and before Mapbox.
           const short = await call(
             { action: "suggest", q: "Fr", session_token: session },
             ownerToken,
           );
           record(
-            "place-resolve: under three characters is none without a lookup",
+            "place-resolve: under three characters is none without a lookup (proof 5)",
             short.status === 200 && short.body && short.body.state === "none",
             "status " + short.status,
           );
