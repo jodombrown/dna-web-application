@@ -125,33 +125,43 @@ export type SuggestedPlace = Omit<ResolvedPlace, "lng" | "lat" | "timezone">;
 export type PlaceState =
   | { state: "one"; place: ResolvedPlace }
   | { state: "several"; places: SuggestedPlace[] }
-  | { state: "none" };
+  | { state: "none" }
+  | { state: "unavailable" };
 
-/** place-resolve. Any failure is `none`: the member's words stand in place_text (publishable). */
+/**
+ * place-resolve (Session 23, the unavailable state). `none` is the function's own word for a
+ * lookup that ran and found nothing; anything that is not an answer from it (no session, a non-2xx
+ * from the gateway, a body that is not a state, a thrown fetch) is `unavailable`, because the
+ * search did not run. Either way the member's words stand in place_text (publishable).
+ * `country_name` is the member's stated country (public.members.current_country), the lookup's
+ * fallback anchor when no home is chosen (Session 23, place anchoring).
+ */
 export async function resolvePlace(body: {
   action: "suggest" | "retrieve";
   q: string;
   session_token: string;
   proximity?: { lng: number; lat: number } | null;
+  country_name?: string | null;
   mapbox_id?: string;
 }): Promise<PlaceState> {
   const headers = await authHeaders();
-  if (!headers) return { state: "none" };
+  if (!headers) return { state: "unavailable" };
   try {
     const res = await fetch(functionsUrl("place-resolve"), {
       method: "POST",
       headers: { ...headers, "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
-    if (!res.ok) return { state: "none" };
+    if (!res.ok) return { state: "unavailable" };
     const data = (await res.json()) as PlaceState | null;
     if (!data || typeof data !== "object" || typeof data.state !== "string")
-      return { state: "none" };
+      return { state: "unavailable" };
     if (data.state === "one" && data.place && data.place.place_id) return data;
     if (data.state === "several" && Array.isArray(data.places) && data.places.length) return data;
-    return { state: "none" };
+    if (data.state === "none") return data;
+    return { state: "unavailable" };
   } catch {
-    return { state: "none" };
+    return { state: "unavailable" };
   }
 }
 

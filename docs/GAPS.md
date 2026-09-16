@@ -1976,3 +1976,43 @@ cannot be short. The same fixed-wait shape appears elsewhere in the file (`waitF
 clicks in the Convene arm, added in Pass 1) and is not this gap's scope until one of them earns it.
 
 **Not this gap's scope.** The check's assertions and the arm's declared count stay as they are.
+
+## G35. Mapbox Search Box carries no POI for Ghana, Kenya or Nigeria, so a Convene host there always falls to their words
+
+**Severity: medium for the surface, none for the code. Not a merge blocker. Opened 16 September
+2026 during Convene Pass 1's place-anchoring correction (Session 23), filed under ruling 597. The
+number is assigned by this entry (ruling 638).**
+
+**What was seen.** The founder typed `Front Room Osu Accra` on PR 3's preview and got nothing; `Front
+Room` alone returned a Front Room in Bangkok. The correction read that as an anchoring fault, and the
+anchoring fault was real (the call carried no `proximity`, so Search Box anchored on the Edge node's
+IP). But anchoring is not what emptied the Ghana answer. Through Mapbox's own Search Box tooling,
+with `country=GH`: `Kempinski Hotel Gold Coast City`, `Labadi Beach Hotel`, `Alliance Française
+Accra`, `Kotoka International Airport`, `Accra Mall`, `Makola Market` and `University of Ghana` return
+no `poi` feature at all; what comes back, when anything does, is a `place`, `locality` or `country`
+feature (Accra, Abura, Ola, Ghana), which the function's `types=poi,address` never asks for. With
+`proximity` at Accra and no country, `Kotoka International Airport` returns cafés and car hire in
+Saudi Arabia and Oman with `distance` in the millions of metres: the nearest POI Mapbox knows for
+those words is on another continent. Kenya (`Alliance Française Nairobi`, `Sarit Centre` under
+`country=KE`) and Nigeria (`country=NG`, `types=poi`) behave the same. South Africa and the United
+Kingdom return POIs and streets. Every POI that did come back anywhere carried
+`external_ids.dataplor`, which is the one POI source Search Box exposes here.
+
+**What it means for the surface.** Case 2 of the anchoring rule (no home, stated country) is correct
+and does what it says: `Front Room` under `country=GH` is `none`, which is Mapbox's own zero and reads
+as `No place found for that. It is kept as you wrote it.` That sentence is now true, where before the
+correction it was not, and the event publishes with the words in `place_text`. But a host in Accra,
+Nairobi or Lagos will read it for every venue they own, and the resolved row (place, coordinates, a
+zone from the place) never forms for them; the zone then comes from the host's browser, because words
+carry none, not from the venue. The market the surface is built for is the one the provider does not cover.
+
+**The fix this entry names.** A decision before code. Either a second POI source for the African
+footprint behind the same `place-resolve` contract (the function's four states and the row's shape
+do not change; the provider behind `suggest` and `retrieve` does), or DNA's own venue vocabulary that
+members grow, read at runtime as every fixed vocabulary is, with Search Box as the fallback for the
+rest of the world. Both are a ruling and a brief, not a patch. Until then the four states and the
+hints are honest, and `docs/` should say plainly that a Ghana venue will not resolve.
+
+**Not this gap's scope.** The unavailable state, the anchoring rule and the live arms are Session
+23's and are in; the Ghana arm in `tests/live-checks.cjs` asserts what is true (a Mapbox answer with
+nothing outside Ghana), and the country filter itself is proven on the United Kingdom.

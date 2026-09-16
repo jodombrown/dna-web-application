@@ -19,6 +19,7 @@ import { makeInfer, makeUpload, unfurl } from "@/lib/dia";
 import { loadDraft, saveDraft } from "@/lib/drafts";
 import { loadMemberSpaces } from "@/lib/feed";
 import { loadMemberHomes, type Home } from "@/lib/homes";
+import { loadProfile } from "@/lib/profile";
 import { browserZone } from "@/lib/when";
 import { publishPost } from "@/lib/publish";
 import { useMode, useTier } from "@/lib/tier";
@@ -62,6 +63,11 @@ export function ComposerShell() {
   const [spaces, setSpaces] = useState<{ id: string; name: string }[]>([]);
   // Convene Pass 1 (633, 690): the member's homes for the form's place chips; empty means none.
   const [homes, setHomes] = useState<Home[]>([]);
+  // Session 23, place anchoring: the member's stated country (public.members.current_country,
+  // through profile_view, the one profile read) anchors the place lookup when no home is chosen.
+  // Null when none is stated or the read fails; the form then sends no anchor and the function
+  // answers unavailable rather than letting Mapbox anchor on the Edge node's IP.
+  const [country, setCountry] = useState<string | null>(null);
   // Ruling 193: Contribute's instrument options are the contribute_instrument vocabulary, read at
   // runtime through the one vocabulary path. Ruling 194: a read that fails leaves this empty and the
   // control renders no options; nothing here substitutes a default.
@@ -85,19 +91,21 @@ export function ComposerShell() {
     if (!open || !member || !request) return;
     let active = true;
     void (async () => {
-      const [restored, memberSpaces, vocab, memberHomes] = await Promise.all([
+      const [restored, memberSpaces, vocab, memberHomes, profile] = await Promise.all([
         request.initialVerb || request.initial
           ? Promise.resolve(null)
           : loadDraft(member.id, hostContext),
         loadMemberSpaces(member.id),
         loadVocabularies().catch(() => null),
         loadMemberHomes(member.id).catch(() => [] as Home[]),
+        member.handle ? loadProfile(member.handle).catch(() => null) : Promise.resolve(null),
       ]);
       if (!active) return;
       setDraft(restored?.seed ?? null);
       setPostId(restored?.postId ?? crypto.randomUUID());
       setSpaces(memberSpaces);
       setHomes(memberHomes);
+      setCountry(profile?.sections.where?.current_country || null);
       setInstrument((vocab?.instrument ?? []).map((i) => i.label));
       setLoadedSeed(seed);
     })();
@@ -125,12 +133,13 @@ export function ComposerShell() {
           {...p}
           author={{ name: authorName }}
           homes={homes}
+          country={country}
           spaces={spaces}
           browserTz={browserZone()}
         />
       ),
     }),
-    [authorName, homes, spaces],
+    [authorName, homes, country, spaces],
   );
   const lastVerb = useRef<ComposerState["verb"]>(null);
 

@@ -825,8 +825,11 @@ async function mockSupabase(page, db, opts = {}) {
       return json(key ? INFER[key] : null);
     }
     if (p === "/functions/v1/place-resolve") {
-      // Convene Pass 1, PR 2: three typed states. "Front Room" is one place, "Alliance" several,
-      // anything else none. Suggest carries no coordinates; retrieve does.
+      // Convene Pass 1, PR 2: four typed states. "Front Room" is one place, "Alliance" several,
+      // anything else none. Suggest carries no coordinates; retrieve does. Session 23: a query
+      // naming an outage is answered 503 from the gateway, which the client reads as
+      // `unavailable`; a suggest with neither a proximity nor a country_name is the function's
+      // own `unavailable` (case 3, withheld: never the Edge node's IP).
       const body = req.postDataJSON() || {};
       db.placeCalls.push(body);
       await new Promise((r) => setTimeout(r, 120));
@@ -876,6 +879,8 @@ async function mockSupabase(page, db, opts = {}) {
       }
       const q = String(body.q || "").toLowerCase();
       if (q.length < 3) return json({ state: "none" });
+      if (q.includes("outage")) return json({ message: "upstream unavailable" }, 503);
+      if (!body.proximity && !body.country_name) return json({ state: "unavailable" });
       if (q.includes("front room")) return json({ state: "one", place: FRONT });
       if (q.includes("alliance")) return json({ state: "several", places: AF });
       return json({ state: "none" });
@@ -2549,10 +2554,14 @@ async function runConvene(browserType, bname, [w, h], theme) {
         !(await pub().isDisabled()),
       previewText.slice(0, 200),
     );
+    // Session 23, place anchoring: before a home is chosen the stated country anchors
+    // (profile_view's where.current_country for the persona), and nothing else does.
     record(
-      tag + " the place lookup carried no proximity until a home is chosen (633)",
-      db.placeCalls.length >= 1 && db.placeCalls.every((c) => c.proximity == null),
-      JSON.stringify(db.placeCalls.map((c) => c.q)).slice(0, 120),
+      tag +
+        " the place lookup carried no proximity until a home is chosen (633) and the stated country as its anchor",
+      db.placeCalls.length >= 1 &&
+        db.placeCalls.every((c) => c.proximity == null && c.country_name === "South Africa"),
+      JSON.stringify(db.placeCalls.map((c) => [c.q, c.country_name])).slice(0, 160),
     );
     await shot(page, `${tag}-02-in-person`);
     await noOverflow(page, tag + " in person");
@@ -2586,8 +2595,9 @@ async function runConvene(browserType, bname, [w, h], theme) {
         !!last &&
         !!last.proximity &&
         Math.round(last.proximity.lng) === 37 &&
+        last.country_name == null &&
         !(await pub().isDisabled()),
-      JSON.stringify(last && last.proximity),
+      JSON.stringify(last && [last.proximity, last.country_name]),
     );
     await dialog
       .getByRole("listbox", { name: "Places that match" })
@@ -2613,6 +2623,25 @@ async function runConvene(browserType, bname, [w, h], theme) {
           "In person at Kwame's rooftop.",
     );
     await shot(page, `${tag}-03-place-none`);
+    // Session 23, the unavailable state: a lookup that did not run (here a 503 from the gateway)
+    // is its own hint, never "No place found"; the words stand and Publish stays open.
+    await field("place_query").fill("The outage bar");
+    await dialog
+      .getByText("Place search is unavailable right now. Your words are kept, and you can publish.")
+      .waitFor({ timeout: 5000 });
+    record(
+      tag + " unavailable: its own hint, not No place found; words kept, still publishable",
+      (await dialog.getByText("No place found for that. It is kept as you wrote it.").count()) ===
+        0 &&
+        !(await pub().isDisabled()) &&
+        (await dialog.locator('[data-convene="intent"]').textContent()) ===
+          "In person at The outage bar.",
+    );
+    await shot(page, `${tag}-03b-place-unavailable`);
+    await field("place_query").fill("Kwame's rooftop");
+    await dialog
+      .getByText("No place found for that. It is kept as you wrote it.")
+      .waitFor({ timeout: 5000 });
 
     // The moment: a failed parse mounts the pickers; a window is words (520, 634).
     await field("when").fill("next Thursday evening");

@@ -37,6 +37,12 @@ export type ConveneFormProps = ComposerFormProps & {
   author: { name: string };
   /** The member's homes (633); with none, the line and the chips are absent (690). */
   homes: Home[];
+  /**
+   * The member's stated country from onboarding (public.members.current_country, read through
+   * profile_view), the lookup's anchor when no home is chosen; null when none is stated. Never
+   * combined with a home (Session 23, place anchoring).
+   */
+  country: string | null;
   /** The member's Spaces, for More options (Canon 6). */
   spaces: { id: string; name: string }[];
   /** The host's browser zone: an online-only event's zone until a first home exists (ruling owed 7). */
@@ -45,7 +51,10 @@ export type ConveneFormProps = ComposerFormProps & {
 
 type Format = "" | "in_person" | "online" | "hybrid";
 type Lookup =
-  { state: "idle" } | { state: "none" } | { state: "several"; places: SuggestedPlace[] };
+  | { state: "idle" }
+  | { state: "none" }
+  | { state: "several"; places: SuggestedPlace[] }
+  | { state: "unavailable" };
 
 const LOOKUP_PAUSE_MS = 400;
 const MIN_QUERY = 3;
@@ -96,6 +105,7 @@ export function ConveneForm({
   reportValidity,
   author,
   homes,
+  country,
   spaces,
   browserTz,
 }: ConveneFormProps) {
@@ -275,6 +285,7 @@ export function ConveneForm({
       mapbox_id: s.place_id,
     });
     if (r.state === "one") pick(r.place);
+    else if (r.state === "unavailable") setLookup({ state: "unavailable" });
     else setLookup({ state: "none" });
   };
   useEffect(() => {
@@ -290,11 +301,14 @@ export function ConveneForm({
         action: "suggest",
         q,
         session_token: session.current,
+        // A chosen home anchors; without one the stated country does; never both.
         proximity: home ? { lng: home.lng, lat: home.lat } : null,
+        country_name: home ? null : country,
       });
       if (!live) return;
       if (r.state === "one") pick(r.place);
       else if (r.state === "several") setLookup({ state: "several", places: r.places });
+      else if (r.state === "unavailable") setLookup({ state: "unavailable" });
       else setLookup({ state: "none" });
     }, LOOKUP_PAUSE_MS);
     return () => {
@@ -488,12 +502,15 @@ export function ConveneForm({
     >
       {input("place_query", "Place", {
         placeholder: "A venue name",
+        // Session 23, the unavailable state: a lookup that did not run is never "no place found".
         hint:
           lookup.state === "none"
             ? "No place found for that. It is kept as you wrote it."
             : lookup.state === "several"
               ? "Several places match. Pick one, or leave it as you wrote it."
-              : undefined,
+              : lookup.state === "unavailable"
+                ? "Place search is unavailable right now. Your words are kept, and you can publish."
+                : undefined,
       })}
       {!query.trim() && homes.length > 0 && (
         <div data-convene="homes" style={{ display: "flex", flexDirection: "column", gap: 6 }}>
