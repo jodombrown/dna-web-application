@@ -29,6 +29,12 @@ alter table public.events
   add column cancelled_reason text,
   add column attachments jsonb not null default '[]'::jsonb;  -- 705: Hub-written, never compose-time
 
+-- Existing rows without an instant carry their "By when" words forward as the window's basis, so
+-- events_window_or_start below holds for them (520: the words are the honest window). Verified on
+-- the canonical project before this file was pushed: four events, three with starts_at null and
+-- when_text set; without this the constraint fails validation and db push aborts mid-file.
+update public.events set window_basis = when_text where starts_at is null and when_text is not null;
+
 -- Timing invariants (634: no end invented; 520: a window is honest).
 alter table public.events add constraint events_ends_after_starts
   check (ends_at is null or starts_at is null or ends_at > starts_at);
