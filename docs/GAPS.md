@@ -1542,9 +1542,9 @@ silence.
 **Changing the number is forward-only, unlike the decline window.** The two settings live in the same
 table and are read through the same helper, and they behave in opposite ways:
 
-| Setting | Read | Effect of changing it |
-| --- | --- | --- |
-| `decline_window_days` (90) | per call, inside the RPCs, against `responded_at` | retroactive: every existing declined pair is re-windowed at once |
+| Setting                         | Read                                                | Effect of changing it                                                     |
+| ------------------------------- | --------------------------------------------------- | ------------------------------------------------------------------------- |
+| `decline_window_days` (90)      | per call, inside the RPCs, against `responded_at`   | retroactive: every existing declined pair is re-windowed at once          |
 | `introduction_expiry_days` (30) | once, at insert, as the `expires_at` column default | forward only: rows already pending keep the window they were stamped with |
 
 `private.purge_expired_introductions()` compares the stored `expires_at`, never a recomputed window,
@@ -1737,8 +1737,7 @@ defect at all — but whether an absence would otherwise have to be inferred.
 
 ## G28. The session-open commit check is a discipline with no arm, and its shape is an id allowlist
 
-**Severity: medium. Not a merge blocker. Opened 15 September 2026 under ruling 598, filed under ruling
-597.**
+**Severity: medium. Not a merge blocker. Opened 15 September 2026 under ruling 598, filed under ruling 597.**
 
 **The shape, which ruling 598 fixes.** The check is an allowlist of GitHub account and app ids, never a
 denylist of names. The ids are `214720153` (`jodombrown`), `81847` (`claude`) and `319149162`
@@ -1763,8 +1762,7 @@ is what ruling 146 already says.
 
 ## G29. `tests/auth.cjs` section 7 waits fifteen seconds on a render instead of on the mock
 
-**Severity: low. Not a merge blocker. Opened 15 September 2026 under ruling 574, filed under ruling
-597.**
+**Severity: low. Not a merge blocker. Opened 15 September 2026 under ruling 574, filed under ruling 597.**
 
 **The arm and the wait.** Section 7 of `tests/auth.cjs` proves that sign-up's "Check your email" state
 is byte-identical whether or not the address already has an account (rulings 432, 384). It fills the
@@ -1871,3 +1869,37 @@ sighting, and a fix guessed from one is a change nobody can later attribute. A s
 would earn the work, and the first is recorded here because the pair is the evidence, not either half:
 run 207's artefacts `matrix-chromium-run-207` hold both attempts, attempt 1 as artifact 10384635140 and
 attempt 2 as 10385176388, with the arm's screenshots.
+
+## G32. The composer's `created_object` assembly against the namespaced store is flat, dotted keys; the app assembles none
+
+**Severity: low, a contract note. Not a merge blocker. Opened 16 September 2026 by the Convene Pass
+1 handoff (section 0, G32 owed), filed under ruling 638: the number is assigned by this entry.**
+
+**What the handoff says.** Pass 1's host "builds the card from `created_object.convene.*`" (3.2), and
+the prototype's `publishedCard` does exactly that. The handoff asked Code to confirm the assembly
+before PR 3 built on it.
+
+**What the bundle does, read rather than assumed.** Strand's Composer at `v1789537371639386`
+assembles `post.created_object` as
+`Object.fromEntries(Object.entries(fv).map(([k, v]) => [k, v.value]))` whenever a verb is active. It
+is the whole field store flattened: every key of every verb that ever held a value, with the supplied
+form's keys under their dotted names (`"convene.title"`, `"convene.meta"`, `"convene.place_query"`),
+not nested under `convene`. Nothing in the bundle nests, filters by the active verb, or drops the
+preview-only keys. `created_object.convene.*` in the handoff therefore means "the entries whose key
+starts with `convene.`", which is how the prototype reads it (`k.startsWith('convene.')`), and not a
+`created_object.convene` object.
+
+**What the app does instead.** The app's Composer hands the host `ComposerState.fields`, the store
+itself, and assembles no `created_object`. `src/lib/publish.ts` flattens that store into
+`payload.fields` for `publish_post`, dotted keys included, and the function is the only reader of
+them (20260916120200). The published card is not built by the host from the store at all: on
+`onClose('published')` the shell invalidates the Feed read and the card renders from the rows the
+one projection returns, which is what the one-read-projection absolute asks for and what the
+prototype's timer-based `publish` stood in for. So there is no host-side assembly for PR 3 to build
+on, and none is needed: the meta line the prototype computed from `created_object` is the same line
+`src/lib/feed.ts` computes from `events` and `event_delivery`.
+
+**What is owed.** Nothing in code. If a later surface needs the Composer to hand over an assembled
+object rather than the store, it takes the bundle's shape: flat, dotted, unfiltered, and the host
+filters by prefix. This entry exists so the next reader does not look for a nested object the bundle
+never produces.

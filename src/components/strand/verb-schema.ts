@@ -4,19 +4,7 @@ import type { C, ComposerVerb } from "./cmeta";
 
 /** The keys VERB_SCHEMA's own fields use. */
 export type SchemaKey =
-  | "title"
-  | "who"
-  | "why"
-  | "date"
-  | "time"
-  | "place"
-  | "hybrid"
-  | "ticket"
-  | "category"
-  | "roles"
-  | "instrument"
-  | "need"
-  | "by";
+  "title" | "who" | "why" | "category" | "roles" | "instrument" | "need" | "by";
 
 /**
  * Ruling 664: a verb that supplies its own form (Convene, Pass 1) stores its keys namespaced as
@@ -40,23 +28,14 @@ export type VerbSchema = { kicker: string | null; action: string | null; fields:
 
 /** Structured fields of the object each composer verb creates (brief: backing data shape). */
 export const VERB_SCHEMA: Record<ComposerVerb, VerbSchema> = {
+  // Convene Pass 1 (rulings 664, 671, 681): Convene supplies its own form through the Composer's
+  // `forms.convene` (src/components/dna/ConveneForm.tsx), so the schema carries no fields for it,
+  // and the card's action row is the fixed vocabulary (React, Ask the host, Save, Share): no RSVP
+  // (579), so no "Get a ticket". The kicker stays.
   convene: {
     kicker: "Event",
-    action: "Get a ticket",
-    fields: [
-      { key: "title", label: "Title", title: true },
-      { key: "date", label: "Date", icon: "calendar" },
-      { key: "time", label: "Time", icon: "clock" },
-      { key: "place", label: "Location or link", icon: "map-pin" },
-      { key: "hybrid", label: "Hybrid", kind: "toggle" },
-      {
-        key: "ticket",
-        label: "Ticket",
-        icon: "ticket",
-        kind: "segment",
-        options: ["Free", "Paid"],
-      },
-    ],
+    action: null,
+    fields: [],
   },
   collaborate: {
     kicker: "Space",

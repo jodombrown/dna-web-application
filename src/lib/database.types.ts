@@ -210,48 +210,163 @@ export type Database = {
           },
         ];
       };
+      event_delivery: {
+        Row: {
+          city: string | null;
+          country: string | null;
+          created_at: string;
+          event_id: string;
+          external_link: boolean;
+          id: string;
+          kind: Database["public"]["Enums"]["delivery_kind"];
+          lat: number | null;
+          lng: number | null;
+          place_id: string | null;
+          place_name: string | null;
+          place_text: string | null;
+          position: number;
+          url: string | null;
+        };
+        Insert: {
+          city?: string | null;
+          country?: string | null;
+          created_at?: string;
+          event_id: string;
+          external_link?: boolean;
+          id?: string;
+          kind: Database["public"]["Enums"]["delivery_kind"];
+          lat?: number | null;
+          lng?: number | null;
+          place_id?: string | null;
+          place_name?: string | null;
+          place_text?: string | null;
+          position?: number;
+          url?: string | null;
+        };
+        Update: {
+          city?: string | null;
+          country?: string | null;
+          created_at?: string;
+          event_id?: string;
+          external_link?: boolean;
+          id?: string;
+          kind?: Database["public"]["Enums"]["delivery_kind"];
+          lat?: number | null;
+          lng?: number | null;
+          place_id?: string | null;
+          place_name?: string | null;
+          place_text?: string | null;
+          position?: number;
+          url?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "event_delivery_event_id_fkey";
+            columns: ["event_id"];
+            isOneToOne: false;
+            referencedRelation: "events";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      event_host_settings: {
+        Row: {
+          capacity: number | null;
+          event_id: string;
+          updated_at: string;
+        };
+        Insert: {
+          capacity?: number | null;
+          event_id: string;
+          updated_at?: string;
+        };
+        Update: {
+          capacity?: number | null;
+          event_id?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "event_host_settings_event_id_fkey";
+            columns: ["event_id"];
+            isOneToOne: true;
+            referencedRelation: "events";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       events: {
         Row: {
+          attachments: Json;
+          cancelled_at: string | null;
+          cancelled_reason: string | null;
           created_at: string;
+          date_confirmed: boolean;
+          delivery_intent: string;
+          doors_at: string | null;
           ends_at: string | null;
+          expected_window_end: string | null;
+          expected_window_start: string | null;
           host_member_id: string;
           id: string;
-          location: Json | null;
           mode: Database["public"]["Enums"]["event_mode"];
           space_id: string | null;
           starts_at: string | null;
+          status: Database["public"]["Enums"]["event_status"];
           ticket_kind: Database["public"]["Enums"]["ticket_kind"];
+          time_confirmed: boolean;
+          timezone: string | null;
           title: string;
-          virtual_url: string | null;
           when_text: string;
+          window_basis: string | null;
         };
         Insert: {
+          attachments?: Json;
+          cancelled_at?: string | null;
+          cancelled_reason?: string | null;
           created_at?: string;
+          date_confirmed?: boolean;
+          delivery_intent?: string;
+          doors_at?: string | null;
           ends_at?: string | null;
+          expected_window_end?: string | null;
+          expected_window_start?: string | null;
           host_member_id: string;
           id?: string;
-          location?: Json | null;
           mode?: Database["public"]["Enums"]["event_mode"];
           space_id?: string | null;
           starts_at?: string | null;
+          status?: Database["public"]["Enums"]["event_status"];
           ticket_kind?: Database["public"]["Enums"]["ticket_kind"];
+          time_confirmed?: boolean;
+          timezone?: string | null;
           title: string;
-          virtual_url?: string | null;
           when_text?: string;
+          window_basis?: string | null;
         };
         Update: {
+          attachments?: Json;
+          cancelled_at?: string | null;
+          cancelled_reason?: string | null;
           created_at?: string;
+          date_confirmed?: boolean;
+          delivery_intent?: string;
+          doors_at?: string | null;
           ends_at?: string | null;
+          expected_window_end?: string | null;
+          expected_window_start?: string | null;
           host_member_id?: string;
           id?: string;
-          location?: Json | null;
           mode?: Database["public"]["Enums"]["event_mode"];
           space_id?: string | null;
           starts_at?: string | null;
+          status?: Database["public"]["Enums"]["event_status"];
           ticket_kind?: Database["public"]["Enums"]["ticket_kind"];
+          time_confirmed?: boolean;
+          timezone?: string | null;
           title?: string;
-          virtual_url?: string | null;
           when_text?: string;
+          window_basis?: string | null;
         };
         Relationships: [
           {
@@ -555,6 +670,56 @@ export type Database = {
           },
           {
             foreignKeyName: "member_follows_member_id_fkey";
+            columns: ["member_id"];
+            isOneToOne: false;
+            referencedRelation: "members";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      member_homes: {
+        Row: {
+          city: string;
+          country: string;
+          created_at: string;
+          id: string;
+          lat: number;
+          lng: number;
+          member_id: string;
+          place_id: string;
+          place_name: string;
+          position: number;
+          timezone: string;
+        };
+        Insert: {
+          city: string;
+          country: string;
+          created_at?: string;
+          id?: string;
+          lat: number;
+          lng: number;
+          member_id: string;
+          place_id: string;
+          place_name: string;
+          position?: number;
+          timezone: string;
+        };
+        Update: {
+          city?: string;
+          country?: string;
+          created_at?: string;
+          id?: string;
+          lat?: number;
+          lng?: number;
+          member_id?: string;
+          place_id?: string;
+          place_name?: string;
+          position?: number;
+          timezone?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "member_homes_member_id_fkey";
             columns: ["member_id"];
             isOneToOne: false;
             referencedRelation: "members";
@@ -1700,7 +1865,9 @@ export type Database = {
         | "contribution_fulfilled"
         | "story_about"
         | "authored";
+      delivery_kind: "physical" | "meeting_link" | "to_be_announced";
       event_mode: "in_person" | "virtual" | "hybrid";
+      event_status: "draft" | "published" | "cancelled";
       heritage_kind:
         "First generation" | "Second generation" | "Third generation or later" | "Continental";
       link_kind: "website" | "linkedin" | "x" | "instagram";
@@ -1735,7 +1902,7 @@ export type Database = {
       space_role: "lead" | "member";
       space_role_status: "active" | "invited" | "left";
       space_status: "active" | "paused" | "completed";
-      ticket_kind: "free" | "paid";
+      ticket_kind: "free" | "paid" | "donation";
     };
     CompositeTypes: {
       [_ in never]: never;
@@ -1872,7 +2039,9 @@ export const Constants = {
         "story_about",
         "authored",
       ],
+      delivery_kind: ["physical", "meeting_link", "to_be_announced"],
       event_mode: ["in_person", "virtual", "hybrid"],
+      event_status: ["draft", "published", "cancelled"],
       heritage_kind: [
         "First generation",
         "Second generation",
@@ -1921,7 +2090,7 @@ export const Constants = {
       space_role: ["lead", "member"],
       space_role_status: ["active", "invited", "left"],
       space_status: ["active", "paused", "completed"],
-      ticket_kind: ["free", "paid"],
+      ticket_kind: ["free", "paid", "donation"],
     },
   },
 } as const;
