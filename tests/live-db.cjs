@@ -686,11 +686,7 @@ async function runLiveDbArms({ record, skip }) {
       const asMember = await readAs(member.id);
       const asOwner = await readAs(owner.id);
       if (asMember.error || asOwner.error) {
-        record(
-          names.delivery,
-          false,
-          "a read was refused: " + (asMember.error || asOwner.error),
-        );
+        record(names.delivery, false, "a read was refused: " + (asMember.error || asOwner.error));
         return;
       }
       record(
