@@ -1943,3 +1943,36 @@ project during a run.
 
 **Not this gap's scope.** The arms' assertions and counts stay as they are; the 416 arm was right to
 read null, since the owner was Private at that instant.
+
+## G34. The draft-restore check in `tests/matrix.cjs` waits a fixed 300 ms after `Continue your draft`, not on the restore
+
+**Severity: low, a harness gap in G29's shape. Not a merge blocker. Opened 16 September 2026 during
+Convene Pass 1's PR 3, filed under ruling 597. The number is assigned by this entry (ruling 638).**
+
+**What was seen.** Pages run 228 on `c1d6811`, `matrix (webkit)`, one check on the `webkit-1536x960-dark`
+arm:
+
+```
+FAIL [no crash] webkit-1536x960-dark Continue your draft restores it, and Draft saved is still the only trace
+0 behind a web-process crash (G5) | 0 an aborted fetch on mocked REST | 1 unclassified
+5035 of 5036 checks passed
+```
+
+No crash, no aborted fetch, no network error in the job, and the same code green on WebKit at
+5036 of 5036 in runs 216, 218 and 222 that day: the branch's diff since run 222 is two policy lines
+in a migration file and a `docs/GAPS.md` entry, neither of which the composer loads.
+
+**The wait.** The check clicks `[data-testid="continue-draft"]`, then `await page.waitForTimeout(300)`,
+then asserts three things at once: the textarea's value begins with the draft's words, the
+`continue-draft` control is gone, and `Draft saved` appears exactly once. Three hundred milliseconds
+is a guess at how long the restore takes on a loaded WebKit; when the guess is short, the first or
+second assertion reads the pre-restore state and the check fails with nothing wrong in the app.
+
+**The fix this entry names.** Wait on the signal the restore produces rather than on the clock:
+`await dialog.locator('[data-testid="continue-draft"]').waitFor({ state: "detached" })` and
+`await expect(ta).toHaveValue(/^(Three intros|We need a volunteer)/)` (or a `waitForFunction` on the
+value), then assert the `Draft saved` count. A wait that resolves on the state the assertion needs
+cannot be short. The same fixed-wait shape appears elsewhere in the file (`waitForTimeout(150)` after
+clicks in the Convene arm, added in Pass 1) and is not this gap's scope until one of them earns it.
+
+**Not this gap's scope.** The check's assertions and the arm's declared count stay as they are.
