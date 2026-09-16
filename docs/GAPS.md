@@ -1943,3 +1943,41 @@ project during a run.
 
 **Not this gap's scope.** The arms' assertions and counts stay as they are; the 416 arm was right to
 read null, since the owner was Private at that instant.
+
+## G36. The lens bar's labels-fit was never checked against the layout it produced, on any engine, and no engine in the matrix is iOS Safari
+
+**Severity: medium for the surface, and it reached production: PR 0's correction 14 is on `main`. Opened
+16 September 2026 during Session 23, filed under ruling 597. The number is assigned by this entry (ruling
+638).**
+
+**What was seen.** The founder, on an iPhone in Safari at 390 wide against PR 3's preview, read lens labels
+painted over the neighbouring lenses' icons. Both matrix engines had passed every arm on the same build
+at 390, and the bar there rendered labels that fit.
+
+**Why the matrix did not see it.** Two things, and only the first is certain.
+
+1. The matrix had no assertion on the bar's layout. It asserted the bar's presence, its lenses, the
+   active lens and the URL, and never that a label sat inside its tab. A wrong `fit` renders labels that
+   overflow their tabs, and nothing in the run reads a tab's `scrollWidth` against its `clientWidth`. The
+   shell arm now does, after `document.fonts.ready`, at every viewport on both engines.
+2. The measurement ran once, at mount, in a layout effect, and again only when the track's width changed.
+   The labels' widths change when the web font arrives (`font-display: swap`, self-hosted woff2), and the
+   track's width does not, so the bar never re-measured after a swap. On the runners the woff2 comes off
+   the preview on a fast link and hydration lands after it; on a phone on a mobile link the swap can land
+   after the layout effect, so the fit was measured on the fallback face and rendered in Alegreya Sans.
+   That ordering is a reading of the timings, not a capture from the device (Moderate). The founder's
+   own reading, that iOS Safari reports `scrollWidth` as 0 inside a zero-size clipped ancestor so that
+   every set "fits", is the other candidate (Moderate); the bar no longer depends on either, because the
+   probe is off-screen and unclipped, read through `getBoundingClientRect`, and re-measured when the
+   document's fonts settle and on every later font load.
+
+**What the matrix cannot do.** Ruling 61 names Safari, and the matrix runs Playwright's WebKit on Linux,
+which shares WebCore with Safari and not its iOS text, font-loading or scrolling behaviour. The founder's
+iPhone is the only iOS check this project has. A real-device pass (BrowserStack, or a Playwright run on a
+macOS runner with an iOS simulator) is the fix this half of the gap names; until then a visual break
+that only iOS Safari produces is found by a person.
+
+**Not this gap's scope.** The measurement fix itself is in `src/components/strand/LensBar.tsx` and is
+proven by the new shell check on both engines; whether that check would have failed on the runners
+before the fix is unknown, because the timing in point 2 is what decides it, and the check's value is
+that it fails wherever the timing goes wrong from now on.

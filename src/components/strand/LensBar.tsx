@@ -71,6 +71,17 @@ export function LensBar<Id extends string = string>({
   const [fit, setFit] = useState(false);
   const canSwitch = !labels && lenses.length > 0 && lenses.every((l) => !!l.icon);
   const key = lenses.map((l) => l.label).join("\u0001");
+  // Session 23 (the founder's iPhone at 390 against the deployed bar): labels rendered over their
+  // neighbours' icons because the measurement had answered "fits" for labels that did not. Two
+  // things in the first version could do that and both are gone. The probe sat inside a zero-size
+  // clipped box and was read through scrollWidth, a value a clipped ancestor is allowed to change
+  // (iOS Safari is the suspect; unproven here, Moderate); it now sits off-screen to the left,
+  // unclipped and unconstrained, and is read through getBoundingClientRect, which is the box's own
+  // laid-out width on every engine. And the measurement ran once at mount and again only when the
+  // track resized, so a web font arriving after hydration (font-display: swap on a phone link)
+  // widened every label with no re-measure; it now re-measures when the document's fonts settle
+  // and on every later font load. Off-screen to the left adds no scrollable overflow in a
+  // left-to-right document, which is what the clipped box was for.
   useLayoutEffect(() => {
     if (!canSwitch) {
       setFit(true);
@@ -78,13 +89,29 @@ export function LensBar<Id extends string = string>({
     }
     const measure = () => {
       if (track.current && probe.current)
-        setFit(probe.current.scrollWidth <= track.current.clientWidth);
+        setFit(Math.ceil(probe.current.getBoundingClientRect().width) <= track.current.clientWidth);
     };
     measure();
-    if (typeof ResizeObserver === "undefined" || !track.current) return;
-    const ro = new ResizeObserver(measure);
-    ro.observe(track.current);
-    return () => ro.disconnect();
+    const cleanups: (() => void)[] = [];
+    if (typeof ResizeObserver !== "undefined" && track.current) {
+      const ro = new ResizeObserver(measure);
+      ro.observe(track.current);
+      cleanups.push(() => ro.disconnect());
+    }
+    const fonts = typeof document !== "undefined" ? document.fonts : undefined;
+    if (fonts) {
+      let live = true;
+      fonts.ready.then(() => {
+        if (live) measure();
+      });
+      const onDone = () => measure();
+      fonts.addEventListener("loadingdone", onDone);
+      cleanups.push(() => {
+        live = false;
+        fonts.removeEventListener("loadingdone", onDone);
+      });
+    }
+    return () => cleanups.forEach((c) => c());
   }, [canSwitch, key]);
   const iconFirst = canSwitch && !fit;
   const [hov, setHov] = useState<string | null>(null);
@@ -119,17 +146,15 @@ export function LensBar<Id extends string = string>({
         {".strand-lens [role=tab]:focus-visible{outline:2px solid var(--focus);outline-offset:2px}"}
       </style>
       {canSwitch && (
-        // A zero-size clipped box, so the probe measures the labels' natural width without adding
-        // scrollable overflow to the column it sits in; scrollWidth reads the clipped content.
+        // The probe: the labels laid out as the track lays them out, hidden and off-screen to the
+        // left, where it adds no scrollable overflow and nothing clips it, so its own laid-out width
+        // is the labels' natural width (see the measurement above).
         <div
           aria-hidden="true"
           style={{
             position: "absolute",
             top: 0,
-            left: 0,
-            width: 0,
-            height: 0,
-            overflow: "hidden",
+            left: -10000,
             visibility: "hidden",
             pointerEvents: "none",
           }}
@@ -138,6 +163,7 @@ export function LensBar<Id extends string = string>({
             ref={probe}
             style={{
               display: "inline-flex",
+              width: "max-content",
               gap: 2,
               padding: 4,
               boxSizing: "border-box",

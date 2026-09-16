@@ -2535,6 +2535,31 @@ async function runShell(browserType, bname, [w, h]) {
     await signIn(page);
     const stamp = await page.getAttribute("html", "data-shell");
     record(tag + " shell mount stamp set", !!stamp);
+    // Session 23: the lens bar's labels-fit answer is checked against the layout it produced, after
+    // the document's fonts have settled, because the founder's iPhone rendered labels over their
+    // neighbours' icons at 390 while both engines here read the bar as fitting (G36). When the bar
+    // shows labels, no tab's content may exceed its box; when it shows icons first, the labels did
+    // not fit and the bar said so.
+    const lensFit = await page.evaluate(async () => {
+      if (document.fonts && document.fonts.ready) await document.fonts.ready;
+      const bar = document.querySelector('[role="tablist"][aria-label="Lens"]');
+      if (!bar) return null;
+      const tabs = Array.from(bar.querySelectorAll('[role="tab"]'));
+      return {
+        mode: bar.getAttribute("data-lensbar"),
+        track: bar.clientWidth,
+        overflowing: tabs
+          .filter((t) => t.scrollWidth > t.clientWidth + 1)
+          .map((t) => t.getAttribute("data-lens") + ":" + t.scrollWidth + ">" + t.clientWidth),
+        barOverflow: bar.scrollWidth > bar.clientWidth + 1,
+      };
+    });
+    record(
+      tag +
+        " lens bar: with fonts settled, no tab's label exceeds its box and the track does not scroll",
+      !!lensFit && lensFit.overflowing.length === 0 && !lensFit.barOverflow,
+      JSON.stringify(lensFit),
+    );
     // Lens in the URL, back-button safe.
     await page.click('[role="tablist"][aria-label="Lens"] [data-lens="saved"]');
     await page.waitForURL("**/feed?lens=saved");
