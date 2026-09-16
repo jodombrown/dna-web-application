@@ -16,6 +16,27 @@
 // `draft` + `onDraft` (server-side drafts per member and host context, ruling 56), `upload` (media
 // goes through the media-upload Edge Function and Tinify, ruling 55), and the preview renders
 // through the shared card router (brief: one PostCard renderer).
+//
+// Convene Pass 1: rebound to Strand's corrected Composer at compile v1789537371639386 (rulings 664
+// to 673, 681; the bundle is the source, this header its summary).
+// 6. `forms`: a per-verb form slot (580's third state). A supplied form receives { fields, setField,
+//    mine, tier, diaTag, proposed, reportValidity }, sees its keys un-prefixed and has them stored
+//    as `{verb}.{key}` (664). The Composer renders it under the verb's caps label and does not read
+//    its fields.
+// 7. Proposal without selection (635, 667, 668): DIA proposes a verb; the DiaLine carries the
+//    proposal, the proposed verb's form mounts with DIA's fills tagged, and no chip carries
+//    aria-checked from the read alone. Publish stays off while a proposal stands without a tap; the
+//    tap on the proposed chip is the acceptance and keeps DIA's fills.
+// 8. `onPublish` returns a promise (665, 666): in flight the fieldset is disabled and aria-busy,
+//    the draft stays visible and Publish reads "Publishing"; rejection lands the caller's message in
+//    Sheet's error slot with every value intact; resolution closes through onClose('published') and
+//    the host navigates in that handler.
+// 9. `disabledVerbs` (correction 7, 672): a disabled chip stays in the row with its reason as
+//    aria-description and pointer title; on touch a tap on it writes the reason into the DiaLine
+//    slot as a status line, and the next tap in the row clears it.
+// 10. With a supplied form the preview reads `{c}.title` and `{c}.meta` and nothing else of the
+//    form's, and its footer is the card's fixed vocabulary (671).
+// 11. Segment fields render through the Segment part (673), the Composer its first caller.
 import {
   Fragment,
   useEffect,
@@ -23,6 +44,7 @@ import {
   useRef,
   useState,
   type ChangeEvent,
+  type ComponentType,
   type DragEvent,
   type ReactNode,
 } from "react";
@@ -36,6 +58,7 @@ import { DiaLine, type DiaLineState } from "./DiaLine";
 import { Icon } from "./Icon";
 import { IconButton } from "./IconButton";
 import { Input } from "./Input";
+import { Segment } from "./Segment";
 import { COMPOSER_SHEET_WIDTH, Sheet } from "./Sheet";
 import { Switch } from "./Switch";
 import { type ComposerVerb } from "./cmeta";
@@ -45,7 +68,10 @@ import {
   UNTYPED,
   VERB_SCHEMA,
   type FieldKey,
+  type FieldValue,
   type FieldValues,
+  type FormFieldValues,
+  type SchemaKey,
   type VerbField,
 } from "./verb-schema";
 
@@ -101,7 +127,10 @@ export type DiaRecord = {
 /** What the composer persists as a draft and hands back on publish. */
 export type ComposerState = {
   text: string;
+  /** The member's chosen verb; only a tap sets it (635). */
   verb: ComposerVerb | null;
+  /** DIA's standing proposal, never a selection (667). */
+  proposed?: ComposerVerb | null | undefined;
   overridden: boolean;
   fields: FieldValues;
   images: ComposerImage[];
@@ -114,9 +143,29 @@ export type ComposerState = {
 
 export type ComposerSeed = Partial<ComposerState> & { hold?: boolean | undefined };
 
+/** What a supplied form receives (ruling 664). Keys are un-prefixed here; the store holds `{verb}.{key}`. */
+export type ComposerFormProps = {
+  fields: FormFieldValues;
+  setField: (key: string, value: string | boolean, mine?: boolean) => void;
+  /** Whether the member wrote this key (true) or DIA filled it (false). */
+  mine: (key: string) => boolean;
+  tier: "compact" | "medium" | "expanded";
+  /** The caps DIA tag a label carries while DIA's fill stands untouched. */
+  diaTag: ReactNode;
+  /** True while the verb is DIA's proposal and not yet the member's tap (667). */
+  proposed: boolean;
+  /** Called on first render and every change; Publish gates on the last report (664). */
+  reportValidity: (valid: boolean) => void;
+};
+export type ComposerForm = ComponentType<ComposerFormProps>;
+
+export type ComposerCloseReason = "published";
+
 export type ComposerProps = {
   open: boolean;
-  onClose?: (() => void) | undefined;
+  /** Ruling 666: 'published' when the Composer closed itself after onPublish resolved; else the member closed it. */
+  onClose?: ((reason?: ComposerCloseReason) => void) | undefined;
+  /** Ruling 665: may return a promise; the Composer carries the in-flight and failed states. */
   onPublish?: ((state: ComposerState) => Promise<void> | void) | undefined;
   tier?: "compact" | "medium" | "expanded";
   mode?: "touch" | "pointer" | undefined;
@@ -139,7 +188,11 @@ export type ComposerProps = {
    * carries no literal for these, so a key that is absent leaves the control with no options
    * (ruling 194), which is what a vocabulary that failed to load has to render.
    */
-  fieldOptions?: Partial<Record<FieldKey, string[]>> | undefined;
+  fieldOptions?: Partial<Record<SchemaKey, string[]>> | undefined;
+  /** Ruling 664: the verb's owner supplies its form as content inside the locked shell. */
+  forms?: Partial<Record<ComposerVerb, ComposerForm>> | undefined;
+  /** Correction 7 (ruling 53): verbs that cannot be chosen here, each with its reason in words. */
+  disabledVerbs?: Partial<Record<ComposerVerb, string>> | undefined;
 };
 
 /** Software keyboard height on touch devices, from visualViewport. 0 when no keyboard or API. */
@@ -174,6 +227,9 @@ const DIA_LINE: Record<ComposerVerb, string> = {
   convey: "DIA read this as a Story.",
 };
 
+const EMPTY_FORMS: Partial<Record<ComposerVerb, ComposerForm>> = {};
+const EMPTY_DISABLED: Partial<Record<ComposerVerb, string>> = {};
+
 /** The Universal Post Composer (Brief 1). One shell for every verb; DIA suggests, the member decides. */
 export function Composer({
   open,
@@ -195,6 +251,8 @@ export function Composer({
   columns,
   maxImages = 4,
   fieldOptions,
+  forms = EMPTY_FORMS,
+  disabledVerbs = EMPTY_DISABLED,
 }: ComposerProps) {
   const touch = (mode || (tier === "expanded" ? "pointer" : "touch")) === "touch";
   /**
@@ -209,7 +267,10 @@ export function Composer({
   const seed: ComposerSeed = useMemo(() => initial || {}, [initial]);
   const [offerDone, setOfferDone] = useState(false);
   const [text, setText] = useState(seed.text || "");
+  // The member's chosen verb; only a tap sets it (635).
   const [verb, setVerb] = useState<ComposerVerb | null>(seed.verb || initialVerb || null);
+  // DIA's proposal; never marks a chip (667).
+  const [proposed, setProposed] = useState<ComposerVerb | null>(seed.proposed || null);
   const [overridden, setOverridden] = useState(!!(seed.overridden || initialVerb));
   const [fv, setFv] = useState<FieldValues>(seed.fields || {});
   const [images, setImages] = useState<ComposerImage[]>(seed.images || []);
@@ -228,7 +289,14 @@ export function Composer({
   // The offer stands while the composer is untouched and a draft exists for this host context.
   const invited = !!draft && !initial && !initialVerb;
   const [picker, setPicker] = useState(false);
-  const [publishing, setPublishing] = useState(false);
+  // Ruling 665: publish in flight, and the caller's failure message.
+  const [pending, setPending] = useState(false);
+  const [fail, setFail] = useState<string | null>(null);
+  // Ruling 664: the supplied form's single validity report; unset means invalid.
+  const [formValid, setFormValid] = useState(false);
+  // Ruling 672: a disabled chip's reason, shown in the DiaLine slot after a touch tap; the next tap
+  // in the row clears it.
+  const [reasonShown, setReasonShown] = useState<string | null>(null);
   const [armed, setArmed] = useState(false);
   const dragDepth = useRef(0);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -236,8 +304,11 @@ export function Composer({
   const taRef = useRef<HTMLTextAreaElement>(null);
   const run = useRef(0);
   const kb = useKeyboardHeight(open && touch && stacked);
-  const c: ComposerVerb = verb || "convey";
-  const schema = verb ? VERB_SCHEMA[verb] : UNTYPED;
+  // The verb whose form mounts: chosen, else proposed (635).
+  const active: ComposerVerb | null = verb || proposed;
+  const c: ComposerVerb = active || "convey";
+  const schema = active ? VERB_SCHEMA[active] : UNTYPED;
+  const form: ComposerForm | undefined = active ? forms[active] : undefined;
   const uploading = images.some((i) => i.pending);
   const has =
     text.trim().length > 0 ||
@@ -246,6 +317,33 @@ export function Composer({
     Object.values(fv).some((f) => f && f.value);
   const setField = (key: FieldKey, value: string | boolean, mine = true) =>
     setFv((s) => ({ ...s, [key]: { value, mine } }));
+  // Ruling 664: a supplied form's keys are namespaced `{verb}.{key}` in the store; the form sees
+  // them un-prefixed.
+  const ns = active ? active + "." : "";
+  const formFields = useMemo<FormFieldValues>(
+    () =>
+      Object.fromEntries(
+        Object.entries(fv)
+          .filter(([k]) => k.startsWith(ns))
+          .map(([k, v]) => [k.slice(ns.length), v]),
+      ) as FormFieldValues,
+    [fv, ns],
+  );
+  const formSetField = (key: string, value: string | boolean, mine = true) =>
+    setField((ns + key) as FieldKey, value, mine);
+  const formMine = (k: string) => {
+    const f = fv[(ns + k) as FieldKey];
+    return !!(f && f.mine);
+  };
+  const nsRead = (k: string): FieldValue | undefined => fv[(ns + k) as FieldKey];
+  // A new verb's form has not reported yet; mount itself does not reset a report already made.
+  const prevActive = useRef(active);
+  useEffect(() => {
+    if (prevActive.current !== active) {
+      prevActive.current = active;
+      setFormValid(false);
+    }
+  }, [active]);
   // The offer stands only while the composer is still empty; once the member has typed, applying
   // the draft would overwrite their own words.
   const showOffer = invited && !offerDone && !has;
@@ -256,6 +354,7 @@ export function Composer({
     if (!d) return;
     setText(d.text || "");
     setVerb(d.verb || null);
+    setProposed(d.proposed || null);
     setOverridden(!!d.overridden);
     setFv(d.fields || {});
     setImages(d.images || []);
@@ -279,7 +378,7 @@ export function Composer({
     const t = text.trim();
     if (t.length < MIN_INFER_CHARS) {
       if (!overridden) {
-        setVerb(null);
+        setProposed(null);
         setDia({ state: null });
       }
       return;
@@ -293,11 +392,14 @@ export function Composer({
         new Promise<null>((r) => setTimeout(() => r(null), THINK_BUDGET)),
       ]).catch(() => null);
       if (id !== run.current) return;
-      if (!res || !res.c) {
+      // A disabled verb is never proposed (53).
+      if (!res || !res.c || disabledVerbs[res.c]) {
         setDia({ state: null });
         return;
       }
-      setVerb(res.c);
+      // 635, 667: proposed, never selected. The chip stays unchecked; the DiaLine and the proposed
+      // fields carry the read.
+      setProposed(res.c);
       setFv((s) => {
         const n: FieldValues = { ...s };
         (Object.entries(res.fields || {}) as [FieldKey, string | boolean][]).forEach(([k, v]) => {
@@ -306,11 +408,12 @@ export function Composer({
         });
         return n;
       });
+      // Accepted only by the member's tap on the proposed chip (668); recorded there.
       setDiaRecord({
         verb: res.c,
         confidence: res.confidence ?? null,
         proposed_fields: res.fields || {},
-        accepted: true,
+        accepted: false,
         member_overrode: false,
         latency_ms: res.latency_ms ?? Date.now() - started,
       });
@@ -324,6 +427,7 @@ export function Composer({
   const snapshot = (): ComposerState => ({
     text,
     verb,
+    proposed,
     overridden,
     fields: fv,
     images: images.filter((i) => !i.pending && i.storage_path),
@@ -362,7 +466,7 @@ export function Composer({
     }, DRAFT_DEBOUNCE);
     return () => clearTimeout(h);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [text, verb, fv, images, link, audience, asSpace, has, open]);
+  }, [text, verb, proposed, fv, images, link, audience, asSpace, has, open]);
   // Closing with content keeps the draft: flush a pending debounce when the composer unmounts.
   useEffect(() => {
     return () => {
@@ -380,8 +484,7 @@ export function Composer({
   useEffect(() => {
     if (!open || touch) return;
     const k = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === "Enter" && has && !uploading && !publishing)
-        void publish();
+      if ((e.metaKey || e.ctrlKey) && e.key === "Enter" && canPublish) void publish();
     };
     window.addEventListener("keydown", k);
     return () => window.removeEventListener("keydown", k);
@@ -389,6 +492,7 @@ export function Composer({
 
   const notThis = () => {
     setOverridden(true);
+    setProposed(null);
     setVerb(null);
     setDia({ state: null });
     setFv(
@@ -396,11 +500,25 @@ export function Composer({
     );
     setDiaRecord((r) => (r ? { ...r, accepted: false, member_overrode: true } : r));
   };
+  // A hand-picked verb silences the read (53, 635). 668: a tap on the proposed chip is the
+  // acceptance and keeps DIA's fills; another chip is an override.
   const choose = (v: ComposerVerb) => {
+    if (disabledVerbs[v]) return;
     setOverridden(true);
     setVerb(v);
+    setProposed(null);
     setDia({ state: null });
     setDiaRecord((r) => (r ? { ...r, accepted: r.verb === v, member_overrode: r.verb !== v } : r));
+  };
+  // 672: touch only. A tap on a disabled chip changes no selection and shows its reason in the
+  // DiaLine slot; the next tap anywhere in the row clears it. Pointer keeps title and
+  // aria-description (correction 7). The chip is read at the row.
+  const rowTap = (disabledVerb: ComposerVerb | null) => {
+    if (reasonShown) {
+      setReasonShown(null);
+      return;
+    }
+    if (disabledVerb && disabledVerbs[disabledVerb]) setReasonShown(disabledVerbs[disabledVerb]!);
   };
 
   // Armed drop state (ruling 107, pointer): the whole fields column is the target. dragenter and
@@ -410,24 +528,24 @@ export function Composer({
   const dragProps = touch
     ? {}
     : {
-        onDragEnter: (e: DragEvent<HTMLDivElement>) => {
+        onDragEnter: (e: DragEvent<HTMLFieldSetElement>) => {
           if (!hasFiles(e)) return;
           e.preventDefault();
           dragDepth.current++;
           setArmed(true);
         },
-        onDragOver: (e: DragEvent<HTMLDivElement>) => {
+        onDragOver: (e: DragEvent<HTMLFieldSetElement>) => {
           if (!hasFiles(e)) return;
           e.preventDefault();
           e.dataTransfer.dropEffect = images.length >= maxImages ? "none" : "copy";
           if (!armed) setArmed(true);
         },
-        onDragLeave: (e: DragEvent<HTMLDivElement>) => {
+        onDragLeave: (e: DragEvent<HTMLFieldSetElement>) => {
           if (!hasFiles(e)) return;
           dragDepth.current = Math.max(0, dragDepth.current - 1);
           if (dragDepth.current === 0) setArmed(false);
         },
-        onDrop: (e: DragEvent<HTMLDivElement>) => {
+        onDrop: (e: DragEvent<HTMLFieldSetElement>) => {
           e.preventDefault();
           dragDepth.current = 0;
           setArmed(false);
@@ -506,45 +624,55 @@ export function Composer({
   };
 
   const space = spaces.find((s) => s.id === asSpace);
+  // 671, preview by convention: with a supplied form the preview reads exactly `{c}.title` and
+  // `{c}.meta` from the store and nothing else of the form's; its action row is the card's fixed
+  // vocabulary, never VERB_SCHEMA[c].action. Without a form, unchanged.
+  const convTitle = form ? nsRead("title") : undefined;
+  const convMeta = form ? nsRead("meta") : undefined;
   const view: PostView = {
     c_category: c,
-    verb,
+    verb: active,
     author_kind: space ? "space" : "member",
     author_name: space ? space.name : author.name,
     author_avatar: space ? undefined : author.avatar,
     body: text,
     anchor_name: anchor && anchor.name,
     audience,
-    fields: fv,
+    fields: form ? (convTitle ? { title: convTitle } : {}) : fv,
+    meta:
+      form && typeof convMeta?.value === "string" && convMeta.value ? convMeta.value : undefined,
     media: images.map((i) => i.preview),
     link: link
       ? { url: link.url, domain: link.domain, title: link.title, image: link.image }
       : null,
   };
 
+  // 664: a supplied form gates Publish on its report alone. 668: proposed alone never publishes.
+  // VERB_SCHEMA verbs keep `has`.
+  const canPublish =
+    !!onPublish && !pending && !uploading && !(proposed && !verb) && (form ? formValid : has);
+
+  // Ruling 665 / 666: in flight the fields stay mounted and read-only and Publish reads
+  // "Publishing"; failure lands the caller's message in Sheet's error slot with the draft
+  // untouched; resolution closes through onClose('published').
   const publish = async () => {
-    if (!onPublish || publishing) return;
-    setPublishing(true);
+    if (!onPublish || !canPublish) return;
+    setFail(null);
+    setPending(true);
     // Mark before the host closes the shell so the unmount flush never re-saves a published draft.
     latest.current.published = true;
     try {
-      await onPublish({
-        text,
-        verb,
-        overridden,
-        fields: fv,
-        images,
-        link,
-        audience,
-        asSpace,
-        dia,
-        diaRecord,
-      });
+      await onPublish(snapshot());
+      setPending(false);
+      onClose?.("published");
     } catch (err) {
       latest.current.published = false;
-      throw err;
-    } finally {
-      setPublishing(false);
+      setPending(false);
+      const msg =
+        err instanceof Error && err.message
+          ? err.message
+          : "Publishing did not go through. Your draft is here. Try again.";
+      setFail(msg);
     }
   };
 
@@ -584,44 +712,17 @@ export function Composer({
           style={{ width: "100%", paddingRight: 2 }}
         />
       );
+    // 673: the Segment part, the Composer its first caller.
     if (f.kind === "segment")
       return (
         <div key={f.key} style={{ display: "flex", flexDirection: "column", gap: 6 }}>
           <div style={{ fontSize: 15, fontWeight: 500, color: "var(--ink-2)" }}>{lab}</div>
-          <div
-            role="radiogroup"
-            aria-label={f.label}
-            style={{ display: "flex", gap: 8, flexWrap: "wrap" }}
-          >
-            {(fieldOptions?.[f.key] ?? f.options ?? []).map((o) => {
-              const on = v.value === o;
-              return (
-                <button
-                  key={o}
-                  type="button"
-                  role="radio"
-                  aria-checked={on}
-                  onClick={() => setField(f.key, o)}
-                  style={{
-                    all: "unset",
-                    boxSizing: "border-box",
-                    cursor: "pointer",
-                    height: 44,
-                    padding: "0 16px",
-                    borderRadius: 999,
-                    fontFamily: "var(--font-sans)",
-                    fontSize: 15,
-                    fontWeight: 500,
-                    color: on ? "var(--on-fill)" : "var(--ink)",
-                    background: on ? "var(--ink)" : "transparent",
-                    border: "1px solid " + (on ? "var(--ink)" : "var(--line)"),
-                  }}
-                >
-                  {o}
-                </button>
-              );
-            })}
-          </div>
+          <Segment
+            label={f.label}
+            options={fieldOptions?.[f.key] ?? f.options ?? []}
+            value={typeof v.value === "string" ? v.value : undefined}
+            onChange={(o) => setField(f.key, o)}
+          />
         </div>
       );
     return (
@@ -790,13 +891,40 @@ export function Composer({
     </div>
   );
 
+  // 664: the verb's owner authors its form as content inside the locked shell; it is rendered as a
+  // component keyed on the verb so its own hooks mount and unmount with it. Falls back to
+  // VERB_SCHEMA's fields when no form is given for the verb.
+  const Form = form;
+  const formBody = Form ? (
+    <Form
+      key={active ?? "none"}
+      fields={formFields}
+      setField={formSetField}
+      mine={formMine}
+      tier={tier}
+      diaTag={diaTag}
+      proposed={!verb && !!proposed}
+      reportValidity={setFormValid}
+    />
+  ) : (
+    schema.fields.map(fieldEl)
+  );
+
   const free = maxImages - images.length;
+  // Ruling 665: the fields column is a fieldset so an in-flight publish disables every control in
+  // one attribute and reads aria-busy, with the draft still visible.
   const fields = (
-    <div
+    <fieldset
       {...dragProps}
+      disabled={pending || undefined}
+      aria-busy={pending || undefined}
       data-drop-target
       data-armed={armed ? "1" : "0"}
       style={{
+        all: "unset",
+        boxSizing: "border-box",
+        width: "100%",
+        minWidth: 0,
         position: "relative",
         display: "flex",
         flexDirection: "column",
@@ -807,7 +935,9 @@ export function Composer({
         outlineColor: armed ? "var(--c-" + c + ")" : "transparent",
         outlineOffset: 12,
         background: armed ? "var(--c-" + c + "-tint)" : "transparent",
-        transition: "background var(--dur-fast) var(--ease)",
+        opacity: pending ? 0.6 : 1,
+        transition:
+          "background var(--dur-fast) var(--ease), opacity var(--dur-default) var(--ease)",
       }}
     >
       {armed && (
@@ -880,7 +1010,13 @@ export function Composer({
         </div>
       )}
       {/* Ruling 458: the chip row sits directly above the text area and is always visible. */}
-      <VerbRow value={verb} onChoose={choose} compact={stacked} />
+      <VerbRow
+        value={verb}
+        onChoose={choose}
+        compact={stacked}
+        disabled={disabledVerbs}
+        onRowTap={touch ? rowTap : undefined}
+      />
       <textarea
         ref={taRef}
         aria-label="What is going on with you"
@@ -903,8 +1039,27 @@ export function Composer({
           minHeight: 44,
         }}
       />
-      <DiaLine state={dia.state} text={dia.text} onNotThis={notThis} />
-      {verb && (
+      {reasonShown ? (
+        <div
+          role="status"
+          aria-live="polite"
+          data-verb-reason
+          style={{
+            display: "flex",
+            alignItems: "center",
+            minHeight: 24,
+            fontFamily: "var(--font-sans)",
+            fontSize: 15,
+            lineHeight: 1.4,
+            color: "var(--ink-3)",
+          }}
+        >
+          {reasonShown}
+        </div>
+      ) : (
+        <DiaLine state={dia.state} text={dia.text} onNotThis={notThis} />
+      )}
+      {active && (
         <div
           style={{
             display: "flex",
@@ -920,18 +1075,18 @@ export function Composer({
               letterSpacing: "0.06em",
               textTransform: "uppercase",
               fontWeight: 500,
-              color: "var(--c-" + verb + "-text)",
+              color: "var(--c-" + active + "-text)",
               paddingTop: 12,
             }}
           >
-            {VERB_ACT[verb]}
+            {VERB_ACT[active]}
           </div>
-          {schema.fields.map(fieldEl)}
+          {formBody}
         </div>
       )}
       {attach}
       <AudienceSelect value={audience} onChange={setAudience} anchor={anchor && anchor.name} />
-    </div>
+    </fieldset>
   );
 
   const header = (
@@ -957,6 +1112,7 @@ export function Composer({
             aria-label="Post as"
             value={asSpace}
             onChange={(e) => setAsSpace(e.target.value)}
+            disabled={pending}
             style={{
               appearance: "none",
               WebkitAppearance: "none",
@@ -1003,18 +1159,19 @@ export function Composer({
       )}
       <span style={{ flex: 1 }} />
       {drafted && has && <span style={{ fontSize: 13, color: "var(--ink-3)" }}>Draft saved</span>}
-      <IconButton name="x" label="Close" onClick={onClose} />
+      <IconButton name="x" label="Close" onClick={() => onClose?.()} />
     </header>
   );
 
   const publishBtn = (
     <Button
-      c={verb || undefined}
-      disabled={!has || uploading || publishing}
+      c={active || undefined}
+      disabled={!canPublish}
+      aria-busy={pending || undefined}
       onClick={() => void publish()}
       full={stacked}
     >
-      Publish
+      {pending ? "Publishing" : "Publish"}
     </Button>
   );
   const col = {
@@ -1028,7 +1185,7 @@ export function Composer({
   return (
     <Sheet
       open={open}
-      onClose={onClose}
+      onClose={() => onClose?.()}
       variant={tier === "compact" ? "sheet" : "drawer"}
       label="Compose"
       contained={contained}
@@ -1036,6 +1193,8 @@ export function Composer({
       // Ruling 492: 80 percent tall on compact, and the composer alone takes 50 percent of the
       // width on medium and expanded. Never full screen; B1's 1000px drawer is retired.
       width={COMPOSER_SHEET_WIDTH}
+      // Ruling 665: the caller's failure message, above the action row, with the draft intact.
+      error={fail}
       // Ruling 480: the action row is a footer in the dialog's flex column, never an overlay.
       actions={
         stacked ? (

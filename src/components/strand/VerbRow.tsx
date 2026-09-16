@@ -6,7 +6,12 @@
 //   --surface edge fade that appears only when there is more to scroll, selected or not (W52).
 // - A vertical wheel over the row scrolls it sideways (ruling 493). The Sheet's scroll lock leaves
 //   a horizontal scroller alone, so the wheel reaches this handler.
-import { useCallback, useEffect, useRef, useState } from "react";
+// - Convene Pass 1 (correction 7, ruling 672): `disabled` carries a reason per verb; a disabled chip
+//   stays in the row, is not selectable and carries the reason as aria-description and pointer
+//   title. On touch, a tap anywhere in the row reaches `onRowTap` with the disabled chip's verb, or
+//   null when the tap landed elsewhere, so the Composer can write the reason into the DiaLine slot
+//   and clear it on the next tap. The chip is read at the row, as Strand's Composer reads it.
+import { useCallback, useEffect, useRef, useState, type MouseEvent } from "react";
 import { VerbChip } from "./VerbChip";
 import { COMPOSER_VERBS, type ComposerVerb } from "./cmeta";
 
@@ -17,11 +22,27 @@ export function VerbRow({
   value,
   onChoose,
   compact,
+  disabled,
+  onRowTap,
 }: {
   value: ComposerVerb | null;
   onChoose: (c: ComposerVerb) => void;
   compact?: boolean | undefined;
+  disabled?: Partial<Record<ComposerVerb, string>> | undefined;
+  /** Touch only: every tap in the row, with the disabled verb it landed on, if any. */
+  onRowTap?: ((disabledVerb: ComposerVerb | null) => void) | undefined;
 }) {
+  const rowTap = onRowTap
+    ? (e: MouseEvent<HTMLDivElement>) => {
+        const t = e.target as HTMLElement | null;
+        const el = t && t.closest ? (t.closest("[role=radio]") as HTMLElement | null) : null;
+        const v =
+          el && el.getAttribute("aria-disabled") === "true"
+            ? (el.getAttribute("data-verb") as ComposerVerb | null)
+            : null;
+        onRowTap(v && disabled?.[v] ? v : null);
+      }
+    : undefined;
   const row = useRef<HTMLDivElement>(null);
   const [edge, setEdge] = useState({ start: false, end: false });
   const measure = useCallback(() => {
@@ -76,6 +97,7 @@ export function VerbRow({
         aria-label="What kind of post"
         data-verb-row
         onScroll={measure}
+        onClick={rowTap}
         style={{
           display: "flex",
           gap: 8,
@@ -92,6 +114,8 @@ export function VerbRow({
             c={v}
             compact={compact}
             selected={value === v}
+            disabled={!!disabled?.[v]}
+            reason={disabled?.[v]}
             onClick={() => onChoose(v)}
           />
         ))}

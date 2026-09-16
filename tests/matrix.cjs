@@ -2022,39 +2022,46 @@ async function runViewport(browserType, bname, [w, h], theme) {
     await shot(page, `${tag}-01-empty`);
     await noOverflow(page, tag + " empty");
 
-    // Thinking then populated (Convene sample).
+    // Thinking then proposed (Contribute sample: a verb whose fields VERB_SCHEMA still carries, so
+    // DIA's tags have labels to sit on. Convene's fields are its own form's from Pass 1, and the
+    // publish arm below drives that verb.)
     const ta = dialog.locator('textarea[aria-label="What is going on with you"]');
-    await ta.fill(SAMPLES.convene);
+    await ta.fill(SAMPLES.contribute);
     await dialog.locator('[data-dia="thinking"]').waitFor({ timeout: 3000 });
     record(tag + " thinking state after 700ms debounce", true);
     await shot(page, `${tag}-02-thinking`);
     await dialog.locator('[data-dia="done"]').waitFor({ timeout: 5000 });
+    // Rulings 635, 667, 668 (Convene Pass 1 rebind): DIA proposes and selects nothing. The DiaLine
+    // carries the read, the proposed verb's fields mount with DIA's fills tagged, no chip carries
+    // aria-checked from the read alone, and Publish stays off until the member taps a chip.
     record(
-      tag + " populated: chip selected + DIA line",
+      tag + " proposed: DIA line, no chip checked by the read, Publish off (667, 668)",
       (await dialog
-        .locator('[role="radio"][aria-label^="Host an Event"][aria-checked="true"]')
-        .count()) === 1 &&
+        .locator(
+          '[role="radiogroup"][aria-label="What kind of post"] [role="radio"][aria-checked="true"]',
+        )
+        .count()) === 0 &&
         (await dialog.locator('[data-dia="done"]').textContent()).includes(
-          "DIA read this as an Event.",
-        ),
+          "DIA read this as a Need.",
+        ) &&
+        (await pub.isDisabled()),
     );
     record(
-      tag + " populated: DIA tags on filled fields",
+      tag + " proposed: DIA tags on filled fields",
       (await dialog.locator("label", { hasText: "DIA" }).count()) >= 3,
     );
     const preview = dialog.locator("article[aria-label='Preview of your post']");
     record(
-      tag + " populated: preview card assembled as convene",
-      (await preview.getAttribute("data-c")) === "convene" &&
-        (await preview.textContent()).includes("Diaspora Builders Dinner"),
+      tag + " proposed: preview card assembled as contribute",
+      (await preview.getAttribute("data-c")) === "contribute" &&
+        (await preview.textContent()).includes("Volunteer accountant"),
     );
-    record(tag + " publish enabled with content", !(await pub.isDisabled()));
     await shot(page, `${tag}-03-populated`);
     await noOverflow(page, tag + " populated");
 
     // Member edits a DIA field: tag disappears; re-inference must not overwrite it.
     const titleInput = dialog.locator("label", { hasText: "Title" }).locator("..").locator("input");
-    await titleInput.fill("Builders Dinner, Nairobi");
+    await titleInput.fill("Accountant for the cooperative books");
     record(
       tag + " member edit removes DIA tag on that field",
       (await dialog
@@ -2063,17 +2070,21 @@ async function runViewport(browserType, bname, [w, h], theme) {
         .count()) === 0,
     );
     record(
-      tag + " member-written field shows pen glyph in preview",
-      (await preview.locator("h3").textContent()).includes("Builders Dinner, Nairobi"),
+      tag + " member-written field shows in the preview title",
+      (await preview.locator("h3").textContent()).includes("Accountant for the cooperative books"),
     );
 
-    // Not this? clears DIA fields, keeps member ones, returns to untyped Convey.
+    // Not this? clears the proposal and DIA's fields, keeps member ones, returns to untyped Convey.
     await dialog.getByRole("button", { name: "Not this?" }).click();
     record(
       tag + " Not this? -> untyped convey, no DiaLine",
       (await dialog.locator("[data-dia]").count()) === 0 &&
         (await preview.getAttribute("data-c")) === "convey" &&
         (await preview.locator("h3").count()) === 0,
+    );
+    record(
+      tag + " publish enabled with content once nothing is proposed",
+      !(await pub.isDisabled()),
     );
     // Previews via the four chips (rulings 400, 417): four, not five. Connect left the composer
     // with the Intro verb.
@@ -2208,6 +2219,21 @@ async function runPublish(browserType, bname, [w, h], theme) {
     await sheetSettled(page, 'section[role="dialog"][aria-label="Compose"]');
     await dialog.locator('textarea[aria-label="What is going on with you"]').fill(SAMPLES.convene);
     await diaSettled(page, dialog, tag);
+    // Ruling 668: the read is a proposal; the tap on the proposed chip is the acceptance and keeps
+    // DIA's fills, and it is what enables Publish (664, 667).
+    record(
+      tag + " Publish is off while the proposal stands without a tap (668)",
+      await dialog.getByRole("button", { name: "Publish" }).isDisabled(),
+    );
+    await dialog.locator('[role="radio"][aria-label^="Host an Event"]').click();
+    record(
+      tag + " tapping the proposed chip accepts it: chip checked, DiaLine gone, Publish on",
+      (await dialog
+        .locator('[role="radio"][aria-label^="Host an Event"][aria-checked="true"]')
+        .count()) === 1 &&
+        (await dialog.locator("[data-dia]").count()) === 0 &&
+        !(await dialog.getByRole("button", { name: "Publish" }).isDisabled()),
+    );
     // Link.
     await dialog.getByRole("button", { name: "Add a link" }).click();
     await dialog.locator('input[placeholder="https://"]').fill("https://nation.africa/summit");

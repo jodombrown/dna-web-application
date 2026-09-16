@@ -51,3 +51,5 @@ export * from "./AuthHead";
 export * from "./BackRow";
 export * from "./CardFade";
 export * from "./VerbRow";
+// Convene Pass 1 (ruling 673): the Segment part, the Composer its first caller.
+export * from "./Segment";

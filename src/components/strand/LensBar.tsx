@@ -14,7 +14,13 @@
 // the active lens toggles it back. Disabled lenses keep their seat (dashed hairline). Accessible
 // name "{label}: {scope}". Light haptic on accepted taps. `compact`: header slot, no descriptor,
 // inactive lenses min 32. `dense`: the active lens shows its name in place of its icon.
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+// Correction 14 (ruling 723, re-synced at compile v1789537371639386): labels-fit. The bar measures
+// whether every lens label fits the track at once; when it does, every lens renders its label; when
+// it does not, the bar renders icon-first: the active lens its icon and label, every other lens its
+// icon with an accessible name. The switch is a rendering decision inside the part, not a caller
+// prop; `labels` forces labels for sets that always fit. No motion on the switch. A set without
+// icons on every lens never switches, because it has nothing to fall back to.
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import { Icon } from "./Icon";
 import type { C } from "./cmeta";
 
@@ -37,8 +43,8 @@ export type LensBarProps<Id extends string = string> = {
   c?: C | "brand" | undefined;
   compact?: boolean | undefined;
   dense?: boolean | undefined;
-  /** Inactive lenses show icon plus label (expanded tier). */
-  labels?: boolean | undefined;
+  /** Forces labels on every lens (723's `labels="always"`); otherwise the bar measures. */
+  labels?: boolean | "always" | undefined;
   /** Host signal: the member scrolled down; the descriptor collapses, latched. */
   collapsed?: boolean | undefined;
   label?: string;
@@ -59,7 +65,28 @@ export function LensBar<Id extends string = string>({
   style,
 }: LensBarProps<Id>) {
   const track = useRef<HTMLDivElement>(null);
+  const probe = useRef<HTMLDivElement>(null);
   const [showScope, setShowScope] = useState(true);
+  // 723: does every label fit the track at once? Measured on a hidden probe laid out as labels.
+  const [fit, setFit] = useState(false);
+  const canSwitch = !labels && lenses.length > 0 && lenses.every((l) => !!l.icon);
+  const key = lenses.map((l) => l.label).join("\u0001");
+  useLayoutEffect(() => {
+    if (!canSwitch) {
+      setFit(true);
+      return;
+    }
+    const measure = () => {
+      if (track.current && probe.current)
+        setFit(probe.current.scrollWidth <= track.current.clientWidth);
+    };
+    measure();
+    if (typeof ResizeObserver === "undefined" || !track.current) return;
+    const ro = new ResizeObserver(measure);
+    ro.observe(track.current);
+    return () => ro.disconnect();
+  }, [canSwitch, key]);
+  const iconFirst = canSwitch && !fit;
   const [hov, setHov] = useState<string | null>(null);
   // Latched for the visit (405). The host reports the first scroll once; a later report never
   // re-collapses a descriptor the member has brought back by tapping the active lens.
@@ -79,6 +106,7 @@ export function LensBar<Id extends string = string>({
       className="strand-lens"
       data-lens-bar={compact ? "compact" : "flow"}
       style={{
+        position: "relative",
         display: "flex",
         flexDirection: "column",
         fontFamily: "var(--font-sans)",
@@ -90,10 +118,58 @@ export function LensBar<Id extends string = string>({
       <style>
         {".strand-lens [role=tab]:focus-visible{outline:2px solid var(--focus);outline-offset:2px}"}
       </style>
+      {canSwitch && (
+        // A zero-size clipped box, so the probe measures the labels' natural width without adding
+        // scrollable overflow to the column it sits in; scrollWidth reads the clipped content.
+        <div
+          aria-hidden="true"
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            width: 0,
+            height: 0,
+            overflow: "hidden",
+            visibility: "hidden",
+            pointerEvents: "none",
+          }}
+        >
+          <div
+            ref={probe}
+            style={{
+              display: "inline-flex",
+              gap: 2,
+              padding: 4,
+              boxSizing: "border-box",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {lenses.map((l) => (
+              <span
+                key={l.id}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 8,
+                  padding: "0 14px",
+                  fontSize: 15,
+                  fontWeight: 700,
+                  border: "1px solid transparent",
+                  boxSizing: "border-box",
+                }}
+              >
+                {l.icon && <span style={{ width: 20, height: 20, flex: "none" }} />}
+                {l.label}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
       <div
         ref={track}
         role="tablist"
         aria-label={label}
+        data-lensbar={iconFirst ? "icon-first" : "labels"}
         style={{
           position: "relative",
           display: "flex",
@@ -110,7 +186,7 @@ export function LensBar<Id extends string = string>({
         {lenses.map((l) => {
           const on = l.id === value;
           const dis = !!l.disabled;
-          const txt = on || !!labels;
+          const txt = on || !iconFirst;
           const ico = !!l.icon && !(on && dense);
           const tap = () => {
             if (dis) return;
