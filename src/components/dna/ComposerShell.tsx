@@ -1,8 +1,15 @@
 // The one composer shell, mounted once by the shell layout (ruling 56; moved from the root in
 // Brief 2 so the shell owns the mount). Opened from any surface via openComposer(). Wires the Strand Composer to auth, tiers, DIA, unfurl, media upload, server
-// drafts and publish_post. Never navigates on publish (ruling 52).
-import { useEffect, useMemo, useState } from "react";
-import { Composer, type ComposerSeed, type ComposerState } from "@/components/strand/Composer";
+// drafts and publish_post. The Composer never navigates (ruling 52); under rulings 665 and 666 it
+// closes itself through onClose('published') once the promise resolves, and this host reacts in
+// that handler by raising PUBLISHED_EVENT, which the shell layout answers with the Feed and a toast.
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  Composer,
+  type ComposerCloseReason,
+  type ComposerSeed,
+  type ComposerState,
+} from "@/components/strand/Composer";
 import { SHEET_DUR } from "@/components/strand/Sheet";
 import { useAuth } from "@/lib/auth";
 import { closeComposer, hostContextOf, useComposerState } from "@/lib/composer-store";
@@ -14,6 +21,24 @@ import { useMode, useTier } from "@/lib/tier";
 import { loadVocabularies } from "@/lib/vocabularies";
 
 export const PUBLISHED_EVENT = "dna:published";
+
+// Ruling 665: the caller's failure message when the RPC gives nothing a member can act on.
+export const PUBLISH_FAILED = "Publishing did not go through. Your draft is here. Try again.";
+
+/**
+ * What the error slot shows (665). publish_post refuses in two registers: a plain sentence meant
+ * for the member (`An introduction needs a message.`), which is surfaced as written, and a named
+ * internal refusal (`publish_post: …`, `send_introduction: …`) or a transport error, which is not a
+ * sentence for a member and becomes the one failure line. Nothing else is surfaced.
+ */
+export function publishFailureMessage(err: unknown): string {
+  const raw =
+    err && typeof err === "object" && "message" in err && typeof err.message === "string"
+      ? err.message.trim()
+      : "";
+  if (!raw || /^[a-z_]+:/.test(raw) || raw.length > 200) return PUBLISH_FAILED;
+  return raw;
+}
 
 export function ComposerShell() {
   const { member } = useAuth();
@@ -71,6 +96,9 @@ export function ComposerShell() {
 
   const infer = useMemo(() => makeInfer(request?.anchor?.name), [request?.anchor?.name]);
   const upload = useMemo(() => (postId ? makeUpload(postId) : undefined), [postId]);
+  // The id publish_post returned, held until the Composer closes itself with 'published' (666).
+  const publishedId = useRef<string | null>(null);
+  const lastVerb = useRef<ComposerState["verb"]>(null);
 
   if (!(open || visible) || !member || !request || loadedSeed !== seed) return null;
 
@@ -78,27 +106,48 @@ export function ComposerShell() {
     void saveDraft(member.id, hostContext, postId, state);
   };
 
+  // Ruling 665: a promise. Rejection carries the message the Composer lands in Sheet's error slot,
+  // with the draft intact; the Composer owns closing on resolution (666).
   const onPublish = async (state: ComposerState) => {
-    const id = await publishPost(state, {
-      postId,
-      memberId: member.id,
-      hostContext,
-      anchor: request.anchor,
-    });
+    let id: string;
+    try {
+      id = await publishPost(state, {
+        postId,
+        memberId: member.id,
+        hostContext,
+        anchor: request.anchor,
+      });
+    } catch (err) {
+      throw new Error(publishFailureMessage(err));
+    }
     // Ruling 287: the consumed id does not survive in memory. `postId` is state on a shell mounted
     // once for the session; openComposer's load effect mints a fresh uuid only when the draft load
     // returns null, so a successful publish clears it here instead of relying on that path. `upload`
     // is memoised off `postId` and yields undefined on an empty string.
     setPostId("");
+    publishedId.current = id;
+    lastVerb.current = state.verb;
+  };
+
+  // Ruling 666: the Composer closes itself on resolve; the host reacts here. The shell layout
+  // answers PUBLISHED_EVENT with the Feed, the fresh read and one toast (ruling 52: the Composer
+  // itself never navigates).
+  const onClose = (reason?: ComposerCloseReason) => {
     closeComposer();
-    window.dispatchEvent(new CustomEvent(PUBLISHED_EVENT, { detail: { id } }));
+    if (reason === "published") {
+      const id = publishedId.current;
+      publishedId.current = null;
+      window.dispatchEvent(
+        new CustomEvent(PUBLISHED_EVENT, { detail: { id, verb: lastVerb.current } }),
+      );
+    }
   };
 
   return (
     <Composer
       key={seed}
       open={open}
-      onClose={closeComposer}
+      onClose={onClose}
       onPublish={onPublish}
       tier={tier}
       mode={mode}

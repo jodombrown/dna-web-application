@@ -49,6 +49,11 @@ export type SheetProps = {
   keyboardHeight?: number | undefined;
   /** The action row. Rendered as a footer in the dialog's flex column, never as an overlay. */
   actions?: ReactNode;
+  /**
+   * Ruling 665 (Convene Pass 1, compile v1789537371639386): the caller's failure message, rendered
+   * in a status region above the action row with everything else untouched. Null renders nothing.
+   */
+  error?: string | null | undefined;
   /** Overrides the default focus target. Never point it at a destructive control. */
   initialFocus?: RefObject<HTMLElement | null> | undefined;
   /** Overrides where focus returns on close. Defaults to whatever was focused when it opened. */
@@ -80,6 +85,7 @@ export function Sheet({
   side = "right",
   keyboardHeight = 0,
   actions,
+  error,
   initialFocus,
   returnFocus,
   children,
@@ -385,6 +391,25 @@ export function Sheet({
           </div>
         )}
         {children}
+        {/* Ruling 665: the caller's failure message, in a live region above the action row. */}
+        <div aria-live="polite" role="status" style={{ flex: "none" }}>
+          {error && (
+            <p
+              data-sheet-error
+              style={{
+                margin: 0,
+                padding: "var(--space-3) var(--space-5)",
+                background: "var(--error-tint)",
+                color: "var(--error)",
+                fontSize: "var(--text-s)",
+                lineHeight: 1.45,
+                borderTop: "var(--border-thin) solid var(--line)",
+              }}
+            >
+              {error}
+            </p>
+          )}
+        </div>
         {actions && (
           <footer
             data-sheet-actions

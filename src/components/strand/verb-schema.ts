@@ -2,7 +2,8 @@
 // router (src/components/dna/PostCardRouter.tsx) and the Composer share it without a cycle.
 import type { C, ComposerVerb } from "./cmeta";
 
-export type FieldKey =
+/** The keys VERB_SCHEMA's own fields use. */
+export type SchemaKey =
   | "title"
   | "who"
   | "why"
@@ -17,8 +18,16 @@ export type FieldKey =
   | "need"
   | "by";
 
+/**
+ * Ruling 664: a verb that supplies its own form (Convene, Pass 1) stores its keys namespaced as
+ * `{verb}.{key}`; the form sees them un-prefixed. The store is one map, so the key type is the
+ * schema's keys plus that namespaced shape, and a `convene.title` can sit beside a `title`.
+ */
+export type FormKey = `${ComposerVerb}.${string}`;
+export type FieldKey = SchemaKey | FormKey;
+
 export type VerbField = {
-  key: FieldKey;
+  key: SchemaKey;
   label: string;
   icon?: string;
   title?: boolean;
@@ -113,6 +122,9 @@ export const CARD_SCHEMA: Record<C, VerbSchema> = {
 
 export type FieldValue = { value: string | boolean; mine: boolean };
 export type FieldValues = Partial<Record<FieldKey, FieldValue>>;
+
+/** The un-prefixed view a supplied form receives (ruling 664). */
+export type FormFieldValues = Record<string, FieldValue | undefined>;
 
 /** Build the PostCard field rows for a verb from keyed values. Title rows are excluded (the card title carries it). */
 export function fieldRows(verb: C | null, fv: FieldValues) {

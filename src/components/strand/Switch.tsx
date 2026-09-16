@@ -1,4 +1,7 @@
-// Ported from Strand components/core/Switch.jsx. Behavior unchanged.
+// Ported from Strand components/core/Switch.jsx. Behavior unchanged. Re-synced at compile
+// v1789537371639386 (correction 13, ruling 703): the label is a block beside the control, so it
+// wraps in a narrow host and no caller needs white-space: nowrap. Callers that already fit render
+// unchanged.
 import type { CSSProperties, ReactNode } from "react";
 
 export type SwitchProps = {
@@ -9,7 +12,8 @@ export type SwitchProps = {
   style?: CSSProperties | undefined;
 };
 
-/** Toggle switch with label. */
+/** Toggle switch with label. 703 (correction 13): the label is a block beside the control, so it wraps in a narrow host
+ *  and no caller needs white-space: nowrap. */
 export function Switch({ label, checked, onChange, disabled, style }: SwitchProps) {
   return (
     <label
@@ -25,7 +29,9 @@ export function Switch({ label, checked, onChange, disabled, style }: SwitchProp
         ...style,
       }}
     >
-      {label}
+      <span style={{ display: "block", flex: "1 1 auto", minWidth: 0, lineHeight: 1.3 }}>
+        {label}
+      </span>
       <input
         type="checkbox"
         role="switch"
