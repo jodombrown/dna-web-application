@@ -436,33 +436,75 @@ async function get(url, headers = {}) {
             typed(nairobi) && typed(accra),
             "nairobi " + brief(nairobi) + " | accra " + brief(accra),
           );
+          // The row: `one` is already retrieved; `several` is retrieved here for its first place, in
+          // the same session, the way the form's pick does. Either way the row carries the point
+          // and the zone.
+          const first = placesOf(accra)[0];
+          const row =
+            accra.body && accra.body.state === "one"
+              ? accra
+              : first
+                ? await call(
+                    {
+                      action: "retrieve",
+                      q: "Front Room",
+                      session_token: session,
+                      mapbox_id: first.place_id,
+                    },
+                    ownerToken,
+                  )
+                : null;
           record(
-            "place-resolve: a resolved row carries the place and the zone (proof 1)",
-            placesOf(accra)
-              .concat(placesOf(nairobi))
-              .some((p) => p && p.place_id && p.label) &&
-              (accra.body.state !== "one" ||
-                (typeof accra.body.place.timezone === "string" &&
-                  Number.isFinite(accra.body.place.lng))),
-            "accra " + brief(accra),
+            "place-resolve: a resolved row carries the place, the coordinates and the zone (proof 1)",
+            !!row &&
+              row.status === 200 &&
+              row.body &&
+              row.body.state === "one" &&
+              typeof row.body.place.timezone === "string" &&
+              row.body.place.timezone.includes("/") &&
+              Number.isFinite(row.body.place.lng) &&
+              Number.isFinite(row.body.place.lat) &&
+              !!row.body.place.label,
+            row ? brief(row) : "no suggestion to retrieve: accra " + brief(accra),
           );
-          // 633: a home narrows the lookup. Two proximities give two orderings, unless Mapbox knew
-          // no such place near either, in which case both are `none` and the narrowing is unproven.
+          // 633: a home narrows the lookup. Two proximities give two orderings where Search Box
+          // knows the name near at least one of them; near Nairobi and Accra it knows none (G35),
+          // so both answers are the same far-away list and prove nothing about narrowing. London
+          // and Portland, Maine each have a Front Room, so the two orderings differ or the
+          // narrowing is not happening.
+          const london = await call(
+            {
+              action: "suggest",
+              q: "Front Room",
+              session_token: session,
+              proximity: { lng: -0.1276, lat: 51.5072 },
+            },
+            ownerToken,
+          );
+          const portland = await call(
+            {
+              action: "suggest",
+              q: "Front Room",
+              session_token: session,
+              proximity: { lng: -70.2553, lat: 43.6591 },
+            },
+            ownerToken,
+          );
           if (
-            nairobi.body &&
-            accra.body &&
-            nairobi.body.state === "none" &&
-            accra.body.state === "none"
+            london.body &&
+            portland.body &&
+            london.body.state === "none" &&
+            portland.body.state === "none"
           )
             skip("place-resolve: proximity changes the ordering (633)", "both calls returned none");
           else
             record(
               "place-resolve: proximity changes the ordering (633)",
-              firstOf(nairobi) !== firstOf(accra),
-              "nairobi " +
-                firstOf(nairobi).slice(0, 40) +
-                " | accra " +
-                firstOf(accra).slice(0, 40),
+              typed(london) && typed(portland) && firstOf(london) !== firstOf(portland),
+              "london " +
+                firstOf(london).slice(0, 40) +
+                " | portland " +
+                firstOf(portland).slice(0, 40),
             );
 
           // Proof 2: no home, a stated country. The name is what public.members.current_country
