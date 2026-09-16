@@ -353,6 +353,131 @@ async function get(url, headers = {}) {
       );
       if (!ownerToken || !memberToken)
         skip("ruling 218: every signed-in arm", "sign-in did not return an access token");
+
+      // -------------------------------------------------------------------------------------
+      // Convene Pass 1, PR 2: place-resolve, one check per state (the handoff's four calls). The
+      // function reaches the project by the founder's `supabase functions deploy`, so a 404 from
+      // the gateway means it is not deployed yet and the arms report unproven (ruling 228), never
+      // passing and never failing on an absence. A 401 without a token is asserted first because
+      // it needs no deployment secret to be true once the function is there.
+      // -------------------------------------------------------------------------------------
+      if (ownerToken) {
+        const fn = SUPABASE_URL + "/functions/v1/place-resolve";
+        const call = async (body, token) => {
+          const r = await fetch(fn, {
+            method: "POST",
+            headers: {
+              apikey: KEY,
+              ...(token ? { Authorization: "Bearer " + token } : {}),
+              "content-type": "application/json",
+            },
+            body: JSON.stringify(body),
+          });
+          const text = await r.text();
+          let parsed = null;
+          try {
+            parsed = JSON.parse(text);
+          } catch {}
+          return { status: r.status, body: parsed, text, retryAfter: r.headers.get("retry-after") };
+        };
+        const session = "live-" + Date.now().toString(36) + "-arms";
+        const probe = await call(
+          { action: "suggest", q: "Front Room", session_token: session },
+          ownerToken,
+        );
+        if (probe.status === 404) {
+          skip(
+            "place-resolve: the four handoff calls (one, several, none, 401)",
+            "function not deployed on the project (gateway 404)",
+          );
+        } else {
+          const noJwt = await call({ action: "suggest", q: "Front Room", session_token: session });
+          record(
+            "place-resolve: a call without a JWT returns 401",
+            noJwt.status === 401,
+            "status " + noJwt.status,
+          );
+          const nairobi = await call(
+            {
+              action: "suggest",
+              q: "Front Room",
+              session_token: session,
+              proximity: { lng: 36.8219, lat: -1.2921 },
+            },
+            ownerToken,
+          );
+          const accra = await call(
+            {
+              action: "suggest",
+              q: "Front Room",
+              session_token: session,
+              proximity: { lng: -0.187, lat: 5.6037 },
+            },
+            ownerToken,
+          );
+          const states = ["one", "several", "none"];
+          const typed = (r) =>
+            r.status === 200 &&
+            r.body &&
+            states.includes(r.body.state) &&
+            (r.body.state !== "several" || Array.isArray(r.body.places));
+          record(
+            "place-resolve: Front Room near Nairobi and near Accra both answer in a typed state",
+            typed(nairobi) && typed(accra),
+            "nairobi " +
+              nairobi.status +
+              " " +
+              nairobi.text.slice(0, 60) +
+              " | accra " +
+              accra.status +
+              " " +
+              accra.text.slice(0, 60),
+          );
+          // 633: a home narrows the lookup. Two proximities give two orderings, unless Mapbox knew
+          // no such place near either, in which case both are `none` and the narrowing is unproven.
+          const firstOf = (r) =>
+            r.body && r.body.state === "one"
+              ? r.body.place.place_id
+              : r.body && r.body.state === "several"
+                ? r.body.places.map((p) => p.place_id).join(",")
+                : "";
+          if (
+            nairobi.body &&
+            accra.body &&
+            nairobi.body.state === "none" &&
+            accra.body.state === "none"
+          )
+            skip("place-resolve: proximity changes the ordering (633)", "both calls returned none");
+          else
+            record(
+              "place-resolve: proximity changes the ordering (633)",
+              firstOf(nairobi) !== firstOf(accra),
+              "nairobi " +
+                firstOf(nairobi).slice(0, 40) +
+                " | accra " +
+                firstOf(accra).slice(0, 40),
+            );
+          const noPlace = await call(
+            { action: "suggest", q: "xq7zv plk9 wmmt", session_token: session },
+            ownerToken,
+          );
+          record(
+            "place-resolve: a nonsense string returns none",
+            noPlace.status === 200 && noPlace.body && noPlace.body.state === "none",
+            "status " + noPlace.status + " " + noPlace.text.slice(0, 60),
+          );
+          const short = await call(
+            { action: "suggest", q: "Fr", session_token: session },
+            ownerToken,
+          );
+          record(
+            "place-resolve: under three characters is none without a lookup",
+            short.status === 200 && short.body && short.body.state === "none",
+            "status " + short.status,
+          );
+        }
+      }
+
       if (ownerToken && memberToken) {
         // The fixture owner is whoever OWNER_EMAIL signs in as, read from their own session:
         // profile_view() with no handle returns the caller's own profile, switches included.

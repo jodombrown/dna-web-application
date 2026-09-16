@@ -49,7 +49,9 @@ export function contentSecurityPolicy(nonce: string | undefined): string {
   const script = nonce ? `script-src 'self' 'nonce-${nonce}'` : "script-src 'self'";
   return [
     "default-src 'self'",
-    `connect-src 'self' ${SUPABASE} ${SUPABASE_WS} https://api.mapbox.com`,
+    // Convene Pass 1 (PR 2): place resolution runs through the place-resolve Edge Function, which
+    // holds the Mapbox token; the browser makes no Mapbox request, so api.mapbox.com is not allowed.
+    `connect-src 'self' ${SUPABASE} ${SUPABASE_WS}`,
     `img-src 'self' data: blob: https: ${SUPABASE}`,
     script,
     "style-src 'self' 'unsafe-inline'",
