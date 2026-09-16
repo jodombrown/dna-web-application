@@ -128,5 +128,5 @@ create policy member_homes_service_role on public.member_homes for all to servic
 
 -- Admin (the fifth persona in the RLS absolute): the same read the admin already holds on events,
 -- for the two event-scoped tables. Homes stay owner-only; an admin has no reason to read a home.
-create policy event_delivery_admin_select on public.event_delivery for select to authenticated using (public.is_admin());
-create policy event_host_settings_admin_select on public.event_host_settings for select to authenticated using (public.is_admin());
+create policy event_delivery_admin_select on public.event_delivery for select to authenticated using (private.is_admin());
+create policy event_host_settings_admin_select on public.event_host_settings for select to authenticated using (private.is_admin());
