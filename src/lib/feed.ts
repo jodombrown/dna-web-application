@@ -9,10 +9,10 @@ import type { Tables, Views } from "./database.types";
 import { signedMediaUrl } from "./dia";
 import { deliverImageUrl } from "./media";
 import type { LensId } from "./lens";
-import { domainOf, type PostView } from "./post-view";
+import { domainOf, type EventView, type PostView } from "./post-view";
 import { getSupabase, type Supabase } from "./supabase";
 import { instrumentLabels } from "./vocabularies";
-import { whenLabel } from "./when";
+import { browserZone, dateInZone, isPast, knownZone, localLine, whenLabel, whenLine } from "./when";
 
 type FeedRow = Views<"feed">;
 type PostRow = Tables<"posts">;
@@ -123,7 +123,43 @@ export async function hydratePosts(
   ]);
 
   const eventMap = new Map((events.data ?? []).map((e) => [e.id, e]));
+  // Convene Pass 1 (P1-SPEC section 2): the physical delivery row is what `where` renders; the
+  // meeting_link row is host-only under RLS and the card never asks for it. The Space a card hooks
+  // to (Canon 6) is fetched by name when the first pass did not already carry it.
+  const eventRows = events.data ?? [];
+  const eventSpaceIds = eventRows
+    .map((e) => e.space_id)
+    .filter((id): id is string => !!id && !spaceIds.has(id));
+  const [delivery, hookSpaces] = await Promise.all([
+    eventRows.length
+      ? sb
+          .from("event_delivery")
+          .select("event_id, kind, place_name, place_text, city, country, position")
+          .in("event_id", [...eventIds])
+          .order("position")
+      : Promise.resolve({
+          data: [] as Pick<
+            Tables<"event_delivery">,
+            "event_id" | "kind" | "place_name" | "place_text" | "city" | "country" | "position"
+          >[],
+        }),
+    eventSpaceIds.length
+      ? sb.from("spaces").select("id, title").in("id", eventSpaceIds)
+      : Promise.resolve({ data: [] as Pick<Tables<"spaces">, "id" | "title">[] }),
+  ]);
+  const deliveryByEvent = new Map<string, NonNullable<typeof delivery.data>>();
+  for (const d of delivery.data ?? []) {
+    const list = deliveryByEvent.get(d.event_id) ?? [];
+    list.push(d);
+    deliveryByEvent.set(d.event_id, list);
+  }
   const spaceMap = new Map((spaces.data ?? []).map((s) => [s.id, s]));
+  const spaceNames = new Map<string, string>([
+    ...[...spaceMap.values()].map((sp) => [sp.id, sp.title] as [string, string]),
+    ...(hookSpaces.data ?? []).map((sp) => [sp.id, sp.title] as [string, string]),
+  ]);
+  const viewerTz = browserZone();
+  const now = new Date();
   const oppMap = new Map((opps.data ?? []).map((o) => [o.id, o]));
   const reqMap = new Map((reqs.data ?? []).map((r) => [r.id, r]));
   const storyMap = new Map((stories.data ?? []).map((s) => [s.id, s]));
@@ -153,12 +189,78 @@ export async function hydratePosts(
     const verb = verbOf(p.created_object_kind);
     const fields: FieldValues = {};
     const oid = p.created_object_id ?? "";
+    let eventView: EventView | undefined;
+    let eventMeta: string | undefined;
     if (verb === "convene") {
-      // Convene Pass 1 (PR 1): events.location and events.virtual_url are gone and VERB_SCHEMA
-      // carries no convene rows, so the card renders the title; the meta line and Convene's rows
-      // arrive with the surface (PR 3, SPEC section 2).
+      // Convene Pass 1 (P1-SPEC section 2). The meta line is `Presented by {presented} · {when} ·
+      // {where}`: presented is the poster's name (674), when is the viewer's zone then the event's
+      // local time when they differ, a window as words, past as `Happened`; where is the venue and
+      // city, `Online`, or `{city} and online`. Cancelled reads `Was set for {local} · {where}`.
+      // VERB_SCHEMA carries no convene rows (671); Going, Sponsor and Speakers wait for their
+      // tables (508, 630, 678), so the rows carry nothing here.
       const e = eventMap.get(oid);
-      if (e) Object.assign(fields, { title: mine(e.title) });
+      if (e) {
+        Object.assign(fields, { title: mine(e.title) });
+        const rows = deliveryByEvent.get(e.id) ?? [];
+        const physical = rows.find((r) => r.kind === "physical");
+        const placeWords = physical
+          ? physical.place_name
+            ? [physical.place_name, physical.city].filter(Boolean).join(", ")
+            : (physical.place_text ?? "")
+          : "";
+        const city = physical?.city ?? null;
+        const where =
+          e.mode === "virtual"
+            ? "Online"
+            : e.mode === "hybrid"
+              ? city || placeWords
+                ? (city || placeWords) + " and online"
+                : "Online"
+              : placeWords;
+        const timing = {
+          starts_at: e.starts_at,
+          timezone: e.timezone,
+          window_basis: e.window_basis,
+          expected_window_end: e.expected_window_end,
+          city,
+        };
+        const cancelled = e.status === "cancelled";
+        const past = isPast(timing, now);
+        const localTz = knownZone(e.timezone) ? e.timezone : viewerTz;
+        const when = whenLine(timing, viewerTz, now);
+        const wasSetFor = e.starts_at
+          ? localLine(e.starts_at, localTz)
+          : e.window_basis
+            ? e.window_basis + ", date to be confirmed"
+            : "";
+        const hostName =
+          (p.feed_author ?? NO_AUTHOR).name ??
+          (p.author_id === member.id ? member.name : "The host");
+        const cancelledOn = e.cancelled_at ? dateInZone(new Date(e.cancelled_at), viewerTz) : "";
+        eventMeta = cancelled
+          ? ["Was set for " + wasSetFor, where || null].filter(Boolean).join(" · ")
+          : ["Presented by " + hostName, when || null, where || null].filter(Boolean).join(" · ");
+        eventView = {
+          cancelled,
+          past,
+          cancelledBody: cancelled
+            ? "This event will not happen. " +
+              hostName +
+              " cancelled it" +
+              (cancelledOn ? " on " + cancelledOn : "") +
+              "." +
+              (e.cancelled_reason
+                ? "\n\nThe host wrote: " +
+                  e.cancelled_reason.trim() +
+                  (/[.!?]$/.test(e.cancelled_reason.trim()) ? "" : ".")
+                : "") +
+              "\n\nIf you had said you were going, you were told by email."
+            : null,
+          space: e.space_id
+            ? { id: e.space_id, name: spaceNames.get(e.space_id) ?? "Space" }
+            : null,
+        };
+      }
     } else if (verb === "collaborate") {
       const s = spaceMap.get(oid);
       if (s) {
@@ -234,8 +336,10 @@ export async function hydratePosts(
             image: link.image_url ?? undefined,
           }
         : null,
-      // The meta line is the absolute time; city and zone arrive with member profiles.
-      meta: whenLabel(p.published_at),
+      // The meta line is the absolute time; city and zone arrive with member profiles. A Convene
+      // card's meta is the event's line (P1-SPEC section 2).
+      meta: eventMeta ?? whenLabel(p.published_at),
+      event: eventView,
     };
   });
 }

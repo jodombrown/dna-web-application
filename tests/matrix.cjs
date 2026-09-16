@@ -83,15 +83,16 @@ const SAMPLES = {
     "Back in Nairobi after three weeks in Houston. The jet lag is winning and the mangoes are not.",
 };
 const INFER = {
+  // Convene Pass 1 (SPEC 1): DIA may fill the title, when as words, the venue name and doors;
+  // never the city, never the format. src/lib/dia.ts namespaces these as convene.* (664).
   convene: {
     verb: "convene",
     confidence: 0.95,
     fields: {
       title: "Diaspora Builders Dinner",
-      date: "Thu 16 Oct",
-      time: "19:00",
-      place: "Nairobi",
-      ticket: "Free",
+      when: "Thu 16 Oct at 19:00",
+      place_name: "Front Room",
+      doors: "18:30",
     },
     latency_ms: 900,
   },
@@ -631,6 +632,36 @@ function makeMockDb() {
   const db = {
     posts: [],
     events: [],
+    // Convene Pass 1: one row per delivery endpoint (521), the member's homes (633) and the
+    // place-resolve calls the form made, with their proximity.
+    event_delivery: [],
+    homes: [
+      {
+        id: "h1",
+        position: 0,
+        place_id: "dXJuOm1ieHBsYzpBY2NyYQ",
+        place_name: "Accra",
+        city: "Accra",
+        country: "Ghana",
+        lng: -0.187,
+        lat: 5.6037,
+        timezone: "Africa/Accra",
+      },
+      {
+        id: "h2",
+        position: 1,
+        place_id: "dXJuOm1ieHBsYzpOYWlyb2Jp",
+        place_name: "Nairobi",
+        city: "Nairobi",
+        country: "Kenya",
+        lng: 36.8219,
+        lat: -1.2921,
+        timezone: "Africa/Nairobi",
+      },
+    ],
+    placeCalls: [],
+    // Set to make publish_post refuse with this message (ruling 665's failed state).
+    publishFail: null,
     spaces: [
       {
         id: "s1",
@@ -792,6 +823,62 @@ async function mockSupabase(page, db, opts = {}) {
         (k) => k !== "untyped" && body.text.startsWith(SAMPLES[k].slice(0, 30)),
       );
       return json(key ? INFER[key] : null);
+    }
+    if (p === "/functions/v1/place-resolve") {
+      // Convene Pass 1, PR 2: three typed states. "Front Room" is one place, "Alliance" several,
+      // anything else none. Suggest carries no coordinates; retrieve does.
+      const body = req.postDataJSON() || {};
+      db.placeCalls.push(body);
+      await new Promise((r) => setTimeout(r, 120));
+      const FRONT = {
+        place_id: "dXJuOm1ieHBvaTpmcm9udC1yb29t",
+        place_name: "Front Room",
+        area: "Osu",
+        city: "Accra",
+        country: "Ghana",
+        lng: -0.1747,
+        lat: 5.5559,
+        timezone: "Africa/Accra",
+        label: "Front Room, Osu, Accra",
+      };
+      const AF = [
+        {
+          place_id: "af-accra",
+          place_name: "Alliance Française Accra",
+          area: "Airport Residential",
+          city: "Accra",
+          country: "Ghana",
+          label: "Alliance Française Accra, Airport Residential, Accra",
+        },
+        {
+          place_id: "af-nairobi",
+          place_name: "Alliance Française Nairobi",
+          area: "Loresho",
+          city: "Nairobi",
+          country: "Kenya",
+          label: "Alliance Française Nairobi, Loresho, Nairobi",
+        },
+      ];
+      if (body.action === "retrieve") {
+        if (body.mapbox_id === FRONT.place_id) return json({ state: "one", place: FRONT });
+        const hit = AF.find((a) => a.place_id === body.mapbox_id);
+        return hit
+          ? json({
+              state: "one",
+              place: {
+                ...hit,
+                lng: hit.city === "Accra" ? -0.18 : 36.79,
+                lat: hit.city === "Accra" ? 5.61 : -1.26,
+                timezone: hit.city === "Accra" ? "Africa/Accra" : "Africa/Nairobi",
+              },
+            })
+          : json({ state: "none" });
+      }
+      const q = String(body.q || "").toLowerCase();
+      if (q.length < 3) return json({ state: "none" });
+      if (q.includes("front room")) return json({ state: "one", place: FRONT });
+      if (q.includes("alliance")) return json({ state: "several", places: AF });
+      return json({ state: "none" });
     }
     if (p === "/functions/v1/link-unfurl") {
       await new Promise((r) => setTimeout(r, 400));
@@ -996,28 +1083,67 @@ async function mockSupabase(page, db, opts = {}) {
     if (p === "/rest/v1/rpc/publish_post") {
       const payload = req.postDataJSON().payload;
       db.rpcPayloads.push(payload);
+      // A refusal (ruling 665's failed state) writes nothing and answers in the RPC's own shape.
+      if (db.publishFail)
+        return json({ code: "22023", message: db.publishFail, details: null, hint: null }, 400);
       const id = payload.id;
       let kind = null,
         oid = null;
       const f = payload.fields || {};
       const title = f.title || payload.body.split("\n")[0].slice(0, 80) || "Untitled";
       if (payload.verb === "convene") {
+        // Convene Pass 1: the namespaced keys publish_post reads (20260916120200), mirrored here.
         oid = "e" + id;
         kind = "event";
+        const c = (k) => f["convene." + k];
+        const format = c("format") || "in_person";
+        const mode = format === "online" ? "virtual" : format;
+        const starts = c("starts_at") || null;
+        const windowed = !starts && !!c("when_window");
         db.events.push({
           id: oid,
           host_member_id: UID,
-          title,
-          starts_at: payload.starts_at,
-          ends_at: null,
-          when_text: [f.date, f.time].filter(Boolean).join("\n"),
-          mode: f.hybrid ? "hybrid" : "in_person",
-          location: f.place ? { text: f.place } : null,
-          virtual_url: null,
-          ticket_kind: (f.ticket || "Free").toLowerCase(),
-          space_id: payload.anchor?.kind === "space" ? payload.anchor.id : null,
+          title: c("title") || title,
+          starts_at: starts,
+          ends_at: c("ends_at") || null,
+          doors_at: c("doors_at") || null,
+          when_text: c("when") || c("when_window") || "",
+          mode,
+          ticket_kind: c("price_nature") || "free",
+          space_id: c("space_id") || (payload.anchor?.kind === "space" ? payload.anchor.id : null),
+          status: "published",
+          timezone: c("timezone") || null,
+          time_confirmed: !!starts,
+          date_confirmed: !!starts,
+          expected_window_start: windowed ? c("expected_window_start") || null : null,
+          expected_window_end: windowed ? c("expected_window_end") || null : null,
+          window_basis: windowed ? c("when_window") : null,
+          delivery_intent: c("delivery_intent") || "",
+          cancelled_at: null,
+          cancelled_reason: null,
+          attachments: [],
           created_at: new Date().toISOString(),
         });
+        if (format === "in_person" || format === "hybrid")
+          db.event_delivery.push({
+            id: "d" + id + "p",
+            event_id: oid,
+            kind: "physical",
+            position: 0,
+            place_id: c("place_id") || null,
+            place_name: c("place_name") || null,
+            place_text: c("place_id") ? null : c("place_text") || null,
+            city: c("city") || null,
+            country: c("country") || null,
+          });
+        if (format === "online" || format === "hybrid")
+          db.event_delivery.push({
+            id: "d" + id + "l",
+            event_id: oid,
+            kind: c("link") ? "meeting_link" : "to_be_announced",
+            position: format === "hybrid" ? 1 : 0,
+            url: c("link") || null,
+          });
       }
       if (payload.verb === "collaborate") {
         oid = "sp" + id;
@@ -1301,6 +1427,17 @@ async function mockSupabase(page, db, opts = {}) {
           db.profile.rel = b.status === "accepted" ? "connected" : "none";
         }
         return json([], method === "POST" ? 201 : 200);
+      }
+      if (table === "member_homes") return json(db.homes);
+      if (table === "event_delivery") {
+        const ids = inIds("event_id");
+        // The meeting_link row is host-only under RLS; the mock member is the host of what they
+        // publish and a viewer of the seeded rows, so seeded meeting links stay out.
+        return json(
+          db.event_delivery.filter(
+            (d) => (!ids || ids.includes(d.event_id)) && (d.kind !== "meeting_link" || d.mine),
+          ),
+        );
       }
       if (table === "member_connections") return json([]);
       if (table === "space_roles") return json([{ space_id: "s1" }]);
@@ -2187,6 +2324,470 @@ async function runViewport(browserType, bname, [w, h], theme) {
   await browser.close();
 }
 
+// Convene Pass 1 (P1-SPEC section 6, the composer and the card). One arm per tier and theme it is
+// declared for: the form on Strand's Composer (664 to 673), place resolution in its three states
+// (PR 2's mock), the moment parsed and windowed (520, 634), the door by format (521, 621), publish
+// in flight and failed (665, 666), the published card and a seeded cancelled card (SPEC 2).
+function seedEvent(db, kind) {
+  const id = "seed-event-" + kind;
+  const oid = "e-" + kind;
+  const past = kind === "past";
+  const starts = new Date(Date.now() + (past ? -3 : 20) * 86400e3);
+  starts.setUTCHours(19, 0, 0, 0);
+  db.posts.unshift({
+    id,
+    author_kind: "member",
+    author_id: "00000000-0000-4000-8000-0000000000f2",
+    created_by: "00000000-0000-4000-8000-0000000000f2",
+    author_name: "Kwame Mensah",
+    author_handle: "kwame-mensah",
+    author_avatar_path: null,
+    c_category: "convene",
+    body: "A long table for members in the Accra to Los Angeles agriculture corridor. Growers, buyers, cold chain people and the ones financing them. One conversation, no panel.",
+    anchor_kind: null,
+    anchor_id: null,
+    created_object_kind: "event",
+    created_object_id: oid,
+    audience: "everyone",
+    status: "published",
+    published_at: new Date(Date.now() - 7200e3).toISOString(),
+    created_at: new Date(Date.now() - 7200e3).toISOString(),
+  });
+  db.events.push({
+    id: oid,
+    host_member_id: "00000000-0000-4000-8000-0000000000f2",
+    title: "Corridor Suppers: Accra",
+    starts_at: starts.toISOString(),
+    ends_at: null,
+    doors_at: null,
+    when_text: "15 October at 19:00",
+    mode: "in_person",
+    ticket_kind: "free",
+    space_id: "s1",
+    status: kind === "cancelled" ? "cancelled" : "published",
+    timezone: "Africa/Accra",
+    time_confirmed: true,
+    date_confirmed: true,
+    expected_window_start: null,
+    expected_window_end: null,
+    window_basis: null,
+    delivery_intent: "In person at Front Room, Accra.",
+    cancelled_at: kind === "cancelled" ? new Date(Date.now() - 3600e3).toISOString() : null,
+    cancelled_reason:
+      kind === "cancelled"
+        ? "The market association moved its own event onto our evening and the supper would have been in the way. We will find another Thursday."
+        : null,
+    attachments: [],
+    created_at: new Date().toISOString(),
+  });
+  db.event_delivery.push({
+    id: "d-" + kind,
+    event_id: oid,
+    kind: "physical",
+    position: 0,
+    place_id: "dXJuOm1ieHBvaTpmcm9udC1yb29t",
+    place_name: "Front Room",
+    place_text: null,
+    city: "Accra",
+    country: "Ghana",
+  });
+  db.event_delivery.push({
+    id: "d-" + kind + "-link",
+    event_id: oid,
+    kind: "meeting_link",
+    position: 1,
+    url: "https://meet.example/" + kind,
+  });
+  db.post_media.push({
+    id: "m-" + kind,
+    post_id: id,
+    storage_path: "seed/" + kind + ".jpg",
+    width: 1200,
+    height: 800,
+    position: 0,
+  });
+  return id;
+}
+
+async function runConvene(browserType, bname, [w, h], theme) {
+  const tag = `${bname}-${w}x${h}-${theme}-convene`;
+  armStart(tag);
+  const browser = await launch(browserType);
+  const touch = w < 1024;
+  const ctx = await browser.newContext({
+    viewport: { width: w, height: h },
+    hasTouch: touch,
+    isMobile: touch,
+    colorScheme: theme,
+  });
+  const page = await ctx.newPage();
+  const db = makeMockDb();
+  seedPosts(db, 2);
+  const cancelledId = seedEvent(db, "cancelled");
+  await page.addInitScript(
+    ({ theme }) => {
+      try {
+        localStorage.setItem("dna.theme", theme);
+      } catch {}
+    },
+    { theme },
+  );
+  await mockSupabase(page, db);
+  const errors = [];
+  page.on("pageerror", (e) => errors.push(String(e)));
+  const dialog = page.locator('section[role="dialog"][aria-label="Compose"]');
+  const pub = () => dialog.getByRole("button", { name: /^Publish/ });
+  const fmt = (label) =>
+    dialog.locator('[role="radiogroup"][aria-label="Format"] [role="radio"]', { hasText: label });
+  const field = (key) => dialog.locator(`input[data-convene="${key}"]`);
+  try {
+    await signIn(page);
+
+    // The seeded cancelled card, before anything is composed (SPEC 2: the full treatment).
+    const cancelled = page.locator(`[data-post-id="${cancelledId}"] article`);
+    await cancelled.waitFor({ timeout: 10000 });
+    const cText = await cancelled.textContent();
+    record(
+      tag + " cancelled card: kicker Event cancelled, struck title, past-tense meta, the reason",
+      cText.includes("Event cancelled") &&
+        (await cancelled.locator("[data-cancelled-title]").count()) === 1 &&
+        cText.includes("Was set for") &&
+        cText.includes("This event will not happen.") &&
+        cText.includes("The host wrote:") &&
+        cText.includes("told by email"),
+      cText.slice(0, 200),
+    );
+    record(
+      tag + " cancelled card: no img, no hook rows, no Read more, four icon actions, no RSVP",
+      (await cancelled.locator("img").count()) === 0 &&
+        (await cancelled.locator("[data-hook]").count()) === 0 &&
+        (await cancelled.locator("[data-read-more]").count()) === 0 &&
+        (await cancelled.locator("footer [data-testid]").count()) === 4 &&
+        !cText.includes("Get a ticket") &&
+        (await cancelled.locator('[data-testid="respond"]').getAttribute("aria-label")) ===
+          "Ask the host",
+    );
+    await shot(page, `${tag}-00-cancelled`);
+
+    // Step 1 and 2: the words, the proposal, nothing selected (635, 667, 668).
+    await page.click('[data-testid="compose"]');
+    await dialog.waitFor();
+    await sheetSettled(page, 'section[role="dialog"][aria-label="Compose"]');
+    const ta = dialog.locator('textarea[aria-label="What is going on with you"]');
+    await ta.fill(SAMPLES.convene);
+    await diaSettled(page, dialog, tag);
+    const proposedFields = (db.rpcPayloads[0] && db.rpcPayloads[0].dia) || null;
+    record(
+      tag +
+        " proposal: no chip carries aria-checked from the read, Publish off, form mounted with DIA's tags",
+      (await dialog
+        .locator(
+          '[role="radiogroup"][aria-label="What kind of post"] [role="radio"][aria-checked="true"]',
+        )
+        .count()) === 0 &&
+        (await pub().isDisabled()) &&
+        (await dialog.locator("[data-convene-form]").count()) === 1 &&
+        (await dialog.locator("label", { hasText: "DIA" }).count()) >= 3,
+      String(proposedFields),
+    );
+    record(
+      tag + " the door renders no place or link control before a format is chosen (621)",
+      (await dialog
+        .locator('[data-convene="place-block"], [data-convene="link-block"]')
+        .count()) === 0 && (await fmt("In person").count()) === 1,
+    );
+    record(
+      tag + " preview meta carries no time zone before a format is chosen (671)",
+      (await dialog.locator("article[aria-label='Preview of your post']").textContent()).includes(
+        "Presented by Amara Osei · Thu 16 Oct, 19:00 · ",
+      ) === false ||
+        !/19:00 GMT/.test(
+          await dialog.locator("article[aria-label='Preview of your post']").textContent(),
+        ),
+    );
+    await shot(page, `${tag}-01-proposal`);
+    await noOverflow(page, tag + " proposal");
+
+    // Accept (668): the tap keeps DIA's fills; the form still gates Publish (664).
+    await dialog.locator('[role="radio"][aria-label^="Host an Event"]').click();
+    record(
+      tag + " tap accepts the proposal and keeps DIA's fills; Publish still gated by the form",
+      (await dialog
+        .locator('[role="radio"][aria-label^="Host an Event"][aria-checked="true"]')
+        .count()) === 1 &&
+        (await field("title").inputValue()) === "Diaspora Builders Dinner" &&
+        (await field("when").inputValue()) === "Thu 16 Oct at 19:00" &&
+        (await field("doors").inputValue()) === "18:30" &&
+        (await pub().isDisabled()),
+    );
+
+    // The door: In person. The venue DIA filled resolves to one place (PR 2's `one`), with the
+    // homes as chips before anything is typed only, and the zone from the place.
+    await fmt("In person").click();
+    await dialog.locator('[data-convene="place-resolved"]').waitFor({ timeout: 5000 });
+    const resolved = await dialog.locator('[data-convene="place-resolved"]').textContent();
+    record(
+      tag + " in person: the venue resolves to one place, zone from the place, when read back",
+      resolved.includes("Front Room, Osu, Accra") &&
+        resolved.includes("Time zone GMT, from the place.") &&
+        (await dialog.locator('[data-convene="when-line"]').textContent()) ===
+          "Fri 16 Oct, 19:00 GMT, the time at the place" &&
+        (await dialog.locator('[data-convene="intent"]').textContent()) ===
+          "In person at Front Room, Osu, Accra.",
+      resolved.slice(0, 160),
+    );
+    const previewText = await dialog
+      .locator("article[aria-label='Preview of your post']")
+      .textContent();
+    record(
+      tag + " preview reads convene.title and convene.meta with the fixed footer (671)",
+      previewText.includes("Diaspora Builders Dinner") &&
+        previewText.includes(
+          "Presented by Amara Osei · Fri 16 Oct, 19:00 GMT · Front Room, Osu, Accra",
+        ) &&
+        !previewText.includes("Get a ticket") &&
+        !(await pub().isDisabled()),
+      previewText.slice(0, 200),
+    );
+    record(
+      tag + " the place lookup carried no proximity until a home is chosen (633)",
+      db.placeCalls.length >= 1 && db.placeCalls.every((c) => c.proximity == null),
+      JSON.stringify(db.placeCalls.map((c) => c.q)).slice(0, 120),
+    );
+    await shot(page, `${tag}-02-in-person`);
+    await noOverflow(page, tag + " in person");
+
+    // Change: the homes appear while the field is empty; several and none fall back to words.
+    await dialog.getByRole("button", { name: "Change" }).click();
+    await field("place_query").fill("");
+    await page.waitForTimeout(150);
+    record(
+      tag + " empty place: Near one of your homes with the member's homes as chips (633, 690)",
+      (await dialog.locator('[data-convene="homes"]').count()) === 1 &&
+        (await dialog.locator('[data-convene="homes"] button', { hasText: "Accra" }).count()) ===
+          1 &&
+        (await dialog.locator('[data-convene="homes"] button', { hasText: "Nairobi" }).count()) ===
+          1,
+    );
+    await dialog.locator('[data-convene="homes"] button', { hasText: "Nairobi" }).click();
+    await field("place_query").fill("Alliance");
+    await dialog.getByRole("listbox", { name: "Places that match" }).waitFor({ timeout: 5000 });
+    const last = db.placeCalls[db.placeCalls.length - 1];
+    record(
+      tag + " several: the hint and a listbox, nothing chosen; the chosen home narrows the lookup",
+      (await dialog
+        .getByText("Several places match. Pick one, or leave it as you wrote it.")
+        .count()) === 1 &&
+        (await dialog
+          .getByRole("listbox", { name: "Places that match" })
+          .getByRole("option")
+          .count()) === 2 &&
+        (await dialog.locator('[data-convene="place-resolved"]').count()) === 0 &&
+        !!last &&
+        !!last.proximity &&
+        Math.round(last.proximity.lng) === 37 &&
+        !(await pub().isDisabled()),
+      JSON.stringify(last && last.proximity),
+    );
+    await dialog
+      .getByRole("listbox", { name: "Places that match" })
+      .getByRole("option")
+      .first()
+      .click();
+    await dialog.locator('[data-convene="place-resolved"]').waitFor({ timeout: 5000 });
+    record(
+      tag + " picking one of several retrieves it and settles the row",
+      (await dialog.locator('[data-convene="place-resolved"]').textContent()).includes(
+        "Alliance Française Accra, Airport Residential, Accra",
+      ),
+    );
+    await dialog.getByRole("button", { name: "Change" }).click();
+    await field("place_query").fill("Kwame's rooftop");
+    await dialog
+      .getByText("No place found for that. It is kept as you wrote it.")
+      .waitFor({ timeout: 5000 });
+    record(
+      tag + " none: the words stand in place_text and the event is still publishable",
+      !(await pub().isDisabled()) &&
+        (await dialog.locator('[data-convene="intent"]').textContent()) ===
+          "In person at Kwame's rooftop.",
+    );
+    await shot(page, `${tag}-03-place-none`);
+
+    // The moment: a failed parse mounts the pickers; a window is words (520, 634).
+    await field("when").fill("next Thursday evening");
+    await page.waitForTimeout(100);
+    record(
+      tag + " failed parse: the hint and a date and time picker, Publish off",
+      (await dialog.getByText("That did not read as a date and time. Pick them below.").count()) ===
+        1 &&
+        (await field("when_date").count()) === 1 &&
+        (await field("when_time").count()) === 1 &&
+        (await pub().isDisabled()),
+    );
+    await field("when_time").fill("19:30");
+    await page.waitForTimeout(100);
+    record(
+      tag + " the picker completes the moment and Publish returns",
+      !(await pub().isDisabled()) &&
+        /19:30/.test(await dialog.locator('[data-convene="when-line"]').textContent()),
+    );
+    await dialog.locator('[data-convene="give-window"]').click();
+    await field("when_window").fill("November");
+    await page.waitForTimeout(100);
+    record(
+      tag + " window: the card will say November, date to be confirmed; no end invented",
+      (await dialog.getByText("The card will say: November, date to be confirmed.").count()) ===
+        1 &&
+        (await dialog.locator('[data-convene="when-line"]').textContent()) ===
+          "November, date to be confirmed" &&
+        (await dialog.locator('[data-convene="ends"]').count()) === 0 &&
+        !(await pub().isDisabled()),
+    );
+    await shot(page, `${tag}-04-window`);
+    await dialog.locator('[data-convene="have-date"]').click();
+    await field("when").fill("Thu 16 Oct at 19:00");
+
+    // Online and hybrid (521): the link or a promise of one; hybrid is two rows and one sentence.
+    await fmt("Online").click();
+    await page.waitForTimeout(100);
+    record(
+      tag + " online: the link control, no place control, zone your home time zone",
+      (await dialog.locator('[data-convene="link-block"]').count()) === 1 &&
+        (await dialog
+          .locator('[data-convene="place-block"], [data-convene="place-resolved"]')
+          .count()) === 0 &&
+        /your home time zone$/.test(
+          await dialog.locator('[data-convene="when-line"]').textContent(),
+        ) &&
+        (await pub().isDisabled()),
+    );
+    await dialog.locator('[data-convene="announce-later"]').click();
+    await page.waitForTimeout(150);
+    record(
+      tag + " announce later: Link to be announced, publishable, Online in the meta",
+      (await dialog.locator('[data-convene="link-tba"]').textContent()).includes(
+        "Link to be announced",
+      ) &&
+        (await dialog.locator('[data-convene="intent"]').textContent()) ===
+          "Online, link to be announced." &&
+        !(await pub().isDisabled()) &&
+        (await dialog.locator("article[aria-label='Preview of your post']").textContent()).includes(
+          " · Online",
+        ),
+    );
+    await fmt("Hybrid").click();
+    await page.waitForTimeout(150);
+    // The words the member wrote for the place stand across a format change (the store keeps its
+    // values), so hybrid is publishable at once and its sentence joins both endpoints.
+    record(
+      tag + " hybrid: two delivery rows and one sentence; the typed words still stand",
+      (await dialog.locator('[data-convene="place-block"]').count()) === 1 &&
+        (await dialog.locator('[data-convene="link-tba"]').count()) === 1 &&
+        (await dialog.locator('[data-convene="intent"]').textContent()) ===
+          "In person at Kwame's rooftop and Online, link to be announced." &&
+        !(await pub().isDisabled()),
+    );
+    await field("place_query").fill("Front Room");
+    await dialog.locator('[data-convene="place-resolved"]').waitFor({ timeout: 5000 });
+    record(
+      tag + " hybrid resolved: one sentence for both endpoints, where is city and online",
+      (await dialog.locator('[data-convene="intent"]').textContent()) ===
+        "In person at Front Room, Osu, Accra and Online, link to be announced." &&
+        (await dialog.locator("article[aria-label='Preview of your post']").textContent()).includes(
+          "Accra and online",
+        ) &&
+        !(await pub().isDisabled()),
+    );
+    await shot(page, `${tag}-05-hybrid`);
+    await noOverflow(page, tag + " hybrid");
+
+    // Publish failed (665): the caller's message in the error slot, every value intact.
+    db.publishFail = "Publishing did not go through. Your draft is here. Try again.";
+    await pub().click();
+    await dialog.locator("[data-sheet-error]").waitFor({ timeout: 5000 });
+    record(
+      tag + " failed publish: the message in Sheet's error slot, the draft intact, Publish back",
+      (await dialog.locator("[data-sheet-error]").textContent()) ===
+        "Publishing did not go through. Your draft is here. Try again." &&
+        (await field("title").inputValue()) === "Diaspora Builders Dinner" &&
+        (await field("when").inputValue()) === "Thu 16 Oct at 19:00" &&
+        (await dialog.locator('[data-convene="place-resolved"]').count()) === 1 &&
+        (await pub().textContent()).trim() === "Publish" &&
+        !(await pub().isDisabled()),
+    );
+    await shot(page, `${tag}-06-failed`);
+    db.publishFail = null;
+
+    // Publish in flight (665): fieldset disabled and aria-busy, Publish reads Publishing.
+    db.publishDelayMs = 1500;
+    const before = db.rpcPayloads.length;
+    await pub().click();
+    await page.waitForTimeout(300);
+    record(
+      tag + " publish in flight: fieldset disabled and aria-busy, Publish reads Publishing",
+      (await dialog.locator("fieldset[disabled][aria-busy='true']").count()) === 1 &&
+        (await pub().textContent()).trim() === "Publishing" &&
+        (await field("title").count()) === 1,
+    );
+    await page.waitForSelector('section[role="dialog"][aria-label="Compose"]', {
+      state: "detached",
+      timeout: 15000,
+    });
+    db.publishDelayMs = 0;
+    const payload = db.rpcPayloads[before];
+    record(
+      tag +
+        " payload: the namespaced convene keys, hybrid, one place, to be announced, no city from DIA",
+      !!payload &&
+        payload.verb === "convene" &&
+        payload.fields["convene.format"] === "hybrid" &&
+        payload.fields["convene.place_id"] === "dXJuOm1ieHBvaTpmcm9udC1yb29t" &&
+        payload.fields["convene.link_tba"] === true &&
+        typeof payload.fields["convene.starts_at"] === "string" &&
+        payload.fields["convene.timezone"] === "Africa/Accra" &&
+        payload.fields["convene.delivery_intent"] ===
+          "In person at Front Room, Osu, Accra and Online, link to be announced." &&
+        payload.dia &&
+        payload.dia.accepted === true &&
+        !Object.keys(payload.dia.proposed_fields || {}).some((k) => /city|format/.test(k)),
+      payload ? JSON.stringify(payload.fields).slice(0, 300) : "no payload",
+    );
+    await page.getByText("Published. It is in the Feed and on Convene.").waitFor({ timeout: 4000 });
+    const card = page.locator("main article[data-c='convene']").first();
+    await card.waitFor({ timeout: 10000 });
+    const cardText = await card.textContent();
+    record(
+      tag +
+        " the published card first: kicker Event, meta line, four icon actions, no RSVP, no count",
+      cardText.includes("Event") &&
+        cardText.includes("Diaspora Builders Dinner") &&
+        cardText.includes("Presented by Amara Osei") &&
+        // 16 October 2026 is a Friday: the parser trusts the day the member wrote, and the
+        // weekday comes from the calendar (P1-EXTRACTION item 9).
+        cardText.includes("Fri 16 Oct") &&
+        cardText.includes("Accra and online") &&
+        (await card.locator("footer [data-testid]").count()) === 4 &&
+        !cardText.includes("Get a ticket") &&
+        (await card.locator('[data-testid="respond"]').getAttribute("aria-label")) ===
+          "Ask the host" &&
+        !/\b\d+\s+(going|members|people)\b/i.test(cardText),
+      cardText.slice(0, 220),
+    );
+    await shot(page, `${tag}-07-published`);
+    await noOverflow(page, tag + " published");
+  } catch (e) {
+    record(tag + " flow", false, String(e).slice(0, 300));
+    await shot(page, `${tag}-ERROR`).catch(() => {});
+  }
+  record(
+    tag + " no page errors",
+    errors.length === 0,
+    errors.slice(0, 3).join(" | ").slice(0, 300),
+  );
+  await browser.close();
+}
+
 // End-to-end publish (once per tier) including link unfurl, image attach, and the feed card via the router.
 async function runPublish(browserType, bname, [w, h], theme) {
   const tag = `${bname}-${w}x${h}-${theme}-publish`;
@@ -2227,12 +2828,30 @@ async function runPublish(browserType, bname, [w, h], theme) {
     );
     await dialog.locator('[role="radio"][aria-label^="Host an Event"]').click();
     record(
-      tag + " tapping the proposed chip accepts it: chip checked, DiaLine gone, Publish on",
+      tag + " tapping the proposed chip accepts it: chip checked, DiaLine gone, DIA's fills kept",
       (await dialog
         .locator('[role="radio"][aria-label^="Host an Event"][aria-checked="true"]')
         .count()) === 1 &&
         (await dialog.locator("[data-dia]").count()) === 0 &&
-        !(await dialog.getByRole("button", { name: "Publish" }).isDisabled()),
+        (await dialog.locator('input[data-convene="title"]').inputValue()) ===
+          "Diaspora Builders Dinner",
+    );
+    // Convene Pass 1 (664): the form gates Publish. With the title, when and venue filled by DIA
+    // and no format chosen, Publish is still off; In person lets the venue resolve (PR 2's one
+    // state) and the form reports true.
+    record(
+      tag + " Publish stays off until the Convene form reports true (664)",
+      await dialog.getByRole("button", { name: "Publish" }).isDisabled(),
+    );
+    await dialog
+      .locator('[role="radiogroup"][aria-label="Format"] [role="radio"]', { hasText: "In person" })
+      .click();
+    await dialog.locator('[data-convene="place-resolved"]').waitFor({ timeout: 5000 });
+    record(
+      tag + " In person: the venue resolves to one place and Publish is on",
+      (await dialog.locator('[data-convene="place-resolved"]').textContent()).includes(
+        "Front Room, Osu, Accra",
+      ) && !(await dialog.getByRole("button", { name: "Publish" }).isDisabled()),
     );
     // Link.
     await dialog.getByRole("button", { name: "Add a link" }).click();
@@ -2302,10 +2921,14 @@ async function runPublish(browserType, bname, [w, h], theme) {
         payload.dia.accepted === true &&
         // Ruling 681: the instants travel inside `fields` as convene.* from the Convene form;
         // the chassis stand-in that parsed date and time here is retired, so this is null.
-        payload.starts_at === null,
+        payload.starts_at === null &&
+        typeof payload.fields["convene.starts_at"] === "string" &&
+        payload.fields["convene.format"] === "in_person" &&
+        payload.fields["convene.place_id"] === "dXJuOm1ieHBvaTpmcm9udC1yb29t",
       JSON.stringify(payload).slice(0, 300),
     );
-    await page.getByText("Published. It is in the Feed.").waitFor({ timeout: 3000 });
+    // Convene Pass 1: an event's toast names Convene too (P1-EXTRACTION, confirmed content).
+    await page.getByText("Published. It is in the Feed and on Convene.").waitFor({ timeout: 3000 });
     const card = page.locator("main article[data-c='convene']").first();
     await card.waitFor({ timeout: 10000 });
     // Rulings 579, 671: the card's action row is the fixed vocabulary; no RSVP, so no "Get a
@@ -2315,6 +2938,8 @@ async function runPublish(browserType, bname, [w, h], theme) {
         " feed card rendered by the router with kicker Event, title, fixed icon actions, no RSVP",
       (await card.textContent()).includes("Event") &&
         (await card.textContent()).includes("Diaspora Builders Dinner") &&
+        (await card.textContent()).includes("Presented by Amara Osei") &&
+        (await card.textContent()).includes("Front Room, Accra") &&
         !(await card.textContent()).includes("Get a ticket") &&
         (await card.locator('[data-testid="react"]').count()) === 1 &&
         (await card.locator('[data-testid="respond"]').count()) === 1 &&
@@ -3835,6 +4460,10 @@ if (require.main === module)
           await runPublishGuards(bt, bname, [1280, 800], "dark");
         }
         if (process.env.SPECIAL.includes("keyboard")) await runKeyboard(bt, bname);
+        if (process.env.SPECIAL.includes("convene")) {
+          await runConvene(bt, bname, [390, 844], "light");
+          await runConvene(bt, bname, [1280, 800], "dark");
+        }
         if (process.env.SPECIAL.includes("silence")) await runSilence(bt, bname);
         if (process.env.SPECIAL.includes("shell"))
           for (const vp of process.env.ONLY ? [JSON.parse(process.env.ONLY)] : VIEWPORTS)
@@ -3945,6 +4574,9 @@ if (require.main === module)
       await runPublishGuards(bt, bname, [1280, 800], "dark");
       await runSilence(bt, bname);
       await runKeyboard(bt, bname);
+      // Convene Pass 1 (P1-SPEC section 6): the composer's Convene mode and the card.
+      await runConvene(bt, bname, [390, 844], "light");
+      await runConvene(bt, bname, [1280, 800], "dark");
       for (const vp of TARGETED_VIEWPORTS) await runTargeted(bt, bname, vp);
       // Brief 3: the profile in its three views plus editing mode, every viewport, both themes.
       const { runProfile } = require("./profile.cjs");

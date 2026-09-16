@@ -24,7 +24,8 @@ import type { CardC } from "./cmeta";
 export type PostCardField = {
   label: string;
   icon?: string | undefined;
-  value: string;
+  /** Words, or a node when the row is a hook into another C (Convene Pass 1, Canon 6, ruling 642). */
+  value: ReactNode;
   mine?: boolean | undefined;
 };
 export type PostCardLink = {
@@ -45,7 +46,8 @@ export type PostCardProps = {
   anchor?: string | undefined;
   audience?: string | undefined;
   kicker?: string | null | undefined;
-  title?: string | null | undefined;
+  /** Words, or a node: the cancelled event's title is struck in --ink-3 (Convene Pass 1, SPEC 2). */
+  title?: ReactNode;
   children?: ReactNode;
   fields?: PostCardField[] | undefined;
   media?: MediaBlockProps | undefined;
