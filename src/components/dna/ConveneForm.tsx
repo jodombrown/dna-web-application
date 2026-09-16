@@ -35,14 +35,13 @@ import {
 export type ConveneFormProps = ComposerFormProps & {
   /** The poster: `Presented by` reads their name and is not editable at launch (674). */
   author: { name: string };
-  /** The member's homes (633); with none, the line and the chips are absent (690). */
-  homes: Home[];
   /**
-   * The member's stated country from onboarding (public.members.current_country, read through
-   * profile_view), the lookup's anchor when no home is chosen; null when none is stated. Never
-   * combined with a home (Session 23, place anchoring).
+   * The member's homes (633); with none, the line and the chips are absent (690). A chosen home is
+   * the lookup's only anchor (Session 23, change 3: the country derived from the member's profile
+   * is withdrawn, after "Labadi beach" resolved to a Florida venue for a member in California);
+   * with none chosen the function answers unavailable rather than guessing.
    */
-  country: string | null;
+  homes: Home[];
   /** The member's Spaces, for More options (Canon 6). */
   spaces: { id: string; name: string }[];
   /** The host's browser zone: an online-only event's zone until a first home exists (ruling owed 7). */
@@ -105,7 +104,6 @@ export function ConveneForm({
   reportValidity,
   author,
   homes,
-  country,
   spaces,
   browserTz,
 }: ConveneFormProps) {
@@ -119,6 +117,10 @@ export function ConveneForm({
   const [windowMode, setWindowMode] = useState(!!v("when_window"));
   const [homeId, setHomeId] = useState<string | null>(null);
   const [lookup, setLookup] = useState<Lookup>({ state: "idle" });
+  // Session 23, change 4: Change puts the field into an editing state that holds the resolved
+  // row's words and does not look them up again until the text actually changes. Without it the
+  // lookup effect saw the same words with no row and re-resolved them before the member could type.
+  const [editingFrom, setEditingFrom] = useState<string | null>(null);
   const session = useRef<string>(
     typeof crypto !== "undefined" && "randomUUID" in crypto
       ? crypto.randomUUID()
@@ -132,7 +134,11 @@ export function ConveneForm({
   const placeId = v("place_id");
   const query = v("place_query");
   const home = homes.find((h) => h.id === homeId) ?? null;
-  const placeLabel = placeId
+  // Session 23, change 2: a resolved area (place, locality, neighborhood) carries no place_id, so
+  // publish_post keeps the member's words in place_text beside the area's name, city and point.
+  const areaResolved = v("place_kind") === "area" && !!v("lat");
+  const resolved = !!placeId || areaResolved;
+  const placeLabel = resolved
     ? [v("place_name"), v("place_area"), v("city")].filter(Boolean).join(", ")
     : "";
   const placeText = physical && !placeId && query.trim().length >= MIN_QUERY ? query.trim() : "";
@@ -151,7 +157,7 @@ export function ConveneForm({
         ? placeTz
         : browserTz
       : browserTz;
-  const tzFromPlace = physical && !!placeId && knownZone(placeTz);
+  const tzFromPlace = physical && resolved && knownZone(placeTz);
 
   // ---- the moment ------------------------------------------------------------------------------
   const whenWords = v("when");
@@ -194,7 +200,12 @@ export function ConveneForm({
       : ", time zone from the place once it is set";
 
   // ---- where, intent, validity, meta ------------------------------------------------------------
-  const whereText = placeId ? placeLabel : placeText;
+  // A venue replaces the words; an area stands beside them (change 2).
+  const whereText = placeId
+    ? placeLabel
+    : areaResolved
+      ? [placeText, placeLabel].filter(Boolean).join(", ")
+      : placeText;
   const where =
     format === "online"
       ? "Online"
@@ -253,7 +264,8 @@ export function ConveneForm({
 
   // ---- place lookup, resolved never typed (633, SPEC 3) ----------------------------------------
   const pick = (p: ResolvedPlace) => {
-    setField("place_id", p.place_id);
+    setField("place_id", p.kind === "area" ? "" : p.place_id);
+    setField("place_kind", p.kind);
     setField("place_name", p.place_name);
     setField("place_area", p.area ?? "");
     setField("city", p.city ?? "");
@@ -266,6 +278,7 @@ export function ConveneForm({
   const unpick = () => {
     for (const k of [
       "place_id",
+      "place_kind",
       "place_name",
       "place_area",
       "city",
@@ -289,8 +302,13 @@ export function ConveneForm({
     else setLookup({ state: "none" });
   };
   useEffect(() => {
-    if (!physical || placeId) return;
+    if (!physical || resolved) return;
     const q = query.trim();
+    if (editingFrom !== null) {
+      // Change 4: the words the row was resolved from are not looked up again as they stand.
+      if (q === editingFrom.trim()) return;
+      setEditingFrom(null);
+    }
     if (q.length < MIN_QUERY) {
       setLookup({ state: "idle" });
       return;
@@ -301,9 +319,9 @@ export function ConveneForm({
         action: "suggest",
         q,
         session_token: session.current,
-        // A chosen home anchors; without one the stated country does; never both.
+        // A chosen home is the only anchor (change 3); without one the function answers
+        // unavailable rather than letting Mapbox anchor on the Edge node's IP.
         proximity: home ? { lng: home.lng, lat: home.lat } : null,
-        country_name: home ? null : country,
       });
       if (!live) return;
       if (r.state === "one") pick(r.place);
@@ -316,7 +334,7 @@ export function ConveneForm({
       clearTimeout(t);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query, placeId, physical, homeId]);
+  }, [query, resolved, physical, homeId, editingFrom]);
 
   // ---- parts -------------------------------------------------------------------------------------
   const lab = (text: string, key: string): ReactNode => (
@@ -471,10 +489,11 @@ export function ConveneForm({
   );
 
   // The door: format first, then only what the format needs (621, 521).
-  const placeBlock = placeId ? (
+  const placeBlock = resolved ? (
     <div
       key="place"
       data-convene="place-resolved"
+      data-place-kind={areaResolved ? "area" : "venue"}
       style={{ display: "flex", flexDirection: "column", gap: 8 }}
     >
       <div style={{ fontSize: 15, fontWeight: 500, color: "var(--ink-2)" }}>
@@ -482,8 +501,23 @@ export function ConveneForm({
       </div>
       <div style={ROW_BOX}>
         <Icon name="map-pin" size={18} style={{ color: "var(--ink-3)", flex: "none" }} />
-        <span style={{ flex: 1, minWidth: 0 }}>{placeLabel}</span>
-        <Button variant="secondary" size="sm" onClick={unpick}>
+        {areaResolved ? (
+          // The member's words stand beside the resolved area, never replaced by it (change 2).
+          <span style={{ flex: 1, minWidth: 0 }}>
+            {placeText}
+            <span style={{ color: "var(--ink-3)" }}>{placeLabel ? ", " + placeLabel : ""}</span>
+          </span>
+        ) : (
+          <span style={{ flex: 1, minWidth: 0 }}>{placeLabel}</span>
+        )}
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => {
+            unpick();
+            setEditingFrom(query);
+          }}
+        >
           Change
         </Button>
       </div>

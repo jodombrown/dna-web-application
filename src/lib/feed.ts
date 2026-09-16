@@ -203,10 +203,13 @@ export async function hydratePosts(
         Object.assign(fields, { title: mine(e.title) });
         const rows = deliveryByEvent.get(e.id) ?? [];
         const physical = rows.find((r) => r.kind === "physical");
+        // A venue row carries place_name and no words; an area row (Session 23, change 2) carries
+        // the member's words in place_text beside the area's name; words alone carry only
+        // place_text. All three read left to right.
         const placeWords = physical
-          ? physical.place_name
-            ? [physical.place_name, physical.city].filter(Boolean).join(", ")
-            : (physical.place_text ?? "")
+          ? [physical.place_text, physical.place_name, physical.city]
+              .filter((p, i, a) => !!p && a.indexOf(p) === i)
+              .join(", ")
           : "";
         const city = physical?.city ?? null;
         const where =

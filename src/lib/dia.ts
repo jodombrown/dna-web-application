@@ -120,6 +120,8 @@ export type ResolvedPlace = {
   lat: number;
   timezone: string;
   label: string;
+  /** Session 23, change 2: a poi or an address is a venue; a place, locality or neighborhood is an area. */
+  kind: "venue" | "area";
 };
 export type SuggestedPlace = Omit<ResolvedPlace, "lng" | "lat" | "timezone">;
 export type PlaceState =
@@ -156,8 +158,12 @@ export async function resolvePlace(body: {
     const data = (await res.json()) as PlaceState | null;
     if (!data || typeof data !== "object" || typeof data.state !== "string")
       return { state: "unavailable" };
-    if (data.state === "one" && data.place && data.place.place_id) return data;
-    if (data.state === "several" && Array.isArray(data.places) && data.places.length) return data;
+    // A row without kind is a venue (the shape before change 2).
+    const kindOf = (p: { kind?: string }) => (p.kind === "area" ? "area" : "venue");
+    if (data.state === "one" && data.place && data.place.place_id)
+      return { state: "one", place: { ...data.place, kind: kindOf(data.place) } };
+    if (data.state === "several" && Array.isArray(data.places) && data.places.length)
+      return { state: "several", places: data.places.map((p) => ({ ...p, kind: kindOf(p) })) };
     if (data.state === "none") return data;
     return { state: "unavailable" };
   } catch {

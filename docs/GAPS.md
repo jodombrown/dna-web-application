@@ -1975,6 +1975,11 @@ value), then assert the `Draft saved` count. A wait that resolves on the state t
 cannot be short. The same fixed-wait shape appears elsewhere in the file (`waitForTimeout(150)` after
 clicks in the Convene arm, added in Pass 1) and is not this gap's scope until one of them earns it.
 
+**Second sighting.** Pages run 235 on `402e708`, `matrix (webkit)`, first attempt, at
+`webkit-1366x1024-light`: the same check, the same shape, one viewport over from the first. Two sightings
+in one day at two widths on two heads whose composer code is the same is a timing that the fixed wait
+loses often enough to name it a recurring cost, not a one-off.
+
 **Not this gap's scope.** The check's assertions and the arm's declared count stay as they are.
 
 ## G35. Mapbox Search Box carries no POI for Ghana, Kenya or Nigeria, so a Convene host there always falls to their words
