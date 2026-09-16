@@ -1903,3 +1903,43 @@ on, and none is needed: the meta line the prototype computed from `created_objec
 object rather than the store, it takes the bundle's shape: flat, dotted, unfiltered, and the host
 filters by prefix. This entry exists so the next reader does not look for a nested object the bundle
 never produces.
+
+## G33. Two `live` jobs on different branches share one project and two test accounts, and one run's fixture can be read by the other's arm
+
+**Severity: low, a harness gap. Not a merge blocker. Opened 16 September 2026 during Convene Pass 1's
+PR 1, filed under ruling 597: a follow-up found during a PR earns a G number, not a PR comment. The
+number is assigned by this entry (ruling 638).**
+
+**What was seen.** Pages run 223 on `1e34082` (PR 1) and run 224 on `85fadea` (PR 2) started within a
+minute of each other after a merge forward. Their `live` jobs ran against the same canonical project
+with the same OWNER and MEMBER test accounts. PR 2's F3 arm set the owner's Private switch at
+19:40:08.96 UTC and restored it at 19:40:09.47, both committed through REST. PR 1's ruling 416 arm
+read the owner's post from `public.feed` as the member at 19:40:09.37, inside that window, and got
+`author_name null`: `private.can_see_core` reads `members.profile_private`, which the other run had
+just set. The arm recorded `FAIL ruling 416` (98 of 99) on a head whose diff was two policy lines in a
+migration file. PR 2's own run, five seconds later, read 99 of 99, and every run before it that day
+read 99 of 99 on the same arm.
+
+**Why the transaction wrapper does not cover it.** `tests/live-db.cjs` runs its arms on one pg client
+inside a transaction it rolls back, so nothing an arm writes reaches another run. `tests/live-checks.cjs`
+F3 and F4 are REST arms: they change the owner's switches and the block row through PostgREST as the
+signed-in accounts, commit, and restore a moment later. The restore is part of the same run's sequence,
+not of the database's isolation, so a concurrent reader on another branch sees the interim state.
+`pages.yml`'s `concurrency` group is per ref, which serialises runs of one branch and nothing across
+branches, and the stacked Convene PRs push three branches at once by design.
+
+**What it costs.** A red `live` job that is nobody's, on whichever branch's arm happened to read during
+another branch's fixture window, at a rate set by how often two branches push together. Under the CI
+rules it is a re-run once identified, and a re-run passes; the cost is the identification, which took
+reading two logs side by side, and a red check on a PR that was green.
+
+**The fix this entry names.** One of two shapes, and not both. Either the REST fixtures move inside the
+same rolled-back transaction as the live-db arms (F3's switch and F4's block are one `update` and one
+`insert` under the caller's role, which `actAs` already provides), so no run commits fixture state at
+all; or the `live` job takes a cross-branch concurrency group (`live-${{ github.repository }}`, not
+cancelling in progress), so two runs never overlap the project. The first removes the window; the
+second only serialises it, and the first is the one that also holds for a founder's own test on the
+project during a run.
+
+**Not this gap's scope.** The arms' assertions and counts stay as they are; the 416 arm was right to
+read null, since the owner was Private at that instant.
