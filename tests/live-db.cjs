@@ -643,31 +643,56 @@ async function runLiveDbArms({ record, skip }) {
         );
         return;
       }
-      await actAsSelf(client);
-      const ev = await client.query(
+      // The host reads their own post for the event id (posts_member_select). live_arms holds no
+      // grant on posts, so this read stays as the owner rather than resetting the role; and every
+      // read from here goes through attempt(), so a refusal records a FAIL with its code instead of
+      // escaping the arm and ending the suite.
+      const ev = await attempt(
+        client,
         "select created_object_id as id from public.posts where id = $1",
         [published.rows[0].id],
       );
-      const eventId = ev.rows[0] && ev.rows[0].id;
+      const eventId = ev.ok && ev.rows[0] ? ev.rows[0].id : null;
+      if (!eventId) {
+        record(
+          names.delivery,
+          false,
+          "the published post carries no event id: " +
+            (ev.ok ? "no row" : ev.code + " " + ev.message),
+        );
+        return;
+      }
       const readAs = async (uid) => {
         await actAs(client, uid);
-        const e = await client.query("select id from public.events where id = $1", [eventId]);
-        const d = await client.query(
+        const e = await attempt(client, "select id from public.events where id = $1", [eventId]);
+        const d = await attempt(
+          client,
           "select kind from public.event_delivery where event_id = $1 order by position",
           [eventId],
         );
-        const h = await client.query(
+        const h = await attempt(
+          client,
           "select capacity from public.event_host_settings where event_id = $1",
           [eventId],
         );
+        const refused = [e, d, h].find((r) => !r.ok);
         return {
-          event: e.rows.length,
-          kinds: d.rows.map((r) => r.kind),
-          settings: h.rows.length,
+          error: refused ? refused.code + " " + refused.message : null,
+          event: e.ok ? e.rows.length : -1,
+          kinds: d.ok ? d.rows.map((r) => r.kind) : [],
+          settings: h.ok ? h.rows.length : -1,
         };
       };
       const asMember = await readAs(member.id);
       const asOwner = await readAs(owner.id);
+      if (asMember.error || asOwner.error) {
+        record(
+          names.delivery,
+          false,
+          "a read was refused: " + (asMember.error || asOwner.error),
+        );
+        return;
+      }
       record(
         names.delivery,
         asMember.event === 1 &&
