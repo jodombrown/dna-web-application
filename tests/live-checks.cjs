@@ -572,6 +572,28 @@ async function get(url, headers = {}) {
             brief(unresolvable),
           );
 
+          // Session 23, change 2: place, locality and neighborhood join poi and address, because
+          // Search Box holds no POI and no street addressing in Ghana. Osu near Accra answers an
+          // area, and the row says so through kind.
+          const osu = await call(
+            { action: "suggest", q: "Osu", session_token: session, proximity: ACCRA },
+            ownerToken,
+          );
+          const osuPlaces = placesOf(osu);
+          record(
+            "place-resolve: Osu near Accra answers an area (place, locality or neighborhood) with kind area (change 2)",
+            typed(osu) &&
+              osuPlaces.length > 0 &&
+              osuPlaces.some((p) => p.kind === "area" && /osu/i.test(p.place_name || "")),
+            brief(osu),
+          );
+          record(
+            "place-resolve: a venue row carries kind venue and an area row kind area (change 2)",
+            placesOf(accra).every((p) => p.kind === "venue" || p.kind === "area") &&
+              placesOf(accra).some((p) => p.kind === "venue"),
+            JSON.stringify(placesOf(accra).map((p) => p.kind)).slice(0, 80),
+          );
+
           // Proof 3: nonsense, anchored, is Mapbox's own zero: `none`.
           const noPlace = await call(
             {

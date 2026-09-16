@@ -16,7 +16,11 @@
 //                                              ran out, the token is not configured, or the call could
 //                                              not be anchored (below). Never `none`: nothing was
 //                                              found or not found, because the search did not run.
-// Place    = { place_id, place_name, area, city, country, lng, lat, timezone, label }
+// Place    = { place_id, place_name, area, city, country, lng, lat, timezone, label, kind }
+//            kind is 'venue' for a poi or an address and 'area' for a place, locality or
+//            neighborhood (Session 23, change 2): Search Box holds no POI and no street addressing
+//            for Ghana, so a venue there resolves to its area at best, and the form keeps the
+//            member's words beside the resolved area rather than replacing them.
 // Suggested = the same without coordinates or a time zone: Search Box's suggest carries none for a
 //            poi or an address, so `several` hands back names and labels and the client's pick comes
 //            back through `retrieve` for the coordinates, inside the same session_token. `one` is
@@ -24,14 +28,18 @@
 //            coordinates and the zone at once. label is `{place_name}, {area}, {city}` in Convene's
 //            words (`Front Room, Osu, Accra`).
 //
-// Anchoring (Session 23, place anchoring), in this order and never combined:
+// Anchoring (Session 23, place anchoring; change 3 of the same session), in this order and never
+// combined:
 //   1. proximity given (a chosen home, 633): Search Box `proximity={lng},{lat}`, which narrows and
 //      never filters.
-//   2. no proximity, country_name given (the member's stated country from onboarding, which is
-//      public.members.current_country, a name from public.world_countries): Search Box `country=`
-//      with the ISO 3166-1 alpha-2 code for that name, resolved through ICU's English region names
-//      (Intl.DisplayNames, long and short styles) under a fixed fold. No table is kept here: a name
-//      ICU does not carry under that fold resolves to nothing and falls to case 3.
+//   2. no proximity, country_name given: Search Box `country=` with the ISO 3166-1 alpha-2 code for
+//      that name, resolved through ICU's English region names (Intl.DisplayNames, long and short
+//      styles) under a fixed fold. No table is kept here: a name ICU does not carry under that fold
+//      resolves to nothing and falls to case 3. The form sends no country tonight: the country
+//      derived from public.members.current_country is withdrawn (Session 23, change 3: a member in
+//      California typing "Labadi beach" resolved to LABADIE CHERIE in West Palm Beach with a GMT-4
+//      zone), and the parameter stays for the country control the member will set themselves, which
+//      Design owns. Until then an in-person lookup with no chosen home is case 3.
 //   3. neither: the call is not made and the state is `unavailable`, logged `reason: unanchored`.
 //      Search Box applies the caller's IP as the proximity when none is sent (the reference: "if not
 //      provided, the default is IP proximity"), and the caller is an Edge node, not the member; there
@@ -65,7 +73,10 @@ const BUDGET_MS = 3000;
 const MIN_CHARS = 3;
 const MAX_CHARS = 256;
 const LIMIT = 5;
-const TYPES = "poi,address";
+// Session 23, change 2: place, locality and neighborhood beside poi and address. Verified by direct
+// query: Mapbox holds no POI and no street addressing in Ghana; Osu comes back as a locality.
+const TYPES = "poi,address,place,locality,neighborhood";
+const VENUE_TYPES = new Set(["poi", "address"]);
 const LANGUAGE = "en";
 const SEARCHBOX = "https://api.mapbox.com/search/searchbox/v1";
 
@@ -90,6 +101,7 @@ export type Place = {
   lat: number;
   timezone: string;
   label: string;
+  kind: "venue" | "area";
 };
 export type Suggested = Omit<Place, "lng" | "lat" | "timezone">;
 export type Resolved =
@@ -193,7 +205,10 @@ function named(s: Suggestion): Suggested | null {
       : s.place_formatted
         ? name + ", " + s.place_formatted
         : name;
-  return { place_id: id, place_name: name, area, city, country, label };
+  const kind = VENUE_TYPES.has(typeof s.feature_type === "string" ? s.feature_type : "")
+    ? "venue"
+    : "area";
+  return { place_id: id, place_name: name, area, city, country, label, kind };
 }
 
 function zoneFor(lng: number, lat: number): string | null {
