@@ -589,10 +589,14 @@ async function runLiveDbArms({ record, skip }) {
     // ------------------------------------------------------------------------------------------
     await inTransaction(client, async () => {
       await actAsSelf(client);
+      // Presence by name, not by privilege: information_schema.tables lists only the tables the
+      // current role holds a privilege on, and live_arms holds none on these (the grants are to
+      // authenticated and service_role), so it read zero on a project that had them. The reads
+      // below run as authenticated through set role, where the grants and the policies apply.
       const present = await client.query(
-        "select count(*)::int as n from information_schema.tables where table_schema = 'public' and table_name in ('event_delivery', 'event_host_settings')",
+        "select (to_regclass('public.event_delivery') is not null and to_regclass('public.event_host_settings') is not null) as ok",
       );
-      if (!present.rows[0] || present.rows[0].n !== 2) {
+      if (!present.rows[0] || present.rows[0].ok !== true) {
         skip(
           names.delivery,
           "20260916120100_p1_convene_place_columns.sql is not on the project yet",
