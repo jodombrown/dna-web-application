@@ -87,9 +87,25 @@ export function LensBar<Id extends string = string>({
       setFit(true);
       return;
     }
+    // The fit test matches the layout it decides for. The track gives the active tab its content
+    // width (flex: none) and every other tab an equal share of what is left (flex: 1 1 0), so a
+    // label fits only if it fits its share, not only if the labels' sum fits the track: run 239
+    // on this branch read "network" at 86px of content inside a 72px share at 390 with the sum
+    // test answering "fits", which is the founder's screenshot. Whichever lens is active, the
+    // widest label as an active tab plus the widest as an inactive tab times the others, with the
+    // gaps and the track's padding, has to fit; otherwise the bar renders icon-first.
     const measure = () => {
-      if (track.current && probe.current)
-        setFit(Math.ceil(probe.current.getBoundingClientRect().width) <= track.current.clientWidth);
+      if (!track.current || !probe.current) return;
+      let activeMax = 0;
+      let inactiveMax = 0;
+      probe.current.querySelectorAll<HTMLElement>("[data-probe]").forEach((el) => {
+        const w = el.getBoundingClientRect().width;
+        if (el.getAttribute("data-probe") === "active") activeMax = Math.max(activeMax, w);
+        else inactiveMax = Math.max(inactiveMax, w);
+      });
+      const others = Math.max(0, lenses.length - 1);
+      const need = 8 + others * 2 + activeMax + others * inactiveMax;
+      setFit(Math.ceil(need) <= track.current.clientWidth);
     };
     measure();
     const cleanups: (() => void)[] = [];
@@ -170,24 +186,30 @@ export function LensBar<Id extends string = string>({
               whiteSpace: "nowrap",
             }}
           >
-            {lenses.map((l) => (
-              <span
-                key={l.id}
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 8,
-                  padding: "0 14px",
-                  fontSize: 15,
-                  fontWeight: 700,
-                  border: "1px solid transparent",
-                  boxSizing: "border-box",
-                }}
-              >
-                {l.icon && <span style={{ width: 20, height: 20, flex: "none" }} />}
-                {l.label}
-              </span>
-            ))}
+            {lenses.map((l) =>
+              (["active", "inactive"] as const).map((role) => (
+                // Each label twice: as the active tab (bold, 14px sides) and as an inactive one
+                // (medium, 8px sides), the two shapes the track renders.
+                <span
+                  key={l.id + ":" + role}
+                  data-probe={role}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 8,
+                    padding: role === "active" ? "0 14px" : "0 8px",
+                    fontSize: 15,
+                    fontWeight: role === "active" ? 700 : 500,
+                    border: "1px solid transparent",
+                    boxSizing: "border-box",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {l.icon && <span style={{ width: 20, height: 20, flex: "none" }} />}
+                  {l.label}
+                </span>
+              )),
+            )}
           </div>
         </div>
       )}

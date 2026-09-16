@@ -7,7 +7,10 @@ export type LensId = "all" | "for-you" | "network" | "mine" | "saved";
 export const LENS_IDS: LensId[] = ["all", "for-you", "network", "mine", "saved"];
 
 export const LENSES: (Lens<LensId> & { scope: string })[] = [
-  { id: "all", label: "All", scope: "Everything you can see, newest first." },
+  // Session 23: every lens carries an icon, because a set with one lens lacking an icon never
+  // switches to icon-first (correction 14's own rule), and that is what painted "My Network" over
+  // its neighbour at 390 on every engine. globe is the set's icon for everything a member can see.
+  { id: "all", label: "All", icon: "globe", scope: "Everything you can see, newest first." },
   {
     id: "for-you",
     label: "For You",

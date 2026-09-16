@@ -2552,6 +2552,10 @@ async function runShell(browserType, bname, [w, h]) {
           .filter((t) => t.scrollWidth > t.clientWidth + 1)
           .map((t) => t.getAttribute("data-lens") + ":" + t.scrollWidth + ">" + t.clientWidth),
         barOverflow: bar.scrollWidth > bar.clientWidth + 1,
+        // What the bar measured: its probe's labels, as active and as inactive tabs.
+        probe: Array.from(
+          (bar.parentElement && bar.parentElement.querySelectorAll("[data-probe]")) || [],
+        ).map((e) => e.getAttribute("data-probe")[0] + Math.round(e.getBoundingClientRect().width)),
       };
     });
     record(

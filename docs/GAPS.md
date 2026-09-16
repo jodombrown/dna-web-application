@@ -1944,40 +1944,49 @@ project during a run.
 **Not this gap's scope.** The arms' assertions and counts stay as they are; the 416 arm was right to
 read null, since the owner was Private at that instant.
 
-## G36. The lens bar's labels-fit was never checked against the layout it produced, on any engine, and no engine in the matrix is iOS Safari
+## G36. The lens bar could never fall back to icon-first on the Feed, its fit test did not match its layout, and no check read the layout it produced
 
 **Severity: medium for the surface, and it reached production: PR 0's correction 14 is on `main`. Opened
 16 September 2026 during Session 23, filed under ruling 597. The number is assigned by this entry (ruling
 638).**
 
-**What was seen.** The founder, on an iPhone in Safari at 390 wide against PR 3's preview, read lens labels
-painted over the neighbouring lenses' icons. Both matrix engines had passed every arm on the same build
-at 390, and the bar there rendered labels that fit.
+**What was seen.** The founder, on an iPhone in Safari at 390 wide against PR 3's preview, read a lens label
+painted over the neighbouring lens's icon. Both matrix engines had passed every arm on the same build at 390.
 
-**Why the matrix did not see it.** Two things, and only the first is certain.
+**What it was.** Three things, established in this order on the branch that fixes them, and none of them
+iOS.
 
-1. The matrix had no assertion on the bar's layout. It asserted the bar's presence, its lenses, the
-   active lens and the URL, and never that a label sat inside its tab. A wrong `fit` renders labels that
-   overflow their tabs, and nothing in the run reads a tab's `scrollWidth` against its `clientWidth`. The
-   shell arm now does, after `document.fonts.ready`, at every viewport on both engines.
-2. The measurement ran once, at mount, in a layout effect, and again only when the track's width changed.
-   The labels' widths change when the web font arrives (`font-display: swap`, self-hosted woff2), and the
-   track's width does not, so the bar never re-measured after a swap. On the runners the woff2 comes off
-   the preview on a fast link and hydration lands after it; on a phone on a mobile link the swap can land
-   after the layout effect, so the fit was measured on the fallback face and rendered in Alegreya Sans.
-   That ordering is a reading of the timings, not a capture from the device (Moderate). The founder's
-   own reading, that iOS Safari reports `scrollWidth` as 0 inside a zero-size clipped ancestor so that
-   every set "fits", is the other candidate (Moderate); the bar no longer depends on either, because the
-   probe is off-screen and unclipped, read through `getBoundingClientRect`, and re-measured when the
-   document's fonts settle and on every later font load.
+1. **The Feed's lens set could never switch.** Correction 14's rule is that a set with a lens lacking an icon
+   never renders icon-first, because that lens would have nothing to fall back to. `src/lib/lens.ts`
+   shipped `all` without an icon, so `canSwitch` was false, no probe was rendered, `fit` was set true
+   and the bar rendered labels at every width on every engine. The first form of the shell check on this
+   branch read the bar as `mode: labels` at 360, 390 and 430 with no probe in the document, which is what
+   made this visible. `all` now carries `globe`, the set's icon for everything a member can see.
+2. **The fit test did not match the layout it decided for.** The track gives the active tab its content
+   width (`flex: none`) and every other tab an equal share of what is left (`flex: 1 1 0`), so a label
+   fits only if it fits its share. The test compared the sum of the labels' natural widths against the
+   track, which passes while a long label overflows a short share: run 239 on this branch read
+   `network` at 86px of content inside a 72px share at 390 with the sum test satisfied. The test now
+   takes the widest label as an active tab plus the widest as an inactive tab times the others, with
+   the gaps and the track's padding, against the track.
+3. **Nothing re-measured after the web font arrived.** The measurement ran once at mount and again only
+   on track resize, and the fonts are self-hosted with `font-display: swap`; a swap after hydration
+   widens every label with no re-measure. Fixed alongside (re-measure on `document.fonts.ready` and on
+   every later font load), and the probe no longer sits in a zero-size clipped box read through
+   `scrollWidth`, which was the reading the correction arrived with; neither of those two was the cause
+   of what the founder saw, and both could have been the next one.
 
-**What the matrix cannot do.** Ruling 61 names Safari, and the matrix runs Playwright's WebKit on Linux,
-which shares WebCore with Safari and not its iOS text, font-loading or scrolling behaviour. The founder's
-iPhone is the only iOS check this project has. A real-device pass (BrowserStack, or a Playwright run on a
-macOS runner with an iOS simulator) is the fix this half of the gap names; until then a visual break
-that only iOS Safari produces is found by a person.
+**Why the matrix did not see it.** It had no assertion on the bar's layout. It checked the bar's presence,
+its lenses, the active lens and the URL, and never that a label sat inside its tab. The shell arm now
+does, at every viewport on both engines, after `document.fonts.ready`: no tab's content exceeds its box
+and the track does not scroll, whichever mode the bar chose. With that one check in place the defect
+reproduced on Chromium on the first run, which is the whole point of the check.
 
-**Not this gap's scope.** The measurement fix itself is in `src/components/strand/LensBar.tsx` and is
-proven by the new shell check on both engines; whether that check would have failed on the runners
-before the fix is unknown, because the timing in point 2 is what decides it, and the check's value is
-that it fails wherever the timing goes wrong from now on.
+**What the matrix still cannot do.** Ruling 61 names Safari, and the matrix runs Playwright's WebKit on
+Linux, which shares WebCore with Safari and not its iOS text, font-loading or scrolling behaviour. The
+founder's iPhone is the only iOS check this project has. This time iOS was where a person happened to
+look, not what was different; the next time it may be the other way round, and a real-device pass
+(BrowserStack, or a Playwright run on a macOS runner with an iOS simulator) is the fix this half names.
+
+**Not this gap's scope.** Connect's lens bar carries its own set and is not read by the shell check; if
+its set ever loses an icon it fails the same way, silently, until a check reads it.
