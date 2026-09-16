@@ -2950,9 +2950,16 @@ async function runPublish(browserType, bname, [w, h], theme) {
     await dialog
       .locator('[role="radiogroup"][aria-label="Format"] [role="radio"]', { hasText: "In person" })
       .click();
+    // Session 23, change 3: with no home chosen the lookup is unavailable and the words stand, so
+    // the arm chooses a home the way a member does (clear the field, tap a chip, retype) and the
+    // venue then resolves to one place. The Convene arm asserts the unanchored state itself.
+    const placeField = dialog.locator('input[data-convene="place_query"]');
+    await placeField.fill("");
+    await dialog.locator('[data-convene="homes"] button', { hasText: "Accra" }).click();
+    await placeField.fill("Front Room");
     await dialog.locator('[data-convene="place-resolved"]').waitFor({ timeout: 5000 });
     record(
-      tag + " In person: the venue resolves to one place and Publish is on",
+      tag + " In person with a home chosen: the venue resolves to one place and Publish is on",
       (await dialog.locator('[data-convene="place-resolved"]').textContent()).includes(
         "Front Room, Osu, Accra",
       ) && !(await dialog.getByRole("button", { name: "Publish" }).isDisabled()),
