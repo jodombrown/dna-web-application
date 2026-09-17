@@ -2143,3 +2143,62 @@ Design with these numbers.
 
 **Not this gap's scope.** The compact tier is the founder's screenshot and reads icon-first correctly;
 the expanded tier fits with 141px to spare.
+
+## G38. A published in-person event with no resolved place carries the host's browser zone, not the country's
+
+**Severity: high for the surface, and it reaches the stored row rather than only the rendering. Not a
+merge blocker under ruling 813, which scopes the fix separately. Opened 17 September 2026 during
+Convene Pass 1's PR 3, filed under ruling 597. The number is assigned by this entry (ruling 638).**
+
+**What decides it.** `src/components/dna/ConveneForm.tsx:204` to `210`:
+
+```ts
+const tz: string | null = !format
+  ? null
+  : physical
+    ? knownZone(placeTz)
+      ? placeTz
+      : browserTz
+    : browserTz;
+```
+
+`placeTz` is `convene.place_tz`, written only by `pick()` from a resolved place's `timezone` (the
+Edge function's `tz-lookup` on the place's point). With no resolution the field is empty,
+`knownZone("")` is false, and the zone falls to `browserTz`, the host's own. The payload carries it
+as `convene.timezone` (line 307) and `20260916120200_p1_publish_post_convene.sql:175` reads it into
+`events.timezone`. So a Ghana event composed from California, published with words only, is stored
+with `America/Los_Angeles`. Chat's reading in 813 is correct.
+
+**The part that is worse than the label.** Line 219, `const zoneForInstants = tz ?? browserTz`, and
+`startsAt = instantFor(date, time, zoneForInstants)`. The zone does not merely label the event, it
+interprets the host's typed time. A host in California who types `7pm` for an Accra event stores
+03:00 the following day in Accra. Every viewer reads that instant, so the error is not the host's
+alone. Ghana is the case this was found on because Mapbox resolves no venue there (G35), which means
+the words-only path is the normal path for exactly the market the surface is built for.
+
+**Why it survived the founder's test.** The composer never shows the browser zone in words in that
+state: `whenSuffix` reads `, time zone from the place once it is set`, and the `Time zone …, from the
+place.` line renders only when `tzFromPlace` is true. The wrong value is stored, not displayed.
+
+**The fix this entry names (813).** The zone comes from the chosen country, derived from
+`event_delivery.country` with no lookup, and the host is asked where a country spans more than one
+zone. Four pieces, and the first is why this is a brief rather than a patch:
+
+1. **A country-to-zone source.** There is none in the repo. `public.world_countries` is
+   `(name text primary key, position smallint not null unique)` (`20260908142054_b3_rulings_141_142_144.sql:14`)
+   — no alpha-2, no zone. The only name-to-code fold lives server-side in `place-resolve`, and
+   copying it into the component is the hardcoded-vocabulary anti-pattern the absolutes name. So this
+   needs zone data on the vocabulary the form already reads, with RLS and a read through the one
+   vocabulary path: a migration.
+2. **The multi-zone control.** Ghana, Kenya and most of Africa are single-zone; the United States,
+   Canada, Mexico, Brazil, Russia, Australia, Indonesia and the DRC are not. Asking rather than
+   guessing is a new field in the place block with its own absence rule, validity clause and copy.
+3. **The instants.** `zoneForInstants` changing under an open draft, and what a published event does
+   when its country's zone was never stored: the seven existing events and anything published before
+   the column exists.
+4. **The arms.** Both engines, a single-zone country and a multi-zone one, plus a live arm that the
+   stored `events.timezone` matches the country rather than the runner's.
+
+**Not this gap's scope.** The resolved-place path is correct and unchanged: a place that resolves
+carries its own zone from its own point. Online events taking the host's browser zone is SPEC 4 as
+written (ruling owed 7) and is not part of this.
