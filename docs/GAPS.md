@@ -1990,3 +1990,33 @@ look, not what was different; the next time it may be the other way round, and a
 
 **Not this gap's scope.** Connect's lens bar carries its own set and is not read by the shell check; if
 its set ever loses an icon it fails the same way, silently, until a check reads it.
+
+## G37. With the fit test corrected, the medium tier reads icon-first for a 3px shortfall that `main` hid inside a label's padding
+
+**Severity: low, a Design decision rather than a defect. Opened 17 September 2026 during Session 23 on
+PR 45, filed under ruling 597. The number is assigned by this entry (ruling 638).**
+
+**What was measured.** The G36 fix's shell check, run on Chromium against `wrangler pages dev dist` of
+`458e285` and of `main` at `1eb7ab8`, at the same widths:
+
+| Build     | 390 by 844 (track 358)                               | 744 by 1133 and 1024 by 768 (track 616)       | 1280 by 800 (track 760) |
+| --------- | ---------------------------------------------------- | --------------------------------------------- | ----------------------- |
+| `main`    | labels, `network` at 86px of content in a 72px share | labels, nothing over its box by more than 1px | labels                  |
+| `458e285` | icon-first                                           | icon-first                                    | labels                  |
+
+The corrected test needs 619px for labels on the Feed's set: the track's 8px of padding, four 2px gaps,
+the widest label as the active tab (131px, "My Network") and the widest as an inactive tab (118px)
+times the four others. At 616px the four inactive tabs get a 117.25px share each, so the widest label's
+118px does not fit by 0.75px, and the bar renders icon-first at every medium-tier width. On `main` that
+same 0.75px was clipped out of the label's 8px side padding, under the check's 1px tolerance and below
+anything an eye could see; the medium tier read labels and looked right.
+
+**Why it is logged and not fixed here.** Correction 14's rule is binary, labels fit or they do not, and
+the test now answers it exactly. Making the tier read labels again is one of three choices, none of
+them the PR's to make: a tolerance in the test (which hides a real overlap the next time a label is a
+pixel wider), 1px less side padding on inactive tabs (8 becomes 7, saving 8px, and the tier fits with
+5px to spare), or a wider column at the medium tier. The founder owns the lens bar; the choice goes to
+Design with these numbers.
+
+**Not this gap's scope.** The compact tier is the founder's screenshot and reads icon-first correctly;
+the expanded tier fits with 141px to spare.
