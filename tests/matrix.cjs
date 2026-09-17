@@ -2946,6 +2946,10 @@ async function runConvene(browserType, bname, [w, h], theme) {
         payload.fields["convene.link_tba"] === true &&
         typeof payload.fields["convene.starts_at"] === "string" &&
         payload.fields["convene.timezone"] === "Africa/Accra" &&
+        // SPEC Revision 5's exit check (799): event_delivery.country is the chosen country on every
+        // published in-person event, and place_text never contains it.
+        payload.fields["convene.country"] === "Ghana" &&
+        !String(payload.fields["convene.place_text"] || "").includes("Ghana") &&
         payload.fields["convene.delivery_intent"] ===
           "In person at Front Room, Osu, Accra and Online, link to be announced." &&
         payload.dia &&

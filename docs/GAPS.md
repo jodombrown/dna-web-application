@@ -1933,6 +1933,13 @@ another branch's fixture window, at a rate set by how often two branches push to
 rules it is a re-run once identified, and a re-run passes; the cost is the identification, which took
 reading two logs side by side, and a red check on a PR that was green.
 
+**Second sighting.** Pages runs 250 (PR 42, `e6e35f2`) and 251 (PR 44, `19b1087`), both `live` jobs pushed
+a minute apart and running their arms at 05:09:58 and 05:09:59 UTC on 17 September. Run 250's F4 fixture
+held the block while run 251 inserted it (`F4: the viewer blocks the other member` read 409, `23505`),
+then tore it down under run 251's reads (`B4A section 4` read `viewer_blocked false`, `B4A section 7`
+read `relationship present`). Three arms red on a head whose diff touches none of them; the fix below
+is unchanged, and until it lands two `live` jobs are never re-run together.
+
 **The fix this entry names.** One of two shapes, and not both. Either the REST fixtures move inside the
 same rolled-back transaction as the live-db arms (F3's switch and F4's block are one `update` and one
 `insert` under the caller's role, which `actAs` already provides), so no run commits fixture state at
