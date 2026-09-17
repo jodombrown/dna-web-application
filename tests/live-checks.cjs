@@ -389,8 +389,17 @@ async function get(url, headers = {}) {
         const session = "live-" + Date.now().toString(36) + "-arms";
         const ACCRA = { lng: -0.187, lat: 5.6037 };
         const NAIROBI = { lng: 36.8219, lat: -1.2921 };
+        // Session 24 (783, 796, 797): the host-set country is the anchor of every lookup and a home
+        // narrows inside it; proximity alone anchors nothing. Every call below carries the country
+        // the form would send.
         const probe = await call(
-          { action: "suggest", q: "Front Room", session_token: session, proximity: ACCRA },
+          {
+            action: "suggest",
+            q: "Front Room",
+            session_token: session,
+            country_name: "Ghana",
+            proximity: ACCRA,
+          },
           ownerToken,
         );
         if (probe.status === 404) {
@@ -399,7 +408,12 @@ async function get(url, headers = {}) {
             "function not deployed on the project (gateway 404)",
           );
         } else {
-          const noJwt = await call({ action: "suggest", q: "Front Room", session_token: session });
+          const noJwt = await call({
+            action: "suggest",
+            q: "Front Room",
+            session_token: session,
+            country_name: "Ghana",
+          });
           record(
             "place-resolve: a call without a JWT returns 401",
             noJwt.status === 401,
@@ -424,25 +438,43 @@ async function get(url, headers = {}) {
               .map((p) => p.place_id)
               .join(",");
           const brief = (r) => r.status + " " + r.text.slice(0, 60);
+          const inCountry = (r, name) => typed(r) && placesOf(r).every((p) => p.country === name);
 
-          // Proof 1: a home chosen. Front Room near Accra is the founder's own case.
+          // Proof 1: a country and a home. Front Room in Ghana near Accra is the founder's own case;
+          // in Kenya near Nairobi the same words.
           const nairobi = await call(
-            { action: "suggest", q: "Front Room", session_token: session, proximity: NAIROBI },
+            {
+              action: "suggest",
+              q: "Front Room",
+              session_token: session,
+              country_name: "Kenya",
+              proximity: NAIROBI,
+            },
             ownerToken,
           );
           const accra = probe;
           record(
-            "place-resolve: Front Room near Nairobi and near Accra both answer (one, several or none)",
+            "place-resolve: Front Room in Kenya near Nairobi and in Ghana near Accra both answer (one, several or none)",
             typed(nairobi) && typed(accra),
             "nairobi " + brief(nairobi) + " | accra " + brief(accra),
           );
           // The row: `one` is already retrieved; `several` is retrieved here for its first place, in
           // the same session, the way the form's pick does. Either way the row carries the point
-          // and the zone.
-          const first = placesOf(accra)[0];
+          // and the zone. Ghana holds no POI (G35), so the row is taken from the United Kingdom,
+          // which does.
+          const ukList = await call(
+            {
+              action: "suggest",
+              q: "Front Room",
+              session_token: session,
+              country_name: "United Kingdom",
+            },
+            ownerToken,
+          );
+          const first = placesOf(ukList)[0];
           const row =
-            accra.body && accra.body.state === "one"
-              ? accra
+            ukList.body && ukList.body.state === "one"
+              ? ukList
               : first
                 ? await call(
                     {
@@ -465,80 +497,76 @@ async function get(url, headers = {}) {
               Number.isFinite(row.body.place.lng) &&
               Number.isFinite(row.body.place.lat) &&
               !!row.body.place.label,
-            row ? brief(row) : "no suggestion to retrieve: accra " + brief(accra),
+            row ? brief(row) : "no suggestion to retrieve: uk " + brief(ukList),
           );
-          // 633: a home narrows the lookup. Two proximities give two orderings where Search Box
-          // knows the name near at least one of them; near Nairobi and Accra it knows none (G35),
-          // so both answers are the same far-away list and prove nothing about narrowing. London
-          // and Portland, Maine each have a Front Room, so the two orderings differ or the
-          // narrowing is not happening.
-          const london = await call(
-            {
-              action: "suggest",
-              q: "Front Room",
-              session_token: session,
-              proximity: { lng: -0.1276, lat: 51.5072 },
-            },
-            ownerToken,
-          );
+          // 633: a home narrows the lookup inside the country. Two proximities in one country give
+          // two orderings where Search Box knows the name near at least one of them; Portland,
+          // Maine and Los Angeles each have a Front Room.
           const portland = await call(
             {
               action: "suggest",
               q: "Front Room",
               session_token: session,
+              country_name: "United States",
               proximity: { lng: -70.2553, lat: 43.6591 },
             },
             ownerToken,
           );
+          const losAngeles = await call(
+            {
+              action: "suggest",
+              q: "Front Room",
+              session_token: session,
+              country_name: "United States",
+              proximity: { lng: -118.2437, lat: 34.0522 },
+            },
+            ownerToken,
+          );
           if (
-            london.body &&
             portland.body &&
-            london.body.state === "none" &&
-            portland.body.state === "none"
+            losAngeles.body &&
+            portland.body.state === "none" &&
+            losAngeles.body.state === "none"
           )
-            skip("place-resolve: proximity changes the ordering (633)", "both calls returned none");
+            skip(
+              "place-resolve: a home changes the ordering inside the country (633)",
+              "both calls returned none",
+            );
           else
             record(
-              "place-resolve: proximity changes the ordering (633)",
-              typed(london) && typed(portland) && firstOf(london) !== firstOf(portland),
-              "london " +
-                firstOf(london).slice(0, 40) +
-                " | portland " +
-                firstOf(portland).slice(0, 40),
+              "place-resolve: a home changes the ordering inside the country (633)",
+              typed(portland) &&
+                typed(losAngeles) &&
+                inCountry(portland, "United States") &&
+                inCountry(losAngeles, "United States") &&
+                firstOf(portland) !== firstOf(losAngeles),
+              "portland " +
+                firstOf(portland).slice(0, 40) +
+                " | los angeles " +
+                firstOf(losAngeles).slice(0, 40),
             );
 
-          // Proof 2: no home, a stated country. The name is what public.members.current_country
-          // stores (a public.world_countries name); the function resolves it to alpha-2 through ICU
-          // and sends Search Box `country`. Every place that comes back is in that country. Ghana
-          // is the founder's case; Search Box carries no POI for Ghana (docs/GAPS.md G35), so the
-          // honest Ghana answer is `none`, and the filter itself is shown on a country it does
-          // cover.
-          const inCountry = (r, name) => typed(r) && placesOf(r).every((p) => p.country === name);
+          // The country filters (783). The name is what the form sends: a public.world_countries
+          // name the host chose; the function resolves it to alpha-2 through ICU and sends Search
+          // Box `country`. Every place that comes back is in that country. Ghana is the founder's
+          // case; Search Box carries no POI for Ghana (docs/GAPS.md G35), so the honest Ghana
+          // answer is `none` or an area, and the filter itself is shown on a country it does cover.
           const ghana = await call(
             { action: "suggest", q: "Front Room", session_token: session, country_name: "Ghana" },
             ownerToken,
           );
           record(
-            "place-resolve: no home, stated country Ghana: a Mapbox answer with nothing outside Ghana (proof 2)",
+            "place-resolve: country Ghana, no home: a Mapbox answer with nothing outside Ghana",
             inCountry(ghana, "Ghana"),
             brief(ghana),
           );
-          const uk = await call(
-            {
-              action: "suggest",
-              q: "Front Room",
-              session_token: session,
-              country_name: "United Kingdom",
-            },
-            ownerToken,
-          );
           record(
-            "place-resolve: stated country United Kingdom: results, all in the United Kingdom (the country filter and the ICU conversion)",
-            inCountry(uk, "United Kingdom") && placesOf(uk).length > 0,
-            brief(uk),
+            "place-resolve: country United Kingdom: results, all in the United Kingdom (the country filter and the ICU conversion)",
+            inCountry(ukList, "United Kingdom") && placesOf(ukList).length > 0,
+            brief(ukList),
           );
-          // Home wins over country: with both sent, proximity is the anchor and the country is
-          // not a filter on top, so the near-Nairobi answer is the same as without the country.
+          // A home narrows inside the country and never widens it: United Kingdom with a Nairobi
+          // home still answers only the United Kingdom.
           const both = await call(
             {
               action: "suggest",
@@ -550,33 +578,102 @@ async function get(url, headers = {}) {
             ownerToken,
           );
           record(
-            "place-resolve: a home wins over the stated country, which is never a second filter",
-            typed(both) && firstOf(both) === firstOf(nairobi),
-            "both " + firstOf(both).slice(0, 40) + " | nairobi " + firstOf(nairobi).slice(0, 40),
+            "place-resolve: a home narrows inside the chosen country and never widens it (783, 633)",
+            inCountry(both, "United Kingdom") && placesOf(both).length > 0,
+            brief(both),
           );
-          // A stored name ICU does not carry falls to case 3, never to a guess.
-          const unresolvable = await call(
-            {
-              action: "suggest",
-              q: "Front Room",
-              session_token: session,
-              country_name: "Cabo Verde",
-            },
+          // Proximity alone anchors nothing (783): a home without a country is not a lookup.
+          const homeOnly = await call(
+            { action: "suggest", q: "Front Room", session_token: session, proximity: ACCRA },
             ownerToken,
           );
           record(
-            "place-resolve: a country name ICU does not resolve falls to case 3 (unavailable), never a guess",
-            unresolvable.status === 200 &&
-              unresolvable.body &&
-              unresolvable.body.state === "unavailable",
-            brief(unresolvable),
+            "place-resolve: a home with no country is unavailable without a call (783)",
+            homeOnly.status === 200 && homeOnly.body && homeOnly.body.state === "unavailable",
+            brief(homeOnly),
+          );
+          // The three stored spellings ICU renders otherwise anchor through the function's own
+          // spellings (Session 24): Cabo Verde was case 3 in Session 23 and is a country now.
+          const caboVerde = await call(
+            { action: "anchor", q: "", session_token: session, country_name: "Cabo Verde" },
+            ownerToken,
+          );
+          record(
+            "place-resolve: a stored spelling ICU renders otherwise (Cabo Verde) anchors, never case 3",
+            caboVerde.status === 200 &&
+              caboVerde.body &&
+              caboVerde.body.state === "anchored" &&
+              caboVerde.body.country === "CV",
+            brief(caboVerde),
           );
 
+          // Session 24, proof 1 owed: every public.world_countries name either anchors the lookup
+          // or returns unavailable, and none falls through to an unanchored or a differently
+          // anchored call. The dry run resolves the name exactly as suggest does and calls Mapbox
+          // never, so the walk costs nothing upstream. The list is read the way the form reads
+          // it, from the table under the member's own grant.
+          const wc = await fetch(
+            SUPABASE_URL + "/rest/v1/world_countries?select=name&order=position",
+            { headers: { apikey: KEY, Authorization: "Bearer " + ownerToken } },
+          );
+          const wcRows = wc.ok ? await wc.json() : null;
+          const wcNames = Array.isArray(wcRows) ? wcRows.map((r) => r.name).filter(Boolean) : [];
+          if (wcNames.length === 0) {
+            skip(
+              "place-resolve: every world_countries name anchors or is unavailable",
+              "world_countries returned no rows (status " + wc.status + ")",
+            );
+          } else {
+            const walk = [];
+            for (const name of wcNames) {
+              const r = await call(
+                { action: "anchor", q: "", session_token: session, country_name: name },
+                ownerToken,
+              );
+              walk.push({
+                name,
+                status: r.status,
+                state: r.body && r.body.state,
+                code: r.body && r.body.country,
+              });
+            }
+            const offShape = walk.filter(
+              (w) => w.status !== 200 || (w.state !== "anchored" && w.state !== "unavailable"),
+            );
+            const unresolved = walk.filter((w) => w.state === "unavailable").map((w) => w.name);
+            const codes = new Map();
+            for (const w of walk)
+              if (w.state === "anchored") codes.set(w.code, [...(codes.get(w.code) || []), w.name]);
+            const shared = [...codes.entries()].filter(([, v]) => v.length > 1);
+            record(
+              "place-resolve: every world_countries name anchors or is unavailable, never a third thing (" +
+                wcNames.length +
+                " names)",
+              offShape.length === 0,
+              offShape.length ? JSON.stringify(offShape.slice(0, 3)) : wcNames.length + " walked",
+            );
+            record(
+              "place-resolve: every world_countries name anchors to its own current alpha-2 code (" +
+                wcNames.length +
+                " names)",
+              unresolved.length === 0 && shared.length === 0 && wcNames.length >= 195,
+              (unresolved.length ? "unresolved " + JSON.stringify(unresolved) + " " : "") +
+                (shared.length ? "shared " + JSON.stringify(shared) : "") +
+                (unresolved.length || shared.length ? "" : "all " + wcNames.length + " distinct"),
+            );
+          }
+
           // Session 23, change 2: place, locality and neighborhood join poi and address, because
-          // Search Box holds no POI and no street addressing in Ghana. Osu near Accra answers an
-          // area, and the row says so through kind.
+          // Search Box holds no POI and no street addressing in Ghana. Osu in Ghana near Accra
+          // answers an area, and the row says so through kind.
           const osu = await call(
-            { action: "suggest", q: "Osu", session_token: session, proximity: ACCRA },
+            {
+              action: "suggest",
+              q: "Osu",
+              session_token: session,
+              country_name: "Ghana",
+              proximity: ACCRA,
+            },
             ownerToken,
           );
           const osuPlaces = placesOf(osu);
@@ -589,9 +686,9 @@ async function get(url, headers = {}) {
           );
           record(
             "place-resolve: a venue row carries kind venue and an area row kind area (change 2)",
-            placesOf(accra).every((p) => p.kind === "venue" || p.kind === "area") &&
-              placesOf(accra).some((p) => p.kind === "venue"),
-            JSON.stringify(placesOf(accra).map((p) => p.kind)).slice(0, 80),
+            placesOf(ukList).every((p) => p.kind === "venue" || p.kind === "area") &&
+              placesOf(ukList).some((p) => p.kind === "venue"),
+            JSON.stringify(placesOf(ukList).map((p) => p.kind)).slice(0, 80),
           );
 
           // Proof 3: nonsense, anchored, is Mapbox's own zero: `none`.
@@ -600,6 +697,7 @@ async function get(url, headers = {}) {
               action: "suggest",
               q: "xq7zv plk9 wmmt",
               session_token: session,
+              country_name: "Ghana",
               proximity: ACCRA,
             },
             ownerToken,
@@ -612,9 +710,15 @@ async function get(url, headers = {}) {
 
           // Proof 4: a deliberately broken call. An invalid session_token is refused before Mapbox
           // with a 400, which the client reads as `unavailable`; the function's own `unavailable`
-          // body is the unanchored call (case 3, withheld: never the Edge node's IP).
+          // body is the unanchored call (case 3: never the Edge node's IP).
           const badSession = await call(
-            { action: "suggest", q: "Front Room", session_token: "no", proximity: ACCRA },
+            {
+              action: "suggest",
+              q: "Front Room",
+              session_token: "no",
+              country_name: "Ghana",
+              proximity: ACCRA,
+            },
             ownerToken,
           );
           record(
@@ -634,7 +738,7 @@ async function get(url, headers = {}) {
 
           // Proof 5: under three characters is `none` before anchoring and before Mapbox.
           const short = await call(
-            { action: "suggest", q: "Fr", session_token: session },
+            { action: "suggest", q: "Fr", session_token: session, country_name: "Ghana" },
             ownerToken,
           );
           record(
