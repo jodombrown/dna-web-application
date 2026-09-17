@@ -635,6 +635,8 @@ async function get(url, headers = {}) {
                 status: r.status,
                 state: r.body && r.body.state,
                 code: r.body && r.body.country,
+                zones: r.body && r.body.zones,
+                zones_via: r.body && r.body.zones_via,
               });
             }
             const offShape = walk.filter(
@@ -664,6 +666,36 @@ async function get(url, headers = {}) {
               (unresolved.length ? "unresolved " + JSON.stringify(unresolved) + " " : "") +
                 (shared.length ? "shared " + JSON.stringify(shared) : "") +
                 (unresolved.length || shared.length ? "" : "all " + wcNames.length + " distinct"),
+            );
+
+            // Rulings 813, 817, 822: the same walk carries the zones the form now derives a
+            // words-only event's time zone from, so this settles on the deployed Deno runtime what
+            // the Node probe could not — which shape of the Intl Locale Info API it carries, and
+            // whether any stored name comes back with no zone at all. A country with none is not a
+            // failure of this arm's first clause (the form falls back rather than guessing), but it
+            // is named here, because a host in it silently keeps the old behaviour.
+            const zoned = walk.filter((w) => Array.isArray(w.zones) && w.zones.length > 0);
+            const zoneless = walk.filter((w) => w.state === "anchored" && !zoned.includes(w));
+            const zonesOf = (name) => {
+              const w = walk.find((x) => x.name === name);
+              return w && Array.isArray(w.zones) ? w.zones : [];
+            };
+            const via = [...new Set(walk.map((w) => w.zones_via).filter(Boolean))];
+            record(
+              "place-resolve: anchor carries the country's IANA zones, one for Ghana, two for the DRC, more than five for the United States, at least one for all " +
+                wcNames.length +
+                " names (813, 817)",
+              zonesOf("Ghana").length === 1 &&
+                zonesOf("Ghana")[0] === "Africa/Accra" &&
+                zonesOf("Democratic Republic of the Congo").length === 2 &&
+                zonesOf("United States").length > 5 &&
+                zoneless.length === 0 &&
+                zoned.length === wcNames.length,
+              "via " +
+                (via.join(",") || "none") +
+                (zoneless.length
+                  ? " | no zones for " + JSON.stringify(zoneless.map((w) => w.name).slice(0, 5))
+                  : " | all " + zoned.length + " carry at least one"),
             );
           }
 

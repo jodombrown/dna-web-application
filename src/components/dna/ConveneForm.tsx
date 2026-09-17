@@ -143,6 +143,11 @@ export function ConveneForm({
   // row's words and does not look them up again until the text actually changes. Without it the
   // lookup effect saw the same words with no row and re-resolved them before the member could type.
   const [editingFrom, setEditingFrom] = useState<string | null>(null);
+  // The chosen country's IANA zones, as the `anchor` dry run answered them (813, 817). Held with
+  // the country they belong to so a zone list never outlives the country that asked for it.
+  const [zoneList, setZoneList] = useState<{ country: string; zones: string[] | null } | null>(
+    null,
+  );
   const session = useRef<string>(
     typeof crypto !== "undefined" && "randomUUID" in crypto
       ? crypto.randomUUID()
@@ -201,14 +206,33 @@ export function ConveneForm({
   // browser zone for online (ruling owed 7), and the browser's again while a place stands as words
   // only, because words carry no zone.
   const placeTz = v("place_tz");
+  // 813, 817, 821: with no resolved place the zone comes from the country the host chose, never
+  // from the host's browser, because the same value interprets the host's typed time. `anchor`
+  // answers that country's IANA zones from the function's own runtime ICU. One zone is taken
+  // silently (168 countries, the whole corridor among them); several are asked for; null is a
+  // runtime that could not say, and there the previous behaviour stands rather than a guess.
+  const countryZones = zoneList && zoneList.country === country ? zoneList.zones : null;
+  const chosenZone = v("country_tz");
+  const zoneFromCountry: string | null = !countryZones
+    ? null
+    : countryZones.length === 1
+      ? (countryZones[0] ?? null)
+      : countryZones.includes(chosenZone)
+        ? chosenZone
+        : null;
+  const needsZoneChoice = physical && !resolved && !!countryZones && countryZones.length > 1;
   const tz: string | null = !format
     ? null
     : physical
       ? knownZone(placeTz)
         ? placeTz
-        : browserTz
+        : countryZones
+          ? zoneFromCountry
+          : browserTz
       : browserTz;
   const tzFromPlace = physical && resolved && knownZone(placeTz);
+  // The line reads only where the host chose (821); a country with one zone says nothing at all.
+  const tzFromChoice = needsZoneChoice && !!zoneFromCountry;
 
   // ---- the moment ------------------------------------------------------------------------------
   const whenWords = v("when");
@@ -281,7 +305,10 @@ export function ConveneForm({
       ]
         .filter(Boolean)
         .join(" and ");
-  const physicalOk = !!country && (resolved || !!placeText);
+  // 821: where the chosen country carries more than one zone and no place resolved, the door is not
+  // satisfied until the host picks one. Nothing else about the door changes.
+  const physicalOk =
+    !!country && (resolved || !!placeText) && (!needsZoneChoice || !!zoneFromCountry);
   const virtualOk = linkOk || linkTba;
   const valid =
     !!v("title").trim() &&
@@ -350,6 +377,9 @@ export function ConveneForm({
     if (name === country) return;
     if (resolved) unpick();
     setField("country", name);
+    // The zone belongs to the country that was chosen, so both go when the country changes (813).
+    setField("country_tz", "");
+    setZoneList(null);
     setEditingFrom(null);
     setLookup({ state: "idle" });
     if (home && vocabularyName(home.country) !== name) setHomeId(null);
@@ -376,6 +406,29 @@ export function ConveneForm({
     else if (r.state === "unavailable") setLookup({ state: "unavailable" });
     else setLookup({ state: "none" });
   };
+  // The country's zones, asked for once per country (813, 817). `anchor` calls Mapbox never, so
+  // this costs no Search Box session; it runs for an in-person or hybrid event only, because an
+  // online event has no country to derive from (824).
+  useEffect(() => {
+    if (!physical || !country) return;
+    if (zoneList && zoneList.country === country) return;
+    let live = true;
+    void (async () => {
+      const r = await resolvePlace({
+        action: "anchor",
+        q: "",
+        session_token: session.current,
+        country_name: country,
+      });
+      if (!live) return;
+      setZoneList({ country, zones: r.state === "anchored" ? r.zones : null });
+    })();
+    return () => {
+      live = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [country, physical]);
+
   useEffect(() => {
     if (!physical || resolved || !country) return;
     const q = query.trim();
@@ -593,6 +646,29 @@ export function ConveneForm({
             ? "Place search is unavailable right now. Your words are kept, and you can publish."
             : undefined,
   });
+  // 821: the zone control, present only where the chosen country carries more than one zone and no
+  // place resolved — absent, never disabled (786, 580, 621). The options are the country's own IANA
+  // identifiers as the function returned them, with the member's browser zone ordered first when the
+  // country holds it and never selected; no display name is invented and no offset is computed.
+  // Pass 4 redraws the place block, this control with it.
+  const zoneOptions = needsZoneChoice && countryZones ? countryZones : [];
+  const orderedZones =
+    zoneOptions.includes(browserTz) && zoneOptions.length > 1
+      ? [browserTz, ...zoneOptions.filter((z) => z !== browserTz)]
+      : zoneOptions;
+  const zoneSelect = needsZoneChoice ? (
+    <Select
+      key="country-tz"
+      label={lab("Time zone", "country_tz")}
+      data-convene="country-tz"
+      value={zoneFromCountry ?? ""}
+      onChange={(e) => setField("country_tz", e.target.value)}
+      options={[
+        { value: "", label: "Choose a time zone" },
+        ...orderedZones.map((z) => ({ value: z, label: z })),
+      ]}
+    />
+  ) : null;
   const placeBlock = resolved ? (
     <div
       key="place"
@@ -653,6 +729,12 @@ export function ConveneForm({
           {countrySelect}
           {country ? placeInput : null}
         </>
+      )}
+      {zoneSelect}
+      {tzFromChoice && (
+        <div data-convene="country-tz-line" style={QUIET}>
+          Time zone {zoneFromCountry}, from the country.
+        </div>
       )}
       {!query.trim() && homes.length > 0 && (
         <div data-convene="homes" style={{ display: "flex", flexDirection: "column", gap: 6 }}>

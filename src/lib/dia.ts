@@ -128,7 +128,13 @@ export type PlaceState =
   | { state: "one"; place: ResolvedPlace }
   | { state: "several"; places: SuggestedPlace[] }
   | { state: "none" }
-  | { state: "unavailable" };
+  | { state: "unavailable" }
+  /**
+   * The `anchor` dry run (Session 24; rulings 813, 817): the chosen country's alpha-2 code and its
+   * IANA zones from the function's own runtime ICU, with no Mapbox call. `zones` is null where the
+   * runtime cannot say, and the form then keeps its existing behaviour rather than guessing.
+   */
+  | { state: "anchored"; country: string; zones: string[] | null };
 
 /**
  * place-resolve (Session 23, the unavailable state). `none` is the function's own word for a
@@ -140,7 +146,7 @@ export type PlaceState =
  * inside it. Never the member's residence: the form sends what the member chose or nothing.
  */
 export async function resolvePlace(body: {
-  action: "suggest" | "retrieve";
+  action: "suggest" | "retrieve" | "anchor";
   q: string;
   session_token: string;
   proximity?: { lng: number; lat: number } | null;
@@ -166,6 +172,15 @@ export async function resolvePlace(body: {
     if (data.state === "several" && Array.isArray(data.places) && data.places.length)
       return { state: "several", places: data.places.map((p) => ({ ...p, kind: kindOf(p) })) };
     if (data.state === "none") return data;
+    // The anchor dry run: the country's code, and its zones when the function's runtime could read
+    // them. A body that carries no usable zone list is `zones: null`, never an empty array, so the
+    // form has one thing to test (813, 817).
+    if (data.state === "anchored" && typeof data.country === "string" && data.country) {
+      const zones = Array.isArray(data.zones)
+        ? data.zones.filter((z): z is string => typeof z === "string" && z.length > 0)
+        : [];
+      return { state: "anchored", country: data.country, zones: zones.length ? zones : null };
+    }
     return { state: "unavailable" };
   } catch {
     return { state: "unavailable" };

@@ -2144,13 +2144,14 @@ Design with these numbers.
 **Not this gap's scope.** The compact tier is the founder's screenshot and reads icon-first correctly;
 the expanded tier fits with 141px to spare.
 
-## G38. A published in-person event with no resolved place carries the host's browser zone, not the country's
+## G38. A published in-person event with no resolved place carried the host's browser zone, not the country's
 
-**Severity: high for the surface, and it reaches the stored row rather than only the rendering. Not a
-merge blocker under ruling 813, which scopes the fix separately. Opened 17 September 2026 during
-Convene Pass 1's PR 3, filed under ruling 597. The number is assigned by this entry (ruling 638).**
+**Severity: high for the surface, and it reached the stored row rather than only the rendering.
+Opened 17 September 2026 during Convene Pass 1's PR 3, filed under ruling 597. The number is assigned
+by this entry (ruling 638). Fixed on the same branch under rulings 813, 817 and 821; this entry
+stands as the record of what it was and how it was read.**
 
-**What decides it.** `src/components/dna/ConveneForm.tsx:204` to `210`:
+**What decided it.** `src/components/dna/ConveneForm.tsx:204` to `210`, as it stood:
 
 ```ts
 const tz: string | null = !format
@@ -2162,43 +2163,91 @@ const tz: string | null = !format
     : browserTz;
 ```
 
-`placeTz` is `convene.place_tz`, written only by `pick()` from a resolved place's `timezone` (the
-Edge function's `tz-lookup` on the place's point). With no resolution the field is empty,
-`knownZone("")` is false, and the zone falls to `browserTz`, the host's own. The payload carries it
-as `convene.timezone` (line 307) and `20260916120200_p1_publish_post_convene.sql:175` reads it into
-`events.timezone`. So a Ghana event composed from California, published with words only, is stored
-with `America/Los_Angeles`. Chat's reading in 813 is correct.
+`placeTz` is written only by `pick()` from a resolved place. With no resolution the field is empty
+and the zone fell to `browserTz`, the host's own; the payload carried it as `convene.timezone` and
+`20260916120200_p1_publish_post_convene.sql:175` read it into `events.timezone`. A Ghana event
+composed from California was stored `America/Los_Angeles`.
 
-**The part that is worse than the label.** Line 219, `const zoneForInstants = tz ?? browserTz`, and
-`startsAt = instantFor(date, time, zoneForInstants)`. The zone does not merely label the event, it
-interprets the host's typed time. A host in California who types `7pm` for an Accra event stores
-03:00 the following day in Accra. Every viewer reads that instant, so the error is not the host's
-alone. Ghana is the case this was found on because Mapbox resolves no venue there (G35), which means
-the words-only path is the normal path for exactly the market the surface is built for.
+**The part that was worse than the label.** `zoneForInstants` is the same value, and
+`startsAt = instantFor(date, time, zoneForInstants)`, so the zone interpreted the host's typed time
+rather than only labelling it. A host in California typing `7pm` for an Accra event stored 03:00 the
+following day in Accra, and every viewer read that instant. Ghana is where it was found because
+Mapbox resolves no venue there (G35), which makes the words-only path the normal path for exactly the
+market the surface is built for.
 
-**Why it survived the founder's test.** The composer never shows the browser zone in words in that
+**Why it survived the founder's test.** The composer never showed the browser zone in words in that
 state: `whenSuffix` reads `, time zone from the place once it is set`, and the `Time zone …, from the
-place.` line renders only when `tzFromPlace` is true. The wrong value is stored, not displayed.
+place.` line renders only when a place resolved. The wrong value was stored, never displayed.
 
-**The fix this entry names (813).** The zone comes from the chosen country, derived from
-`event_delivery.country` with no lookup, and the host is asked where a country spans more than one
-zone. Four pieces, and the first is why this is a brief rather than a patch:
+**What the fix turned out to cost, and why this entry was rewritten.** As first written this entry
+named four pieces and the first was a migration, because no country-to-zone source existed in the
+repo: `public.world_countries` is `(name text primary key, position smallint not null unique)` with
+no alpha-2 and no zone, and the only name-to-code fold lives server-side in `place-resolve`. Ruling
+817 asked whether the runtime could answer instead, and it can. Through that same fold and ICU's
+Intl Locale Info API, all 195 stored names return at least one IANA zone with no Mapbox call:
+`GH` one, `CD` two, `US` 29, and 168 of the 195 exactly one. So `anchor` returns `zones` beside the
+code, the form takes the single zone silently, asks only for the 27 that carry several (821), and
+falls back to its previous behaviour where a runtime cannot say. No column, no table, no migration,
+and no hardcoded array: the zones are a runtime vocabulary from the function, like every other.
 
-1. **A country-to-zone source.** There is none in the repo. `public.world_countries` is
-   `(name text primary key, position smallint not null unique)` (`20260908142054_b3_rulings_141_142_144.sql:14`)
-   — no alpha-2, no zone. The only name-to-code fold lives server-side in `place-resolve`, and
-   copying it into the component is the hardcoded-vocabulary anti-pattern the absolutes name. So this
-   needs zone data on the vocabulary the form already reads, with RLS and a read through the one
-   vocabulary path: a migration.
-2. **The multi-zone control.** Ghana, Kenya and most of Africa are single-zone; the United States,
-   Canada, Mexico, Brazil, Russia, Australia, Indonesia and the DRC are not. Asking rather than
-   guessing is a new field in the place block with its own absence rule, validity clause and copy.
-3. **The instants.** `zoneForInstants` changing under an open draft, and what a published event does
-   when its country's zone was never stored: the seven existing events and anything published before
-   the column exists.
-4. **The arms.** Both engines, a single-zone country and a multi-zone one, plus a live arm that the
-   stored `events.timezone` matches the country rather than the runner's.
+**Not this gap.** The resolved-place path was correct throughout: a place that resolves carries its
+own zone from its own point. Online events keep the host's browser zone by ruling 824, which has no
+country to derive from. The seven already published events are not backfilled (823). The `whenSuffix`
+copy still reads `, time zone from the place once it is set` while a country-derived zone is already
+in force, which is G40.
 
-**Not this gap's scope.** The resolved-place path is correct and unchanged: a place that resolves
-carries its own zone from its own point. Online events taking the host's browser zone is SPEC 4 as
-written (ruling owed 7) and is not part of this.
+## G39. A whole `matrix (webkit)` job can fail on TLS resets against the Pages preview, and every arm behind the first navigation reads as a defect
+
+**Severity: medium for the harness, none for the app. Not a merge blocker. Opened 17 September 2026
+during Convene Pass 1's PR 3, filed under ruling 597. The number is assigned by this entry (ruling
+638).**
+
+**What was seen.** Pages run 254 on `0848c79`, `matrix (webkit)`, the head's one re-run, at 18:57
+UTC: a dozen arms failed at their first navigation with
+
+```
+FAIL [no crash] webkit-1280x800-dark profile owner flow Error: page.goto: Peer failed to perform TLS handshake: Error sending data: Connection reset by peer
+  - navigating to "https://claude-dna-web-handoff-jlhuy-fdod.dna-web-application.pages.dev/sign-in", waiting until "networkidle"
+```
+
+and the ruling 292 tail then read `INCOMPLETE: emitted 1 of 33`, `emitted 2 of 32`, `emitted 1 of 10`
+for arms whose checks never ran. `matrix (chromium)` on the same head and the same preview was 5061
+of 5061 on its first attempt, and `live` was 118 of 118, so the deployment was serving; the resets
+were to one runner over one window.
+
+**Why it matters beyond one run.** The failure reads, in the job summary and in the wake event, as a
+dozen arms failing on surfaces the diff never touched, which is indistinguishable at a glance from a
+real regression. It also consumed the head's one re-run, which is what forced G34's fix to be taken
+rather than re-run. A reachability failure is not an arm's result and should not be reported as one.
+
+**The fix this entry names.** Two halves, and the first is the one that pays. The harness already has
+a reachability step before the matrix (`The deployment serves every path the suites open`, ruling
+217); a navigation that fails with a transport error rather than an HTTP status should be retried
+once against the same URL and, if it fails again, should end the job as a reachability failure by
+name rather than emitting per-arm failures — the arms did not run. The second half is the classifier:
+`tests/matrix.cjs` classifies a lost web process (G5) and a WebKit aborted fetch (357) and calls
+everything else unclassified, so a transport error joins those two as a named class and stays out of
+the arm counts (ruling 228's shape: an arm that cannot run is unproven, never failing).
+
+**Not this gap's scope.** The preview URL itself is not in question: it is read from the deploy job's
+own wrangler output and was correct on that run.
+
+## G40. The composer still says the zone comes from the place once one is set, after the country has already set it
+
+**Severity: low, copy only. Not a merge blocker. Opened 17 September 2026 during Convene Pass 1's PR
+3, filed under ruling 597. The number is assigned by this entry (ruling 638).**
+
+**What it is.** `src/components/dna/ConveneForm.tsx` composes `whenSuffix` from `tzFromPlace`: with a
+resolved place it reads `, the time at the place`, and for any other in-person state
+`, time zone from the place once it is set`. Since rulings 813 and 821 a words-only event already
+carries a zone, the country's, so that sentence now describes a state the form is no longer in: it
+promises a zone that is already decided. It was accurate before the fix only in the sense that the
+zone was wrong anyway.
+
+**Why it is not fixed here.** The copy in the place block is ratified per surface and Pass 4 redraws
+the block with the zone control in it (821). Inventing a replacement sentence in a code session is
+exactly what ruling 62's visual contract exists to prevent. The line to write is a Design and Chat
+decision, not this session's.
+
+**Not this gap's scope.** The `Time zone {zone}, from the country.` line under the control and the
+`Time zone GMT, from the place.` line under a resolved row are both ratified and correct as built.

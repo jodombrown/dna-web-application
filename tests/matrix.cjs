@@ -924,6 +924,31 @@ async function mockSupabase(page, db, opts = {}) {
         const hit = CATALOGUE.find((c) => c.place.place_id === body.mapbox_id);
         return hit ? json({ state: "one", place: hit.place }) : json({ state: "none" });
       }
+      // Rulings 813, 817: the dry run answers the country's alpha-2 code and its IANA zones from
+      // the function's own runtime ICU, with no Mapbox call. One zone is the 168-country case the
+      // form takes silently; more than one is the case it asks about (821); null is a runtime that
+      // could not say, which leaves the form's previous behaviour standing.
+      if (body.action === "anchor") {
+        const ANCHORS = {
+          Ghana: { country: "GH", zones: ["Africa/Accra"] },
+          Kenya: { country: "KE", zones: ["Africa/Nairobi"] },
+          "United Kingdom": { country: "GB", zones: ["Europe/London"] },
+          "South Africa": { country: "ZA", zones: ["Africa/Johannesburg"] },
+          "United States": {
+            country: "US",
+            zones: [
+              "America/Chicago",
+              "America/Denver",
+              "America/Los_Angeles",
+              "America/New_York",
+              "Pacific/Honolulu",
+            ],
+          },
+        };
+        const hit = ANCHORS[body.country_name];
+        if (!hit) return json({ state: "unavailable" });
+        return json({ ...hit, state: "anchored", zones_via: "timeZones" });
+      }
       const q = String(body.q || "").toLowerCase();
       if (q.length < 3) return json({ state: "none" });
       if (q.includes("outage")) return json({ message: "upstream unavailable" }, 503);
@@ -2627,7 +2652,10 @@ async function runConvene(browserType, bname, [w, h], theme) {
     await shot(page, `${tag}-02-no-country`);
 
     // The wrong country as a visible state (798): United States chosen, DIA's Front Room finds
-    // nothing there, and the hint names what was searched; the words stand and the event can go.
+    // nothing there, and the hint names what was searched; the words stand. Since ruling 821 the
+    // door also waits on a zone here, because the United States carries more than one and nothing
+    // may be guessed for the host: the check asserts the gate, then opens it the way a host would.
+    // The zone behaviour itself is the -convene-zone arm's, which drives it from a Pacific browser.
     await countrySelect.selectOption("United States");
     await dialog
       .getByText("No place found for that. Searched: United States. It is kept as you wrote it.")
@@ -2644,8 +2672,17 @@ async function runConvene(browserType, bname, [w, h], theme) {
         (await dialog.locator('[data-convene="place-resolved"]').count()) === 0 &&
         (await dialog.locator('[data-convene="intent"]').textContent()) ===
           "In person at Front Room, United States." &&
-        !(await pub().isDisabled()),
+        (await pub().isDisabled()) &&
+        (await dialog.locator('select[data-convene="country-tz"]').count()) === 1,
       JSON.stringify(usCall && [usCall.q, usCall.country_name, usCall.proximity]),
+    );
+    await dialog
+      .locator('select[data-convene="country-tz"]')
+      .selectOption("America/New_York", { timeout: 5000 });
+    record(
+      tag + " and the zone the host chooses opens the door and reads from the country (821)",
+      (await dialog.locator('[data-convene="country-tz-line"]').textContent()) ===
+        "Time zone America/New_York, from the country." && !(await pub().isDisabled()),
     );
     await shot(page, `${tag}-02-wrong-country`);
 
@@ -3040,6 +3077,171 @@ async function runConvene(browserType, bname, [w, h], theme) {
     );
     await shot(page, `${tag}-07-published`);
     await noOverflow(page, tag + " published");
+  } catch (e) {
+    record(tag + " flow", false, String(e).slice(0, 300));
+    await shot(page, `${tag}-ERROR`).catch(() => {});
+  }
+  record(
+    tag + " no page errors",
+    errors.length === 0,
+    errors.slice(0, 3).join(" | ").slice(0, 300),
+  );
+  await browser.close();
+}
+
+// Rulings 813, 817, 821: the zone a words-only event carries. Driven from a browser in
+// America/Los_Angeles, which is where the founder composes, against a Ghana event, which is where
+// the corridor is: the whole defect was that the two were the same value. A separate arm because
+// the context's timezoneId is what makes the difference visible at all — under the runner's own UTC,
+// Accra and the browser agree and every assertion here would pass vacuously.
+async function runConveneZone(browserType, bname, [w, h], theme) {
+  const tag = `${bname}-${w}x${h}-${theme}-convene-zone`;
+  armStart(tag);
+  const browser = await launch(browserType);
+  const ctx = await browser.newContext({
+    viewport: { width: w, height: h },
+    hasTouch: w < 1024,
+    isMobile: w < 1024,
+    colorScheme: theme,
+    timezoneId: "America/Los_Angeles",
+  });
+  const page = await ctx.newPage();
+  const db = makeMockDb();
+  await page.addInitScript(
+    ({ theme }) => {
+      try {
+        localStorage.setItem("dna.theme", theme);
+      } catch {}
+    },
+    { theme },
+  );
+  await mockSupabase(page, db);
+  const errors = [];
+  page.on("pageerror", (e) => errors.push(String(e)));
+  const dialog = page.locator('section[role="dialog"][aria-label="Compose"]');
+  const pub = () => dialog.getByRole("button", { name: /^Publish/ });
+  const fmt = (label) =>
+    dialog.locator('[role="radiogroup"][aria-label="Format"] [role="radio"]', { hasText: label });
+  const field = (key) => dialog.locator(`input[data-convene="${key}"]`);
+  const country = () => dialog.locator('select[data-convene="country"]');
+  const zone = () => dialog.locator('select[data-convene="country-tz"]');
+  try {
+    await signIn(page);
+    await page.click('[data-testid="compose"]');
+    await dialog.waitFor({ timeout: 10000 });
+    await sheetSettled(page, 'section[role="dialog"][aria-label="Compose"]');
+    const ta = dialog.locator('textarea[aria-label="What is going on with you"]');
+    await ta.fill(SAMPLES.convene);
+    await diaSettled(page, dialog, tag);
+    await dialog.locator('[role="radio"][aria-label^="Host an Event"]').click();
+    await fmt("In person").click();
+
+    // The corridor case: one zone, taken silently. No control, no line, no question (168 countries).
+    await country().selectOption("Ghana");
+    await field("place_query").fill("Kwame's rooftop");
+    await dialog
+      .getByText("No place found for that. Searched: Ghana. It is kept as you wrote it.")
+      .waitFor({ timeout: 5000 });
+    record(
+      tag + " Ghana with words only: no zone control, no zone line, publishable (813, 821)",
+      (await zone().count()) === 0 &&
+        (await dialog.locator('[data-convene="country-tz-line"]').count()) === 0 &&
+        !(await pub().isDisabled()),
+    );
+    await shot(page, `${tag}-00-single-zone`);
+
+    // The instant, which is the whole of 813: the typed 19:00 is 19:00 in Accra, not 19:00 Pacific.
+    // Before the fix this stored 02:00 the next day and every viewer read the wrong hour.
+    const before = db.rpcPayloads.length;
+    await pub().click();
+    await page.waitForSelector('section[role="dialog"][aria-label="Compose"]', {
+      state: "detached",
+      timeout: 15000,
+    });
+    const paid = db.rpcPayloads[before];
+    record(
+      tag + " Ghana with words only stores Africa/Accra and the typed 19:00 as 19:00 Accra (813)",
+      !!paid &&
+        paid.fields["convene.timezone"] === "Africa/Accra" &&
+        /T19:00/.test(String(paid.fields["convene.starts_at"])) &&
+        paid.fields["convene.country"] === "Ghana",
+      paid
+        ? String(paid.fields["convene.starts_at"]) + " " + paid.fields["convene.timezone"]
+        : "no payload",
+    );
+
+    // A country with more than one zone: the control is present, the door is shut until the host
+    // chooses, the browser's own zone is offered first, and nothing is selected for them (821).
+    await page.click('[data-testid="compose"]');
+    await dialog.waitFor({ timeout: 10000 });
+    await sheetSettled(page, 'section[role="dialog"][aria-label="Compose"]');
+    await ta.fill(SAMPLES.convene);
+    await diaSettled(page, dialog, tag);
+    await dialog.locator('[role="radio"][aria-label^="Host an Event"]').click();
+    await fmt("In person").click();
+    await country().selectOption("United States");
+    await field("place_query").fill("Kwame's rooftop");
+    await zone().waitFor({ timeout: 5000 });
+    const options = await zone().locator("option").allTextContents();
+    record(
+      tag +
+        " a country with several zones asks, offers the browser's zone first and selects nothing, and the door stays shut (821)",
+      options[0] === "Choose a time zone" &&
+        options[1] === "America/Los_Angeles" &&
+        options.length === 6 &&
+        (await zone().inputValue()) === "" &&
+        (await pub().isDisabled()),
+      options.join(", "),
+    );
+    await zone().selectOption("America/New_York");
+    record(
+      tag + " choosing a zone opens the door and the line reads it, from the country (821)",
+      (await dialog.locator('[data-convene="country-tz-line"]').textContent()) ===
+        "Time zone America/New_York, from the country." && !(await pub().isDisabled()),
+    );
+    await shot(page, `${tag}-01-several-zones`);
+    const before2 = db.rpcPayloads.length;
+    await pub().click();
+    await page.waitForSelector('section[role="dialog"][aria-label="Compose"]', {
+      state: "detached",
+      timeout: 15000,
+    });
+    const paid2 = db.rpcPayloads[before2];
+    record(
+      tag + " the chosen zone is what the event stores, not the browser's (821)",
+      !!paid2 && paid2.fields["convene.timezone"] === "America/New_York",
+      paid2 ? String(paid2.fields["convene.timezone"]) : "no payload",
+    );
+
+    // A resolved place still wins over the country, unchanged; and changing the country after a
+    // zone was chosen recomputes rather than keeping the old answer.
+    await page.click('[data-testid="compose"]');
+    await dialog.waitFor({ timeout: 10000 });
+    await sheetSettled(page, 'section[role="dialog"][aria-label="Compose"]');
+    await ta.fill(SAMPLES.convene);
+    await diaSettled(page, dialog, tag);
+    await dialog.locator('[role="radio"][aria-label^="Host an Event"]').click();
+    await fmt("In person").click();
+    await country().selectOption("United States");
+    await field("place_query").fill("Kwame's rooftop");
+    await zone().waitFor({ timeout: 5000 });
+    await zone().selectOption("America/Denver");
+    await country().selectOption("Ghana");
+    record(
+      tag + " changing the country recomputes: the control goes, Ghana's one zone stands (813)",
+      (await zone().count()) === 0 &&
+        (await dialog.locator('[data-convene="country-tz-line"]').count()) === 0 &&
+        !(await pub().isDisabled()),
+    );
+    await field("place_query").fill("Front Room");
+    await dialog.locator('[data-convene="place-resolved"]').waitFor({ timeout: 5000 });
+    const resolvedRow = await dialog.locator('[data-convene="place-resolved"]').textContent();
+    record(
+      tag + " a resolved place still wins over the country's zone (813, unchanged)",
+      resolvedRow.includes("Time zone GMT, from the place.") && (await zone().count()) === 0,
+      resolvedRow.slice(0, 120),
+    );
+    await shot(page, `${tag}-02-place-wins`);
   } catch (e) {
     record(tag + " flow", false, String(e).slice(0, 300));
     await shot(page, `${tag}-ERROR`).catch(() => {});
@@ -4760,6 +4962,8 @@ if (require.main === module)
         if (process.env.SPECIAL.includes("convene")) {
           await runConvene(bt, bname, [390, 844], "light");
           await runConvene(bt, bname, [1280, 800], "dark");
+          await runConveneZone(bt, bname, [390, 844], "light");
+          await runConveneZone(bt, bname, [1280, 800], "dark");
         }
         if (process.env.SPECIAL.includes("silence")) await runSilence(bt, bname);
         if (process.env.SPECIAL.includes("shell"))
@@ -4874,6 +5078,8 @@ if (require.main === module)
       // Convene Pass 1 (P1-SPEC section 6): the composer's Convene mode and the card.
       await runConvene(bt, bname, [390, 844], "light");
       await runConvene(bt, bname, [1280, 800], "dark");
+      await runConveneZone(bt, bname, [390, 844], "light");
+      await runConveneZone(bt, bname, [1280, 800], "dark");
       for (const vp of TARGETED_VIEWPORTS) await runTargeted(bt, bname, vp);
       // Brief 3: the profile in its three views plus editing mode, every viewport, both themes.
       const { runProfile } = require("./profile.cjs");
