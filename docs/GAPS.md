@@ -1951,6 +1951,13 @@ project during a run.
 **Not this gap's scope.** The arms' assertions and counts stay as they are; the 416 arm was right to
 read null, since the owner was Private at that instant.
 
+**What confirmed the cause, 17 September 2026.** Run 252 on PR 3, whose `live` job ran with no other
+branch's `live` job anywhere near it, read all three arms green on the same assertions and the same
+fixtures that had failed on run 251 twenty minutes earlier. Nothing in the diff between the two heads
+touches F3, F4 or B4A. Overlap is the whole of it, which is why the two re-runs after the
+`place-resolve` redeploy at 16:08 UTC were fired one after the other, PR 2's first and PR 3's only
+once PR 2's had finished, and both came back green.
+
 ## G34. The draft-restore check in `tests/matrix.cjs` waits a fixed 300 ms after `Continue your draft`, not on the restore
 
 **Severity: low, a harness gap in G29's shape. Not a merge blocker. Opened 16 September 2026 during
@@ -2034,6 +2041,20 @@ hints are honest, and `docs/` should say plainly that a Ghana venue will not res
 **Not this gap's scope.** The unavailable state, the anchoring rule and the live arms are Session
 23's and are in; the Ghana arm in `tests/live-checks.cjs` asserts what is true (a Mapbox answer with
 nothing outside Ghana), and the country filter itself is proven on the United Kingdom.
+
+**Addendum, 17 September 2026 (ruling 810), and why this is not a new number.** Ruling 810 asks for
+the Ghana coverage fact to be written into the register so it is not investigated a third time. It is
+already here, opened a day earlier under 597, and a second entry for one fact is what 638's
+"the number is assigned by the entry" exists to prevent: the next reader opens the register and finds
+two, and neither says which is current. So this stands as G35 and no G38 was minted. What 810 adds,
+recorded here: the founder, composing from California against PR 3's preview on the redeployed
+function, typed `Labadi Beach` and got nothing, and `Labadi` returned the area it sits in, which is
+the same shape as the `Front Room` evidence above and the first time it was read on the anchored
+build rather than the IP-anchored one. The interim answer is ruling 784's: the member's words stand
+beside a resolved area, so a Ghana host publishes their venue words with the area's name, city, point
+and zone, and the card reads them back. The third named fix, beside the two above, is a host-placed
+pin under ruling 790, which is Pass 4's answer if one is wanted; it needs no provider at all. None of
+this is a defect and none of it blocks the merge.
 
 ## G36. The lens bar could never fall back to icon-first on the Feed, its fit test did not match its layout, and no check read the layout it produced
 

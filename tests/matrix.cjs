@@ -860,6 +860,21 @@ async function mockSupabase(page, db, opts = {}) {
         label: "Osu, Accra",
         kind: "area",
       };
+      // Ruling 807: Mapbox names the same thing twice often enough to matter. This Ghana area's
+      // `place_name` and `area` are one string, which is what printed `Labadi Villas, Labadi
+      // Villas, Accra` on the founder's preview on 17 September.
+      const VILLAS = {
+        place_id: "dXJuOm1ieHBsYzpMYWJhZGlWaWxsYXM",
+        place_name: "Labadi Villas",
+        area: "Labadi Villas",
+        city: "Accra",
+        country: "Ghana",
+        lng: -0.1553,
+        lat: 5.5606,
+        timezone: "Africa/Accra",
+        label: "Labadi Villas, Accra",
+        kind: "area",
+      };
       const AF = [
         {
           place_id: "af-accra",
@@ -902,6 +917,7 @@ async function mockSupabase(page, db, opts = {}) {
       const CATALOGUE = [
         { match: "front room", place: FRONT },
         { match: "labadi", place: OSU },
+        { match: "villas", place: VILLAS },
         ...AF.map((place) => ({ match: "alliance", place })),
       ];
       if (body.action === "retrieve") {
@@ -2767,6 +2783,27 @@ async function runConvene(browserType, bname, [w, h], theme) {
       areaRow.slice(0, 160),
     );
     await shot(page, `${tag}-03a-place-area`);
+
+    // Ruling 807: one dedupe for the row, the intent line and the card's where line. This area's
+    // place_name and area are the same string, so a join that does not dedupe prints it twice.
+    await dialog.getByRole("button", { name: "Change" }).click();
+    await field("place_query").fill("The villas");
+    await dialog
+      .locator('[data-convene="place-resolved"][data-place-kind="area"]')
+      .waitFor({ timeout: 5000 });
+    const dupRow = (await dialog.locator('[data-convene="place-resolved"]').textContent()) || "";
+    const dupIntent = (await dialog.locator('[data-convene="intent"]').textContent()) || "";
+    const twice = (s, part) => s.split(part).length - 1;
+    record(
+      tag +
+        " a place whose place_name equals its area renders each part once, row and intent alike (807)",
+      dupRow.includes("The villas, Labadi Villas, Accra, Ghana") &&
+        twice(dupRow, "Labadi Villas") === 1 &&
+        twice(dupRow, "Accra") === 1 &&
+        dupIntent === "In person at The villas, Labadi Villas, Accra." &&
+        !(await pub().isDisabled()),
+      dupRow.slice(0, 160) + " | " + dupIntent,
+    );
 
     // None: the words stand in place_text, the hint names the country searched, the intent and
     // the card compose the country at read (798, 799), and the event is still publishable.

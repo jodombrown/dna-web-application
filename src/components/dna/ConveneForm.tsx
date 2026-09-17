@@ -21,6 +21,7 @@ import { Segment } from "@/components/strand/Segment";
 import { Select } from "@/components/strand/Select";
 import { resolvePlace, type ResolvedPlace, type SuggestedPlace } from "@/lib/dia";
 import type { Home } from "@/lib/homes";
+import { placeLine, placeParts } from "@/lib/place";
 import {
   dateInZone,
   instantFor,
@@ -178,10 +179,18 @@ export function ConveneForm({
   // publish_post keeps the member's words in place_text beside the area's name, city and point.
   const areaResolved = v("place_kind") === "area" && !!v("lat");
   const resolved = !!placeId || areaResolved;
-  const placeLabel = resolved
-    ? [v("place_name"), v("place_area"), v("city")].filter(Boolean).join(", ")
-    : "";
+  // 807: every composed place line goes through the one dedupe in src/lib/place.ts, so no part
+  // repeats another. Mapbox returns the same string as `place_name` and `area` often enough that
+  // the naive join printed it twice.
+  const labelParts = resolved ? placeParts(v("place_name"), v("place_area"), v("city")) : [];
+  const placeLabel = labelParts.join(", ");
   const placeText = physical && !placeId && query.trim().length >= MIN_QUERY ? query.trim() : "";
+  // The resolved row reads the same parts as the intent line and in the same order: the member's
+  // words for an area (784), the resolved label for a venue, then everything the dedupe kept after
+  // them in the quiet ink, the country last (800).
+  const rowLeadParts = areaResolved && placeText ? [placeText] : labelParts;
+  const rowLead = rowLeadParts.join(", ");
+  const rowTail = placeParts(...rowLeadParts, ...labelParts, country).slice(rowLeadParts.length);
   // Never without a country (SPEC 3, Session 24): the door is satisfied by a resolved place, or by
   // a country and at least three typed characters.
   const link = v("link").trim();
@@ -248,9 +257,9 @@ export function ConveneForm({
   const whereText = placeId
     ? placeLabel
     : areaResolved
-      ? [placeText, placeLabel].filter(Boolean).join(", ")
+      ? placeLine(placeText, ...labelParts)
       : placeText && country
-        ? placeText + ", " + country
+        ? placeLine(placeText, country)
         : placeText;
   const where =
     format === "online"
@@ -596,21 +605,14 @@ export function ConveneForm({
       </div>
       <div style={ROW_BOX}>
         <Icon name="map-pin" size={18} style={{ color: "var(--ink-3)", flex: "none" }} />
-        {areaResolved ? (
-          // The member's words stand beside the resolved area, never replaced by it (change 2);
-          // the country follows in the quiet ink (800).
-          <span style={{ flex: 1, minWidth: 0 }}>
-            {placeText}
-            <span style={{ color: "var(--ink-3)" }}>
-              {(placeLabel ? ", " + placeLabel : "") + (country ? ", " + country : "")}
-            </span>
+        {/* The member's words stand beside the resolved area, never replaced by it (change 2); the
+            area, the city and the country follow in the quiet ink (800), each part once (807). */}
+        <span style={{ flex: 1, minWidth: 0 }}>
+          {rowLead}
+          <span style={{ color: "var(--ink-3)" }}>
+            {rowTail.length ? ", " + rowTail.join(", ") : ""}
           </span>
-        ) : (
-          <span style={{ flex: 1, minWidth: 0 }}>
-            {placeLabel}
-            <span style={{ color: "var(--ink-3)" }}>{country ? ", " + country : ""}</span>
-          </span>
-        )}
+        </span>
         <Button
           variant="secondary"
           size="sm"

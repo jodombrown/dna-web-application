@@ -8,6 +8,7 @@ import type { Member } from "./auth";
 import type { Tables, Views } from "./database.types";
 import { signedMediaUrl } from "./dia";
 import { deliverImageUrl } from "./media";
+import { placeLine } from "./place";
 import type { LensId } from "./lens";
 import { domainOf, type EventView, type PostView } from "./post-view";
 import { getSupabase, type Supabase } from "./supabase";
@@ -208,15 +209,14 @@ export async function hydratePosts(
         // place_text, and read with the host's country beside them, composed here at read (799):
         // event_delivery.country holds the chosen name and place_text the words only.
         const wordsOnly = !!physical && !physical.place_name && !physical.city;
+        // The same dedupe the composer's row and intent line read (807), so the three cannot drift.
         const placeWords = physical
-          ? [
+          ? placeLine(
               physical.place_text,
               physical.place_name,
               physical.city,
               wordsOnly ? physical.country : null,
-            ]
-              .filter((p, i, a) => !!p && a.indexOf(p) === i)
-              .join(", ")
+            )
           : "";
         const city = physical?.city ?? null;
         const where =
