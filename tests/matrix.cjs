@@ -2345,7 +2345,30 @@ async function runViewport(browserType, bname, [w, h], theme) {
         (await dialog.locator('[data-testid="discard-draft"]').count()) === 1,
     );
     await dialog.locator('[data-testid="continue-draft"]').click();
-    await page.waitForTimeout(300);
+    // G34: this waited a fixed 300 ms and read the pre-restore state whenever WebKit took longer,
+    // which is four sightings across four heads and four widths, none with a defect behind it. The
+    // wait is now on the two signals the restore itself produces, so it cannot resolve early; the
+    // assertions and the arm's declared count are unchanged.
+    await dialog
+      .locator('[data-testid="continue-draft"]')
+      .waitFor({ state: "detached", timeout: 10000 });
+    await ta.evaluate(
+      (el) =>
+        new Promise((resolve, reject) => {
+          const done = () => /^(Three intros|We need a volunteer)/.test(el.value);
+          if (done()) return resolve();
+          const t = setInterval(() => {
+            if (!done()) return;
+            clearInterval(t);
+            clearTimeout(bail);
+            resolve();
+          }, 50);
+          const bail = setTimeout(() => {
+            clearInterval(t);
+            reject(new Error("the draft's words never reached the textarea"));
+          }, 10000);
+        }),
+    );
     record(
       tag + " Continue your draft restores it, and Draft saved is still the only trace",
       /^(Three intros|We need a volunteer)/.test(await ta.inputValue()) &&

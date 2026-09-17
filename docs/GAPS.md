@@ -2000,6 +2000,17 @@ one re-run passed 4981 of 4981. Three sightings on three heads at three widths, 
 crash; recorded here at PR 3's next code push rather than as a doc-only push to the branch it was seen on
 (ruling 556).
 
+**Fourth sighting, and the fix, 17 September 2026.** Pages run 253 on `7270755` (PR 3, the 807 dedupe),
+`matrix (webkit)`, the re-run, at `webkit-1536x960-dark`: the same check, the same shape, 5060 of 5061,
+no crash. Four sightings on four heads at four widths, all WebKit. That re-run was the head's one, and the
+first attempt had already been spent on a G5 crash on `webkit-390x844-dark-block-flow`, so the choice was
+a red head the founder cannot merge or the fix this entry has named since it was opened. The fix is in:
+the check now waits for `continue-draft` to detach and then for the textarea to actually hold the draft's
+words, each with its own timeout and its own failure sentence, rather than for 300 ms. The assertions and
+the arm's declared count are unchanged, so a real regression still fails exactly as before. The other
+fixed waits in the file (`waitForTimeout(150)` in the Convene arm) have not earned the same treatment and
+are left alone.
+
 **Not this gap's scope.** The check's assertions and the arm's declared count stay as they are.
 
 ## G35. Mapbox Search Box carries no POI for Ghana, Kenya or Nigeria, so a Convene host there always falls to their words
