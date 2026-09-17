@@ -1980,6 +1980,12 @@ clicks in the Convene arm, added in Pass 1) and is not this gap's scope until on
 in one day at two widths on two heads whose composer code is the same is a timing that the fixed wait
 loses often enough to name it a recurring cost, not a one-off.
 
+**Third sighting.** Pages run 244 on `da0e7da` (PR 45, the LensBar fix), `matrix (webkit)`, first attempt,
+at `webkit-430x932-dark`: the same check, the same shape, on a head whose composer code is `main`'s. Its
+one re-run passed 4981 of 4981. Three sightings on three heads at three widths, all WebKit, none with a
+crash; recorded here at PR 3's next code push rather than as a doc-only push to the branch it was seen on
+(ruling 556).
+
 **Not this gap's scope.** The check's assertions and the arm's declared count stay as they are.
 
 ## G35. Mapbox Search Box carries no POI for Ghana, Kenya or Nigeria, so a Convene host there always falls to their words
@@ -2021,3 +2027,80 @@ hints are honest, and `docs/` should say plainly that a Ghana venue will not res
 **Not this gap's scope.** The unavailable state, the anchoring rule and the live arms are Session
 23's and are in; the Ghana arm in `tests/live-checks.cjs` asserts what is true (a Mapbox answer with
 nothing outside Ghana), and the country filter itself is proven on the United Kingdom.
+
+## G36. The lens bar could never fall back to icon-first on the Feed, its fit test did not match its layout, and no check read the layout it produced
+
+**Severity: medium for the surface, and it reached production: PR 0's correction 14 is on `main`. Opened
+16 September 2026 during Session 23, filed under ruling 597. The number is assigned by this entry (ruling
+638).**
+
+**What was seen.** The founder, on an iPhone in Safari at 390 wide against PR 3's preview, read a lens label
+painted over the neighbouring lens's icon. Both matrix engines had passed every arm on the same build at 390.
+
+**What it was.** Three things, established in this order on the branch that fixes them, and none of them
+iOS.
+
+1. **The Feed's lens set could never switch.** Correction 14's rule is that a set with a lens lacking an icon
+   never renders icon-first, because that lens would have nothing to fall back to. `src/lib/lens.ts`
+   shipped `all` without an icon, so `canSwitch` was false, no probe was rendered, `fit` was set true
+   and the bar rendered labels at every width on every engine. The first form of the shell check on this
+   branch read the bar as `mode: labels` at 360, 390 and 430 with no probe in the document, which is what
+   made this visible. `all` now carries `globe`, the set's icon for everything a member can see.
+2. **The fit test did not match the layout it decided for.** The track gives the active tab its content
+   width (`flex: none`) and every other tab an equal share of what is left (`flex: 1 1 0`), so a label
+   fits only if it fits its share. The test compared the sum of the labels' natural widths against the
+   track, which passes while a long label overflows a short share: run 239 on this branch read
+   `network` at 86px of content inside a 72px share at 390 with the sum test satisfied. The test now
+   takes the widest label as an active tab plus the widest as an inactive tab times the others, with
+   the gaps and the track's padding, against the track.
+3. **Nothing re-measured after the web font arrived.** The measurement ran once at mount and again only
+   on track resize, and the fonts are self-hosted with `font-display: swap`; a swap after hydration
+   widens every label with no re-measure. Fixed alongside (re-measure on `document.fonts.ready` and on
+   every later font load), and the probe no longer sits in a zero-size clipped box read through
+   `scrollWidth`, which was the reading the correction arrived with; neither of those two was the cause
+   of what the founder saw, and both could have been the next one.
+
+**Why the matrix did not see it.** It had no assertion on the bar's layout. It checked the bar's presence,
+its lenses, the active lens and the URL, and never that a label sat inside its tab. The shell arm now
+does, at every viewport on both engines, after `document.fonts.ready`: no tab's content exceeds its box
+and the track does not scroll, whichever mode the bar chose. With that one check in place the defect
+reproduced on Chromium on the first run, which is the whole point of the check.
+
+**What the matrix still cannot do.** Ruling 61 names Safari, and the matrix runs Playwright's WebKit on
+Linux, which shares WebCore with Safari and not its iOS text, font-loading or scrolling behaviour. The
+founder's iPhone is the only iOS check this project has. This time iOS was where a person happened to
+look, not what was different; the next time it may be the other way round, and a real-device pass
+(BrowserStack, or a Playwright run on a macOS runner with an iOS simulator) is the fix this half names.
+
+**Not this gap's scope.** Connect's lens bar carries its own set and is not read by the shell check; if
+its set ever loses an icon it fails the same way, silently, until a check reads it.
+
+## G37. With the fit test corrected, the medium tier reads icon-first for a 3px shortfall that `main` hid inside a label's padding
+
+**Severity: low, a Design decision rather than a defect. Opened 17 September 2026 during Session 23 on
+PR 45, filed under ruling 597. The number is assigned by this entry (ruling 638).**
+
+**What was measured.** The G36 fix's shell check, run on Chromium against `wrangler pages dev dist` of
+`458e285` and of `main` at `1eb7ab8`, at the same widths:
+
+| Build     | 390 by 844 (track 358)                               | 744 by 1133 and 1024 by 768 (track 616)       | 1280 by 800 (track 760) |
+| --------- | ---------------------------------------------------- | --------------------------------------------- | ----------------------- |
+| `main`    | labels, `network` at 86px of content in a 72px share | labels, nothing over its box by more than 1px | labels                  |
+| `458e285` | icon-first                                           | icon-first                                    | labels                  |
+
+The corrected test needs 619px for labels on the Feed's set: the track's 8px of padding, four 2px gaps,
+the widest label as the active tab (131px, "My Network") and the widest as an inactive tab (118px)
+times the four others. At 616px the four inactive tabs get a 117.25px share each, so the widest label's
+118px does not fit by 0.75px, and the bar renders icon-first at every medium-tier width. On `main` that
+same 0.75px was clipped out of the label's 8px side padding, under the check's 1px tolerance and below
+anything an eye could see; the medium tier read labels and looked right.
+
+**Why it is logged and not fixed here.** Correction 14's rule is binary, labels fit or they do not, and
+the test now answers it exactly. Making the tier read labels again is one of three choices, none of
+them the PR's to make: a tolerance in the test (which hides a real overlap the next time a label is a
+pixel wider), 1px less side padding on inactive tabs (8 becomes 7, saving 8px, and the tier fits with
+5px to spare), or a wider column at the medium tier. The founder owns the lens bar; the choice goes to
+Design with these numbers.
+
+**Not this gap's scope.** The compact tier is the founder's screenshot and reads icon-first correctly;
+the expanded tier fits with 141px to spare.
