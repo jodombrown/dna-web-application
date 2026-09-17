@@ -640,7 +640,7 @@ async function get(url, headers = {}) {
             const offShape = walk.filter(
               (w) => w.status !== 200 || (w.state !== "anchored" && w.state !== "unavailable"),
             );
-            const unresolved = walk.filter((w) => w.state === "unavailable").map((w) => w.name);
+            const unresolved = walk.filter((w) => w.state !== "anchored").map((w) => w.name);
             const codes = new Map();
             for (const w of walk)
               if (w.state === "anchored") codes.set(w.code, [...(codes.get(w.code) || []), w.name]);
@@ -656,7 +656,11 @@ async function get(url, headers = {}) {
               "place-resolve: every world_countries name anchors to its own current alpha-2 code (" +
                 wcNames.length +
                 " names)",
-              unresolved.length === 0 && shared.length === 0 && wcNames.length >= 195,
+              // Every name anchored, not merely none unavailable: run 248's first attempt passed
+              // this vacuously against the old build, which answered none to every dry run.
+              walk.filter((w) => w.state === "anchored").length === wcNames.length &&
+                shared.length === 0 &&
+                wcNames.length >= 195,
               (unresolved.length ? "unresolved " + JSON.stringify(unresolved) + " " : "") +
                 (shared.length ? "shared " + JSON.stringify(shared) : "") +
                 (unresolved.length || shared.length ? "" : "all " + wcNames.length + " distinct"),
