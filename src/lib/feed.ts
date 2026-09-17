@@ -205,9 +205,16 @@ export async function hydratePosts(
         const physical = rows.find((r) => r.kind === "physical");
         // A venue row carries place_name and no words; an area row (Session 23, change 2) carries
         // the member's words in place_text beside the area's name; words alone carry only
-        // place_text. All three read left to right.
+        // place_text, and read with the host's country beside them, composed here at read (799):
+        // event_delivery.country holds the chosen name and place_text the words only.
+        const wordsOnly = !!physical && !physical.place_name && !physical.city;
         const placeWords = physical
-          ? [physical.place_text, physical.place_name, physical.city]
+          ? [
+              physical.place_text,
+              physical.place_name,
+              physical.city,
+              wordsOnly ? physical.country : null,
+            ]
               .filter((p, i, a) => !!p && a.indexOf(p) === i)
               .join(", ")
           : "";

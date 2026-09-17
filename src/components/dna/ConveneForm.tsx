@@ -36,12 +36,23 @@ export type ConveneFormProps = ComposerFormProps & {
   /** The poster: `Presented by` reads their name and is not editable at launch (674). */
   author: { name: string };
   /**
-   * The member's homes (633); with none, the line and the chips are absent (690). A chosen home is
-   * the lookup's only anchor (Session 23, change 3: the country derived from the member's profile
-   * is withdrawn, after "Labadi beach" resolved to a Florida venue for a member in California);
-   * with none chosen the function answers unavailable rather than guessing.
+   * The member's homes (633); with none, the line and the chips are absent (690). A tap sets the
+   * event's country and the city words together (Session 24); the home's point then narrows the
+   * lookup inside that country and anchors nothing alone.
    */
   homes: Home[];
+  /**
+   * Session 24 (783, 786, 796, 797): the country vocabulary the Country control offers, read at
+   * runtime from public.world_countries through the one vocabulary path, in the table's position
+   * order. No list lives here. Empty when the read failed, and the control then offers nothing but
+   * its placeholder (ruling 194).
+   */
+  countries: string[];
+  /**
+   * The member's stated country (public.members.current_country), for ordering only: it is listed
+   * first and never selected. Nothing selects a country except the member's choice or a home chip.
+   */
+  statedCountry: string | null;
   /** The member's Spaces, for More options (Canon 6). */
   spaces: { id: string; name: string }[];
   /** The host's browser zone: an online-only event's zone until a first home exists (ruling owed 7). */
@@ -94,6 +105,14 @@ const ROW_BOX = {
 };
 
 const isUrl = (s: string) => /^https?:\/\/\S+$/i.test(s.trim());
+// Session 24: a home's country (Mapbox's English name) against the vocabulary's spelling.
+const foldName = (s: string) =>
+  s
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z]+/g, " ")
+    .trim();
 
 export function ConveneForm({
   fields,
@@ -106,6 +125,8 @@ export function ConveneForm({
   homes,
   spaces,
   browserTz,
+  countries,
+  statedCountry,
 }: ConveneFormProps) {
   const v = (k: string): string => {
     const f = fields[k]?.value;
@@ -134,6 +155,25 @@ export function ConveneForm({
   const placeId = v("place_id");
   const query = v("place_query");
   const home = homes.find((h) => h.id === homeId) ?? null;
+  // Session 24: the country the host set for the event, a public.world_countries name. It is the
+  // anchor of every lookup (783), the value event_delivery.country stores whether or not a place
+  // resolves (799), and never the member's residence.
+  const country = v("country");
+  const orderedCountries = useMemo(
+    () =>
+      statedCountry && countries.includes(statedCountry)
+        ? [statedCountry, ...countries.filter((c) => c !== statedCountry)]
+        : countries,
+    [countries, statedCountry],
+  );
+  // A home's country is Mapbox's name for it; the vocabulary's spelling is matched by a fold so a
+  // chip can set the control, and a home whose country the vocabulary does not carry sets no country.
+  const vocabularyName = (name: string | null): string | null => {
+    if (!name) return null;
+    if (countries.includes(name)) return name;
+    const key = foldName(name);
+    return countries.find((c) => foldName(c) === key) ?? null;
+  };
   // Session 23, change 2: a resolved area (place, locality, neighborhood) carries no place_id, so
   // publish_post keeps the member's words in place_text beside the area's name, city and point.
   const areaResolved = v("place_kind") === "area" && !!v("lat");
@@ -142,6 +182,8 @@ export function ConveneForm({
     ? [v("place_name"), v("place_area"), v("city")].filter(Boolean).join(", ")
     : "";
   const placeText = physical && !placeId && query.trim().length >= MIN_QUERY ? query.trim() : "";
+  // Never without a country (SPEC 3, Session 24): the door is satisfied by a resolved place, or by
+  // a country and at least three typed characters.
   const link = v("link").trim();
   const linkTba = flag("link_tba");
   const linkOk = isUrl(link);
@@ -200,12 +242,16 @@ export function ConveneForm({
       : ", time zone from the place once it is set";
 
   // ---- where, intent, validity, meta ------------------------------------------------------------
-  // A venue replaces the words; an area stands beside them (change 2).
+  // A venue replaces the words; an area stands beside them (change 2). Words that resolved to
+  // nothing read with the country beside them, composed here and on the card at read (799), never
+  // written into place_text.
   const whereText = placeId
     ? placeLabel
     : areaResolved
       ? [placeText, placeLabel].filter(Boolean).join(", ")
-      : placeText;
+      : placeText && country
+        ? placeText + ", " + country
+        : placeText;
   const where =
     format === "online"
       ? "Online"
@@ -215,7 +261,7 @@ export function ConveneForm({
   const intent = !format
     ? ""
     : [
-        physical && whereText ? "In person at " + whereText : null,
+        physical && whereText && country ? "In person at " + whereText : null,
         virtual
           ? linkOk
             ? "Online, link with your ticket"
@@ -226,7 +272,7 @@ export function ConveneForm({
       ]
         .filter(Boolean)
         .join(" and ");
-  const physicalOk = !!placeId || !!placeText;
+  const physicalOk = !!country && (resolved || !!placeText);
   const virtualOk = linkOk || linkTba;
   const valid =
     !!v("title").trim() &&
@@ -269,7 +315,6 @@ export function ConveneForm({
     setField("place_name", p.place_name);
     setField("place_area", p.area ?? "");
     setField("city", p.city ?? "");
-    setField("country", p.country ?? "");
     setField("lng", String(p.lng));
     setField("lat", String(p.lat));
     setField("place_tz", p.timezone);
@@ -282,12 +327,33 @@ export function ConveneForm({
       "place_name",
       "place_area",
       "city",
-      "country",
       "lng",
       "lat",
       "place_tz",
     ])
       setField(k, "");
+    setLookup({ state: "idle" });
+  };
+  // The Country control (786): the member's choice or a home chip, nothing else. A change from the
+  // open state clears any resolution and keeps the words; a home whose country is not the new one
+  // no longer narrows.
+  const setCountry = (name: string) => {
+    if (name === country) return;
+    if (resolved) unpick();
+    setField("country", name);
+    setEditingFrom(null);
+    setLookup({ state: "idle" });
+    if (home && vocabularyName(home.country) !== name) setHomeId(null);
+  };
+  // A home chip (633, 690, Session 24): the country and the city words together, so Place mounts
+  // with the city in it and the lookup runs inside that country, narrowed to the home's point.
+  const chooseHome = (h: Home) => {
+    if (resolved) unpick();
+    setHomeId(h.id);
+    const name = vocabularyName(h.country);
+    if (name) setField("country", name);
+    setField("place_query", h.city);
+    setEditingFrom(null);
     setLookup({ state: "idle" });
   };
   const choose = async (s: SuggestedPlace) => {
@@ -302,7 +368,7 @@ export function ConveneForm({
     else setLookup({ state: "none" });
   };
   useEffect(() => {
-    if (!physical || resolved) return;
+    if (!physical || resolved || !country) return;
     const q = query.trim();
     if (editingFrom !== null) {
       // Change 4: the words the row was resolved from are not looked up again as they stand.
@@ -319,8 +385,9 @@ export function ConveneForm({
         action: "suggest",
         q,
         session_token: session.current,
-        // A chosen home is the only anchor (change 3); without one the function answers
-        // unavailable rather than letting Mapbox anchor on the Edge node's IP.
+        // The host's country is the anchor of every lookup (783); a chosen home narrows inside it
+        // (633). Never the member's residence, never the Edge node's IP.
+        country_name: country,
         proximity: home ? { lng: home.lng, lat: home.lat } : null,
       });
       if (!live) return;
@@ -334,7 +401,7 @@ export function ConveneForm({
       clearTimeout(t);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query, resolved, physical, homeId, editingFrom]);
+  }, [query, resolved, physical, homeId, editingFrom, country]);
 
   // ---- parts -------------------------------------------------------------------------------------
   const lab = (text: string, key: string): ReactNode => (
@@ -488,7 +555,35 @@ export function ConveneForm({
     ) : null,
   );
 
-  // The door: format first, then only what the format needs (621, 521).
+  // The door: format first, then only what the format needs (621, 521). Session 24: Country is
+  // the first control of the place block, a Strand Select reading the vocabulary; Place is not in
+  // the DOM until a country is chosen (786, 580); above compact the two share one row.
+  const countrySelect = (
+    <Select
+      key="country"
+      label={lab("Country", "country")}
+      data-convene="country"
+      value={country}
+      onChange={(e) => setCountry(e.target.value)}
+      options={[
+        { value: "", label: "Choose a country" },
+        ...orderedCountries.map((c) => ({ value: c, label: c })),
+      ]}
+    />
+  );
+  const placeInput = input("place_query", "Place", {
+    placeholder: "A venue or an area",
+    // Session 23, the unavailable state: a lookup that did not run is never "no place found".
+    // Session 24 (798): nothing found names the country that was searched.
+    hint:
+      lookup.state === "none"
+        ? "No place found for that. Searched: " + country + ". It is kept as you wrote it."
+        : lookup.state === "several"
+          ? "Several places match. Pick one, or leave it as you wrote it."
+          : lookup.state === "unavailable"
+            ? "Place search is unavailable right now. Your words are kept, and you can publish."
+            : undefined,
+  });
   const placeBlock = resolved ? (
     <div
       key="place"
@@ -502,13 +597,19 @@ export function ConveneForm({
       <div style={ROW_BOX}>
         <Icon name="map-pin" size={18} style={{ color: "var(--ink-3)", flex: "none" }} />
         {areaResolved ? (
-          // The member's words stand beside the resolved area, never replaced by it (change 2).
+          // The member's words stand beside the resolved area, never replaced by it (change 2);
+          // the country follows in the quiet ink (800).
           <span style={{ flex: 1, minWidth: 0 }}>
             {placeText}
-            <span style={{ color: "var(--ink-3)" }}>{placeLabel ? ", " + placeLabel : ""}</span>
+            <span style={{ color: "var(--ink-3)" }}>
+              {(placeLabel ? ", " + placeLabel : "") + (country ? ", " + country : "")}
+            </span>
           </span>
         ) : (
-          <span style={{ flex: 1, minWidth: 0 }}>{placeLabel}</span>
+          <span style={{ flex: 1, minWidth: 0 }}>
+            {placeLabel}
+            <span style={{ color: "var(--ink-3)" }}>{country ? ", " + country : ""}</span>
+          </span>
         )}
         <Button
           variant="secondary"
@@ -534,28 +635,29 @@ export function ConveneForm({
       data-convene="place-block"
       style={{ display: "flex", flexDirection: "column", gap: 8 }}
     >
-      {input("place_query", "Place", {
-        placeholder: "A venue name",
-        // Session 23, the unavailable state: a lookup that did not run is never "no place found".
-        hint:
-          lookup.state === "none"
-            ? "No place found for that. It is kept as you wrote it."
-            : lookup.state === "several"
-              ? "Several places match. Pick one, or leave it as you wrote it."
-              : lookup.state === "unavailable"
-                ? "Place search is unavailable right now. Your words are kept, and you can publish."
-                : undefined,
-      })}
+      {wide && country ? (
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "minmax(0, 1fr) minmax(0, 2fr)",
+            gap: 12,
+          }}
+        >
+          {countrySelect}
+          {placeInput}
+        </div>
+      ) : (
+        <>
+          {countrySelect}
+          {country ? placeInput : null}
+        </>
+      )}
       {!query.trim() && homes.length > 0 && (
         <div data-convene="homes" style={{ display: "flex", flexDirection: "column", gap: 6 }}>
           <div style={QUIET}>Near one of your homes</div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             {homes.map((h) => (
-              <Chip
-                key={h.id}
-                selected={homeId === h.id}
-                onClick={() => setHomeId(homeId === h.id ? null : h.id)}
-              >
+              <Chip key={h.id} selected={homeId === h.id} onClick={() => chooseHome(h)}>
                 {h.city}
               </Chip>
             ))}

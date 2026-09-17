@@ -135,8 +135,9 @@ export type PlaceState =
  * lookup that ran and found nothing; anything that is not an answer from it (no session, a non-2xx
  * from the gateway, a body that is not a state, a thrown fetch) is `unavailable`, because the
  * search did not run. Either way the member's words stand in place_text (publishable).
- * `country_name` is the member's stated country (public.members.current_country), the lookup's
- * fallback anchor when no home is chosen (Session 23, place anchoring).
+ * `country_name` is the country the host set for the event (Session 24, 783): a
+ * public.world_countries name, the anchor of every suggest; `proximity`, a chosen home, narrows
+ * inside it. Never the member's residence: the form sends what the member chose or nothing.
  */
 export async function resolvePlace(body: {
   action: "suggest" | "retrieve";

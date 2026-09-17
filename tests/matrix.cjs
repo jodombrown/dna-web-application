@@ -825,11 +825,12 @@ async function mockSupabase(page, db, opts = {}) {
       return json(key ? INFER[key] : null);
     }
     if (p === "/functions/v1/place-resolve") {
-      // Convene Pass 1, PR 2: four typed states. "Front Room" is one place, "Alliance" several,
-      // anything else none. Suggest carries no coordinates; retrieve does. Session 23: a query
+      // Convene Pass 1, PR 2: four typed states. Session 24 (783): every suggest carries the
+      // host's country and the mock answers inside it only: zero hits is none, one is one, two
+      // or more is several. A suggest with no country_name is the function's own `unavailable`
+      // (never the Edge node's IP); a proximity narrows and never widens. Session 23: a query
       // naming an outage is answered 503 from the gateway, which the client reads as
-      // `unavailable`; a suggest with neither a proximity nor a country_name is the function's
-      // own `unavailable` (case 3, withheld: never the Edge node's IP).
+      // `unavailable`.
       const body = req.postDataJSON() || {};
       db.placeCalls.push(body);
       await new Promise((r) => setTimeout(r, 120));
@@ -866,7 +867,22 @@ async function mockSupabase(page, db, opts = {}) {
           area: "Airport Residential",
           city: "Accra",
           country: "Ghana",
+          lng: -0.18,
+          lat: 5.61,
+          timezone: "Africa/Accra",
           label: "Alliance Française Accra, Airport Residential, Accra",
+          kind: "venue",
+        },
+        {
+          place_id: "af-kumasi",
+          place_name: "Alliance Française Kumasi",
+          area: "Nhyiaeso",
+          city: "Kumasi",
+          country: "Ghana",
+          lng: -1.62,
+          lat: 6.67,
+          timezone: "Africa/Accra",
+          label: "Alliance Française Kumasi, Nhyiaeso, Kumasi",
           kind: "venue",
         },
         {
@@ -875,33 +891,36 @@ async function mockSupabase(page, db, opts = {}) {
           area: "Loresho",
           city: "Nairobi",
           country: "Kenya",
+          lng: 36.79,
+          lat: -1.26,
+          timezone: "Africa/Nairobi",
           label: "Alliance Française Nairobi, Loresho, Nairobi",
           kind: "venue",
         },
       ];
+      // What the stand-in knows, by the words that find it.
+      const CATALOGUE = [
+        { match: "front room", place: FRONT },
+        { match: "labadi", place: OSU },
+        ...AF.map((place) => ({ match: "alliance", place })),
+      ];
       if (body.action === "retrieve") {
-        if (body.mapbox_id === FRONT.place_id) return json({ state: "one", place: FRONT });
-        const hit = AF.find((a) => a.place_id === body.mapbox_id);
-        return hit
-          ? json({
-              state: "one",
-              place: {
-                ...hit,
-                lng: hit.city === "Accra" ? -0.18 : 36.79,
-                lat: hit.city === "Accra" ? 5.61 : -1.26,
-                timezone: hit.city === "Accra" ? "Africa/Accra" : "Africa/Nairobi",
-              },
-            })
-          : json({ state: "none" });
+        const hit = CATALOGUE.find((c) => c.place.place_id === body.mapbox_id);
+        return hit ? json({ state: "one", place: hit.place }) : json({ state: "none" });
       }
       const q = String(body.q || "").toLowerCase();
       if (q.length < 3) return json({ state: "none" });
       if (q.includes("outage")) return json({ message: "upstream unavailable" }, 503);
-      if (!body.proximity && !body.country_name) return json({ state: "unavailable" });
-      if (q.includes("front room")) return json({ state: "one", place: FRONT });
-      if (q.includes("labadi")) return json({ state: "one", place: OSU });
-      if (q.includes("alliance")) return json({ state: "several", places: AF });
-      return json({ state: "none" });
+      if (!body.country_name) return json({ state: "unavailable" });
+      const hits = CATALOGUE.filter(
+        (c) => q.includes(c.match) && c.place.country === body.country_name,
+      ).map((c) => c.place);
+      if (hits.length === 0) return json({ state: "none" });
+      if (hits.length === 1) return json({ state: "one", place: hits[0] });
+      return json({
+        state: "several",
+        places: hits.map(({ lng, lat, timezone, ...rest }) => rest),
+      });
     }
     if (p === "/functions/v1/link-unfurl") {
       await new Promise((r) => setTimeout(r, 400));
@@ -2544,60 +2563,77 @@ async function runConvene(browserType, bname, [w, h], theme) {
         (await pub().isDisabled()),
     );
 
-    // The door: In person. Session 23, change 3: DIA's venue words stand with no home chosen, and
-    // the lookup answers unavailable rather than anchoring on anything the member did not choose.
-    // The chips render only while the field is empty (690), so the member clears the words to
-    // choose a home; that trap is reported in the PR body, not papered over here.
+    // The door: In person. Session 24 (783, 786, 796, 797): Country is the first control of the
+    // place block and reads the vocabulary; nothing is selected on a fresh form, the member's
+    // stated country (South Africa in the fixture) is listed first; Place is not in the DOM until
+    // a country is chosen; no lookup runs; DIA's venue words wait in the store.
     await fmt("In person").click();
-    await dialog
-      .getByText("Place search is unavailable right now. Your words are kept, and you can publish.")
-      .waitFor({ timeout: 5000 });
+    await page.waitForTimeout(150);
+    const countrySelect = dialog.locator('select[data-convene="country"]');
+    const options = await countrySelect.locator("option").allTextContents();
     record(
       tag +
-        " in person with no home chosen: the lookup is unavailable, nothing anchored, words stand (change 3)",
-      db.placeCalls.length >= 1 &&
-        db.placeCalls.every((c) => c.proximity == null && c.country_name == null) &&
+        " in person, no country: Choose a country with nothing selected, the stated country first, no Place in the DOM, no lookup, Publish off (786, 783)",
+      (await countrySelect.count()) === 1 &&
+        (await countrySelect.inputValue()) === "" &&
+        options[0] === "Choose a country" &&
+        options[1] === "South Africa" &&
+        options.length === 1 + VOCAB.world.length &&
+        (await field("place_query").count()) === 0 &&
+        db.placeCalls.length === 0 &&
+        (await dialog.locator('[data-convene="intent"]').count()) === 0 &&
+        (await pub().isDisabled()),
+      JSON.stringify(options).slice(0, 120) + " calls " + db.placeCalls.length,
+    );
+    await shot(page, `${tag}-02-no-country`);
+
+    // The wrong country as a visible state (798): United States chosen, DIA's Front Room finds
+    // nothing there, and the hint names what was searched; the words stand and the event can go.
+    await countrySelect.selectOption("United States");
+    await dialog
+      .getByText("No place found for that. Searched: United States. It is kept as you wrote it.")
+      .waitFor({ timeout: 5000 });
+    const usCall = db.placeCalls[db.placeCalls.length - 1];
+    record(
+      tag +
+        " wrong country: Front Room in United States finds nothing, the hint names United States, words stand, publishable (798)",
+      (await field("place_query").inputValue()) === "Front Room" &&
+        (await field("place_query").getAttribute("placeholder")) === "A venue or an area" &&
+        !!usCall &&
+        usCall.country_name === "United States" &&
+        usCall.proximity == null &&
         (await dialog.locator('[data-convene="place-resolved"]').count()) === 0 &&
         (await dialog.locator('[data-convene="intent"]').textContent()) ===
-          "In person at Front Room." &&
+          "In person at Front Room, United States." &&
         !(await pub().isDisabled()),
-      JSON.stringify(db.placeCalls.map((c) => [c.q, c.proximity, c.country_name])).slice(0, 160),
+      JSON.stringify(usCall && [usCall.q, usCall.country_name, usCall.proximity]),
     );
-    await shot(page, `${tag}-02-in-person-unanchored`);
+    await shot(page, `${tag}-02-wrong-country`);
 
-    // A home chosen (633): the chips appear while the field is empty, Nairobi anchors, and the
-    // same words now resolve to one place with the zone from the place.
-    await field("place_query").fill("");
-    await page.waitForTimeout(150);
-    record(
-      tag + " empty place: Near one of your homes with the member's homes as chips (633, 690)",
-      (await dialog.locator('[data-convene="homes"]').count()) === 1 &&
-        (await dialog.locator('[data-convene="homes"] button', { hasText: "Accra" }).count()) ===
-          1 &&
-        (await dialog.locator('[data-convene="homes"] button', { hasText: "Nairobi" }).count()) ===
-          1,
-    );
-    await dialog.locator('[data-convene="homes"] button', { hasText: "Nairobi" }).click();
-    await field("place_query").fill("Front Room");
+    // Ghana chosen: the same words resolve inside Ghana with the zone from the place; the row
+    // carries the country in the quiet ink and replaces both controls (800).
+    await countrySelect.selectOption("Ghana");
     await dialog.locator('[data-convene="place-resolved"]').waitFor({ timeout: 5000 });
     const resolved = await dialog.locator('[data-convene="place-resolved"]').textContent();
     const anchored = db.placeCalls[db.placeCalls.length - 1];
     record(
       tag +
-        " in person with a home chosen: the venue resolves to one place, zone from the place, when read back",
+        " Ghana chosen: the venue resolves inside Ghana, the row reads the place then Ghana, zone from the place, the country control not rendered",
       resolved.includes("Front Room, Osu, Accra") &&
+        resolved.includes(", Ghana") &&
         resolved.includes("Time zone GMT, from the place.") &&
         (await dialog
           .locator('[data-convene="place-resolved"]')
           .getAttribute("data-place-kind")) === "venue" &&
+        (await countrySelect.count()) === 0 &&
         (await dialog.locator('[data-convene="when-line"]').textContent()) ===
           "Fri 16 Oct, 19:00 GMT, the time at the place" &&
         (await dialog.locator('[data-convene="intent"]').textContent()) ===
           "In person at Front Room, Osu, Accra." &&
         !!anchored &&
-        !!anchored.proximity &&
-        Math.round(anchored.proximity.lng) === 37,
-      resolved.slice(0, 160) + " " + JSON.stringify(anchored && anchored.proximity),
+        anchored.country_name === "Ghana" &&
+        anchored.proximity == null,
+      resolved.slice(0, 160) + " " + JSON.stringify(anchored && anchored.country_name),
     );
     const previewText = await dialog
       .locator("article[aria-label='Preview of your post']")
@@ -2615,41 +2651,87 @@ async function runConvene(browserType, bname, [w, h], theme) {
     await shot(page, `${tag}-02-in-person`);
     await noOverflow(page, tag + " in person");
 
-    // Session 23, change 4: Change is an editing state. The row opens back into the field with the
-    // words in it, and nothing is looked up again until the text changes.
+    // Change (785, Session 23 change 4): both controls return, the country still selected and the
+    // words in place, and nothing is looked up again until the text changes.
     const callsBeforeChange = db.placeCalls.length;
     await dialog.getByRole("button", { name: "Change" }).click();
     await page.waitForTimeout(700);
     record(
-      tag + " Change opens the field with the words and does not re-resolve them (change 4)",
+      tag +
+        " Change reopens both controls with Ghana still selected and the words in place, and does not re-resolve them (785)",
       (await dialog.locator('[data-convene="place-resolved"]').count()) === 0 &&
+        (await countrySelect.inputValue()) === "Ghana" &&
         (await field("place_query").inputValue()) === "Front Room" &&
         db.placeCalls.length === callsBeforeChange &&
-        (await dialog.getByText("No place found for that. It is kept as you wrote it.").count()) ===
-          0,
+        (await dialog.getByText(/^No place found for that/).count()) === 0,
       "calls " + callsBeforeChange + " -> " + db.placeCalls.length,
     );
 
-    // Several: the hint and a listbox, nothing chosen; the chosen home still narrows the lookup.
+    // A home chip (633, 690, Session 24): with the words cleared the chips render; a tap sets the
+    // country and the city words together, and the lookup runs inside that country narrowed to
+    // the home's point.
+    await field("place_query").fill("");
+    await page.waitForTimeout(150);
+    record(
+      tag + " empty place: Near one of your homes with the member's homes as chips (633, 690)",
+      (await dialog.locator('[data-convene="homes"]').count()) === 1 &&
+        (await dialog.locator('[data-convene="homes"] button', { hasText: "Accra" }).count()) ===
+          1 &&
+        (await dialog.locator('[data-convene="homes"] button', { hasText: "Nairobi" }).count()) ===
+          1,
+    );
+    await dialog.locator('[data-convene="homes"] button', { hasText: "Nairobi" }).click();
+    await dialog
+      .getByText("No place found for that. Searched: Kenya. It is kept as you wrote it.")
+      .waitFor({ timeout: 5000 });
+    const homeCall = db.placeCalls[db.placeCalls.length - 1];
+    record(
+      tag +
+        " a home chip sets the country and the city words together and narrows inside that country (633, Session 24)",
+      (await countrySelect.inputValue()) === "Kenya" &&
+        (await field("place_query").inputValue()) === "Nairobi" &&
+        !!homeCall &&
+        homeCall.country_name === "Kenya" &&
+        !!homeCall.proximity &&
+        Math.round(homeCall.proximity.lng) === 37 &&
+        (await dialog.locator('[data-convene="homes"]').count()) === 0,
+      JSON.stringify(homeCall && [homeCall.q, homeCall.country_name, homeCall.proximity]),
+    );
+
+    // The country filters: Alliance in Kenya is one place, the Nairobi one, and it resolves.
     await field("place_query").fill("Alliance");
+    await dialog.locator('[data-convene="place-resolved"]').waitFor({ timeout: 5000 });
+    record(
+      tag + " the country filters: Alliance in Kenya is one place, the Nairobi one (783)",
+      (await dialog.locator('[data-convene="place-resolved"]').textContent()).includes(
+        "Alliance Française Nairobi, Loresho, Nairobi, Kenya",
+      ),
+    );
+
+    // Changing the country from the open state clears any resolution and keeps the words: after
+    // Change, Ghana chosen with Alliance still in the field finds two places, the home no longer
+    // narrows, and nothing is chosen for the member.
+    await dialog.getByRole("button", { name: "Change" }).click();
+    await countrySelect.selectOption("Ghana");
     await dialog.getByRole("listbox", { name: "Places that match" }).waitFor({ timeout: 5000 });
     const last = db.placeCalls[db.placeCalls.length - 1];
     record(
-      tag + " several: the hint and a listbox, nothing chosen; the chosen home narrows the lookup",
-      (await dialog
-        .getByText("Several places match. Pick one, or leave it as you wrote it.")
-        .count()) === 1 &&
+      tag +
+        " changing the country keeps the words and re-runs the lookup inside the new country: several, nothing chosen, the home no longer narrows",
+      (await field("place_query").inputValue()) === "Alliance" &&
+        (await dialog
+          .getByText("Several places match. Pick one, or leave it as you wrote it.")
+          .count()) === 1 &&
         (await dialog
           .getByRole("listbox", { name: "Places that match" })
           .getByRole("option")
           .count()) === 2 &&
         (await dialog.locator('[data-convene="place-resolved"]').count()) === 0 &&
         !!last &&
-        !!last.proximity &&
-        Math.round(last.proximity.lng) === 37 &&
-        last.country_name == null &&
+        last.country_name === "Ghana" &&
+        last.proximity == null &&
         !(await pub().isDisabled()),
-      JSON.stringify(last && [last.proximity, last.country_name]),
+      JSON.stringify(last && [last.q, last.country_name, last.proximity]),
     );
     await dialog
       .getByRole("listbox", { name: "Places that match" })
@@ -2660,12 +2742,13 @@ async function runConvene(browserType, bname, [w, h], theme) {
     record(
       tag + " picking one of several retrieves it and settles the row",
       (await dialog.locator('[data-convene="place-resolved"]').textContent()).includes(
-        "Alliance Française Accra, Airport Residential, Accra",
+        "Alliance Française Accra, Airport Residential, Accra, Ghana",
       ),
     );
 
-    // Session 23, change 2: an area. The words stand beside the resolved area, the zone comes
-    // from the area's point, and the payload carries the words in place_text with no place_id.
+    // Session 23, change 2: an area. The words stand beside the resolved area, the country after
+    // it (784, 800), the zone comes from the area's point, and the payload carries the words in
+    // place_text with no place_id.
     await dialog.getByRole("button", { name: "Change" }).click();
     await field("place_query").fill("Labadi beach");
     await dialog
@@ -2674,9 +2757,9 @@ async function runConvene(browserType, bname, [w, h], theme) {
     const areaRow = await dialog.locator('[data-convene="place-resolved"]').textContent();
     record(
       tag +
-        " an area resolves with the words beside it, zone from the area, publishable (change 2)",
+        " an area resolves with the words beside it and the country after, zone from the area, publishable (784, 800)",
       areaRow.includes("Labadi beach") &&
-        areaRow.includes(", Osu, Accra") &&
+        areaRow.includes(", Osu, Accra, Ghana") &&
         areaRow.includes("Time zone GMT, from the place.") &&
         (await dialog.locator('[data-convene="intent"]').textContent()) ===
           "In person at Labadi beach, Osu, Accra." &&
@@ -2685,17 +2768,31 @@ async function runConvene(browserType, bname, [w, h], theme) {
     );
     await shot(page, `${tag}-03a-place-area`);
 
-    // None: the words stand in place_text and the event is still publishable.
+    // None: the words stand in place_text, the hint names the country searched, the intent and
+    // the card compose the country at read (798, 799), and the event is still publishable.
     await dialog.getByRole("button", { name: "Change" }).click();
     await field("place_query").fill("Kwame's rooftop");
     await dialog
-      .getByText("No place found for that. It is kept as you wrote it.")
+      .getByText("No place found for that. Searched: Ghana. It is kept as you wrote it.")
       .waitFor({ timeout: 5000 });
     record(
-      tag + " none: the words stand in place_text and the event is still publishable",
+      tag +
+        " none: the hint names Ghana, the words stand in place_text, the intent composes the country, publishable (798, 799)",
       !(await pub().isDisabled()) &&
         (await dialog.locator('[data-convene="intent"]').textContent()) ===
-          "In person at Kwame's rooftop.",
+          "In person at Kwame's rooftop, Ghana.",
+    );
+    record(
+      tag +
+        " a request never carries the member's residence; every lookup carried a chosen country (783)",
+      db.placeCalls.length > 0 &&
+        // A retrieve resolves a chosen row by its id and carries no anchor; every suggest does.
+        db.placeCalls.every(
+          (c) =>
+            c.action === "retrieve" ||
+            (!!c.country_name && c.country_name !== "South Africa" && !("residence" in c)),
+        ),
+      JSON.stringify([...new Set(db.placeCalls.map((c) => c.country_name))]),
     );
     await shot(page, `${tag}-03-place-none`);
     // Session 23, the unavailable state: a lookup that did not run (here a 503 from the gateway)
@@ -2706,16 +2803,15 @@ async function runConvene(browserType, bname, [w, h], theme) {
       .waitFor({ timeout: 5000 });
     record(
       tag + " unavailable: its own hint, not No place found; words kept, still publishable",
-      (await dialog.getByText("No place found for that. It is kept as you wrote it.").count()) ===
-        0 &&
+      (await dialog.getByText(/^No place found for that/).count()) === 0 &&
         !(await pub().isDisabled()) &&
         (await dialog.locator('[data-convene="intent"]').textContent()) ===
-          "In person at The outage bar.",
+          "In person at The outage bar, Ghana.",
     );
     await shot(page, `${tag}-03b-place-unavailable`);
     await field("place_query").fill("Kwame's rooftop");
     await dialog
-      .getByText("No place found for that. It is kept as you wrote it.")
+      .getByText("No place found for that. Searched: Ghana. It is kept as you wrote it.")
       .waitFor({ timeout: 5000 });
 
     // The moment: a failed parse mounts the pickers; a window is words (520, 634).
@@ -2789,7 +2885,7 @@ async function runConvene(browserType, bname, [w, h], theme) {
       (await dialog.locator('[data-convene="place-block"]').count()) === 1 &&
         (await dialog.locator('[data-convene="link-tba"]').count()) === 1 &&
         (await dialog.locator('[data-convene="intent"]').textContent()) ===
-          "In person at Kwame's rooftop and Online, link to be announced." &&
+          "In person at Kwame's rooftop, Ghana and Online, link to be announced." &&
         !(await pub().isDisabled()),
     );
     await field("place_query").fill("Front Room");
@@ -2950,16 +3046,13 @@ async function runPublish(browserType, bname, [w, h], theme) {
     await dialog
       .locator('[role="radiogroup"][aria-label="Format"] [role="radio"]', { hasText: "In person" })
       .click();
-    // Session 23, change 3: with no home chosen the lookup is unavailable and the words stand, so
-    // the arm chooses a home the way a member does (clear the field, tap a chip, retype) and the
-    // venue then resolves to one place. The Convene arm asserts the unanchored state itself.
-    const placeField = dialog.locator('input[data-convene="place_query"]');
-    await placeField.fill("");
-    await dialog.locator('[data-convene="homes"] button', { hasText: "Accra" }).click();
-    await placeField.fill("Front Room");
+    // Session 24 (783, 786): Place is not in the DOM until a country is chosen, so the arm chooses
+    // Ghana the way a member does and DIA's venue words then resolve inside it. The Convene arm
+    // asserts the no-country state itself.
+    await dialog.locator('select[data-convene="country"]').selectOption("Ghana");
     await dialog.locator('[data-convene="place-resolved"]').waitFor({ timeout: 5000 });
     record(
-      tag + " In person with a home chosen: the venue resolves to one place and Publish is on",
+      tag + " In person with Ghana chosen: the venue resolves to one place and Publish is on",
       (await dialog.locator('[data-convene="place-resolved"]').textContent()).includes(
         "Front Room, Osu, Accra",
       ) && !(await dialog.getByRole("button", { name: "Publish" }).isDisabled()),

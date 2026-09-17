@@ -19,6 +19,7 @@ import { makeInfer, makeUpload, unfurl } from "@/lib/dia";
 import { loadDraft, saveDraft } from "@/lib/drafts";
 import { loadMemberSpaces } from "@/lib/feed";
 import { loadMemberHomes, type Home } from "@/lib/homes";
+import { loadProfile } from "@/lib/profile";
 import { browserZone } from "@/lib/when";
 import { publishPost } from "@/lib/publish";
 import { useMode, useTier } from "@/lib/tier";
@@ -66,6 +67,10 @@ export function ComposerShell() {
   // runtime through the one vocabulary path. Ruling 194: a read that fails leaves this empty and the
   // control renders no options; nothing here substitutes a default.
   const [instrument, setInstrument] = useState<string[]>([]);
+  // Session 24 (783, 786): the Country control's vocabulary, public.world_countries through the one
+  // vocabulary path, and the member's stated country for the control's ordering only.
+  const [world, setWorld] = useState<string[]>([]);
+  const [statedCountry, setStatedCountry] = useState<string | null>(null);
 
   const hostContext = request ? hostContextOf(request) : "feed";
 
@@ -85,13 +90,14 @@ export function ComposerShell() {
     if (!open || !member || !request) return;
     let active = true;
     void (async () => {
-      const [restored, memberSpaces, vocab, memberHomes] = await Promise.all([
+      const [restored, memberSpaces, vocab, memberHomes, profile] = await Promise.all([
         request.initialVerb || request.initial
           ? Promise.resolve(null)
           : loadDraft(member.id, hostContext),
         loadMemberSpaces(member.id),
         loadVocabularies().catch(() => null),
         loadMemberHomes(member.id).catch(() => [] as Home[]),
+        member.handle ? loadProfile(member.handle).catch(() => null) : Promise.resolve(null),
       ]);
       if (!active) return;
       setDraft(restored?.seed ?? null);
@@ -99,6 +105,8 @@ export function ComposerShell() {
       setSpaces(memberSpaces);
       setHomes(memberHomes);
       setInstrument((vocab?.instrument ?? []).map((i) => i.label));
+      setWorld(Array.isArray(vocab?.world) ? vocab.world : []);
+      setStatedCountry(profile?.sections.where?.current_country || null);
       setLoadedSeed(seed);
     })();
     return () => {
@@ -127,10 +135,12 @@ export function ComposerShell() {
           homes={homes}
           spaces={spaces}
           browserTz={browserZone()}
+          countries={world}
+          statedCountry={statedCountry}
         />
       ),
     }),
-    [authorName, homes, spaces],
+    [authorName, homes, spaces, world, statedCountry],
   );
   const lastVerb = useRef<ComposerState["verb"]>(null);
 
