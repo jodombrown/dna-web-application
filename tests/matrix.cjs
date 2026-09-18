@@ -1599,9 +1599,31 @@ async function launch(browserType) {
   const outerContext = browser.newContext.bind(browser);
   browser.newContext = async (o) => {
     const ctx = await outerContext(o);
-    ctx.on("page", watchCrash);
+    ctx.on("page", (page) => watchCrash(page, browser));
     return ctx;
   };
+  // Ruling 830. `page.on("crash")` fires for a lost web process and says nothing about the browser
+  // process, and Playwright's own error cannot tell them apart either: it reads "Target page,
+  // context or browser has been closed" whichever went. Ruling 828's census could not answer which
+  // died on any of its seventeen sightings, because nothing ever asked.
+  //
+  // Measured against Chromium at `chrome://crash` before this was written, because a listener whose
+  // behaviour is assumed is the thing ruling 828 spent a day undoing: on a lost web process `crash`
+  // fires with `isConnected()` still true, and `disconnected` does not fire at all. So the two
+  // together separate the cases that Playwright's one error message conflates. The same probe is why
+  // `closing` exists: `disconnected` fires on every ordinary `browser.close()` too, which without
+  // the flag would print this line once per arm, two hundred times a job, each one reading as an
+  // event when it is a teardown. A signal that fires on the ordinary path is not a signal.
+  let closing = false;
+  const outerClose = browser.close.bind(browser);
+  browser.close = async (...args) => {
+    closing = true;
+    return outerClose(...args);
+  };
+  browser.on("disconnected", () => {
+    if (closing) return;
+    console.log("BROWSER DISCONNECTED |", openArm ? openArm.arm : "(no arm open)");
+  });
   return browser;
 }
 
@@ -1621,6 +1643,8 @@ const results = [];
 const armLog = [];
 const crashSightings = [];
 let openArm = null;
+/** Ruling 830: the zero the per-arm progress line counts from. */
+const runStart = Date.now();
 
 /** The tier ruling 61's matrix is read in. Widths are the app's own breakpoints. */
 function tierOf(name) {
@@ -1633,6 +1657,12 @@ function tierOf(name) {
 function armStart(tag) {
   armClose();
   openArm = { arm: tag, from: results.length, crashed: false, pages: new Set() };
+  // Ruling 830: `record()` prints nothing for a passing check, so a job's log held no timeline at
+  // all and ruling 828's census had to place each crash by step timestamps and infer how far the
+  // run had got. One line per arm makes that readable: the checks emitted so far, the seconds since
+  // the run began, and the arm about to run. Two hundred lines a job, against a log of thousands.
+  const at = Math.round((Date.now() - runStart) / 1000);
+  console.log(`ARM ${String(results.length).padStart(5)} +${at}s ${tag}`);
   return tag;
 }
 
@@ -1652,7 +1682,7 @@ function armClose() {
  * arm: once the web process is gone every check behind it fails for that reason and no other, which
  * is exactly the distinction the suite could not previously draw.
  */
-function watchCrash(page) {
+function watchCrash(page, browser) {
   // Pinned here rather than read when the event fires: the page belongs to the arm that opened it,
   // and a crash reported during teardown must not be charged to whichever arm opened next.
   const owner = openArm;
@@ -1661,8 +1691,22 @@ function watchCrash(page) {
     const on = owner || openArm;
     const arm = on ? on.arm : "(no arm open)";
     if (on) on.crashed = true;
-    crashSightings.push({ arm, tier: tierOf(arm), at: new Date().toISOString() });
-    console.log("WEB PROCESS CRASHED |", arm);
+    // Ruling 830. Read here and not later: by the time a flow's catch runs, teardown has closed the
+    // context and the answer is gone. `null` where no browser was handed in, never a guess.
+    const alive = browser ? browser.isConnected() : null;
+    crashSightings.push({
+      arm,
+      tier: tierOf(arm),
+      at: new Date().toISOString(),
+      secondsIn: Math.round((Date.now() - runStart) / 1000),
+      browserConnected: alive,
+    });
+    console.log(
+      "WEB PROCESS CRASHED |",
+      arm,
+      "| browser",
+      alive === null ? "unknown" : alive ? "still connected" : "gone with it",
+    );
   });
   return page;
 }
@@ -1672,8 +1716,11 @@ function armCrashed() {
   return !!(openArm && openArm.crashed);
 }
 
-function record(name, ok, detail = "", crashed = armCrashed()) {
-  results.push({ name, ok, detail, arm: openArm ? openArm.arm : null, crashed });
+function record(name, ok, detail = "", crashed = armCrashed(), arm = openArm ? openArm.arm : null) {
+  // `arm` is explicit only for ruling 292's own per-arm accounting, which runs after the last arm
+  // has closed and so has no open arm to read. Ruling 832 needs those records attributed, because a
+  // crashed arm's accounting failure is the crashed arm's and not a failure elsewhere in the job.
+  results.push({ name, ok, detail, arm, crashed });
   // Ruling 316: every failure carries the flag or its absence, in the line a reader sees first.
   if (!ok) console.log("FAIL", crashed ? "[CRASH]" : "[no crash]", name, detail);
   // Ruling 292 asks for a changed count to be explained by name, and EXPECT=write only ever gives
@@ -1716,7 +1763,24 @@ function accountForArms({ full, engines }) {
     // the crash in as the expectation. A declared number only ever falls by a deliberate edit.
     const prior = loadExpected() || {};
     const next = new Map(Object.entries(prior));
-    for (const [arm, n] of seen) next.set(arm, Math.max(prior[arm] || 0, n));
+    for (const [arm, n] of seen) {
+      // Ruling 831's other end. Merging upward already refuses to take a crashed arm's short count.
+      // It used to take an inflated one: an arm that threw emits one check MORE than it declares,
+      // because every flow's catch records `${tag} flow` on the error path and that check is in no
+      // declaration, so a calibration run with one late failure would raise the declaration by one
+      // for good and every clean run after it would read INCOMPLETE. An arm that crashed or failed
+      // is not calibration material in either direction; the declaration keeps what it had.
+      if (
+        armLog.some((a) => a.arm === arm && a.crashed) ||
+        results.some((r) => r.arm === arm && !r.ok)
+      ) {
+        console.log(
+          `EXPECT=write: ${arm} crashed or failed; its declaration is left at ${prior[arm] ?? "unset"}`,
+        );
+        continue;
+      }
+      next.set(arm, Math.max(prior[arm] || 0, n));
+    }
     const body = JSON.stringify(sortedObject(next), null, 2) + "\n";
     fs.writeFileSync(EXPECTED_PATH, body);
     // Also into the artifact and the job log, so a calibration run on a runner can be read back
@@ -1743,6 +1807,14 @@ function accountForArms({ full, engines }) {
   for (const [arm, n] of seen) {
     const want = expected[arm];
     const crashed = armLog.some((a) => a.arm === arm && a.crashed);
+    // Ruling 831. An arm that threw late emits one check MORE than it declares: every flow's catch
+    // records `${tag} flow` on the error path, and that check is in no declaration. Read as DRIFT
+    // it told the reader the declaration was stale and to regenerate a file that was correct, which
+    // is what run 254 attempt 1's crashed arm reported (39 against a declared 38) and what attempt
+    // 2 reported on a plain fifteen-second timeout with no crash anywhere in the job. So the cause
+    // is the catch-all and not the crash handler, and the discriminator is a failing check inside
+    // the arm: a declaration that is genuinely stale drifts upward with every check still passing.
+    const threw = results.some((r) => r.arm === arm && !r.ok);
     const label = `ruling 292 | ${arm}: emitted every check it declares`;
     if (want === undefined) {
       record(
@@ -1750,23 +1822,49 @@ function accountForArms({ full, engines }) {
         false,
         `UNDECLARED: emitted ${n} checks and is absent from expected-counts.json; regenerate with EXPECT=write`,
         crashed,
+        arm,
       );
     } else if (n < want) {
       record(
         label,
         false,
-        `INCOMPLETE: emitted ${n} of ${want}; the ${want - n} checks behind the failure never ran`,
+        `UNPROVEN (228): emitted ${n} of ${want}; the ${want - n} checks behind the failure never ran`,
         crashed,
+        arm,
+      );
+    } else if (n > want && (crashed || threw)) {
+      record(
+        label,
+        false,
+        `UNPROVEN (228): emitted ${n} against a declared ${want}, and the arm ${crashed ? "lost a web process" : "threw"}; ` +
+          `the extra check is the flow catch-all on the error path, so the declaration is sound and must not be regenerated from this run`,
+        crashed,
+        arm,
       );
     } else if (n > want) {
       record(
         label,
         false,
-        `DRIFT: emitted ${n} against a declared ${want}; the declaration is stale, regenerate with EXPECT=write`,
+        `DRIFT: emitted ${n} against a declared ${want} with every check passing; the declaration is stale, regenerate with EXPECT=write`,
         crashed,
+        arm,
+      );
+    } else if (crashed) {
+      // Rulings 228 and 832. An arm can lose its web process after its last check has passed: the
+      // listener charges the crash to the arm that opened the page, and a crash during teardown
+      // arrives when the arm is over. Left as a pass, that arm emitted its declared number, failed
+      // nothing, and the job went green with a dead web process in it and no failing check anywhere
+      // to classify. So the count matching is not enough: an arm that lost a web process is
+      // unproven whatever it emitted, and this is the check that says so.
+      record(
+        label,
+        false,
+        `UNPROVEN (228): emitted its declared ${want}, but the arm lost a web process, so what it emitted proves nothing`,
+        crashed,
+        arm,
       );
     } else {
-      record(label, true, "", crashed);
+      record(label, true, "", crashed, arm);
     }
   }
 
@@ -1859,9 +1957,49 @@ function finish({ full = false, engines = [] } = {}) {
   if (crashSightings.length)
     console.log("arms that lost a web process: " + crashSightings.map((c) => c.arm).join(", "));
 
-  console.log(`\n${results.length - fails.length} of ${results.length} checks passed`);
+  // Ruling 832, adopted narrowly. G5 is an engine defect, reported and not fixed under ruling 200,
+  // and ruling 828 measured it at about one crashed arm per four to five WebKit passes across
+  // seventeen sightings: a rate no branch owns and no push can move. One crashed arm therefore no
+  // longer fails the job, on three conditions, all of them ruling 228's. It is reported unproven
+  // rather than passing. Its checks are excluded from the passing count rather than folded into it,
+  // so the count never claims the arm as green. And a second crashed arm in one job still fails,
+  // because two is not the priced rate; so does any failure outside the crashed arm, which is the
+  // whole point of the exemption being one arm wide rather than a class-based pass.
+  // Every arm that lost a web process is unproven and comes out of the count, however many there
+  // are: that part is ruling 228 and is not the exemption. What ruling 832 grants is narrower than
+  // that and sits in `standDown` alone, one arm wide.
+  const unproven = [...new Set(armLog.filter((a) => a.crashed).map((a) => a.arm))];
+  const counted = results.filter((r) => !unproven.includes(r.arm));
+  const countedFails = counted.filter((r) => !r.ok);
+  const standDown = unproven.length === 1 && countedFails.length === 0;
+  const declared = loadExpected() || {};
+
+  console.log(
+    `\n${counted.length - countedFails.length} of ${counted.length} checks passed` +
+      (unproven.length
+        ? `; ${unproven.length} arm${unproven.length > 1 ? "s" : ""} UNPROVEN and excluded from that ` +
+          `count (228): ` +
+          unproven
+            .map((a) => `${a} (declares ${declared[a] ?? "an undeclared number of"})`)
+            .join(", ")
+        : ""),
+  );
   fails.forEach((f) => console.log("FAIL", f.crashed ? "[CRASH]" : "[no crash]", f.name, f.detail));
-  process.exit(fails.length ? 1 : 0);
+  if (standDown) {
+    console.log(
+      "\n=== ruling 832: STOOD DOWN ON ONE CRASHED ARM. THIS IS NOT A CLEAN RUN. ===\n" +
+        `${unproven[0]} lost a web process (G5, ruling 200; the rate is ruling 828's) and is UNPROVEN, never passed.\n` +
+        "Every other arm in this job is green, so the job exits 0 rather than charging an engine defect to this branch.\n" +
+        "A second crashed arm in one job still fails, and so does any failure outside the crashed arm.\n" +
+        "Do not read this green as the arm above having run.",
+    );
+  }
+  if (unproven.length > 1)
+    console.log(
+      `\n=== ruling 832 does NOT cover this run: ${unproven.length} arms lost a web process ===\n` +
+        "The exemption is one arm wide, because one is the rate ruling 828 measured and two is not.",
+    );
+  process.exit(standDown ? 0 : fails.length || unproven.length ? 1 : 0);
 }
 
 /**
@@ -3194,6 +3332,37 @@ async function runConveneZone(browserType, bname, [w, h], theme) {
       options.join(", "),
     );
     await zone().selectOption("America/New_York");
+    // G34's family, and the sighting that earned the entry's own "until one of them earns it".
+    // `selectOption` resolves when the change event is dispatched, not when React has re-rendered
+    // the line and re-evaluated the door, so this read was a race: won on every fast run, lost on
+    // run 261's second attempt at `webkit-1280x800-dark`. The app was not wrong there, and the
+    // proof is in the same run: the next check passed, so the payload did carry America/New_York
+    // and the door did open. The wait is now on the two signals this assertion needs, in the shape
+    // the draft-restore fix above uses; the assertions and the arm's declared count are unchanged.
+    await dialog.evaluate(
+      (root) =>
+        new Promise((resolve, reject) => {
+          const want = "Time zone America/New_York, from the country.";
+          const done = () => {
+            const line = root.querySelector('[data-convene="country-tz-line"]');
+            const publish = [...root.querySelectorAll("button")].find((b) =>
+              /^Publish/.test(b.textContent || ""),
+            );
+            return !!line && line.textContent === want && !!publish && !publish.disabled;
+          };
+          if (done()) return resolve();
+          const t = setInterval(() => {
+            if (!done()) return;
+            clearInterval(t);
+            clearTimeout(bail);
+            resolve();
+          }, 50);
+          const bail = setTimeout(() => {
+            clearInterval(t);
+            reject(new Error("the zone line and the door never settled on the chosen zone"));
+          }, 10000);
+        }),
+    );
     record(
       tag + " choosing a zone opens the door and the line reads it, from the country (821)",
       (await dialog.locator('[data-convene="country-tz-line"]').textContent()) ===

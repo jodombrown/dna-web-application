@@ -992,6 +992,128 @@ across 64 locator resolutions over 30 seconds, which is this entry's composer sy
 fourth sighting; and `webkit-390x844-light-auth` and `webkit-390x844-dark-auth` on the recovery
 landing flow. Recorded, not re-run: under 304 a fifth run would sample the same distribution.
 
+### Ruling 828: the rate, censused, and the last constant broken
+
+Ruling 827 asked whether the rate had risen after five sightings were reported in one day. It had
+not, and the census that answers it is below: every failed run since crash labelling existed, read
+from the job logs. **Seventeen crashed arms in sixteen jobs, 10 to 17 September, every one WebKit and
+not one Chromium.**
+
+| Crash (UTC)    | Run    | Arm              | Viewport, theme | Into the matrix step |
+| -------------- | ------ | ---------------- | --------------- | -------------------- |
+| 09-11 06:45:02 | 133    | profile owner    | 820x1180 light  | 9m57s                |
+| 09-11 08:34:46 | 139    | profile owner    | 430x932 light   | 10m48s               |
+| 09-11 08:36:03 | 139    | profile owner    | 744x1133 dark   | 12m05s               |
+| 09-11 15:58:57 | 141    | profile owner    | 820x1180 light  | 12m21s               |
+| 09-11 17:58:19 | 147    | auth flows       | 1280x800 dark   | 22m45s               |
+| 09-11 19:06:07 | 154    | profile owner    | 820x1180 dark   | 13m03s               |
+| 09-11 19:48:30 | 156    | viewport arm     | 820x1180 dark   | 3m30s                |
+| 09-12 06:07:18 | 160    | auth flows       | 390x844 dark    | 22m37s               |
+| 09-12 10:05:18 | 172    | profile owner    | 820x1180 dark   | 13m00s               |
+| 09-13 08:10:59 | 180    | profile owner    | 820x1180 light  | 12m12s               |
+| 09-16 22:18:33 | 234    | auth flows       | 1280x800 dark   | 26m53s               |
+| 09-16 23:40:08 | 241    | onboarding flows | 390x844 dark    | 29m49s               |
+| 09-17 04:42:18 | 245    | viewport arm     | 1024x1366 light | 4m24s                |
+| 09-17 17:19:46 | 253 a1 | block flow       | 390x844 dark    | 28m08s               |
+| 09-17 17:59:47 | 254 a1 | viewport arm     | 390x844 light   | 1m21s                |
+| 09-17 22:57:17 | 250 a3 | onboarding flows | 390x844 dark    | 28m49s               |
+| 09-17 23:25:50 | 250 a4 | block flow       | 390x844 dark    | 26m38s               |
+
+**Why earlier days look clean, and it is not that they were.** `armCrashed`, `"behind a web-process
+crash"` and the `page.on("crash")` listener all arrived in one commit, `3090336` of 10 September, and
+the same commit's job shape is the second half of it: until ruling 283 split the engines, one `matrix`
+job drove Chromium and WebKit together, so a day's WebKit passes are not comparable across that
+boundary either. Before 10 September a lost web process surfaced as a closed-target error or a
+thirty-second timeout and was counted as neither. The rate did not rise on 17 September; counting
+started.
+
+**The rate, by Pacific day.** Numerator exact from the logs; denominator approximate, counted as runs
+whose latest attempt lasted long enough to complete a matrix pass, which undercounts re-run attempts.
+11 September: six of sixteen jobs, 37 per cent. 16 September, the busiest day of the window at 25
+passes: three, 12 per cent. 17 September: four of nine, 44 per cent. 11 September and 17 September are
+the same number at this sample size, and the busiest day is the lowest. This is ruling 265's rate and
+this entry's "about one per six full profile matrix runs" measured again over a wider window: about
+one crashed arm per four to five WebKit passes.
+
+**Three explanations tested and all three refuted.**
+
+- **Concurrency is not the variable.** Run 250 attempt 4 crashed with one matrix job in flight on the
+  whole account; attempt 3, thirty minutes earlier on the same head, crashed with three. The busiest
+  day of the window had the lowest rate.
+- **Ordering and accumulation are not the variable.** The sightings run from 81 seconds into the
+  matrix step, run 254 attempt 1 at about the fifth arm of 205, to 29m49s, run 241 in the last arm
+  group. There is no curve. The apparent concentration at `390x844 dark` is an artefact of which arms
+  exist where: the flow arms run at `[390,844]` and `[1280,800]` only, both themes, so that
+  combination is one of four by construction and not one of eighteen.
+- **Nothing in the environment moved.** Runner `2.337.0`, image `ubuntu-24.04` version
+  `20260907.300.1` (release `ubuntu24/20260907.300`), provisioner `20260828.587`, Playwright `1.63.0`,
+  WebKit 26.6 `playwright webkit v2359`: identical between run 108, which passed on 10 September, and
+  run 250 attempt 4, which crashed on 17 September. Consistent with the fault being anchored to
+  offsets inside a fixed `libWPEWebKit-2.0.so.1`, and it closes off "something moved under us".
+
+**The last surviving constant is broken.** This entry says what survives is WebKit and the Profile
+surface at `/m/:handle`. Six of the seventeen are the profile owner flow and **all six are from 10 to
+13 September**. Since then it has crashed on the block control flow, onboarding flows, auth flows, and
+twice on a bare viewport arm that only renders and measures. The surface is not a variable either, and
+the modal viewport simply tracks whichever heavy arm exists at the time: `820x1180` held six sightings
+while profile owner was the heaviest arm, `390x844` six once the flow arms were. Every constant ruling
+200 named is now refuted by this entry's own evidence, which leaves WebKit's compositor and nothing
+else. The next step is unchanged and is still the only one that decides whose defect it is: symbolise
+the offsets against a WebKit 26.6 debug build.
+
+**What CI now captures, and what it did not.** At the moment of the crash the harness had one log
+line, the sticky flag on every failing check behind it, Playwright's error text and, in the artefact,
+`arms.json`. It had no core, no stack, no memory figure, no browser stderr, no answer to whether the
+browser died with the web process, and no timeline at all, because nothing is printed for a passing
+check: this census had to place each crash by step timestamps. Rulings 830, 831 and 832 close that,
+and the table above is the argument for each of them. 830 ports matrix.yml's core dump, gdb frames and
+offset resolution onto the WebKit job of the PR path, asks `browser.isConnected()` inside the crash
+handler, listens for `disconnected`, and prints one line per arm. 831 stops a crashed or late-throwing
+arm reading as a stale declaration. 832 makes one crashed arm unproven under 228 rather than red, and
+keeps a second crash failing. Ruling 833 declined an arm-level retry.
+
+### The eighteenth sighting, and the first one the capture was watching (ruling 880)
+
+Run [259](https://github.com/jodombrown/dna-web-application/actions/runs/35307376068) on `8fabd50`,
+18 September, was the first WebKit pass after ruling 830's capture landed, and it crashed. It is
+recorded here rather than in a pull request, because ruling 760 is right that a body and a comment
+both die with the thread, and this is the first primary evidence anyone has for the question the
+seventeen sightings above could not settle.
+
+| Fact                         | Value                                                                              |
+| ---------------------------- | ---------------------------------------------------------------------------------- |
+| Arm                          | `webkit-1280x800-dark profile visitor stranger`                                    |
+| **Did the browser die too?** | **No: `browser still connected`**                                                  |
+| Position                     | `ARM 2443 +1035s`, the arm's **first** `page.goto` to `/m/thandiwe-dube`           |
+| Playwright's error           | `page.goto: Page crashed`, then `state unavailable: page.evaluate: Target crashed` |
+| Emitted                      | 16 of a declared 22, so `UNPROVEN (228)`                                           |
+| Core                         | `cores written: 1`, `core.eadedCompositor.13681.sig11`                             |
+
+**The browser survives; only the web process dies.** Ruling 200's frames already said the fault is in
+the compositor thread of the `WPEWebProcess`, but nothing had ever asked the browser whether it was
+still there, and Playwright's own error cannot answer it: it reads "Target page, context or browser
+has been closed" whichever went. `browser.isConnected()` read inside the crash handler answers it, and
+`disconnected` not firing corroborates it. Measured beforehand against Chromium at `chrome://crash`,
+where a lost web process gives exactly that pair.
+
+**The core's own name is a third confirmation of the signature.** `core.eadedCompositor.13681.sig11`
+is the kernel's `%e` truncating `ThreadedCompositor` to fifteen characters, and `sig11` is SIGSEGV:
+the thread and the signal this entry names, arriving from the kernel rather than from Playwright.
+
+**The frames were lost, and that is the part worth remembering.** The extraction step died before gdb
+ran: `file` on that core printed `too many program headers (2054)` and no `execfn:`, so the `grep -o`
+matched nothing and exited 1, and under the runner's default `bash -e` with `pipefail` the assignment
+inherited it. The job went red for the crash it had just successfully recorded. Both extractions are
+non-fatal now and the step carries `continue-on-error`, which is why ruling 850 then required a
+degraded extraction to announce itself: silence plus safety is how the next one would be lost without
+anyone noticing. **So offsets and frames still have never been captured on the PR path**, and the next
+crash there is the first real test of that half of 830.
+
+**This one is the short-count path, not the teardown path.** The crash arrived with the arm open and
+on its first navigation, so the arm emitted 16 of 22 and read incomplete. The case ruling 832 had to
+close separately — a crash charged to an arm after its last check has already passed, where the count
+matches and nothing fails — is still unobserved in the wild and remains owed under ruling 849.
+
 ## G6. Withdraw separated the two states ruling 214 joined — closed (ruling 229)
 
 **Opened and closed 9 September 2026, both inside Fix PR 01. Ruling 227 stated the requirement,
@@ -2011,7 +2133,52 @@ the arm's declared count are unchanged, so a real regression still fails exactly
 fixed waits in the file (`waitForTimeout(150)` in the Convene arm) have not earned the same treatment and
 are left alone.
 
-**Not this gap's scope.** The check's assertions and the arm's declared count stay as they are.
+**Fifth sighting, 18 September 2026, and the first against the fixed wait.** Pages run 261 on
+`7522504` (PR 46, the crash harness), `matrix (webkit)`, first attempt, at `webkit-1536x960-dark`: the
+same check, the same arm and the same width as the fourth, 5078 of 5080, no crash. But the failure
+mode has changed, and that is the point of recording it. The first four read the pre-restore state
+because 300 ms was a guess. This one waited on the signal, for ten seconds, and the signal never came:
+`locator.waitFor: Timeout 10000ms exceeded ... waiting for [data-testid="continue-draft"] to be
+detached, 24 × locator resolved to visible`. So "the guess was short" no longer covers it. Either the
+restore genuinely does not complete on that arm on that run, or ten seconds is still short for WebKit
+at 1536x960 under load. **Open, and deliberately not fixed from one sighting**: a remedy chosen from a
+single observation is the shape ruling 200's guardrail exists to refuse, and this entry has already
+recorded two causes it named confidently and had to withdraw.
+
+**Sixth sighting, the same day, and the one that earned this entry's own clause.** Run 261's second
+attempt, at `webkit-1280x800-dark-convene-zone`, 5080 of 5081, no crash: `choosing a zone opens the
+door and the line reads it, from the country (821)`. Not the draft-restore check, but the same family
+and a worse instance of it, because it had **no wait at all**:
+
+```js
+await zone().selectOption("America/New_York");
+record(
+  tag + " choosing a zone opens the door …",
+  (await dialog.locator('[data-convene="country-tz-line"]').textContent()) === "…" &&
+    !(await pub().isDisabled()),
+);
+```
+
+`selectOption` resolves when the change event is dispatched, not when React has re-rendered the line
+and re-evaluated the door. **The app was not wrong, and the same run proves it**: the next check in
+that arm passed, so the payload did carry `America/New_York` and the door did open. The arm won that
+race on every run before this one.
+
+This is what the paragraph above meant by "not this gap's scope until one of them earns it". One
+earned it, so it is recorded here rather than under a new number, which is what ruling 638 exists to
+prevent. **Fixed** in the shape the fourth sighting's fix uses: an in-page poll on the two signals the
+assertion needs, with its own bail and its own sentence, then the assertion unchanged. The arm's
+declared count is unchanged, so a real regression still fails exactly as before. Proven locally
+against `wrangler pages dev` on Chromium at 96 of 96 for the four Convene arms; WebKit is not
+installed in that environment, so the engine the sighting came from is proven only by CI.
+
+**Ruling 304, demonstrated again.** Run 261's two attempts on a byte-identical head failed one check
+each, in two different arms at two different widths, with **zero overlap**. That is 304's finding
+exactly: on this engine a re-run cannot confirm a WebKit failure by reproduction, so the single re-run
+neither confirmed the fifth sighting nor cleared it, and the head's one re-run bought a different red
+rather than a green.
+
+**Not this gap's scope.** The check's assertions and the arms' declared counts stay as they are.
 
 ## G35. Mapbox Search Box carries no POI for Ghana, Kenya or Nigeria, so a Convene host there always falls to their words
 
@@ -2189,6 +2356,19 @@ Intl Locale Info API, all 195 stored names return at least one IANA zone with no
 code, the form takes the single zone silently, asks only for the 27 that carry several (821), and
 falls back to its previous behaviour where a runtime cannot say. No column, no table, no migration,
 and no hardcoded array: the zones are a runtime vocabulary from the function, like every other.
+
+**The two-shape read is load-bearing, and only the deployment could show it.** The Intl Locale Info
+API ships in two shapes, a getter `locale.timeZones` and a method `locale.getTimeZones()`, and
+`zonesFor` reads `(l.getTimeZones?.() ?? l.timeZones)` for that reason. That looked like ordinary
+defensiveness when it was written and it is not: **the deployed Deno runtime answers through
+`getTimeZones()`, while the Node 22.22 probe that scoped ruling 817 carries only the getter.** Written
+to either shape alone, `anchor` would have returned `zones: null` for all 195 countries on one of the
+two runtimes, the form would have fallen back to the host's browser zone exactly as before, and
+nothing would have failed: the fix would have shipped inert. What proved it is `zones_via` in the
+response, which names the shape that answered, and the live arm reading it back from the deployed
+function rather than from a local run. The general lesson is ruling 545's again, one layer down: a
+capability probed in one runtime is a fact about that runtime, and the only environment that settles
+an Edge Function's ICU is the one the function runs in.
 
 **Not this gap.** The resolved-place path was correct throughout: a place that resolves carries its
 own zone from its own point. Online events keep the host's browser zone by ruling 824, which has no

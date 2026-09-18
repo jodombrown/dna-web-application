@@ -256,17 +256,38 @@ jobs:
           node tests/matrix.cjs 2>&1 | tee "$OUT/matrix.log"
       - name: Extract the signal and stack from any core (ruling 200)
         if: always()
+        # As on the PR path: diagnostic by charter, so it cannot fail the job by construction.
+        continue-on-error: true
         run: |
           set -uo pipefail
           shopt -s nullglob
           cores=(/tmp/cores/core.*)
           echo "cores written: ${#cores[@]}"
           [ "${#cores[@]}" -eq 0 ] && exit 0
+          # Ruling 850. continue-on-error is right under 217 and it also buys silence: this step can
+          # now degrade three ways and every one of them is quiet. apt failing prints a ::notice::
+          # that nobody reads in a job that went green; an unresolvable executable and a gdb run that
+          # produces no frames each leave one line in an artefact nobody opens. The next PR-path
+          # crash is the one that finally delivers frames and offsets, because run 259's step died
+          # before gdb ran and run 260 had nothing to analyse, and a degradation that announces
+          # nothing would lose exactly that crash without anyone knowing it was lost. So a degraded
+          # extraction says so in the job summary, where the classification tail already reports.
+          degraded() {
+            echo "::warning::ruling 850: the core extraction degraded, $1"
+            {
+              echo "### ruling 850: a web process died and its stack was NOT extracted"
+              echo ""
+              echo "$1"
+              echo ""
+              echo "Nothing else in this run captures those frames. Where the core was retained it is"
+              echo "in this job's artefact under \`cores/\`; where it was not, the crash is unrecoverable."
+            } >> "$GITHUB_STEP_SUMMARY"
+          }
           # Ruling 217: this step is diagnostic by its own charter, and apt and gdb are third
           # parties it does not test. It reports what it found and never fails the job; a red gate
           # here would be red for a reason unrelated to anything the matrix asserts.
           sudo apt-get update -qq && sudo apt-get install -y -qq gdb elfutils || {
-            echo "::notice::gdb and elfutils could not be installed; cores are retained unanalysed."
+            degraded "gdb and elfutils could not be installed, so ${#cores[@]} core(s) are retained unanalysed."
             mkdir -p "$OUT/cores"
             for c in "${cores[@]}"; do cp "$c" "$OUT/cores/" 2>/dev/null || true; done
             exit 0
@@ -279,8 +300,16 @@ jobs:
             # `file` names the binary in execfn; that is the only reliable source here, because the
             # crashing thread's comm (ThreadedCompositor, truncated to 15 chars) is what %e records,
             # not the executable. Passing the core with no executable makes gdb read it as one.
-            exe=$(file "$c" | grep -o "execfn: '[^']*'" | head -1 | sed "s/execfn: '//; s/'$//")
-            [ -n "$exe" ] || exe=$(file "$c" | grep -o "from '[^']*'" | head -1 | sed "s/from '//; s/'$//" | awk '{print $1}')
+            # `|| true` is load-bearing, not tidiness. The runner's default shell is `bash -e`, so
+            # -e is already on before this step's own `set -uo pipefail`, and grep exits 1 when it
+            # matches nothing. A core `file` cannot read the notes of prints no `execfn:` at all, so
+            # the pipeline exits 1, the assignment inherits it, and the step dies before gdb runs:
+            # on run 259 the first real core on this path read "too many program headers (2054)" and
+            # took the whole job red with it, which is exactly the diagnostic-fails-the-gate shape
+            # this step's charter forbids. Empty is a legitimate answer here and reaches the
+            # degraded path below, which retains the core for offline analysis.
+            exe=$(file "$c" | grep -o "execfn: '[^']*'" | head -1 | sed "s/execfn: '//; s/'$//" || true)
+            [ -n "$exe" ] || exe=$(file "$c" | grep -o "from '[^']*'" | head -1 | sed "s/from '//; s/'$//" | awk '{print $1}' || true)
             echo "exe: ${exe:-unknown}" | tee -a "$OUT/cores/stacks.txt"
             frames=0
             if [ -n "$exe" ] && [ -e "$exe" ]; then
@@ -309,6 +338,7 @@ jobs:
               fi
             else
               echo "executable not resolvable" | tee -a "$OUT/cores/stacks.txt"
+              degraded "the executable could not be resolved from \`file\` output for $name, so gdb was never run."
             fi
             # A web-process core runs to hundreds of megabytes or more, and an artifact that fails
             # to upload takes the stack down with it. Keep the core only when no frames came back,
@@ -317,7 +347,11 @@ jobs:
               echo "frames extracted; core not retained ($(du -h "$c" | cut -f1))" | tee -a "$OUT/cores/stacks.txt"
             else
               echo "no frames; retaining core ($(du -h "$c" | cut -f1))" | tee -a "$OUT/cores/stacks.txt"
-              cp "$c" "$OUT/cores/" 2>/dev/null || echo "core copy failed (size?)" | tee -a "$OUT/cores/stacks.txt"
+              degraded "gdb ran on $name but returned no frames."
+              cp "$c" "$OUT/cores/" 2>/dev/null || {
+                echo "core copy failed (size?)" | tee -a "$OUT/cores/stacks.txt"
+                degraded "$name could not be copied into the artefact either, so it is lost with the runner."
+              }
             fi
           done
           exit 0
