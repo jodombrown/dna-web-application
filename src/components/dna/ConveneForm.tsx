@@ -293,13 +293,13 @@ export function ConveneForm({
     startsAt && date && doorsTime ? instantFor(date, doorsTime, zoneForInstants) : null;
   const windowWords = windowMode ? v("when_window").trim() : "";
   const window = windowWords ? windowFor(windowWords) : null;
+
+  const startDate = startsAt ? new Date(startsAt) : null;
   // Ruling 836: where the weekday the host typed disagrees with the date those same words parsed
   // to, the disagreement is stated and the instant that will be stored is named beside it. The
   // field above still holds the host's own words: nothing is rewritten and nothing is silently
   // corrected. It waits on an instant, because until there is one there is nothing the event
   // "will be stored for" and the sentence would be naming a date the form has not settled.
-
-  const startDate = startsAt ? new Date(startsAt) : null;
   const weekdayLine =
     !windowMode && startDate && parsed?.date
       ? weekdayContradiction(whenWords, parsed.date, dateLine(startDate, zoneForInstants))
