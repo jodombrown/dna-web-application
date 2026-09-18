@@ -154,6 +154,16 @@ export function ConveneForm({
   // Pass 4 (P4-SPEC sections 3 and 5). `infoOpen` is the `Why is my venue not here?` panel; the
   // drag is transient and belongs to no field, because a point half-moved is not a point.
   const [infoOpen, setInfoOpen] = useState(false);
+  // The country whose lookup has answered with nothing at least once. P4-SPEC section 3 asks for
+  // the info control in `Country chosen, place empty`, and says the panel's claim "renders only
+  // where it is true" — but nothing in this tree knows which countries Mapbox holds venues for.
+  // `place-resolve` answers one, several, none or unavailable and carries no coverage signal, and
+  // `public.world_countries` is two columns, name and position. The two ways to render the drawn
+  // state exactly are a hardcoded list of countries, which the fixed-vocabularies absolute
+  // forbids, and a coverage column nobody has ratified. So the control waits for grounds: the
+  // words this host typed in this country came back with nothing, which is the map's own zero and
+  // is the only true thing the surface can say. Reported as the finding and logged as gap G44.
+  const [noVenues, setNoVenues] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
   // Ruling 814 needs the affordance reachable by touch, so the surface has to know which it is.
   // The app already derives it from `(pointer: coarse)` and the Composer reads the same hook.
@@ -255,7 +265,7 @@ export function ConveneForm({
   const nothingFound = lookup.state === "none";
   // 814 and G35: the claim is about this country's coverage and renders only where it is true, so
   // the control appears once a country is chosen and the place field is still empty.
-  const infoShown = physical && !!country && !resolved && !query.trim();
+  const infoShown = physical && !!country && !resolved && !query.trim() && noVenues === country;
   // The plate appears once the host has said where to look: a country, and either a resolution or
   // enough typed words for the lookup to have run.
   const plateShown = physical && !!country && (resolved || query.trim().length >= MIN_QUERY);
@@ -446,6 +456,8 @@ export function ConveneForm({
     // words do.
     setField("pin_x", "");
     setField("pin_y", "");
+    // The coverage claim belongs to the country it was observed in.
+    setNoVenues(null);
     setZoneList(null);
     setEditingFrom(null);
     setLookup({ state: "idle" });
@@ -471,7 +483,10 @@ export function ConveneForm({
     });
     if (r.state === "one") pick(r.place);
     else if (r.state === "unavailable") setLookup({ state: "unavailable" });
-    else setLookup({ state: "none" });
+    else {
+      setLookup({ state: "none" });
+      setNoVenues(country);
+    }
   };
   // The country's zones, asked for once per country (813, 817). `anchor` calls Mapbox never, so
   // this costs no Search Box session; it runs for an in-person or hybrid event only, because an
@@ -523,7 +538,10 @@ export function ConveneForm({
       if (r.state === "one") pick(r.place);
       else if (r.state === "several") setLookup({ state: "several", places: r.places });
       else if (r.state === "unavailable") setLookup({ state: "unavailable" });
-      else setLookup({ state: "none" });
+      else {
+        setLookup({ state: "none" });
+        setNoVenues(country);
+      }
     }, LOOKUP_PAUSE_MS);
     return () => {
       live = false;
@@ -843,7 +861,10 @@ export function ConveneForm({
       <div style={{ fontSize: 15, fontWeight: 500, color: "var(--ink-2)" }}>
         {lab("Place", "place_query")}
       </div>
-      <div style={ROW_BOX}>
+      {/* The row itself carries a marker of its own. 807's dedupe is about the parts of the place
+          line, and since 898 the block below it holds an identifier that contains a place name —
+          `Africa/Accra` — so a count taken over the whole block counts the zone as a part. */}
+      <div data-convene="place-row" style={ROW_BOX}>
         <Icon name="map-pin" size={18} style={{ color: "var(--ink-3)", flex: "none" }} />
         {/* The member's words stand beside the resolved area, never replaced by it (change 2); the
             area, the city and the country follow in the quiet ink (800), each part once (807). */}
@@ -1050,7 +1071,19 @@ export function ConveneForm({
     grid(input("doors", "Doors open", { placeholder: "Optional" })),
   );
 
-  // The send-off.
+  // The send-off. P4-SPEC section 8 states the door's three lines as unchanged behaviour, and two
+  // of the three are not in this tree at all: 821's gate has been in force since `e3392e5` — the
+  // door does not open until the host picks a zone — but the surface only disabled Publish and
+  // left the reason to be inferred. These are the sentences the frames draw for it. The third is
+  // the exception: the spec's `Posting publishes the event.` is shorter than the P1-ratified line
+  // that has shipped since Pass 1, and a section headed "unchanged behaviour" is not the place a
+  // ratified line gets quietly rewritten, so it stands as it is. Reported as the finding.
+  const doorLine =
+    physical && !country
+      ? "Choose the country first."
+      : needsZoneChoice && !zoneFromCountry
+        ? "Choose the time zone first."
+        : "Posting publishes this event. It goes to the Feed and to Convene.";
   const price = v("price_nature");
   const sendoff = section(
     "The send-off",
@@ -1064,8 +1097,12 @@ export function ConveneForm({
         Amounts are set with ticketing, after this.
       </div>
     ) : null,
-    <div key="posting" style={{ fontSize: 15, lineHeight: 1.45, color: "var(--ink-2)" }}>
-      Posting publishes this event. It goes to the Feed and to Convene.
+    <div
+      key="posting"
+      data-convene="door-line"
+      style={{ fontSize: 15, lineHeight: 1.45, color: "var(--ink-2)" }}
+    >
+      {doorLine}
     </div>,
   );
 

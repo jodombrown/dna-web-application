@@ -205,6 +205,7 @@ export function ConvenePlate(props: ConvenePlateProps) {
     >
       <div
         ref={plate}
+        data-convene="plate-grid"
         role="group"
         aria-label="Where the venue is on the map"
         style={GRID}

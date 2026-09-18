@@ -2294,6 +2294,16 @@ and zone, and the card reads them back. The third named fix, beside the two abov
 pin under ruling 790, which is Pass 4's answer if one is wanted; it needs no provider at all. None of
 this is a defect and none of it blocks the merge.
 
+**Addendum, 18 September 2026 (P4-SPEC sections 3 to 5), and why this entry stays open.** Pass 4
+landed the third named fix and the surface around it: the host-placed pin under 790, the rewritten
+zero-results hint under 814, and the `Why is my venue not here?` control whose panel says the gap is
+the map's coverage and not the host's typing. A host in Accra, Nairobi or Lagos is now told what is
+happening and given something to do about it, which is what this entry said was owed to the surface.
+What it does not do is close the entry: the two named fixes above — a second POI source behind the
+same `place-resolve` contract, or DNA's own venue vocabulary read at runtime — are still a ruling and
+a brief, and neither has been decided. The words are honest and the affordance exists; the coverage
+does not. See G44 for what the panel can and cannot truthfully say while that is so.
+
 ## G36. The lens bar could never fall back to icon-first on the Feed, its fit test did not match its layout, and no check read the layout it produced
 
 **Severity: medium for the surface, and it reached production: PR 0's correction 14 is on `main`. Opened
@@ -2547,7 +2557,13 @@ the arm counts (ruling 228's shape: an arm that cannot run is unproven, never fa
 **Not this gap's scope.** The preview URL itself is not in question: it is read from the deploy job's
 own wrangler output and was correct on that run.
 
-## G40. The composer still says the zone comes from the place once one is set, after the country has already set it
+## G40. The composer still says the zone comes from the place once one is set, after the country has already set it — closed (Convene Pass 4)
+
+**Closed 18 September 2026 by Convene Pass 4, which is where this entry said it would close. P4-SPEC
+section 1 carries the four ratified cases and the two further readings, and the string this entry was
+opened about appears nowhere in the tree. Kept rather than deleted, because the reason it was not
+fixed in a code session is the reusable part: a line in a ratified block is a Design and Chat
+decision, and waiting cost nothing but a sentence that was wrong for a day.**
 
 **Severity: low, copy only. Not a merge blocker. Opened 17 September 2026 during Convene Pass 1's PR
 3, filed under ruling 597. The number is assigned by this entry (ruling 638).**
@@ -2566,6 +2582,17 @@ decision, not this session's.
 
 **Not this gap's scope.** The `Time zone {zone}, from the country.` line under the control and the
 `Time zone GMT, from the place.` line under a resolved row are both ratified and correct as built.
+
+**Correction, ruling 898.** Half of the paragraph above did not survive. The country line is
+untouched and P4-SPEC section 2 says so in as many words. The second half is wrong: `GMT` is a
+display abbreviation, and for any zone that observes daylight saving it is a computed offset that
+moves twice a year, so one stored instant reads `EDT` on one surface and `America/New_York` on
+another. It read clean in the drawn frames only because Africa/Accra is GMT all year, which is
+exactly the trap — the one country the whole of Convene was drawn in is the one country where the
+defect is invisible. 898 extends 821's IANA-only rule from the zone control to every member-facing
+Convene surface, and Pass 4 carried it to the resolved row, the composer's derived label, the card's
+meta line, the cancelled card's `Was set for` and the rail. `zoneAbbr` survives in
+`src/lib/when.ts` with no caller and a docstring saying what it is no longer for.
 
 ## G41. The C brand rung is painted under small text on five surfaces, and the worst of them bypasses the ink rung written to prevent exactly that
 
@@ -2696,3 +2723,146 @@ should ride the next PR that touches the card.
 **Not this gap's scope.** Whether `--c-stroke` should exist at all, which is a D092 question. The
 `-ink` rung, which has a consumer (`src/components/strand/Chip.tsx:19`) even though no caller reaches
 it today; that is G41's.
+
+## G43. The map plate carries no projection, so the host's own point is not a coordinate and does not travel with the event
+
+**Severity: medium for the surface, none for the code. Not a merge blocker. Opened 18 September 2026
+during Convene Pass 4, filed under ruling 597. The number is assigned by this entry (ruling 638).**
+
+**What it is.** P4-SPEC section 5 orders a map plate and two pin kinds, and its own guardrail 3 says
+the plate "renders no tiles and no invented geography in this build". Both were built:
+`src/components/dna/ConvenePlate.tsx` draws a hairline grid on `--bg-sunken` with the matched area in
+a chip, the host's point is a copper dot inside a dashed `--c-convene` ring and the map's own point is
+an ink dot with a `--line` hairline, and they never read the same. What the two clauses cannot both
+deliver is a coordinate. **A plate with no tiles carries no projection, so a position on it is a
+position on a plate and not a place on the earth.**
+
+**What was built instead, and why it is not a workaround.** The host's point is held as a fraction of
+the plate in each axis, in the composer's own `pin_x` and `pin_y`. The payload carries them,
+`publish_post` reads neither, and an unread key is dropped — which is what makes the omission provable
+rather than promised. Writing that fraction into `event_delivery.lng` and `.lat` would have satisfied
+the frames and put invented geography into the database, where every later read would treat it as a
+real point: the worst available version of the thing guardrail 3 refuses. The map's own point does
+have a coordinate behind it, written by `place-resolve`, and it renders at the plate's centre as the
+token for "the map holds a point" and never as where that point is.
+
+**What this costs, stated plainly.** The panel's second line, ratified in P4-SPEC section 3, reads
+`Type the venue as you say it, then place the pin where it is. Both travel with the event.` The words
+travel, in `place_text`. The pin does not. The sentence is true of the built surface the spec
+describes and is not yet true of this build, and a host in Ghana who places a pin will not find it on
+the event. That is the gap, and it is named here rather than softened in the copy, because the copy is
+ratified and the shortfall is the code's.
+
+**The fix this entry names.** The pass that gives the plate real tiles from the provider — which is
+what the plate's own unplaced line already promises — gives the same control a projection, and the
+host's point becomes a coordinate at that moment. It needs two columns on `event_delivery` beside the
+existing `lng` and `lat`, because P4-SPEC section 5 draws a host-placed point standing beside a
+resolver-derived one and one pair cannot hold both, and it needs a ruling on which provider and which
+token reaches the client. Until then the pin is a surface that reads correctly and stores nothing.
+
+**Not this gap's scope.** The two pin kinds, the chip's four readings, the instruction by state and by
+input mode, and the act by state are all built and all proven in the harness. Nothing about how the
+pins read is in question here; only what is behind one of them.
+
+## G44. The info panel says the map holds no venues for a country, and nothing in the tree knows which countries that is true of
+
+**Severity: medium for the surface, none for the code. Not a merge blocker. Opened 18 September 2026
+during Convene Pass 4, filed under ruling 597. The number is assigned by this entry (ruling 638).**
+
+**What it is.** P4-SPEC section 3 draws the `Why is my venue not here?` control in the state
+`Country chosen, place empty`, and says of its panel: "The country name in the title and body is the
+country the host chose. The claim is about that country's coverage and renders only where it is
+true." The claim is a coverage fact. This tree holds no coverage fact about any country.
+`place-resolve` answers `one`, `several`, `none` or `unavailable` and carries no coverage signal, and
+`public.world_countries` is two columns, `name` and `position`. The two ways to render the drawn state
+exactly are a hardcoded list of countries, which the fixed-vocabularies absolute forbids by name, and
+a coverage column on the vocabulary that nobody has ratified and that would need its own migration,
+its own RLS reading and its own source of truth.
+
+**What was built instead.** The control waits for grounds. It renders once the country the host chose
+has answered a lookup with nothing at least once in this composing session, which is the map's own
+zero and the only true thing the surface can say about that country's coverage. With the field then
+cleared, the form is in the drawn state and the claim is grounded. A host in France, where the map
+does hold venues, never sees a panel telling them it does not.
+
+**What this costs.** The control appears one step later than the frames draw it: after the first
+empty answer rather than on choosing the country. A host who chooses Ghana and never types anything
+is not offered the explanation. Against that, the alternative was a sentence that is false for most
+of the world's countries, rendered on the strength of a list this repository is forbidden to hold.
+
+**The fix this entry names.** G35's decision, and the same one: a coverage fact has to come from
+somewhere before a surface can assert it. Either the second POI source makes the claim unnecessary
+for the countries it covers, or DNA's own venue vocabulary carries coverage as a property of the
+vocabulary, read at runtime as every fixed vocabulary is. Either way the control can then render on
+the country alone, as drawn.
+
+**Not this gap's scope.** The three panel strings are ratified and render verbatim, the panel is
+Strand's `Sheet` under ruling 901, and the rewritten zero-results hint under P4-SPEC section 4 makes
+the same claim in the state where it has always been grounded. Only the moment the control appears is
+in question.
+
+## G45. Pass 4's event-page half has no event page to land on
+
+**Severity: medium for the brief, none for the code. Not a merge blocker. Opened 18 September 2026
+during Convene Pass 4, filed under ruling 597. The number is assigned by this entry (ruling 638).**
+
+**What it is.** P4-SPEC section 7's second half and section 10 are both on the event page: the
+attendee's reading of the host's map link (`Open the host's map link`, with its note), and `Get
+directions` through the viewer's own handler in its three states. Section 6's third chip reading,
+`Placed by the host`, is the attendee's too. **There is no event page in this tree.** The routes are
+`__root`, `_shell`, `_shell/$c`, `_shell/connect`, `_shell/feed`, `_shell/m.$handle`,
+`_shell/password`, `_shell/posts.$id`, `index`, `relationship`, `reset`, `reset_.new`, `sign-in`,
+`welcome` and `where`; `/posts/$id` is ruling 105's expanded card as page content and not an event
+page; and `Get directions` returns zero hits repository-wide. P1-SPEC-R5 section 5a carried all three
+to Pass 4 by name, and Pass 4's own Done Means does not name any of them.
+
+**Why it was not built anyway.** An event page is a surface, and ruling 62 says no surface is built
+without an approved prototype and that the extraction and SPEC are its visual contract. P4-EXTRACTION
+draws four event-page _states_ at four tiers, which ratifies that copy; it draws no page — no
+masthead, no order, no route, no data contract, nothing a builder could lay out without inventing it.
+Building one from four states is exactly the reconstruction ruling 90 refuses.
+
+**What was built.** The four chip readings live in one component and are selected by a `viewer` prop,
+so `Placed by the host` is written, is one prop away, and has nowhere to mount. The composer mounts it
+as the host. The map link is stored (P4-SPEC section 7's first half) and no read path selects it.
+
+**The fix this entry names.** A drawn event page, or a ruling that the expanded card is the event
+surface and the three affordances belong on it. The second is cheap and may be right — `/posts/$id`
+already renders the expanded card as page content — but it is a ruling, because P4-EXTRACTION's frames
+draw the card without a plate, without a link row and without directions, and adding them to the card
+is a card change nobody has approved.
+
+## G46. The info panel opens a second `dialog` inside the composer's, and the tree has no nested-sheet precedent
+
+**Severity: low. Not a merge blocker. Opened 18 September 2026 during Convene Pass 4, filed under
+ruling 597. The number is assigned by this entry (ruling 638).**
+
+**What it is.** `ConveneForm` renders inside the Composer's own `Sheet`, so P4-SPEC section 3's panel
+nests a second `Sheet` — a second `dialog` opened with `showModal()`, a second `aria-modal` panel and a
+second Tab trap — inside the first. Every one of the seven other `Sheet` callers in the tree mounts at
+surface level, so there is no precedent to copy and nothing that has been exercised twice.
+
+**What was checked.** Escape does not double-close: the outer sheet's `cancel` handler is on its own
+dialog and `cancel` does not bubble, so the top-layer dialog takes it. The harness opens the panel,
+reads its three strings and closes it with Escape at both tiers, and the composer is still open on the
+next check. What is not checked is the Tab trap: the outer sheet's focusable list is computed from its
+own panel, which now contains the inner sheet's controls, so Tab inside the panel is governed by two
+traps at once. No misbehaviour was observed; nothing proves there is none.
+
+**Two things the spec asked for that this build did not take, and why.** P4-SPEC section 3 says the
+panel is a `Sheet` "`contained`, with `tier` passed per frame", at "390 bottom-anchored, 820
+side-anchored, 1280 and 1440 centred, which is 584's geometry". Strand as ported has neither. `Sheet`
+takes no `tier` and has no centred geometry: it implements ruling 492, whose own header calls it
+"canonical and not overridable per surface" — a bottom sheet on compact, a 40 percent side sheet on
+medium and expanded — and all seven callers pass `variant={tier === "compact" ? "sheet" : "drawer"}`.
+Taking the drawn anchor would mean a per-surface geometry override, which is the thing 492 forbids and
+the thing "one part, no variant" is asking for. And `contained` is the prototype's scaled-frame
+affordance: `ComposerShell` never passes it, so in the app it is undefined, and passing it would trade
+`showModal()` for a bare `open` attribute and give up the browser-owned top layer and inert
+background that ruling 499 chose. So the panel is the one part, with the geometry the part has.
+
+**The fix this entry names.** A ruling on which is canonical — 584's centred expanded geometry or
+492's side sheet — and, if 584, a change to `Sheet` itself rather than to this caller, because every
+sheet on the platform mounts that one component. Separately, if nesting is to be a pattern rather than
+one surface's accident, `Sheet` should know it is inside another and hand the trap over; that is a
+Strand ask, not a repo patch.

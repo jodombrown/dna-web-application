@@ -2665,6 +2665,11 @@ async function runConvene(browserType, bname, [w, h], theme) {
     colorScheme: theme,
   });
   const page = await ctx.newPage();
+  // P4-SPEC section 5's two input-mode states. `src/lib/tier.ts`'s `useMode` reads exactly this
+  // query, so asking the page for it proves the mapping — the words follow the input mode — rather
+  // than proving that a given engine's mobile emulation flips the query, which is not this suite's
+  // subject and differs between Chromium and WebKit.
+  const coarse = await page.evaluate(() => matchMedia("(pointer: coarse)").matches);
   const db = makeMockDb();
   seedPosts(db, 2);
   const cancelledId = seedEvent(db, "cancelled");
@@ -2695,7 +2700,10 @@ async function runConvene(browserType, bname, [w, h], theme) {
       tag + " cancelled card: kicker Event cancelled, struck title, past-tense meta, the reason",
       cText.includes("Event cancelled") &&
         (await cancelled.locator("[data-cancelled-title]").count()) === 1 &&
-        cText.includes("Was set for") &&
+        // 898 on the cancelled card: the stored instant reads through `localLine`, so the zone
+        // is the event's own identifier and never an abbreviation. The year term is optional
+        // because 835 renders it only outside the year being read in, and the seed is 20 days out.
+        /Was set for \w{3} \d{1,2} \w{3}(?: \d{4})?, \d{2}:\d{2} Africa\/Accra/.test(cText) &&
         cText.includes("This event will not happen.") &&
         cText.includes("The host wrote:") &&
         cText.includes("told by email"),
@@ -2740,14 +2748,17 @@ async function runConvene(browserType, bname, [w, h], theme) {
         .locator('[data-convene="place-block"], [data-convene="link-block"]')
         .count()) === 0 && (await fmt("In person").count()) === 1,
     );
+    // Written as `A === false || !B` it could not fail once `GMT` renders nowhere, which is a
+    // check that proves nothing (485, 539). Read positively instead: the label carries the moment
+    // and nothing follows the time, neither an abbreviation nor an identifier.
+    const preFormatMeta = await dialog
+      .locator("article[aria-label='Preview of your post']")
+      .textContent();
     record(
       tag + " preview meta carries no time zone before a format is chosen (671)",
-      (await dialog.locator("article[aria-label='Preview of your post']").textContent()).includes(
-        "Presented by Amara Osei · Thu 16 Oct, 19:00 · ",
-      ) === false ||
-        !/19:00 GMT/.test(
-          await dialog.locator("article[aria-label='Preview of your post']").textContent(),
-        ),
+      preFormatMeta.includes("Presented by Amara Osei · Fri 16 Oct, 19:00") &&
+        !/Fri 16 Oct, 19:00 [A-Za-z]/.test(preFormatMeta),
+      preFormatMeta.slice(0, 160),
     );
     await shot(page, `${tag}-01-proposal`);
     await noOverflow(page, tag + " proposal");
@@ -2784,6 +2795,10 @@ async function runConvene(browserType, bname, [w, h], theme) {
         (await field("place_query").count()) === 0 &&
         db.placeCalls.length === 0 &&
         (await dialog.locator('[data-convene="intent"]').count()) === 0 &&
+        // P4-SPEC section 8: 821's gate has been in force since `e3392e5`, but the surface only
+        // disabled Publish and left the reason to be inferred. The door now says which.
+        (await dialog.locator('[data-convene="door-line"]').textContent()) ===
+          "Choose the country first." &&
         (await pub().isDisabled()),
       JSON.stringify(options).slice(0, 120) + " calls " + db.placeCalls.length,
     );
@@ -2796,7 +2811,9 @@ async function runConvene(browserType, bname, [w, h], theme) {
     // The zone behaviour itself is the -convene-zone arm's, which drives it from a Pacific browser.
     await countrySelect.selectOption("United States");
     await dialog
-      .getByText("No place found for that. Searched: United States. It is kept as you wrote it.")
+      .getByText(
+        "The map has no venue records in United States. Your words are kept, and you can place the pin yourself.",
+      )
       .waitFor({ timeout: 5000 });
     const usCall = db.placeCalls[db.placeCalls.length - 1];
     record(
@@ -2811,6 +2828,10 @@ async function runConvene(browserType, bname, [w, h], theme) {
         (await dialog.locator('[data-convene="intent"]').textContent()) ===
           "In person at Front Room, United States." &&
         (await pub().isDisabled()) &&
+        // P4-SPEC section 8, the other gate: the United States carries more than one zone and
+        // nothing may be guessed, so the door says what it is waiting on.
+        (await dialog.locator('[data-convene="door-line"]').textContent()) ===
+          "Choose the time zone first." &&
         (await dialog.locator('select[data-convene="country-tz"]').count()) === 1,
       JSON.stringify(usCall && [usCall.q, usCall.country_name, usCall.proximity]),
     );
@@ -2866,15 +2887,33 @@ async function runConvene(browserType, bname, [w, h], theme) {
         " Ghana chosen: the venue resolves inside Ghana, the row reads the place then Ghana, zone from the place, the country control not rendered",
       resolved.includes("Front Room, Osu, Accra") &&
         resolved.includes(", Ghana") &&
-        resolved.includes("Time zone GMT, from the place.") &&
+        resolved.includes("Time zone Africa/Accra, from the place.") &&
         (await dialog
           .locator('[data-convene="place-resolved"]')
           .getAttribute("data-place-kind")) === "venue" &&
         (await countrySelect.count()) === 0 &&
+        // P4-SPEC sections 1 and 2 in one read: the read-back names no zone, the sentence
+        // beneath it does and names where it came from, and `, the time at the place` is gone
+        // along with the string G40 was opened about.
         (await dialog.locator('[data-convene="when-line"]').textContent()) ===
-          "Fri 16 Oct, 19:00 GMT, the time at the place" &&
+          "Fri 16 Oct, 19:00. Time zone Africa/Accra, from the place." &&
         (await dialog.locator('[data-convene="intent"]').textContent()) ===
           "In person at Front Room, Osu, Accra." &&
+        // P4-SPEC section 6, the fourth reading: a point the host did not place reads as the
+        // map's, in the ink treatment and never in the copper ring, and the door returns to its
+        // resting line.
+        (await dialog.locator('[data-convene="pin-chip"]').textContent()) ===
+          "From the map's records" &&
+        (await dialog.locator('[data-convene="pin-chip"]').getAttribute("data-pin-source")) ===
+          "map" &&
+        (await dialog.locator('[data-convene="plate-grid"] [data-pin-kind="map"]').count()) === 1 &&
+        (await dialog.locator('[data-convene="plate-grid"] [data-pin-kind="host"]').count()) ===
+          0 &&
+        (await dialog.locator('[data-convene="pin-instruction"]').textContent()) ===
+          "This point is the map's. If it is not your venue, place your own." &&
+        (await dialog.locator('[data-convene="pin-act"]').textContent()) === "Place it yourself" &&
+        (await dialog.locator('[data-convene="door-line"]').textContent()) ===
+          "Posting publishes this event. It goes to the Feed and to Convene." &&
         !!anchored &&
         anchored.country_name === "Ghana" &&
         anchored.proximity == null,
@@ -2887,7 +2926,7 @@ async function runConvene(browserType, bname, [w, h], theme) {
       tag + " preview reads convene.title and convene.meta with the fixed footer (671)",
       previewText.includes("Diaspora Builders Dinner") &&
         previewText.includes(
-          "Presented by Amara Osei · Fri 16 Oct, 19:00 GMT · Front Room, Osu, Accra",
+          "Presented by Amara Osei · Fri 16 Oct, 19:00 Africa/Accra · Front Room, Osu, Accra",
         ) &&
         !previewText.includes("Get a ticket") &&
         !(await pub().isDisabled()),
@@ -2908,7 +2947,7 @@ async function runConvene(browserType, bname, [w, h], theme) {
         (await countrySelect.inputValue()) === "Ghana" &&
         (await field("place_query").inputValue()) === "Front Room" &&
         db.placeCalls.length === callsBeforeChange &&
-        (await dialog.getByText(/^No place found for that/).count()) === 0,
+        (await dialog.getByText(/^The map has no venue records in/).count()) === 0,
       "calls " + callsBeforeChange + " -> " + db.placeCalls.length,
     );
 
@@ -2927,7 +2966,9 @@ async function runConvene(browserType, bname, [w, h], theme) {
     );
     await dialog.locator('[data-convene="homes"] button', { hasText: "Nairobi" }).click();
     await dialog
-      .getByText("No place found for that. Searched: Kenya. It is kept as you wrote it.")
+      .getByText(
+        "The map has no venue records in Kenya. Your words are kept, and you can place the pin yourself.",
+      )
       .waitFor({ timeout: 5000 });
     const homeCall = db.placeCalls[db.placeCalls.length - 1];
     record(
@@ -2972,6 +3013,12 @@ async function runConvene(browserType, bname, [w, h], theme) {
           .getByRole("option")
           .count()) === 2 &&
         (await dialog.locator('[data-convene="place-resolved"]').count()) === 0 &&
+        // P4-SPEC section 5, `Map shown, pin unplaced`: the plate is up, no point stands behind
+        // it, and this is one of the two states where input mode changes the words.
+        (await dialog.locator('[data-convene="pin-instruction"]').textContent()) ===
+          (coarse
+            ? "Press the map where the venue is, then drag to adjust."
+            : "Click the map where the venue is, or drag the pin.") &&
         !!last &&
         last.country_name === "Ghana" &&
         last.proximity == null &&
@@ -3005,7 +3052,7 @@ async function runConvene(browserType, bname, [w, h], theme) {
         " an area resolves with the words beside it and the country after, zone from the area, publishable (784, 800)",
       areaRow.includes("Labadi beach") &&
         areaRow.includes(", Osu, Accra, Ghana") &&
-        areaRow.includes("Time zone GMT, from the place.") &&
+        areaRow.includes("Time zone Africa/Accra, from the place.") &&
         (await dialog.locator('[data-convene="intent"]').textContent()) ===
           "In person at Labadi beach, Osu, Accra." &&
         !(await pub().isDisabled()),
@@ -3020,7 +3067,9 @@ async function runConvene(browserType, bname, [w, h], theme) {
     await dialog
       .locator('[data-convene="place-resolved"][data-place-kind="area"]')
       .waitFor({ timeout: 5000 });
-    const dupRow = (await dialog.locator('[data-convene="place-resolved"]').textContent()) || "";
+    // The row, not the block: 898 put an identifier under it that contains a place name
+    // (`Africa/Accra`), and 807 is about the parts of the place line rendering once each.
+    const dupRow = (await dialog.locator('[data-convene="place-row"]').textContent()) || "";
     const dupIntent = (await dialog.locator('[data-convene="intent"]').textContent()) || "";
     const twice = (s, part) => s.split(part).length - 1;
     record(
@@ -3039,7 +3088,9 @@ async function runConvene(browserType, bname, [w, h], theme) {
     await dialog.getByRole("button", { name: "Change" }).click();
     await field("place_query").fill("Kwame's rooftop");
     await dialog
-      .getByText("No place found for that. Searched: Ghana. It is kept as you wrote it.")
+      .getByText(
+        "The map has no venue records in Ghana. Your words are kept, and you can place the pin yourself.",
+      )
       .waitFor({ timeout: 5000 });
     record(
       tag +
@@ -3061,6 +3112,124 @@ async function runConvene(browserType, bname, [w, h], theme) {
       JSON.stringify([...new Set(db.placeCalls.map((c) => c.country_name))]),
     );
     await shot(page, `${tag}-03-place-none`);
+
+    // ---- Convene Pass 4 (P4-SPEC sections 3 to 7) ----------------------------------------------
+    // The nothing-found state is where the place section is at its fullest, and it is also the
+    // only state in which the info control has grounds. P4-SPEC section 3 draws the control in
+    // `Country chosen, place empty` and says the panel's claim renders only where it is true;
+    // nothing in this tree knows which countries the map holds venues for, so the surface waits
+    // until this country has answered with nothing, which is the map's own zero and the only true
+    // thing it can say. Clearing the field then puts the form in the drawn state, grounded.
+    await field("place_query").fill("");
+    await dialog.locator('[data-convene="venue-info"]').waitFor({ timeout: 5000 });
+    await dialog.locator('[data-convene="venue-info"]').click();
+    await dialog.locator('[data-convene="venue-info-panel"]').waitFor({ timeout: 5000 });
+    const venuePanel =
+      (await dialog.locator('[data-convene="venue-info-panel"]').textContent()) || "";
+    record(
+      tag +
+        " Pass 4: `Why is my venue not here?` opens a Sheet carrying the three ratified lines, and no plate stands behind it (814, 901)",
+      (await dialog.locator('[data-convene="venue-info"]').textContent()) ===
+        "Why is my venue not here?" &&
+        venuePanel.includes("Venues in Ghana") &&
+        venuePanel.includes(
+          "The map holds no venue records for Ghana, so searching will not find your venue. This is the map\u2019s gap, not a mistake in what you typed.",
+        ) &&
+        venuePanel.includes(
+          "Type the venue as you say it, then place the pin where it is. Both travel with the event.",
+        ) &&
+        (await dialog.locator('[data-convene="map-plate"]').count()) === 0,
+      venuePanel.slice(0, 200),
+    );
+    await page.keyboard.press("Escape");
+    await dialog
+      .locator('[data-convene="venue-info-panel"]')
+      .waitFor({ state: "detached", timeout: 5000 });
+
+    // The plate, unplaced. It is a drawn plate and says so in its own words; it renders no tile and
+    // no invented geography, so there is nothing on it to read as a street (P4-SPEC guardrail 3).
+    await field("place_query").fill("Kwame's rooftop");
+    await dialog
+      .getByText(
+        "The map has no venue records in Ghana. Your words are kept, and you can place the pin yourself.",
+      )
+      .waitFor({ timeout: 5000 });
+    await dialog.locator('[data-convene="map-plate"]').waitFor({ timeout: 5000 });
+    record(
+      tag +
+        " Pass 4: the plate is drawn and unplaced, its own line says where tiles come from, and the act is Place the pin (790, 792)",
+      (await dialog.locator('[data-convene="map-plate"]').getAttribute("data-pin-state")) ===
+        "unplaced" &&
+        (await dialog.locator('[data-convene="plate-line"]').textContent()) ===
+          "No point yet. Map tiles come from the provider in the built surface." &&
+        (await dialog.locator('[data-convene="pin-instruction"]').textContent()) ===
+          "The map has no record here, so the point is yours to place." &&
+        (await dialog.locator('[data-convene="pin-act"]').textContent()) === "Place the pin" &&
+        (await dialog.locator('[data-convene="pin-chip"]').count()) === 0 &&
+        (await dialog.locator('[data-convene="plate-grid"] [data-pin-kind]').count()) === 0 &&
+        (await dialog.locator('[data-convene="plate-grid"] img').count()) === 0,
+    );
+
+    // The host places it, by pressing the plate where the venue is. That opens the drag, which is
+    // section 5's other input-mode state and the chip's second reading.
+    // Into view first: at 390 the plate sits below the fold of the composer's own scroller, and a
+    // press at a point outside the viewport reaches nothing.
+    await dialog.locator('[data-convene="plate-grid"]').scrollIntoViewIfNeeded();
+    const grid = await dialog.locator('[data-convene="plate-grid"]').boundingBox();
+    await page.mouse.move(grid.x + grid.width * 0.4, grid.y + grid.height * 0.6);
+    await page.mouse.down();
+    await dialog
+      .locator('[data-convene="map-plate"][data-pin-state="dragging"]')
+      .waitFor({ timeout: 5000 });
+    record(
+      tag +
+        " Pass 4: a point being moved says so, and the drag's words follow the input mode (790, 792, section 6)",
+      (await dialog.locator('[data-convene="pin-chip"]').textContent()) === "Moving your point" &&
+        (await dialog.locator('[data-convene="pin-instruction"]').textContent()) ===
+          (coarse ? "Keep dragging. Lift your finger to place it." : "Release to place it."),
+      "coarse " + coarse,
+    );
+    await page.mouse.up();
+    await dialog
+      .locator('[data-convene="map-plate"][data-pin-state="placed"]')
+      .waitFor({ timeout: 5000 });
+    record(
+      tag +
+        " Pass 4: the host's own point reads as the host's, the chip says so, and the act becomes Move the pin (790, 792, section 6)",
+      (await dialog.locator('[data-convene="pin-chip"]').textContent()) === "Placed by you" &&
+        (await dialog.locator('[data-convene="pin-chip"]').getAttribute("data-pin-source")) ===
+          "host" &&
+        (await dialog.locator('[data-convene="plate-grid"] [data-pin-kind="host"]').count()) ===
+          1 &&
+        (await dialog.locator('[data-convene="plate-grid"] [data-pin-kind="map"]').count()) === 0 &&
+        (await dialog.locator('[data-convene="pin-instruction"]').textContent()) ===
+          "You placed this point. People see it as your own, not as the map's." &&
+        (await dialog.locator('[data-convene="pin-act"]').textContent()) === "Move the pin" &&
+        (await dialog.locator('[data-convene="plate-line"]').count()) === 0,
+    );
+
+    // The map link (815, 816). The promise the hint makes is that DNA keeps it as a link and never
+    // reads it, and the check that proves it is the one that counts lookups: the link goes in and
+    // nothing is sent anywhere, because nothing parses it, geocodes it or plots it.
+    const callsBeforeLink = db.placeCalls.length;
+    await field("map_link").fill("https://maps.app.goo.gl/frontroom-osu");
+    await page.waitForTimeout(150);
+    record(
+      tag +
+        " Pass 4: the map link is kept as the host typed it, with its hint, and no lookup of any kind follows it (815, 816)",
+      (await field("map_link").inputValue()) === "https://maps.app.goo.gl/frontroom-osu" &&
+        (await field("map_link").getAttribute("placeholder")) === "Paste a link to a map" &&
+        (await dialog
+          .getByText(
+            "Optional. It opens in the app you took it from. DNA keeps it as a link and never reads it.",
+          )
+          .count()) === 1 &&
+        db.placeCalls.length === callsBeforeLink &&
+        !(await pub().isDisabled()),
+      "lookups before " + callsBeforeLink + ", after " + db.placeCalls.length,
+    );
+    await shot(page, `${tag}-03c-plate-and-link`);
+
     // Session 23, the unavailable state: a lookup that did not run (here a 503 from the gateway)
     // is its own hint, never "No place found"; the words stand and Publish stays open.
     await field("place_query").fill("The outage bar");
@@ -3069,7 +3238,7 @@ async function runConvene(browserType, bname, [w, h], theme) {
       .waitFor({ timeout: 5000 });
     record(
       tag + " unavailable: its own hint, not No place found; words kept, still publishable",
-      (await dialog.getByText(/^No place found for that/).count()) === 0 &&
+      (await dialog.getByText(/^The map has no venue records in/).count()) === 0 &&
         !(await pub().isDisabled()) &&
         (await dialog.locator('[data-convene="intent"]').textContent()) ===
           "In person at The outage bar, Ghana.",
@@ -3077,7 +3246,9 @@ async function runConvene(browserType, bname, [w, h], theme) {
     await shot(page, `${tag}-03b-place-unavailable`);
     await field("place_query").fill("Kwame's rooftop");
     await dialog
-      .getByText("No place found for that. Searched: Ghana. It is kept as you wrote it.")
+      .getByText(
+        "The map has no venue records in Ghana. Your words are kept, and you can place the pin yourself.",
+      )
       .waitFor({ timeout: 5000 });
 
     // The moment: a failed parse mounts the pickers; a window is words (520, 634).
@@ -3112,6 +3283,23 @@ async function runConvene(browserType, bname, [w, h], theme) {
     );
     await shot(page, `${tag}-04-window`);
     await dialog.locator('[data-convene="have-date"]').click();
+    // P4-SPEC section 9 (836), in the words the frame draws: 16 September falls on a Thursday in
+    // 2027, which is the year `forwardDate` reaches from here. The host's words are kept exactly
+    // as typed, the disagreement is stated, and the instant that will be stored is named.
+    await field("when").fill("Wed 16 september, 7pm");
+    await dialog.locator('[data-convene="weekday-contradiction"]').waitFor({ timeout: 5000 });
+    record(
+      tag +
+        " Pass 4: a weekday that disagrees with the date is stated, and the host's words are not rewritten (836)",
+      (await dialog.locator('[data-convene="weekday-contradiction"]').textContent()) ===
+        "You wrote Wed. The date you wrote falls on a Thursday in 2027. Your words are kept; the event will be stored for Thu 16 Sep 2027." &&
+        (await field("when").inputValue()) === "Wed 16 september, 7pm" &&
+        // 835's year, on the surface that has to carry it: outside this year the label says which.
+        /^Thu 16 Sep 2027, 19:00\./.test(
+          await dialog.locator('[data-convene="when-line"]').textContent(),
+        ),
+      await dialog.locator('[data-convene="when-line"]').textContent(),
+    );
     await field("when").fill("Thu 16 Oct at 19:00");
 
     // Online and hybrid (521): the link or a promise of one; hybrid is two rows and one sentence.
@@ -3123,7 +3311,10 @@ async function runConvene(browserType, bname, [w, h], theme) {
         (await dialog
           .locator('[data-convene="place-block"], [data-convene="place-resolved"]')
           .count()) === 0 &&
-        /your home time zone$/.test(
+        // 824, and the fourth of section 1's ratified cases. The arm sets no timezoneId, so the
+        // zone named is the runner's own and only the tail can be asserted literally; the
+        // -convene-zone arm drives the same case from a Pacific browser.
+        /\. Time zone \S+, from your device\. An online event has no country to take it from\.$/.test(
           await dialog.locator('[data-convene="when-line"]').textContent(),
         ) &&
         (await pub().isDisabled()),
@@ -3236,6 +3427,11 @@ async function runConvene(browserType, bname, [w, h], theme) {
         // 16 October 2026 is a Friday: the parser trusts the day the member wrote, and the
         // weekday comes from the calendar (P1-EXTRACTION item 9).
         cardText.includes("Fri 16 Oct") &&
+        // 898 on the published card. `whenLine` reads the viewer's zone first, and this arm sets
+        // no timezoneId, so the identifier is whatever the runner is in: what is asserted is that
+        // it is an identifier at all and that no abbreviation renders anywhere on the card.
+        /Fri 16 Oct, 19:00 (?:UTC|[A-Za-z_]+\/[A-Za-z_+-]+)/.test(cardText) &&
+        !/\b(?:GMT|BST|EDT|EST|CDT|CST|PDT|PST|CET|CEST|WAT|EAT|SAST)\b/.test(cardText) &&
         cardText.includes("Accra and online") &&
         (await card.locator("footer [data-testid]").count()) === 4 &&
         !cardText.includes("Get a ticket") &&
@@ -3309,7 +3505,9 @@ async function runConveneZone(browserType, bname, [w, h], theme) {
     await country().selectOption("Ghana");
     await field("place_query").fill("Kwame's rooftop");
     await dialog
-      .getByText("No place found for that. Searched: Ghana. It is kept as you wrote it.")
+      .getByText(
+        "The map has no venue records in Ghana. Your words are kept, and you can place the pin yourself.",
+      )
       .waitFor({ timeout: 5000 });
     record(
       tag + " Ghana with words only: no zone control, no zone line, publishable (813, 821)",
@@ -3438,7 +3636,8 @@ async function runConveneZone(browserType, bname, [w, h], theme) {
     const resolvedRow = await dialog.locator('[data-convene="place-resolved"]').textContent();
     record(
       tag + " a resolved place still wins over the country's zone (813, unchanged)",
-      resolvedRow.includes("Time zone GMT, from the place.") && (await zone().count()) === 0,
+      resolvedRow.includes("Time zone Africa/Accra, from the place.") &&
+        (await zone().count()) === 0,
       resolvedRow.slice(0, 120),
     );
     await shot(page, `${tag}-02-place-wins`);
