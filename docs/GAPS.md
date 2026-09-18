@@ -2133,7 +2133,52 @@ the arm's declared count are unchanged, so a real regression still fails exactly
 fixed waits in the file (`waitForTimeout(150)` in the Convene arm) have not earned the same treatment and
 are left alone.
 
-**Not this gap's scope.** The check's assertions and the arm's declared count stay as they are.
+**Fifth sighting, 18 September 2026, and the first against the fixed wait.** Pages run 261 on
+`7522504` (PR 46, the crash harness), `matrix (webkit)`, first attempt, at `webkit-1536x960-dark`: the
+same check, the same arm and the same width as the fourth, 5078 of 5080, no crash. But the failure
+mode has changed, and that is the point of recording it. The first four read the pre-restore state
+because 300 ms was a guess. This one waited on the signal, for ten seconds, and the signal never came:
+`locator.waitFor: Timeout 10000ms exceeded ... waiting for [data-testid="continue-draft"] to be
+detached, 24 × locator resolved to visible`. So "the guess was short" no longer covers it. Either the
+restore genuinely does not complete on that arm on that run, or ten seconds is still short for WebKit
+at 1536x960 under load. **Open, and deliberately not fixed from one sighting**: a remedy chosen from a
+single observation is the shape ruling 200's guardrail exists to refuse, and this entry has already
+recorded two causes it named confidently and had to withdraw.
+
+**Sixth sighting, the same day, and the one that earned this entry's own clause.** Run 261's second
+attempt, at `webkit-1280x800-dark-convene-zone`, 5080 of 5081, no crash: `choosing a zone opens the
+door and the line reads it, from the country (821)`. Not the draft-restore check, but the same family
+and a worse instance of it, because it had **no wait at all**:
+
+```js
+await zone().selectOption("America/New_York");
+record(
+  tag + " choosing a zone opens the door …",
+  (await dialog.locator('[data-convene="country-tz-line"]').textContent()) === "…" &&
+    !(await pub().isDisabled()),
+);
+```
+
+`selectOption` resolves when the change event is dispatched, not when React has re-rendered the line
+and re-evaluated the door. **The app was not wrong, and the same run proves it**: the next check in
+that arm passed, so the payload did carry `America/New_York` and the door did open. The arm won that
+race on every run before this one.
+
+This is what the paragraph above meant by "not this gap's scope until one of them earns it". One
+earned it, so it is recorded here rather than under a new number, which is what ruling 638 exists to
+prevent. **Fixed** in the shape the fourth sighting's fix uses: an in-page poll on the two signals the
+assertion needs, with its own bail and its own sentence, then the assertion unchanged. The arm's
+declared count is unchanged, so a real regression still fails exactly as before. Proven locally
+against `wrangler pages dev` on Chromium at 96 of 96 for the four Convene arms; WebKit is not
+installed in that environment, so the engine the sighting came from is proven only by CI.
+
+**Ruling 304, demonstrated again.** Run 261's two attempts on a byte-identical head failed one check
+each, in two different arms at two different widths, with **zero overlap**. That is 304's finding
+exactly: on this engine a re-run cannot confirm a WebKit failure by reproduction, so the single re-run
+neither confirmed the fifth sighting nor cleared it, and the head's one re-run bought a different red
+rather than a green.
+
+**Not this gap's scope.** The check's assertions and the arms' declared counts stay as they are.
 
 ## G35. Mapbox Search Box carries no POI for Ghana, Kenya or Nigeria, so a Convene host there always falls to their words
 

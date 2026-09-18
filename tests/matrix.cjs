@@ -3332,6 +3332,37 @@ async function runConveneZone(browserType, bname, [w, h], theme) {
       options.join(", "),
     );
     await zone().selectOption("America/New_York");
+    // G34's family, and the sighting that earned the entry's own "until one of them earns it".
+    // `selectOption` resolves when the change event is dispatched, not when React has re-rendered
+    // the line and re-evaluated the door, so this read was a race: won on every fast run, lost on
+    // run 261's second attempt at `webkit-1280x800-dark`. The app was not wrong there, and the
+    // proof is in the same run: the next check passed, so the payload did carry America/New_York
+    // and the door did open. The wait is now on the two signals this assertion needs, in the shape
+    // the draft-restore fix above uses; the assertions and the arm's declared count are unchanged.
+    await dialog.evaluate(
+      (root) =>
+        new Promise((resolve, reject) => {
+          const want = "Time zone America/New_York, from the country.";
+          const done = () => {
+            const line = root.querySelector('[data-convene="country-tz-line"]');
+            const publish = [...root.querySelectorAll("button")].find((b) =>
+              /^Publish/.test(b.textContent || ""),
+            );
+            return !!line && line.textContent === want && !!publish && !publish.disabled;
+          };
+          if (done()) return resolve();
+          const t = setInterval(() => {
+            if (!done()) return;
+            clearInterval(t);
+            clearTimeout(bail);
+            resolve();
+          }, 50);
+          const bail = setTimeout(() => {
+            clearInterval(t);
+            reject(new Error("the zone line and the door never settled on the chosen zone"));
+          }, 10000);
+        }),
+    );
     record(
       tag + " choosing a zone opens the door and the line reads it, from the country (821)",
       (await dialog.locator('[data-convene="country-tz-line"]').textContent()) ===
