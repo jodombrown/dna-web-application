@@ -36,13 +36,63 @@ export type RouterOptions = {
 export function postCardProps(view: PostView, opts: RouterOptions = {}): PostCardProps {
   const schema = view.verb ? CARD_SCHEMA[view.verb] : UNTYPED;
   const c = view.c_category;
-  const title = view.verb ? view.fields.title?.value : undefined;
-  const media: PostCardProps["media"] =
-    view.media.length > 1
+  const titleWords = view.verb ? view.fields.title?.value : undefined;
+  // Convene Pass 1 (P1-SPEC section 2). Cancelled is the full treatment inside 69's anatomy: kicker
+  // `Event cancelled`, the title struck in --ink-3, the body the fact and the host's reason, never
+  // clamped, no media, no hook rows, no tap into the event page. Past keeps the kicker and the
+  // meta line says `Happened`. The Space hook (Canon 6, 642) renders in the expanded card only,
+  // as a text link in Collaborate's text colour, and only when the event is linked to a Space.
+  const ev = view.event;
+  const cancelled = !!ev?.cancelled;
+  const media: PostCardProps["media"] = cancelled
+    ? undefined
+    : view.media.length > 1
       ? { kind: "gallery", items: view.media }
       : view.media.length === 1
         ? { kind: "image", src: view.media[0], alt: "" }
         : undefined;
+  const title: ReactNode =
+    typeof titleWords === "string" && titleWords ? (
+      cancelled ? (
+        <span
+          data-cancelled-title
+          style={{
+            color: "var(--ink-3)",
+            textDecoration: "line-through",
+            textDecorationColor: "var(--line-strong)",
+          }}
+        >
+          {titleWords}
+        </span>
+      ) : (
+        titleWords
+      )
+    ) : undefined;
+  const hookRows: PostCardProps["fields"] =
+    ev && !cancelled && opts.expanded && ev.space
+      ? [
+          {
+            label: "Space",
+            icon: "hash",
+            value: (
+              <a
+                href="/collaborate"
+                data-hook="space"
+                onClick={(e) => e.stopPropagation()}
+                style={{
+                  color: "var(--c-collaborate-text)",
+                  fontWeight: 500,
+                  textDecoration: "underline",
+                  textDecorationColor: "var(--line-strong)",
+                  textUnderlineOffset: 2,
+                }}
+              >
+                {ev.space.name}
+              </a>
+            ),
+          },
+        ]
+      : [];
   // The post's own act in its C (rule 3). In the Feed it goes to that C's route; in the composer
   // preview it is inert.
   const actions =
@@ -61,32 +111,33 @@ export function postCardProps(view: PostView, opts: RouterOptions = {}): PostCar
     meta: view.meta,
     anchor: view.anchor_name,
     audience: AUDIENCE_LABEL(view.audience, view.anchor_name),
-    kicker: schema.kicker,
-    title: typeof title === "string" && title ? title : undefined,
-    fields: fieldRows(view.verb, view.fields),
+    kicker: ev ? (cancelled ? "Event cancelled" : "Event") : schema.kicker,
+    title,
+    fields: [...fieldRows(view.verb, view.fields), ...hookRows],
     media,
-    link: view.link ?? undefined,
+    link: cancelled ? undefined : (view.link ?? undefined),
     actions,
     respondLabel: c === "convene" ? "Ask the host" : "Respond",
     preview: opts.preview,
     feed: opts.feed,
     onMenu: opts.onMenu,
-    onClick: opts.onClick,
+    onClick: cancelled ? undefined : opts.onClick,
     saved: opts.saved,
     reacted: opts.reacted,
     onReact: opts.onReact,
     onRespond: opts.onRespond,
     onSave: opts.onSave,
     onShare: opts.onShare,
-    readMoreHref: opts.readMoreHref,
-    onReadMore: opts.onReadMore,
-    onReadMoreIntent: opts.onReadMoreIntent,
-    expanded: opts.expanded,
-    onCollapse: opts.onCollapse,
+    readMoreHref: cancelled ? undefined : opts.readMoreHref,
+    onReadMore: cancelled ? undefined : opts.onReadMore,
+    onReadMoreIntent: cancelled ? undefined : opts.onReadMoreIntent,
+    expanded: cancelled ? true : opts.expanded,
+    onCollapse: cancelled ? undefined : opts.onCollapse,
   };
 }
 
 export function PostCardRouter({ view, ...opts }: { view: PostView } & RouterOptions) {
   const props = postCardProps(view, opts);
-  return <PostCard {...props}>{view.body || undefined}</PostCard>;
+  const body = view.event?.cancelled ? view.event.cancelledBody : view.body;
+  return <PostCard {...props}>{body || undefined}</PostCard>;
 }

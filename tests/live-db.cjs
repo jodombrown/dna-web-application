@@ -22,6 +22,11 @@
 //                                   https one.
 //   442                              the ceiling plus one call to onboard_who is refused in words,
 //                                   and the hits table is unreachable to a member.
+//   Convene Pass 1 (521, 623)        publish_post writes a hybrid event with a link and a capacity as
+//                                   the owner; the member selects the event and sees the physical
+//                                   delivery row, no meeting_link row and no event_host_settings
+//                                   row; the owner sees all three. Unproven until the Pass 1
+//                                   migrations are on the project.
 //
 // Nothing here is secret: the connection string arrives from the runner and never from this file.
 const fs = require("fs");
@@ -125,6 +130,8 @@ async function runLiveDbArms({ record, skip }) {
     url: "ruling 439: publish_post refuses a link without an http or https scheme",
     rate: "ruling 442: the ceiling plus one call to onboard_who is refused in words",
     onboarded: "ruling 459 (W49): connect_cards excludes an account that has not onboarded",
+    delivery:
+      "Convene Pass 1 (521, 623): a second member reads the physical delivery row and neither the meeting link nor the host settings",
   };
   if (process.env.SKIP_REST) {
     for (const n of Object.values(names)) skip(n, "SKIP_REST");
@@ -569,6 +576,146 @@ async function runLiveDbArms({ record, skip }) {
             : controlIntro.code + " " + controlIntro.message,
         );
       }
+    });
+
+    // ------------------------------------------------------------------------------------------
+    // Convene Pass 1 (P1-SPEC section 6, row policy; rulings 521, 623). The owner publishes a
+    // hybrid event through publish_post with the namespaced convene.* keys: a resolved place, a
+    // meeting link and a capacity. The member (a reader of the event through its published post)
+    // selects the delivery rows and the host settings: the physical row is theirs to read, the
+    // meeting_link row and the capacity are not. The owner, as host, reads all three: that pair is
+    // ruling 270's control. Everything rolls back. Before the Pass 1 migrations reach the project
+    // the tables do not exist and the arm reports unproven (228), never a pass.
+    // ------------------------------------------------------------------------------------------
+    await inTransaction(client, async () => {
+      await actAsSelf(client);
+      // Presence by name, not by privilege: information_schema.tables lists only the tables the
+      // current role holds a privilege on, and live_arms holds none on these (the grants are to
+      // authenticated and service_role), so it read zero on a project that had them. The reads
+      // below run as authenticated through set role, where the grants and the policies apply.
+      const present = await client.query(
+        "select (to_regclass('public.event_delivery') is not null and to_regclass('public.event_host_settings') is not null) as ok",
+      );
+      if (!present.rows[0] || present.rows[0].ok !== true) {
+        skip(
+          names.delivery,
+          "20260916120100_p1_convene_place_columns.sql is not on the project yet",
+        );
+        return;
+      }
+      await actAs(client, owner.id);
+      const starts = new Date(Date.now() + 14 * 86400e3);
+      starts.setUTCHours(19, 0, 0, 0);
+      const payload = JSON.stringify({
+        verb: "convene",
+        body: "Convene Pass 1 row-policy arm. Rolled back by the same run.",
+        author_kind: "member",
+        author_id: owner.id,
+        audience: "everyone",
+        host_context: "live-checks",
+        fields: {
+          "convene.title": "Row policy supper",
+          "convene.format": "hybrid",
+          "convene.when": "in two weeks at 19:00",
+          "convene.starts_at": starts.toISOString(),
+          "convene.timezone": "Africa/Accra",
+          "convene.place_id": "live-arms-place",
+          "convene.place_name": "Front Room",
+          "convene.city": "Accra",
+          "convene.country": "Ghana",
+          "convene.lng": "-0.1747",
+          "convene.lat": "5.5559",
+          "convene.link": "https://meet.example/row-policy",
+          "convene.price_nature": "free",
+          "convene.capacity": "40",
+          "convene.delivery_intent":
+            "In person at Front Room, Accra and Online, link with your ticket.",
+        },
+      });
+      const published = await attempt(client, "select public.publish_post($1::jsonb) as id", [
+        payload,
+      ]);
+      if (!published.ok) {
+        record(
+          names.delivery,
+          false,
+          "publish_post refused: " + published.code + " " + published.message,
+        );
+        return;
+      }
+      // The host reads their own post for the event id (posts_member_select). live_arms holds no
+      // grant on posts, so this read stays as the owner rather than resetting the role; and every
+      // read from here goes through attempt(), so a refusal records a FAIL with its code instead of
+      // escaping the arm and ending the suite.
+      const ev = await attempt(
+        client,
+        "select created_object_id as id from public.posts where id = $1",
+        [published.rows[0].id],
+      );
+      const eventId = ev.ok && ev.rows[0] ? ev.rows[0].id : null;
+      if (!eventId) {
+        record(
+          names.delivery,
+          false,
+          "the published post carries no event id: " +
+            (ev.ok ? "no row" : ev.code + " " + ev.message),
+        );
+        return;
+      }
+      const readAs = async (uid) => {
+        await actAs(client, uid);
+        const e = await attempt(client, "select id from public.events where id = $1", [eventId]);
+        const d = await attempt(
+          client,
+          "select kind from public.event_delivery where event_id = $1 order by position",
+          [eventId],
+        );
+        const h = await attempt(
+          client,
+          "select capacity from public.event_host_settings where event_id = $1",
+          [eventId],
+        );
+        const refused = [e, d, h].find((r) => !r.ok);
+        return {
+          error: refused ? refused.code + " " + refused.message : null,
+          event: e.ok ? e.rows.length : -1,
+          kinds: d.ok ? d.rows.map((r) => r.kind) : [],
+          settings: h.ok ? h.rows.length : -1,
+        };
+      };
+      const asMember = await readAs(member.id);
+      const asOwner = await readAs(owner.id);
+      if (asMember.error || asOwner.error) {
+        record(names.delivery, false, "a read was refused: " + (asMember.error || asOwner.error));
+        return;
+      }
+      record(
+        names.delivery,
+        asMember.event === 1 &&
+          asMember.kinds.length === 1 &&
+          asMember.kinds[0] === "physical" &&
+          asMember.settings === 0,
+        "member sees event " +
+          asMember.event +
+          ", rows " +
+          JSON.stringify(asMember.kinds) +
+          ", settings " +
+          asMember.settings,
+      );
+      record(
+        "Convene Pass 1 control: the host reads the physical row, the meeting link and the capacity",
+        asOwner.event === 1 &&
+          asOwner.kinds.length === 2 &&
+          asOwner.kinds.includes("physical") &&
+          asOwner.kinds.includes("meeting_link") &&
+          asOwner.settings === 1,
+        "owner sees event " +
+          asOwner.event +
+          ", rows " +
+          JSON.stringify(asOwner.kinds) +
+          ", settings " +
+          asOwner.settings,
+      );
     });
   } finally {
     await client.end().catch(() => {});

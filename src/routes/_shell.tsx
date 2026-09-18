@@ -61,8 +61,14 @@ function ShellLayout() {
   // never navigates (ruling 52), the shell does.
   useEffect(() => {
     if (!member) return;
-    const onPublished = () => {
-      setToast("Published. It is in the Feed.");
+    const onPublished = (e: Event) => {
+      // Convene Pass 1 (P1-EXTRACTION, confirmed content): an event's toast names Convene too.
+      const verb = (e as CustomEvent<{ verb?: string | null }>).detail?.verb;
+      setToast(
+        verb === "convene"
+          ? "Published. It is in the Feed and on Convene."
+          : "Published. It is in the Feed.",
+      );
       void qc.invalidateQueries({ queryKey: ["feed", member.id] });
       void qc.invalidateQueries({ queryKey: ["rails", member.id] });
       void navigate({ to: "/feed", search: {} });

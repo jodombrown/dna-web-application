@@ -19,9 +19,12 @@ const RATE_WINDOW_MS = 60_000;
 type Verb = "convene" | "collaborate" | "contribute" | "convey";
 const VERBS: Verb[] = ["convene", "collaborate", "contribute", "convey"];
 
-// Mirrors VERB_SCHEMA in src/components/strand/Composer.tsx: the only fields DIA may fill per verb.
+// Mirrors VERB_SCHEMA in src/components/strand/verb-schema.ts: the only fields DIA may fill per
+// verb. Convene Pass 1 (SPEC section 1): Convene's form is its own, and DIA may fill the title,
+// `when` as the member's own words, the venue name and the doors time; never the city (Digital
+// Trust Layer) and never the format. src/lib/dia.ts namespaces these as convene.* (664).
 const VERB_SCHEMA: Record<Verb, string[]> = {
-  convene: ["title", "date", "time", "place", "hybrid", "ticket"],
+  convene: ["title", "when", "place_name", "doors"],
   collaborate: ["title", "category", "roles"],
   contribute: ["title", "instrument", "need", "by"],
   convey: ["title"],
@@ -53,11 +56,9 @@ const OUTPUT_SCHEMA = {
       additionalProperties: false,
       properties: {
         title: { type: "string" },
-        date: { type: "string" },
-        time: { type: "string" },
-        place: { type: "string" },
-        hybrid: { type: "boolean" },
-        ticket: { type: "string", enum: ["Free", "Paid"] },
+        when: { type: "string" },
+        place_name: { type: "string" },
+        doors: { type: "string" },
         category: { type: "string" },
         roles: { type: "string" },
         instrument: { type: "string", enum: ["Time", "Skills", "In-kind"] },
@@ -74,7 +75,7 @@ Acts (verb): convene = Host an Event (a gathering with a time or place: dinner, 
 
 Return verb null when the text is a plain update or does not clearly fit one act. Confidence is your probability (0 to 1) that the verb is right.
 
-Fields: include only fields that belong to the chosen verb and that the text states explicitly, copying the member's own words; never invent, infer, or complete a detail that is not there; omit anything absent. convene: title, date, time, place, hybrid, ticket. collaborate: title, category, roles. contribute: title, instrument, need, by. convey: title. title: a short title in the member's words (under 80 characters) when one is clearly implied. date and time: the raw text as written (for example "Thu 16 Oct", "19:00"). place: the venue, city, or link. hybrid: true only if the text says online, hybrid, zoom, stream, or similar alongside a physical place. ticket: "Paid" only when the text mentions a price, ticket cost, or currency; "Free" when it says free. instrument: "Skills" for expertise or professional help, "In-kind" for goods, equipment, or a venue, "Time" for hours, volunteering, or presence. roles: the people sought, as written. need: what is needed, as written. by: the deadline text as written.`;
+Fields: include only fields that belong to the chosen verb and that the text states explicitly, copying the member's own words; never invent, infer, or complete a detail that is not there; omit anything absent. convene: title, when, place_name, doors. collaborate: title, category, roles. contribute: title, instrument, need, by. convey: title. title: a short title in the member's words (under 80 characters) when one is clearly implied. when: the date and time exactly as the member wrote them, in one string (for example "15 October at 19:00", "Thu 16 Oct, 7pm"); never a date the text does not state. place_name: the venue's name as written (for example "Front Room"), never the city, never a link, and never a city standing alone. doors: the doors-open time as written (for example "18:30"), only when the text says doors open at that time. instrument: "Skills" for expertise or professional help, "In-kind" for goods, equipment, or a venue, "Time" for hours, volunteering, or presence. roles: the people sought, as written. need: what is needed, as written. by: the deadline text as written.`;
 
 const rate = new Map<string, number[]>();
 function limited(key: string): boolean {
@@ -127,14 +128,9 @@ function validate(raw: unknown, latency: number): Inference | null {
   const src = (r.fields && typeof r.fields === "object" ? r.fields : {}) as Record<string, unknown>;
   for (const key of VERB_SCHEMA[verb]) {
     const v = src[key];
-    if (key === "hybrid") {
-      if (v === true) fields[key] = true;
-      continue;
-    }
     if (typeof v === "string") {
       const t = v.trim();
       if (!t) continue;
-      if (key === "ticket" && t !== "Free" && t !== "Paid") continue;
       if (key === "instrument" && !["Time", "Skills", "In-kind"].includes(t)) continue;
       fields[key] = t.slice(0, key === "title" ? 120 : 400);
     }

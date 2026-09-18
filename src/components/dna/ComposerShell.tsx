@@ -7,21 +7,30 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Composer,
   type ComposerCloseReason,
+  type ComposerFormProps,
   type ComposerSeed,
   type ComposerState,
 } from "@/components/strand/Composer";
+import { ConveneForm } from "@/components/dna/ConveneForm";
 import { SHEET_DUR } from "@/components/strand/Sheet";
 import { useAuth } from "@/lib/auth";
 import { closeComposer, hostContextOf, useComposerState } from "@/lib/composer-store";
 import { makeInfer, makeUpload, unfurl } from "@/lib/dia";
 import { loadDraft, saveDraft } from "@/lib/drafts";
 import { loadMemberSpaces } from "@/lib/feed";
+import { loadMemberHomes, type Home } from "@/lib/homes";
+import { loadProfile } from "@/lib/profile";
+import { browserZone } from "@/lib/when";
 import { publishPost } from "@/lib/publish";
 import { useMode, useTier } from "@/lib/tier";
 import { loadVocabularies } from "@/lib/vocabularies";
 
 export const PUBLISHED_EVENT = "dna:published";
 
+// Convene Pass 1 (correction 7, ruling 53): inside an event the Convene chip stays in the row,
+// disabled, with this reason. The wording is the packet's (P1-EXTRACTION, confirmed content).
+export const IN_EVENT_REASON =
+  "You are inside an event. Host a new one from the Feed or from Convene.";
 // Ruling 665: the caller's failure message when the RPC gives nothing a member can act on.
 export const PUBLISH_FAILED = "Publishing did not go through. Your draft is here. Try again.";
 
@@ -52,10 +61,16 @@ export function ComposerShell() {
   const [draft, setDraft] = useState<ComposerSeed | null>(null);
   const [postId, setPostId] = useState<string>("");
   const [spaces, setSpaces] = useState<{ id: string; name: string }[]>([]);
+  // Convene Pass 1 (633, 690): the member's homes for the form's place chips; empty means none.
+  const [homes, setHomes] = useState<Home[]>([]);
   // Ruling 193: Contribute's instrument options are the contribute_instrument vocabulary, read at
   // runtime through the one vocabulary path. Ruling 194: a read that fails leaves this empty and the
   // control renders no options; nothing here substitutes a default.
   const [instrument, setInstrument] = useState<string[]>([]);
+  // Session 24 (783, 786): the Country control's vocabulary, public.world_countries through the one
+  // vocabulary path, and the member's stated country for the control's ordering only.
+  const [world, setWorld] = useState<string[]>([]);
+  const [statedCountry, setStatedCountry] = useState<string | null>(null);
 
   const hostContext = request ? hostContextOf(request) : "feed";
 
@@ -75,18 +90,23 @@ export function ComposerShell() {
     if (!open || !member || !request) return;
     let active = true;
     void (async () => {
-      const [restored, memberSpaces, vocab] = await Promise.all([
+      const [restored, memberSpaces, vocab, memberHomes, profile] = await Promise.all([
         request.initialVerb || request.initial
           ? Promise.resolve(null)
           : loadDraft(member.id, hostContext),
         loadMemberSpaces(member.id),
         loadVocabularies().catch(() => null),
+        loadMemberHomes(member.id).catch(() => [] as Home[]),
+        member.handle ? loadProfile(member.handle).catch(() => null) : Promise.resolve(null),
       ]);
       if (!active) return;
       setDraft(restored?.seed ?? null);
       setPostId(restored?.postId ?? crypto.randomUUID());
       setSpaces(memberSpaces);
+      setHomes(memberHomes);
       setInstrument((vocab?.instrument ?? []).map((i) => i.label));
+      setWorld(Array.isArray(vocab?.world) ? vocab.world : []);
+      setStatedCountry(profile?.sections.where?.current_country || null);
       setLoadedSeed(seed);
     })();
     return () => {
@@ -98,6 +118,30 @@ export function ComposerShell() {
   const upload = useMemo(() => (postId ? makeUpload(postId) : undefined), [postId]);
   // The id publish_post returned, held until the Composer closes itself with 'published' (666).
   const publishedId = useRef<string | null>(null);
+  // Correction 7 (ruling 53): inside an event, the Convene chip is disabled with its reason.
+  const disabledVerbs = useMemo(
+    () => (request?.anchor?.kind === "event" ? { convene: IN_EVENT_REASON } : undefined),
+    [request?.anchor?.kind],
+  );
+  // Ruling 664: Convene supplies its form; the host binds the member's name, homes, Spaces and
+  // browser zone to it. Memoised on those so the form's own state survives every other re-render.
+  const authorName = member?.name ?? "";
+  const forms = useMemo(
+    () => ({
+      convene: (p: ComposerFormProps) => (
+        <ConveneForm
+          {...p}
+          author={{ name: authorName }}
+          homes={homes}
+          spaces={spaces}
+          browserTz={browserZone()}
+          countries={world}
+          statedCountry={statedCountry}
+        />
+      ),
+    }),
+    [authorName, homes, spaces, world, statedCountry],
+  );
   const lastVerb = useRef<ComposerState["verb"]>(null);
 
   if (!(open || visible) || !member || !request || loadedSeed !== seed) return null;
@@ -149,6 +193,8 @@ export function ComposerShell() {
       open={open}
       onClose={onClose}
       onPublish={onPublish}
+      forms={forms}
+      disabledVerbs={disabledVerbs}
       tier={tier}
       mode={mode}
       author={{ name: member.name, avatar: member.avatar }}

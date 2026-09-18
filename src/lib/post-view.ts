@@ -11,6 +11,20 @@ export type LinkView = {
   image?: string | undefined;
 };
 
+/**
+ * Convene Pass 1 (P1-SPEC section 2): what the card needs of the event beyond the meta line, all of
+ * it derived at read. `past` from the start or the window's end (ruling owed 5), never stored;
+ * `cancelled` from status, with the sentence the card renders in place of the body; `space` only
+ * when the event is linked to one (Canon 6), for the expanded card's hook row.
+ */
+export type EventView = {
+  cancelled: boolean;
+  past: boolean;
+  /** The cancelled card's body: the fact and the host's reason verbatim (SPEC 2). */
+  cancelledBody: string | null;
+  space: { id: string; name: string } | null;
+};
+
 export type PostView = {
   id?: string | undefined;
   c_category: CardC;
@@ -29,6 +43,8 @@ export type PostView = {
   media: string[];
   link?: LinkView | null | undefined;
   meta?: string | undefined;
+  /** Present on a Convene card (created object of kind event). */
+  event?: EventView | undefined;
 };
 
 export function domainOf(url: string): string {

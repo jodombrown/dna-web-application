@@ -7,7 +7,11 @@
 //          mapbox_id?: string }
 //        'anchor' (Session 24) is the dry run behind the live arm that walks every
 //        public.world_countries name: it resolves country_name the way suggest does and answers
-//        { state: 'anchored', country: alpha-2 } or { state: 'unavailable' }, and calls Mapbox never.
+//        { state: 'anchored', country: alpha-2, zones: string[] | null, zones_via } or
+//        { state: 'unavailable' }, and calls Mapbox never. `zones` are that country's IANA zones
+//        from the runtime's own ICU (rulings 813, 817): the form gives a words-only event the zone
+//        of the country the host chose, silently where there is one and by asking where there are
+//        several (821), and null is "this runtime cannot say", never a guess.
 // Output one of four typed states, never an error body for the member:
 //   { state: 'one', place: Place }            exactly one suggestion (ruling owed 4, default), or a retrieve
 //   { state: 'several', places: Suggested[] }  two to five suggestions; nothing is chosen for the member
@@ -234,6 +238,39 @@ function countryCode(name: string): string | null {
   return key ? (regionIndex.get(key) ?? null) : null;
 }
 
+// ---- a country's IANA zones, from the same runtime ICU (rulings 813, 817, 822) -----------------
+// The Intl Locale Info API has shipped in two shapes: the getter `locale.timeZones` on the V8 the
+// probe ran on (12.4, ICU 78.2), and the function `locale.getTimeZones()` on newer ones. Read
+// whichever exists and answer null where neither does, the way countryCode handles a missing
+// Intl.DisplayNames: a runtime that cannot say is never guessed at, and the form keeps its existing
+// behaviour on null (case 4). `zonesVia` records which shape answered, because the Node probe could
+// not tell us what Deno carries and the live arm reports it.
+type ZonesVia = "getTimeZones" | "timeZones" | "none";
+let zonesVia: ZonesVia = "none";
+function zonesFor(code: string): string[] | null {
+  try {
+    const locale = new Intl.Locale("und-" + code) as Intl.Locale & {
+      getTimeZones?: () => string[] | undefined;
+      timeZones?: string[] | undefined;
+    };
+    let zones: string[] | undefined;
+    if (typeof locale.getTimeZones === "function") {
+      zones = locale.getTimeZones();
+      zonesVia = "getTimeZones";
+    } else if (Array.isArray(locale.timeZones)) {
+      zones = locale.timeZones;
+      zonesVia = "timeZones";
+    } else {
+      zonesVia = "none";
+      return null;
+    }
+    const list = (zones ?? []).filter((z) => typeof z === "string" && z.length > 0);
+    return list.length ? list : null;
+  } catch {
+    return null;
+  }
+}
+
 function named(s: Suggestion): Suggested | null {
   const id = typeof s.mapbox_id === "string" ? s.mapbox_id : "";
   const name = typeof s.name === "string" ? s.name.trim() : "";
@@ -386,10 +423,17 @@ Deno.serve(async (req: Request) => {
   // The dry run (Session 24): does this name anchor? No Mapbox call, no token needed. The live arm
   // walks every public.world_countries name through it, so a stored spelling that resolves to
   // nothing is found there and not by a host.
+  //
+  // Rulings 813 and 817: it also answers the country's IANA zones, which is what lets the form give
+  // a words-only event the zone of the country the host chose rather than the host's own. The form
+  // takes the zone silently where there is one, asks where there are several (821), and keeps its
+  // existing behaviour where `zones` is null. `zones_via` says which shape of the Intl Locale Info
+  // API answered, so the live arm can report what the deployed runtime carries (822).
   if (action === "anchor") {
     if (!country) return unavailable("unanchored");
+    const zones = zonesFor(country);
     done("anchored");
-    return json({ state: "anchored", country });
+    return json({ state: "anchored", country, zones, zones_via: zonesVia });
   }
 
   const token = Deno.env.get("MAPBOX_TOKEN");

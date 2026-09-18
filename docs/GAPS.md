@@ -1933,6 +1933,13 @@ another branch's fixture window, at a rate set by how often two branches push to
 rules it is a re-run once identified, and a re-run passes; the cost is the identification, which took
 reading two logs side by side, and a red check on a PR that was green.
 
+**Second sighting.** Pages runs 250 (PR 42, `e6e35f2`) and 251 (PR 44, `19b1087`), both `live` jobs pushed
+a minute apart and running their arms at 05:09:58 and 05:09:59 UTC on 17 September. Run 250's F4 fixture
+held the block while run 251 inserted it (`F4: the viewer blocks the other member` read 409, `23505`),
+then tore it down under run 251's reads (`B4A section 4` read `viewer_blocked false`, `B4A section 7`
+read `relationship present`). Three arms red on a head whose diff touches none of them; the fix below
+is unchanged, and until it lands two `live` jobs are never re-run together.
+
 **The fix this entry names.** One of two shapes, and not both. Either the REST fixtures move inside the
 same rolled-back transaction as the live-db arms (F3's switch and F4's block are one `update` and one
 `insert` under the caller's role, which `actAs` already provides), so no run commits fixture state at
@@ -1943,6 +1950,122 @@ project during a run.
 
 **Not this gap's scope.** The arms' assertions and counts stay as they are; the 416 arm was right to
 read null, since the owner was Private at that instant.
+
+**What confirmed the cause, 17 September 2026.** Run 252 on PR 3, whose `live` job ran with no other
+branch's `live` job anywhere near it, read all three arms green on the same assertions and the same
+fixtures that had failed on run 251 twenty minutes earlier. Nothing in the diff between the two heads
+touches F3, F4 or B4A. Overlap is the whole of it, which is why the two re-runs after the
+`place-resolve` redeploy at 16:08 UTC were fired one after the other, PR 2's first and PR 3's only
+once PR 2's had finished, and both came back green.
+
+## G34. The draft-restore check in `tests/matrix.cjs` waits a fixed 300 ms after `Continue your draft`, not on the restore
+
+**Severity: low, a harness gap in G29's shape. Not a merge blocker. Opened 16 September 2026 during
+Convene Pass 1's PR 3, filed under ruling 597. The number is assigned by this entry (ruling 638).**
+
+**What was seen.** Pages run 228 on `c1d6811`, `matrix (webkit)`, one check on the `webkit-1536x960-dark`
+arm:
+
+```
+FAIL [no crash] webkit-1536x960-dark Continue your draft restores it, and Draft saved is still the only trace
+0 behind a web-process crash (G5) | 0 an aborted fetch on mocked REST | 1 unclassified
+5035 of 5036 checks passed
+```
+
+No crash, no aborted fetch, no network error in the job, and the same code green on WebKit at
+5036 of 5036 in runs 216, 218 and 222 that day: the branch's diff since run 222 is two policy lines
+in a migration file and a `docs/GAPS.md` entry, neither of which the composer loads.
+
+**The wait.** The check clicks `[data-testid="continue-draft"]`, then `await page.waitForTimeout(300)`,
+then asserts three things at once: the textarea's value begins with the draft's words, the
+`continue-draft` control is gone, and `Draft saved` appears exactly once. Three hundred milliseconds
+is a guess at how long the restore takes on a loaded WebKit; when the guess is short, the first or
+second assertion reads the pre-restore state and the check fails with nothing wrong in the app.
+
+**The fix this entry names.** Wait on the signal the restore produces rather than on the clock:
+`await dialog.locator('[data-testid="continue-draft"]').waitFor({ state: "detached" })` and
+`await expect(ta).toHaveValue(/^(Three intros|We need a volunteer)/)` (or a `waitForFunction` on the
+value), then assert the `Draft saved` count. A wait that resolves on the state the assertion needs
+cannot be short. The same fixed-wait shape appears elsewhere in the file (`waitForTimeout(150)` after
+clicks in the Convene arm, added in Pass 1) and is not this gap's scope until one of them earns it.
+
+**Second sighting.** Pages run 235 on `402e708`, `matrix (webkit)`, first attempt, at
+`webkit-1366x1024-light`: the same check, the same shape, one viewport over from the first. Two sightings
+in one day at two widths on two heads whose composer code is the same is a timing that the fixed wait
+loses often enough to name it a recurring cost, not a one-off.
+
+**Third sighting.** Pages run 244 on `da0e7da` (PR 45, the LensBar fix), `matrix (webkit)`, first attempt,
+at `webkit-430x932-dark`: the same check, the same shape, on a head whose composer code is `main`'s. Its
+one re-run passed 4981 of 4981. Three sightings on three heads at three widths, all WebKit, none with a
+crash; recorded here at PR 3's next code push rather than as a doc-only push to the branch it was seen on
+(ruling 556).
+
+**Fourth sighting, and the fix, 17 September 2026.** Pages run 253 on `7270755` (PR 3, the 807 dedupe),
+`matrix (webkit)`, the re-run, at `webkit-1536x960-dark`: the same check, the same shape, 5060 of 5061,
+no crash. Four sightings on four heads at four widths, all WebKit. That re-run was the head's one, and the
+first attempt had already been spent on a G5 crash on `webkit-390x844-dark-block-flow`, so the choice was
+a red head the founder cannot merge or the fix this entry has named since it was opened. The fix is in:
+the check now waits for `continue-draft` to detach and then for the textarea to actually hold the draft's
+words, each with its own timeout and its own failure sentence, rather than for 300 ms. The assertions and
+the arm's declared count are unchanged, so a real regression still fails exactly as before. The other
+fixed waits in the file (`waitForTimeout(150)` in the Convene arm) have not earned the same treatment and
+are left alone.
+
+**Not this gap's scope.** The check's assertions and the arm's declared count stay as they are.
+
+## G35. Mapbox Search Box carries no POI for Ghana, Kenya or Nigeria, so a Convene host there always falls to their words
+
+**Severity: medium for the surface, none for the code. Not a merge blocker. Opened 16 September
+2026 during Convene Pass 1's place-anchoring correction (Session 23), filed under ruling 597. The
+number is assigned by this entry (ruling 638).**
+
+**What was seen.** The founder typed `Front Room Osu Accra` on PR 3's preview and got nothing; `Front
+Room` alone returned a Front Room in Bangkok. The correction read that as an anchoring fault, and the
+anchoring fault was real (the call carried no `proximity`, so Search Box anchored on the Edge node's
+IP). But anchoring is not what emptied the Ghana answer. Through Mapbox's own Search Box tooling,
+with `country=GH`: `Kempinski Hotel Gold Coast City`, `Labadi Beach Hotel`, `Alliance Française
+Accra`, `Kotoka International Airport`, `Accra Mall`, `Makola Market` and `University of Ghana` return
+no `poi` feature at all; what comes back, when anything does, is a `place`, `locality` or `country`
+feature (Accra, Abura, Ola, Ghana), which the function's `types=poi,address` never asks for. With
+`proximity` at Accra and no country, `Kotoka International Airport` returns cafés and car hire in
+Saudi Arabia and Oman with `distance` in the millions of metres: the nearest POI Mapbox knows for
+those words is on another continent. Kenya (`Alliance Française Nairobi`, `Sarit Centre` under
+`country=KE`) and Nigeria (`country=NG`, `types=poi`) behave the same. South Africa and the United
+Kingdom return POIs and streets. Every POI that did come back anywhere carried
+`external_ids.dataplor`, which is the one POI source Search Box exposes here.
+
+**What it means for the surface.** Case 2 of the anchoring rule (no home, stated country) is correct
+and does what it says: `Front Room` under `country=GH` is `none`, which is Mapbox's own zero and reads
+as `No place found for that. It is kept as you wrote it.` That sentence is now true, where before the
+correction it was not, and the event publishes with the words in `place_text`. But a host in Accra,
+Nairobi or Lagos will read it for every venue they own, and the resolved row (place, coordinates, a
+zone from the place) never forms for them; the zone then comes from the host's browser, because words
+carry none, not from the venue. The market the surface is built for is the one the provider does not cover.
+
+**The fix this entry names.** A decision before code. Either a second POI source for the African
+footprint behind the same `place-resolve` contract (the function's four states and the row's shape
+do not change; the provider behind `suggest` and `retrieve` does), or DNA's own venue vocabulary that
+members grow, read at runtime as every fixed vocabulary is, with Search Box as the fallback for the
+rest of the world. Both are a ruling and a brief, not a patch. Until then the four states and the
+hints are honest, and `docs/` should say plainly that a Ghana venue will not resolve.
+
+**Not this gap's scope.** The unavailable state, the anchoring rule and the live arms are Session
+23's and are in; the Ghana arm in `tests/live-checks.cjs` asserts what is true (a Mapbox answer with
+nothing outside Ghana), and the country filter itself is proven on the United Kingdom.
+
+**Addendum, 17 September 2026 (ruling 810), and why this is not a new number.** Ruling 810 asks for
+the Ghana coverage fact to be written into the register so it is not investigated a third time. It is
+already here, opened a day earlier under 597, and a second entry for one fact is what 638's
+"the number is assigned by the entry" exists to prevent: the next reader opens the register and finds
+two, and neither says which is current. So this stands as G35 and no G38 was minted. What 810 adds,
+recorded here: the founder, composing from California against PR 3's preview on the redeployed
+function, typed `Labadi Beach` and got nothing, and `Labadi` returned the area it sits in, which is
+the same shape as the `Front Room` evidence above and the first time it was read on the anchored
+build rather than the IP-anchored one. The interim answer is ruling 784's: the member's words stand
+beside a resolved area, so a Ghana host publishes their venue words with the area's name, city, point
+and zone, and the card reads them back. The third named fix, beside the two above, is a host-placed
+pin under ruling 790, which is Pass 4's answer if one is wanted; it needs no provider at all. None of
+this is a defect and none of it blocks the merge.
 
 ## G36. The lens bar could never fall back to icon-first on the Feed, its fit test did not match its layout, and no check read the layout it produced
 
@@ -2020,3 +2143,111 @@ Design with these numbers.
 
 **Not this gap's scope.** The compact tier is the founder's screenshot and reads icon-first correctly;
 the expanded tier fits with 141px to spare.
+
+## G38. A published in-person event with no resolved place carried the host's browser zone, not the country's
+
+**Severity: high for the surface, and it reached the stored row rather than only the rendering.
+Opened 17 September 2026 during Convene Pass 1's PR 3, filed under ruling 597. The number is assigned
+by this entry (ruling 638). Fixed on the same branch under rulings 813, 817 and 821; this entry
+stands as the record of what it was and how it was read.**
+
+**What decided it.** `src/components/dna/ConveneForm.tsx:204` to `210`, as it stood:
+
+```ts
+const tz: string | null = !format
+  ? null
+  : physical
+    ? knownZone(placeTz)
+      ? placeTz
+      : browserTz
+    : browserTz;
+```
+
+`placeTz` is written only by `pick()` from a resolved place. With no resolution the field is empty
+and the zone fell to `browserTz`, the host's own; the payload carried it as `convene.timezone` and
+`20260916120200_p1_publish_post_convene.sql:175` read it into `events.timezone`. A Ghana event
+composed from California was stored `America/Los_Angeles`.
+
+**The part that was worse than the label.** `zoneForInstants` is the same value, and
+`startsAt = instantFor(date, time, zoneForInstants)`, so the zone interpreted the host's typed time
+rather than only labelling it. A host in California typing `7pm` for an Accra event stored 03:00 the
+following day in Accra, and every viewer read that instant. Ghana is where it was found because
+Mapbox resolves no venue there (G35), which makes the words-only path the normal path for exactly the
+market the surface is built for.
+
+**Why it survived the founder's test.** The composer never showed the browser zone in words in that
+state: `whenSuffix` reads `, time zone from the place once it is set`, and the `Time zone …, from the
+place.` line renders only when a place resolved. The wrong value was stored, never displayed.
+
+**What the fix turned out to cost, and why this entry was rewritten.** As first written this entry
+named four pieces and the first was a migration, because no country-to-zone source existed in the
+repo: `public.world_countries` is `(name text primary key, position smallint not null unique)` with
+no alpha-2 and no zone, and the only name-to-code fold lives server-side in `place-resolve`. Ruling
+817 asked whether the runtime could answer instead, and it can. Through that same fold and ICU's
+Intl Locale Info API, all 195 stored names return at least one IANA zone with no Mapbox call:
+`GH` one, `CD` two, `US` 29, and 168 of the 195 exactly one. So `anchor` returns `zones` beside the
+code, the form takes the single zone silently, asks only for the 27 that carry several (821), and
+falls back to its previous behaviour where a runtime cannot say. No column, no table, no migration,
+and no hardcoded array: the zones are a runtime vocabulary from the function, like every other.
+
+**Not this gap.** The resolved-place path was correct throughout: a place that resolves carries its
+own zone from its own point. Online events keep the host's browser zone by ruling 824, which has no
+country to derive from. The seven already published events are not backfilled (823). The `whenSuffix`
+copy still reads `, time zone from the place once it is set` while a country-derived zone is already
+in force, which is G40.
+
+## G39. A whole `matrix (webkit)` job can fail on TLS resets against the Pages preview, and every arm behind the first navigation reads as a defect
+
+**Severity: medium for the harness, none for the app. Not a merge blocker. Opened 17 September 2026
+during Convene Pass 1's PR 3, filed under ruling 597. The number is assigned by this entry (ruling
+638).**
+
+**What was seen.** Pages run 254 on `0848c79`, `matrix (webkit)`, the head's one re-run, at 18:57
+UTC: a dozen arms failed at their first navigation with
+
+```
+FAIL [no crash] webkit-1280x800-dark profile owner flow Error: page.goto: Peer failed to perform TLS handshake: Error sending data: Connection reset by peer
+  - navigating to "https://claude-dna-web-handoff-jlhuy-fdod.dna-web-application.pages.dev/sign-in", waiting until "networkidle"
+```
+
+and the ruling 292 tail then read `INCOMPLETE: emitted 1 of 33`, `emitted 2 of 32`, `emitted 1 of 10`
+for arms whose checks never ran. `matrix (chromium)` on the same head and the same preview was 5061
+of 5061 on its first attempt, and `live` was 118 of 118, so the deployment was serving; the resets
+were to one runner over one window.
+
+**Why it matters beyond one run.** The failure reads, in the job summary and in the wake event, as a
+dozen arms failing on surfaces the diff never touched, which is indistinguishable at a glance from a
+real regression. It also consumed the head's one re-run, which is what forced G34's fix to be taken
+rather than re-run. A reachability failure is not an arm's result and should not be reported as one.
+
+**The fix this entry names.** Two halves, and the first is the one that pays. The harness already has
+a reachability step before the matrix (`The deployment serves every path the suites open`, ruling
+217); a navigation that fails with a transport error rather than an HTTP status should be retried
+once against the same URL and, if it fails again, should end the job as a reachability failure by
+name rather than emitting per-arm failures — the arms did not run. The second half is the classifier:
+`tests/matrix.cjs` classifies a lost web process (G5) and a WebKit aborted fetch (357) and calls
+everything else unclassified, so a transport error joins those two as a named class and stays out of
+the arm counts (ruling 228's shape: an arm that cannot run is unproven, never failing).
+
+**Not this gap's scope.** The preview URL itself is not in question: it is read from the deploy job's
+own wrangler output and was correct on that run.
+
+## G40. The composer still says the zone comes from the place once one is set, after the country has already set it
+
+**Severity: low, copy only. Not a merge blocker. Opened 17 September 2026 during Convene Pass 1's PR
+3, filed under ruling 597. The number is assigned by this entry (ruling 638).**
+
+**What it is.** `src/components/dna/ConveneForm.tsx` composes `whenSuffix` from `tzFromPlace`: with a
+resolved place it reads `, the time at the place`, and for any other in-person state
+`, time zone from the place once it is set`. Since rulings 813 and 821 a words-only event already
+carries a zone, the country's, so that sentence now describes a state the form is no longer in: it
+promises a zone that is already decided. It was accurate before the fix only in the sense that the
+zone was wrong anyway.
+
+**Why it is not fixed here.** The copy in the place block is ratified per surface and Pass 4 redraws
+the block with the zone control in it (821). Inventing a replacement sentence in a code session is
+exactly what ruling 62's visual contract exists to prevent. The line to write is a Design and Chat
+decision, not this session's.
+
+**Not this gap's scope.** The `Time zone {zone}, from the country.` line under the control and the
+`Time zone GMT, from the place.` line under a resolved row are both ratified and correct as built.
