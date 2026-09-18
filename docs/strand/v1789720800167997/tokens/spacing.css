@@ -1,0 +1,60 @@
+:root{
+--space-1:4px; --space-2:8px; --space-3:12px; --space-4:16px; --space-5:20px; --space-6:24px; --space-8:32px; --space-10:40px; --space-12:48px; --space-16:64px;
+
+--radius-s:6px; --radius-m:10px; --radius-l:14px; --radius-badge:8px; --radius-pill:999px;
+
+--border-thin:1px; --border-card:1.5px;
+
+/* Elevation: five levels, deliberately shallow. Feed cards sit at level 0. */
+--shadow-0:none;
+--shadow-1:0 1px 2px rgba(26,26,24,0.06);
+--shadow-2:0 1px 2px rgba(26,26,24,0.06), 0 4px 10px rgba(26,26,24,0.07);
+--shadow-3:0 1px 2px rgba(26,26,24,0.06), 0 6px 16px rgba(26,26,24,0.08);
+--shadow-4:0 2px 4px rgba(26,26,24,0.06), 0 12px 28px rgba(26,26,24,0.10);
+--shadow-none:var(--shadow-0); /* legacy alias. --shadow-stack is struck (609); cite --shadow-3 by name. */
+
+--touch-min:44px;
+--target-min:24px; /* WCAG 2.2 AA 2.5.8 floor; primary actions stay at --touch-min */
+
+/* Tier breakpoints (583, 603). The three frames: compact under 640, medium 640 to 1024, expanded over 1024. */
+--tier-medium:640px;
+--tier-expanded:1024px;
+
+/* Sheet geometry (584, 603). 492's two named exceptions are carried, not re-derived. */
+--sheet-compact-height:80%;
+--sheet-medium-width:40%;
+--sheet-expanded-width:40%;
+--sheet-expanded-max-height:80%;
+--sheet-composer-ratio:50%;        /* 492 exception: the composer's stacked preview */
+--sheet-notification-width:380px;  /* 492 exception: the pointer notification panel */
+--sheet-radius:var(--radius-l);
+--sheet-drag-dismiss:120px;
+
+/* Pane geometry (603). The pane is navigated into, so it is laid out, never summoned. */
+--pane-list-width:360px;
+--pane-gap:var(--space-6);
+
+/* Lane geometry (731). A card laid in a lane; read by the caller that lays the lane, PostCard is unchanged. */
+--lane-card-width:320px;
+
+/* Z-index scale (603). Ruled order. No component hardcodes a z-index. */
+--z-pane:1; /* @kind other */           /* navigated into, page content, never over chrome */
+--z-rail:2; /* @kind other */           /* FacetRail as a rail, sticky in its column */
+--z-sticky:20; /* @kind other */        /* AppHeader, PulseDock, sticky bars */
+--z-scrim:50; /* @kind other */         /* scrim behind any summoned layer */
+--z-sheet:60; /* @kind other */          /* sheet, and FacetRail's collapsed sheet form under 640 */
+--z-dialog:65; /* @kind other */        /* 606: Dialog, the centred modal; a dialog over a sheet stacks by DOM order */
+--z-notification:70; /* @kind other */  /* pointer notification panel, above a sheet */
+--z-toast:80; /* @kind other */
+--dock-height:64px;
+--content-max:680px;
+--page-max:1120px;
+
+--ease:cubic-bezier(0.2,0,0,1); /* @kind other */
+/* Motion: exactly three durations. */
+--dur-micro:100ms; /* @kind other */ /* checkbox, switch */
+--dur-default:150ms; /* @kind other */ /* hover, press, focus */
+--dur-slow:300ms; /* @kind other */ /* modals, sheets, page */
+/* Assignment (604): sheet --dur-slow, pane --dur-slow, FacetRail --dur-default.
+   The --dur-fast and --dur-base aliases are struck, not repointed (194 applied to a token). */
+}
