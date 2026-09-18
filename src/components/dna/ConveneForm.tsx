@@ -23,14 +23,14 @@ import { resolvePlace, type ResolvedPlace, type SuggestedPlace } from "@/lib/dia
 import type { Home } from "@/lib/homes";
 import { placeLine, placeParts } from "@/lib/place";
 import {
-  dateInZone,
+  dateLine,
   instantFor,
   knownZone,
   parseTimeWords,
   parseWhen,
   timeInZone,
+  weekdayContradiction,
   windowFor,
-  zoneAbbr,
 } from "@/lib/when";
 
 export type ConveneFormProps = ComposerFormProps & {
@@ -251,28 +251,53 @@ export function ConveneForm({
     startsAt && date && doorsTime ? instantFor(date, doorsTime, zoneForInstants) : null;
   const windowWords = windowMode ? v("when_window").trim() : "";
   const window = windowWords ? windowFor(windowWords) : null;
+  // Ruling 836: where the weekday the host typed disagrees with the date those same words parsed
+  // to, the disagreement is stated and the instant that will be stored is named beside it. The
+  // field above still holds the host's own words: nothing is rewritten and nothing is silently
+  // corrected. It waits on an instant, because until there is one there is nothing the event
+  // "will be stored for" and the sentence would be naming a date the form has not settled.
 
   const startDate = startsAt ? new Date(startsAt) : null;
+  const weekdayLine =
+    !windowMode && startDate && parsed?.date
+      ? weekdayContradiction(whenWords, parsed.date, dateLine(startDate, zoneForInstants))
+      : null;
+  // Two readings of one moment, and since 898 they are not the same string. `whenText` is the
+  // card's derived label (671): it carries the zone inline, as its IANA identifier and never as an
+  // abbreviation, and 835's year, because a card reader has no second line to take either from.
+  // `whenRead` is the composer's own read-back and names no zone at all — the sentence beneath it
+  // does that, and says where the zone came from, which is the whole of what G40 was opened about.
+  const momentText = startDate
+    ? dateLine(startDate, zoneForInstants) + ", " + timeInZone(startDate, zoneForInstants)
+    : "";
+  const momentEnd = endsAt ? " to " + timeInZone(new Date(endsAt), zoneForInstants) : "";
+  const windowText = windowWords ? windowWords + ", date to be confirmed" : "";
   const whenText = windowMode
-    ? windowWords
-      ? windowWords + ", date to be confirmed"
-      : ""
-    : startDate
-      ? dateInZone(startDate, zoneForInstants) +
-        ", " +
-        timeInZone(startDate, zoneForInstants) +
-        (tz ? " " + zoneAbbr(tz, startDate) : "") +
-        (endsAt ? " to " + timeInZone(new Date(endsAt), zoneForInstants) : "")
+    ? windowText
+    : momentText
+      ? momentText + (tz ? " " + tz : "") + momentEnd
       : "";
+  const whenRead = windowMode ? windowText : momentText ? momentText + momentEnd : "";
+  // P4-SPEC section 1, which closes G40: four ratified cases and two further readings, each a
+  // sentence of its own rather than a comma suffix, and each naming the zone by its identifier.
+  // The string `, time zone from the place once it is set` is deleted. It described a state the
+  // form has not been in since 813 and 821 — it promised a zone the country had already decided —
+  // and it stood in two of the old expression's three branches.
   const whenSuffix = windowMode
     ? ""
-    : tz
-      ? tzFromPlace
-        ? ", the time at the place"
-        : physical
-          ? ", time zone from the place once it is set"
-          : ", your home time zone"
-      : ", time zone from the place once it is set";
+    : tzFromPlace
+      ? "Time zone " + placeTz + ", from the place."
+      : virtual && !physical
+        ? "Time zone " +
+          browserTz +
+          ", from your device. An online event has no country to take it from."
+        : tzFromChoice
+          ? "Time zone " + zoneFromCountry + ", the zone you chose."
+          : zoneFromCountry
+            ? "Time zone " + zoneFromCountry + ", from the country."
+            : needsZoneChoice
+              ? "The time zone comes from the country, and this country has more than one."
+              : "The time zone comes from the place, or from the country when no place resolves.";
 
   // ---- where, intent, validity, meta ------------------------------------------------------------
   // A venue replaces the words; an area stands beside them (change 2). Words that resolved to
@@ -610,9 +635,14 @@ export function ConveneForm({
         </button>
       </div>
     ),
-    whenText ? (
+    whenRead ? (
       <div key="when-read" data-convene="when-line" style={QUIET}>
-        {whenText + whenSuffix}
+        {whenRead + (whenSuffix ? ". " + whenSuffix : "")}
+      </div>
+    ) : null,
+    weekdayLine ? (
+      <div key="weekday" data-convene="weekday-contradiction" style={QUIET}>
+        {weekdayLine}
       </div>
     ) : null,
   );
@@ -700,11 +730,13 @@ export function ConveneForm({
           Change
         </Button>
       </div>
-      {tzFromPlace && startDate && (
-        <div style={QUIET}>Time zone {zoneAbbr(placeTz, startDate)}, from the place.</div>
-      )}
-      {tzFromPlace && !startDate && (
-        <div style={QUIET}>Time zone {zoneAbbr(placeTz, new Date())}, from the place.</div>
+      {/* 898: the identifier, never the abbreviation. The two branches this replaces existed only
+          because `zoneAbbr` needed an instant to compute an offset against; an identifier does not
+          move, so a zone with no date yet reads the same as one with a date. */}
+      {tzFromPlace && (
+        <div data-convene="place-tz-line" style={QUIET}>
+          Time zone {placeTz}, from the place.
+        </div>
       )}
     </div>
   ) : (

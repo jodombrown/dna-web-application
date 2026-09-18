@@ -99,7 +99,16 @@ export function zonedInstant(
   return new Date(instant);
 }
 
-/** The zone's short name at an instant, as Intl gives it ("GMT", "BST", "GMT+3"). */
+/**
+ * The zone's short name at an instant, as Intl gives it ("GMT", "BST", "GMT+3").
+ *
+ * Ruling 898 took this off every member-facing Convene surface: a display abbreviation is an
+ * invented name, and for any zone observing daylight saving it is a computed offset that moves
+ * twice a year, so one stored instant reads `EDT` on one surface and `America/New_York` on
+ * another. It reads clean in the Accra frames only because Africa/Accra is GMT all year. The
+ * function is not deleted (P4-SPEC section 2) and no caller in this tree renders it; whoever adds
+ * one is adding a display name, which is what 821 and 898 refuse.
+ */
 export function zoneAbbr(tz: string, instant: Date): string {
   try {
     const f = new Intl.DateTimeFormat("en-GB", { timeZone: tz, timeZoneName: "short" });
@@ -127,11 +136,40 @@ export function timeInZone(instant: Date, tz: string): string {
   return pad(p.hour) + ":" + pad(p.minute);
 }
 
-/** "Thu 15 Oct, 19:00 GMT": the event's own reading of its start (SPEC 2, 3). */
-export function localLine(iso: string, tz: string, withZone = true): string {
+/**
+ * Ruling 835: the year appears where the date is outside the year it is being read in, and not
+ * inside it. Read in the zone the date is read in, so a New Year's Eve instant does not gain or
+ * lose a year by which side of the date line the reader is on.
+ */
+export function outsideThisYear(instant: Date, tz: string, now = new Date()): boolean {
+  return partsIn(instant, tz).year !== partsIn(now, tz).year;
+}
+
+/** "Thu 16 Oct" inside the year being read in, "Thu 16 Sep 2027" outside it (ruling 835). */
+export function dateLine(instant: Date, tz: string, now = new Date()): string {
+  const base = dateInZone(instant, tz);
+  return outsideThisYear(instant, tz, now) ? base + " " + partsIn(instant, tz).year : base;
+}
+
+/**
+ * "Thu 16 Sep 2027, 19:00 Africa/Accra": the event's own reading of its start (SPEC 2, 3), with
+ * 835's year and 898's identifier. The zone is named by its IANA identifier and never by an
+ * abbreviation, on this surface and on every other member-facing Convene surface.
+ */
+export function localLine(iso: string, tz: string, withZone = true, now = new Date()): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime()) || !knownZone(tz)) return "";
-  return dateInZone(d, tz) + ", " + timeInZone(d, tz) + (withZone ? " " + zoneAbbr(tz, d) : "");
+  return dateLine(d, tz, now) + ", " + timeInZone(d, tz) + (withZone ? " " + tz : "");
+}
+
+/**
+ * The rail's stored-instant line (P4-SPEC section 2): the host's words are echoed above it, and
+ * this names the instant those words were stored as, in the event's own zone. The echo and this
+ * line are the whole answer to what the words became; nothing here rewrites them.
+ */
+export function storedLine(iso: string, tz: string, now = new Date()): string {
+  const line = localLine(iso, tz, true, now);
+  return line ? "Stored as " + line : "";
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -163,6 +201,75 @@ export function parseWhen(words: string, now = new Date()): ParsedWhen | null {
     ? pad(s.get("hour") ?? 0) + ":" + pad(s.get("minute") ?? 0)
     : null;
   return { date, time };
+}
+
+// ---------------------------------------------------------------------------------------------
+// Ruling 836: the weekday the host typed, against the weekday the date they typed falls on
+// ---------------------------------------------------------------------------------------------
+
+const WEEKDAY_WORDS: [RegExp, number][] = [
+  [/\bsun(?:day)?\b/i, 0],
+  [/\bmon(?:day)?\b/i, 1],
+  [/\btue(?:s|sday)?\b/i, 2],
+  [/\bwed(?:s|nesday)?\b/i, 3],
+  [/\bthu(?:r|rs|rsday)?\b/i, 4],
+  [/\bfri(?:day)?\b/i, 5],
+  [/\bsat(?:urday)?\b/i, 6],
+];
+
+const WEEKDAYS_FULL = [
+  "Sunday",
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday",
+];
+
+/**
+ * The weekday the words name, and the host's own token for it, or null where they name none. Each
+ * pattern is anchored at both ends so `sunset` is not a Sunday and `March` is not a Tuesday: a
+ * contradiction stated from a false reading is worse than none stated at all.
+ */
+export function typedWeekday(words: string): { index: number; word: string } | null {
+  for (const [re, index] of WEEKDAY_WORDS) {
+    const m = re.exec(words);
+    if (m) return { index, word: m[0] };
+  }
+  return null;
+}
+
+/** The weekday a yyyy-mm-dd falls on, 0 to 6, or null when it is not a date. */
+export function weekdayOf(date: string): number | null {
+  const m = date.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return null;
+  const d = new Date(Date.UTC(+m[1]!, +m[2]! - 1, +m[3]!));
+  return Number.isNaN(d.getTime()) ? null : d.getUTCDay();
+}
+
+/**
+ * Ruling 836's sentence, or null where the words and the date agree. The host's words are never
+ * rewritten: the contradiction is stated, the day the date actually falls on is named, and the
+ * instant that will be stored is named beside it. `date` is yyyy-mm-dd, the date the words parsed
+ * to; `stored` is that date read back through the event's own zone, which is what 835 governs.
+ */
+export function weekdayContradiction(words: string, date: string, stored: string): string | null {
+  const typed = typedWeekday(words);
+  const actual = weekdayOf(date);
+  if (!typed || actual === null || typed.index === actual) return null;
+  const year = date.slice(0, 4);
+  return (
+    "You wrote " +
+    typed.word +
+    ". The date you wrote falls on a " +
+    WEEKDAYS_FULL[actual] +
+    " in " +
+    year +
+    ". Your words are kept; the event will be stored for " +
+    stored +
+    "."
+  );
 }
 
 /** A time alone ("22:00", "7pm", "18:30"), as HH:mm; null when the words carry none. */
@@ -232,8 +339,9 @@ export function isPast(
 
 /**
  * `when` for the meta line: the date in the viewer's zone, then the event's local time when they
- * differ (`Thu 16 Oct, 21:00 EAT, 19:00 in Accra`); a window as words (`November, date to be
- * confirmed`); past as `Happened Thu 16 Oct, 19:00 GMT`.
+ * differ (`Thu 16 Oct, 21:00 Africa/Nairobi, 19:00 in Accra`); a window as words (`November, date
+ * to be confirmed`); past as `Happened Thu 16 Oct, 19:00 Africa/Accra`. Every zone is its IANA
+ * identifier (898) and the year follows 835 through `dateLine`.
  */
 export function whenLine(t: EventTiming, viewerTz: string, now = new Date()): string {
   if (!t.starts_at) return t.window_basis ? t.window_basis + ", date to be confirmed" : "";
@@ -245,9 +353,9 @@ export function whenLine(t: EventTiming, viewerTz: string, now = new Date()): st
     return "Happened " + localLine(t.starts_at, tz);
   }
   const vtz = knownZone(viewerTz) ? viewerTz : (eventTz ?? "UTC");
-  let line = dateInZone(d, vtz) + ", " + timeInZone(d, vtz) + " " + zoneAbbr(vtz, d);
+  let line = dateLine(d, vtz, now) + ", " + timeInZone(d, vtz) + " " + vtz;
   if (eventTz && zoneOffsetMinutes(eventTz, d) !== zoneOffsetMinutes(vtz, d)) {
-    line += ", " + timeInZone(d, eventTz) + (t.city ? " in " + t.city : " " + zoneAbbr(eventTz, d));
+    line += ", " + timeInZone(d, eventTz) + (t.city ? " in " + t.city : " " + eventTz);
   }
   return line;
 }
