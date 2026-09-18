@@ -266,9 +266,28 @@ jobs:
           cores=(/tmp/cores/core.*)
           echo "cores written: ${#cores[@]}"
           [ "${#cores[@]}" -eq 0 ] && exit 0
+          # Ruling 850. continue-on-error is right under 217 and it also buys silence: this step can
+          # now degrade three ways and every one of them is quiet. apt failing prints a ::notice::
+          # that nobody reads in a job that went green; an unresolvable executable and a gdb run that
+          # produces no frames each leave one line in an artefact nobody opens. The next PR-path
+          # crash is the one that finally delivers frames and offsets, because run 259's step died
+          # before gdb ran and run 260 had nothing to analyse, and a degradation that announces
+          # nothing would lose exactly that crash without anyone knowing it was lost. So a degraded
+          # extraction says so in the job summary, where the classification tail already reports.
+          degraded() {
+            echo "::warning::ruling 850: the core extraction degraded, $1"
+            {
+              echo "### ruling 850: a web process died and its stack was NOT extracted"
+              echo ""
+              echo "$1"
+              echo ""
+              echo "Nothing else in this run captures those frames. Where the core was retained it is"
+              echo "in this job's artefact under \`cores/\`; where it was not, the crash is unrecoverable."
+            } >> "$GITHUB_STEP_SUMMARY"
+          }
           # Ruling 217: diagnostic by charter, and apt and gdb are third parties it does not test.
           sudo apt-get update -qq && sudo apt-get install -y -qq gdb elfutils || {
-            echo "::notice::gdb and elfutils could not be installed; cores are retained unanalysed."
+            degraded "gdb and elfutils could not be installed, so ${#cores[@]} core(s) are retained unanalysed."
             mkdir -p "$OUT/cores"
             for c in "${cores[@]}"; do cp "$c" "$OUT/cores/" 2>/dev/null || true; done
             exit 0
@@ -321,6 +340,7 @@ jobs:
               fi
             else
               echo "executable not resolvable" | tee -a "$OUT/cores/stacks.txt"
+              degraded "the executable could not be resolved from \`file\` output for $name, so gdb was never run."
             fi
             # A web-process core runs to hundreds of megabytes, and an artifact that fails to upload
             # takes the stack down with it. Keep the core only when no frames came back.
@@ -328,7 +348,11 @@ jobs:
               echo "frames extracted; core not retained ($(du -h "$c" | cut -f1))" | tee -a "$OUT/cores/stacks.txt"
             else
               echo "no frames; retaining core ($(du -h "$c" | cut -f1))" | tee -a "$OUT/cores/stacks.txt"
-              cp "$c" "$OUT/cores/" 2>/dev/null || echo "core copy failed (size?)" | tee -a "$OUT/cores/stacks.txt"
+              degraded "gdb ran on $name but returned no frames."
+              cp "$c" "$OUT/cores/" 2>/dev/null || {
+                echo "core copy failed (size?)" | tee -a "$OUT/cores/stacks.txt"
+                degraded "$name could not be copied into the artefact either, so it is lost with the runner."
+              }
             fi
           done
           exit 0

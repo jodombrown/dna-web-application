@@ -1072,6 +1072,48 @@ handler, listens for `disconnected`, and prints one line per arm. 831 stops a cr
 arm reading as a stale declaration. 832 makes one crashed arm unproven under 228 rather than red, and
 keeps a second crash failing. Ruling 833 declined an arm-level retry.
 
+### The eighteenth sighting, and the first one the capture was watching (ruling 880)
+
+Run [259](https://github.com/jodombrown/dna-web-application/actions/runs/35307376068) on `8fabd50`,
+18 September, was the first WebKit pass after ruling 830's capture landed, and it crashed. It is
+recorded here rather than in a pull request, because ruling 760 is right that a body and a comment
+both die with the thread, and this is the first primary evidence anyone has for the question the
+seventeen sightings above could not settle.
+
+| Fact                         | Value                                                                              |
+| ---------------------------- | ---------------------------------------------------------------------------------- |
+| Arm                          | `webkit-1280x800-dark profile visitor stranger`                                    |
+| **Did the browser die too?** | **No: `browser still connected`**                                                  |
+| Position                     | `ARM 2443 +1035s`, the arm's **first** `page.goto` to `/m/thandiwe-dube`           |
+| Playwright's error           | `page.goto: Page crashed`, then `state unavailable: page.evaluate: Target crashed` |
+| Emitted                      | 16 of a declared 22, so `UNPROVEN (228)`                                           |
+| Core                         | `cores written: 1`, `core.eadedCompositor.13681.sig11`                             |
+
+**The browser survives; only the web process dies.** Ruling 200's frames already said the fault is in
+the compositor thread of the `WPEWebProcess`, but nothing had ever asked the browser whether it was
+still there, and Playwright's own error cannot answer it: it reads "Target page, context or browser
+has been closed" whichever went. `browser.isConnected()` read inside the crash handler answers it, and
+`disconnected` not firing corroborates it. Measured beforehand against Chromium at `chrome://crash`,
+where a lost web process gives exactly that pair.
+
+**The core's own name is a third confirmation of the signature.** `core.eadedCompositor.13681.sig11`
+is the kernel's `%e` truncating `ThreadedCompositor` to fifteen characters, and `sig11` is SIGSEGV:
+the thread and the signal this entry names, arriving from the kernel rather than from Playwright.
+
+**The frames were lost, and that is the part worth remembering.** The extraction step died before gdb
+ran: `file` on that core printed `too many program headers (2054)` and no `execfn:`, so the `grep -o`
+matched nothing and exited 1, and under the runner's default `bash -e` with `pipefail` the assignment
+inherited it. The job went red for the crash it had just successfully recorded. Both extractions are
+non-fatal now and the step carries `continue-on-error`, which is why ruling 850 then required a
+degraded extraction to announce itself: silence plus safety is how the next one would be lost without
+anyone noticing. **So offsets and frames still have never been captured on the PR path**, and the next
+crash there is the first real test of that half of 830.
+
+**This one is the short-count path, not the teardown path.** The crash arrived with the arm open and
+on its first navigation, so the arm emitted 16 of 22 and read incomplete. The case ruling 832 had to
+close separately — a crash charged to an arm after its last check has already passed, where the count
+matches and nothing fails — is still unobserved in the wild and remains owed under ruling 849.
+
 ## G6. Withdraw separated the two states ruling 214 joined — closed (ruling 229)
 
 **Opened and closed 9 September 2026, both inside Fix PR 01. Ruling 227 stated the requirement,
