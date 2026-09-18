@@ -3141,10 +3141,21 @@ async function runConvene(browserType, bname, [w, h], theme) {
         (await dialog.locator('[data-convene="map-plate"]').count()) === 0,
       venuePanel.slice(0, 200),
     );
+    // Escape on the topmost `dialog` fires `cancel`, which the Sheet turns into a close. This is
+    // the one place in the suite where two modal dialogs are open at once, and no engine's handling
+    // of that has been exercised here before, so a second press backs the first up. The assertion
+    // above is unchanged and the arm's declared count with it; if one press is enough, as it is on
+    // Chromium, the catch never runs.
     await page.keyboard.press("Escape");
     await dialog
       .locator('[data-convene="venue-info-panel"]')
-      .waitFor({ state: "detached", timeout: 5000 });
+      .waitFor({ state: "detached", timeout: 5000 })
+      .catch(async () => {
+        await page.keyboard.press("Escape");
+        await dialog
+          .locator('[data-convene="venue-info-panel"]')
+          .waitFor({ state: "detached", timeout: 5000 });
+      });
 
     // The plate, unplaced. It is a drawn plate and says so in its own words; it renders no tile and
     // no invented geography, so there is nothing on it to read as a street (P4-SPEC guardrail 3).
@@ -3193,10 +3204,28 @@ async function runConvene(browserType, bname, [w, h], theme) {
     await dialog
       .locator('[data-convene="map-plate"][data-pin-state="placed"]')
       .waitFor({ timeout: 5000 });
+    // The act is activated rather than only read. A control named `Move the pin` that moves nothing
+    // reads correct in a label assertion and is useless, and this branch shipped exactly that for
+    // three commits: the act wrote the same fraction back and the plate had no keyboard path at
+    // all. So the act is pressed, focus is followed onto the plate, and an arrow has to move the
+    // point — which is the whole of what a keyboard or AT host can do here.
+    const hostX = () => dialog.locator('[data-convene="host-point"]').getAttribute("data-pin-x");
+    const beforeKeys = await hostX();
+    await dialog.locator('[data-convene="pin-act"]').click();
+    const focusedOnPlate = await page.evaluate(
+      () => document.activeElement && document.activeElement.getAttribute("data-convene"),
+    );
+    await page.keyboard.press("ArrowRight");
+    await dialog
+      .locator(`[data-convene="host-point"]:not([data-pin-x="${beforeKeys}"])`)
+      .waitFor({ timeout: 5000 });
+    const afterKeys = await hostX();
     record(
       tag +
-        " Pass 4: the host's own point reads as the host's, the chip says so, and the act becomes Move the pin (790, 792, section 6)",
-      (await dialog.locator('[data-convene="pin-chip"]').textContent()) === "Placed by you" &&
+        " Pass 4: the host's own point reads as the host's, the chip says so, the act becomes Move the pin, and pressing it hands the keyboard the plate (790, 792, section 6)",
+      focusedOnPlate === "plate-grid" &&
+        Number(afterKeys) > Number(beforeKeys) &&
+        (await dialog.locator('[data-convene="pin-chip"]').textContent()) === "Placed by you" &&
         (await dialog.locator('[data-convene="pin-chip"]').getAttribute("data-pin-source")) ===
           "host" &&
         (await dialog.locator('[data-convene="plate-grid"] [data-pin-kind="host"]').count()) ===
@@ -3213,7 +3242,14 @@ async function runConvene(browserType, bname, [w, h], theme) {
     // nothing is sent anywhere, because nothing parses it, geocodes it or plots it.
     const callsBeforeLink = db.placeCalls.length;
     await field("map_link").fill("https://maps.app.goo.gl/frontroom-osu");
-    await page.waitForTimeout(150);
+    // A wait on an absence, and the one place in this file where a fixed wait is the right shape:
+    // there is no signal to wait on when the assertion is that nothing happens. It has to outlast
+    // what it is proving nothing fires after — every lookup this form issues goes through one
+    // debounced effect at `LOOKUP_PAUSE_MS`, 400 ms — or the obvious regression, routing the link
+    // through `resolvePlace` on that same pause, would fire at 400 ms and be read at 150. The
+    // counter is live rather than stuck: `callsBeforeLink` is already above zero by this point and
+    // the checks after this one drive it higher.
+    await page.waitForTimeout(700);
     record(
       tag +
         " Pass 4: the map link is kept as the host typed it, with its hint, and no lookup of any kind follows it (815, 816)",

@@ -295,6 +295,11 @@ export function ConvenePlate(props: ConvenePlateProps) {
         )}
         {hostPoint && (
           <span
+            data-convene="host-point"
+            // The fraction, readable rather than parsed out of a style string. It is a position on
+            // a plate and not a coordinate; see this file's header and gap G43.
+            data-pin-x={hostPoint.x.toFixed(3)}
+            data-pin-y={hostPoint.y.toFixed(3)}
             style={{
               position: "absolute",
               left: hostPoint.x * 100 + "%",
