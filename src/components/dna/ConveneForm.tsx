@@ -72,6 +72,11 @@ type Lookup =
 
 const LOOKUP_PAUSE_MS = 400;
 const MIN_QUERY = 3;
+// 815: the cap `publish_post` and `event_delivery`'s own constraint both carry. It is here as well
+// because a door that holds one of the function's three refusals and not the others still sends the
+// member to meet the other two after the Publish, which is the thing the door exists to prevent.
+// A Google Maps directions URL in its encoded form runs long enough for this to be reachable.
+const MAP_LINK_MAX = 2048;
 
 const CAPS = {
   fontSize: 13,
@@ -272,7 +277,7 @@ export function ConveneForm({
   // 815: optional, and refused at publish when it is not a link. The form says so where the member
   // can still fix it, in the same words and the same shape the meeting link already uses.
   const mapLink = v("map_link").trim();
-  const mapLinkOk = !mapLink || isUrl(mapLink);
+  const mapLinkOk = !mapLink || (isUrl(mapLink) && mapLink.length <= MAP_LINK_MAX);
   // The line reads only where the host chose (821); a country with one zone says nothing at all.
   const tzFromChoice = needsZoneChoice && !!zoneFromCountry;
 
@@ -438,6 +443,10 @@ export function ConveneForm({
     setField("lng", String(p.lng));
     setField("lat", String(p.lat));
     setField("place_tz", p.timezone);
+    // A venue that resolves in this country is the map holding a venue record for it, so the
+    // grounds for the coverage claim are gone. Without this the panel would tell a host that the
+    // map holds no venues for Ghana immediately after finding one there.
+    setNoVenues(null);
     setLookup({ state: "idle" });
   };
   const unpick = () => {
@@ -577,6 +586,7 @@ export function ConveneForm({
       hint?: ReactNode;
       type?: string;
       inputMode?: "url" | "numeric";
+      maxLength?: number;
     } = {},
   ) => (
     <Input
@@ -589,6 +599,7 @@ export function ConveneForm({
       hint={extra.hint}
       type={extra.type}
       inputMode={extra.inputMode}
+      maxLength={extra.maxLength}
     />
   );
   const seg = (key: string, label: string, opts: [string, string][]) => (
@@ -831,9 +842,17 @@ export function ConveneForm({
     placeholder: "Paste a link to a map",
     type: "url",
     inputMode: "url",
-    hint: mapLinkOk
-      ? "Optional. It opens in the app you took it from. DNA keeps it as a link and never reads it."
-      : "A link starts with http:// or https://",
+    // The field cannot hold more than the column will, so the cap is reached by pasting rather than
+    // by publishing. The length clause below still stands, because a draft saved before this cap
+    // existed can restore a longer value, and the sentence is `publish_post`'s own refusal rather
+    // than a new one invented in a code session.
+    maxLength: MAP_LINK_MAX,
+    hint:
+      mapLink && !isUrl(mapLink)
+        ? "A link starts with http:// or https://"
+        : mapLink.length > MAP_LINK_MAX
+          ? "That map link is too long to keep."
+          : "Optional. It opens in the app you took it from. DNA keeps it as a link and never reads it.",
   });
   const plate = (
     <ConvenePlate

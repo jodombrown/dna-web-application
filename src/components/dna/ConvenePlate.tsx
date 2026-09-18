@@ -183,6 +183,21 @@ function actFor(p: ConvenePlateProps): string {
 
 const clamp = (n: number) => (n < 0 ? 0 : n > 1 ? 1 : n);
 
+// Where the act drops a point that has none yet. The plate carries no projection, so neither
+// position means anything and choosing between them is not geography: it is legibility. With the
+// map's own mark already at the centre, dropping the host's there paints an 18px copper ring over a
+// 10px ink dot and hides it, while the instruction beside it names both — so the host's lands clear
+// of it instead, and "they never read the same" survives the state that puts them together.
+const firstPoint = (mapPoint: boolean): HostPoint =>
+  mapPoint ? { x: 0.68, y: 0.38 } : { x: 0.5, y: 0.5 };
+
+const NUDGE: Record<string, [number, number]> = {
+  ArrowLeft: [-1, 0],
+  ArrowRight: [1, 0],
+  ArrowUp: [0, -1],
+  ArrowDown: [0, 1],
+};
+
 export function ConvenePlate(props: ConvenePlateProps) {
   const { areaName, mapPoint, hostPoint, dragging, onPlace, onDragging } = props;
   const plate = useRef<HTMLDivElement>(null);
@@ -207,7 +222,19 @@ export function ConvenePlate(props: ConvenePlateProps) {
         ref={plate}
         data-convene="plate-grid"
         role="group"
-        aria-label="Where the venue is on the map"
+        tabIndex={0}
+        // A pointer is not the only way to put a point on a plate. The arrows move it, Shift makes
+        // the step fine, and the act beside the plate is what brings focus here — without this the
+        // act read `Move the pin` and moved nothing, which is worse than no control at all.
+        aria-label="Where the venue is on the map. Arrow keys move the point, Shift for a finer step."
+        onKeyDown={(e) => {
+          const d = NUDGE[e.key];
+          if (!d) return;
+          e.preventDefault();
+          const step = e.shiftKey ? 0.01 : 0.05;
+          const base = hostPoint ?? firstPoint(mapPoint);
+          onPlace({ x: clamp(base.x + d[0]! * step), y: clamp(base.y + d[1]! * step) });
+        }}
         style={GRID}
         onPointerDown={(e) => {
           const p = pointAt(e.clientX, e.clientY);
@@ -300,7 +327,10 @@ export function ConvenePlate(props: ConvenePlateProps) {
         size="sm"
         data-convene="pin-act"
         style={{ alignSelf: "flex-start" }}
-        onClick={() => onPlace(hostPoint ?? { x: 0.5, y: 0.5 })}
+        onClick={() => {
+          if (!hostPoint) onPlace(firstPoint(mapPoint));
+          plate.current?.focus();
+        }}
       >
         {actFor(props)}
       </Button>

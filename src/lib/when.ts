@@ -350,7 +350,10 @@ export function whenLine(t: EventTiming, viewerTz: string, now = new Date()): st
   const eventTz = knownZone(t.timezone) ? t.timezone : null;
   if (isPast(t, now)) {
     const tz = eventTz ?? (knownZone(viewerTz) ? viewerTz : "UTC");
-    return "Happened " + localLine(t.starts_at, tz);
+    // The injected clock, here too: without it 835's year is decided against the real wall clock
+    // while the rest of the line is decided against `now`, so one call could put the year on a
+    // past event and leave it off a future one in the same render.
+    return "Happened " + localLine(t.starts_at, tz, true, now);
   }
   const vtz = knownZone(viewerTz) ? viewerTz : (eventTz ?? "UTC");
   let line = dateLine(d, vtz, now) + ", " + timeInZone(d, vtz) + " " + vtz;
