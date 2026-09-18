@@ -1,19 +1,28 @@
 // Design pass 01, strand-patch/LensBar.jsx (rulings 405, 488; supersedes the B2-Shell-Feed-v3
 // patch). Icon-first control that switches the corpus of a list surface.
 // Track: --bg-sunken, --radius-m, 4 padding, 44 tall at every tier, compact included (W35),
-// bounded left and right. The active tab carries the --surface chip itself (--radius-badge,
-// --shadow-1), so the indicator is painted on the first frame and on every resize and cannot be
-// missing (W34, ruling 488); the measured absolute chip that used to be the only indicator is gone,
-// and nothing about the indicator depends on a layout read any more. Inactive lenses are bare icons
-// sharing the remaining width (icon only below expanded, icon plus label at expanded via `labels`).
-// The explainer collapse is latched for the visit (405): the first scroll the host reports collapses
-// the descriptor and it stays collapsed; tapping the active lens brings it back, and that tap does
-// not unlatch the scroll rule. Tabs resolve to --target-min (ruling 498). Active icon
-// carries the surface's C brand rung (`c`); Feed is not a C, so --ink. Descriptor: sans italic,
-// --ink-3, 12 below the track; collapses (max-height) when `collapsed` flips true, latched; tapping
-// the active lens toggles it back. Disabled lenses keep their seat (dashed hairline). Accessible
-// name "{label}: {scope}". Light haptic on accepted taps. `compact`: header slot, no descriptor,
-// inactive lenses min 32. `dense`: the active lens shows its name in place of its icon.
+// bounded left and right. The 44 is the track's own height and not the seat's: each tab inside it
+// is height 36 with minHeight --target-min, which `src/styles/strand.css` sets to 24px. The active
+// tab carries the --surface chip itself (--radius-badge, --shadow-1), so the indicator is painted
+// on the first frame and on every resize and cannot be missing (W34, ruling 488); the measured
+// absolute chip that used to be the only indicator is gone, and nothing about the indicator depends
+// on a layout read any more. Inactive lenses are bare icons sharing the remaining width (icon only
+// below expanded, icon plus label at expanded via `labels`). The explainer collapse is latched for
+// the visit (405): the first scroll the host reports collapses the descriptor and it stays
+// collapsed; tapping the active lens brings it back, and that tap does not unlatch the scroll rule.
+// Tabs resolve to --target-min (ruling 498): minHeight always, and minWidth only under `compact`,
+// which is 44 otherwise. Active icon carries the surface's C brand rung (`c`); Feed is not a C, so
+// --ink, and the active label is --ink on the --surface chip rather than any C rung. Descriptor:
+// sans italic, --ink-3, 12 below the track; collapses (max-height) when `collapsed` flips true,
+// latched; tapping the active lens toggles it back. Disabled lenses keep their seat (dashed
+// hairline). Accessible name "{label}: {scope}". Light haptic on accepted taps. `compact`: header
+// slot, no descriptor, inactive lenses minWidth --target-min, which is 24 and not 32. `dense`: the
+// active lens shows its name in place of its icon, and nothing else moves — the icon is suppressed
+// on the active lens only, every other lens keeps its icon, every lens still renders as a tab, the
+// tablist and the labels-fit switch below are untouched, and the active tab's side padding tightens
+// to 0 10px. Its only caller is `AppHeader`. Ruling 905 takes the seat to 44; the mechanism is
+// pending Design, which chooses between a 52px track and a zero-padding 44px track, and nothing
+// here implements it.
 // Correction 14 (ruling 723, re-synced at compile v1789537371639386): labels-fit. The bar measures
 // whether every lens label fits the track at once; when it does, every lens renders its label; when
 // it does not, the bar renders icon-first: the active lens its icon and label, every other lens its

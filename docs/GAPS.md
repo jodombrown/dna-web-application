@@ -2172,6 +2172,58 @@ declared count is unchanged, so a real regression still fails exactly as before.
 against `wrangler pages dev` on Chromium at 96 of 96 for the four Convene arms; WebKit is not
 installed in that environment, so the engine the sighting came from is proven only by CI.
 
+**Seventh sighting, 18 September 2026: the sixth's twin, in the arm the fix did not reach.** Pages run
+265 on `a11529f` (PR 48, Handoff 26-A, a doc-and-comment-only head), `matrix (webkit)`, first attempt,
+at `webkit-1280x800-dark-convene`: `and the zone the host chooses opens the door and reads from the
+country (821)`, 5064 of 5065, no crash, and the run's classifier reads `1 unclassified` because this
+is neither a G5 crash nor ruling 357's aborted fetch. The one crashed arm in that job,
+`webkit-390x844-light-block-flow`, is separate and was correctly reported UNPROVEN and excluded under
+rulings 228 and 832; one crashed arm does not fail the job, and this check is what did.
+
+The 821 gate is asserted in **two** arms, not one. Ruling 821's own commit, `e3392e5`, wrote both: the
+new `-convene-zone` arm's and the existing `-convene` arm's, the second being the "wrong country"
+check extended to assert the gate and then open it the way a host would. The sixth sighting fixed
+`runConveneZone`'s instance and left this one, still as `e3392e5` wrote it, at
+`tests/matrix.cjs:2817` to `2824` (`git blame` on those lines names that commit):
+
+```js
+await dialog
+  .locator('select[data-convene="country-tz"]')
+  .selectOption("America/New_York", { timeout: 5000 });
+record(
+  tag + " and the zone the host chooses opens the door and reads from the country (821)",
+  (await dialog.locator('[data-convene="country-tz-line"]').textContent()) ===
+    "Time zone America/New_York, from the country." && !(await pub().isDisabled()),
+);
+```
+
+Byte for byte the shape the sixth sighting names: the `{ timeout: 5000 }` bounds how long
+`selectOption` waits for the control, not how long React takes to re-render the line and re-evaluate
+the door, so the two signals are read on the next tick with no wait at all. The fix went into the arm
+the failure was seen in and the twin was left, which is why this entry now has the same defect in it
+twice and why the sighting is recorded rather than folded into the sixth.
+
+**The app was not wrong here either, and this run proves it the same way.** The check's detail is
+empty, so the assertion's boolean was false rather than a locator throwing. Every other check in that
+arm passed, including the Ghana check immediately after it, which reads a resolved row and its zone
+from the same form, and the tier line reports `expanded: 76 arms | 75 with no failing check | 1 with
+at least one`, so this arm's single failure is this check. The same run's `deploy`, `live` and
+`matrix (chromium)` were all green on that head, and the head is a doc-and-comment diff that reaches
+no test and no surface, so nothing in it could reach this arm.
+
+**Not fixed here, and the patch is named so the next code session applies it in one step.** PR 48 is
+doc, comment and register only under ruling 759's handoff, so a harness change is outside its scope
+and is not smuggled in under a green-CI argument. The patch is the sixth sighting's, moved: the same
+in-page poll on the same two signals, its own bail and its own sentence, inserted between the
+`selectOption` at `:2819` and the `record` at `:2820`, with the assertion and the arm's declared count
+left alone so `tests/expected-counts.json` stays untouched (ruling 292). Nothing else in the file has
+earned it: the remaining fixed wait in the Convene arm is `waitForTimeout(150)` and it has still not
+been seen to fail.
+
+No re-run was spent on this. The push that carried this entry superseded run 265 and started a fresh
+run on the new head, which re-runs `matrix (webkit)` as a consequence of the commit rather than as a
+re-run of the job, so the head's one re-run under ruling 304 remains unspent.
+
 **Ruling 304, demonstrated again.** Run 261's two attempts on a byte-identical head failed one check
 each, in two different arms at two different widths, with **zero overlap**. That is 304's finding
 exactly: on this engine a re-run cannot confirm a WebKit failure by reproduction, so the single re-run
@@ -2284,7 +2336,9 @@ its set ever loses an icon it fails the same way, silently, until a check reads 
 ## G37. With the fit test corrected, the medium tier reads icon-first for a 3px shortfall that `main` hid inside a label's padding
 
 **Severity: low, a Design decision rather than a defect. Opened 17 September 2026 during Session 23 on
-PR 45, filed under ruling 597. The number is assigned by this entry (ruling 638).**
+PR 45, filed under ruling 597. The number is assigned by this entry (ruling 638). Explained on 18
+September 2026 under ruling 902 and its closure condition corrected under ruling 903, in Session 26's
+doc-only PR; the reading that closes it is owed and is recorded as owed below.**
 
 **What was measured.** The G36 fix's shell check, run on Chromium against `wrangler pages dev dist` of
 `458e285` and of `main` at `1eb7ab8`, at the same widths:
@@ -2308,6 +2362,79 @@ pixel wider), 1px less side padding on inactive tabs (8 becomes 7, saving 8px, a
 5px to spare), or a wider column at the medium tier. The founder owns the lens bar; the choice goes to
 Design with these numbers.
 
+**Why the two fit tests disagreed (ruling 902).** The disagreement is structural, it is in the side
+padding, and it is neither in the labels nor in the column. Strand prices a tab by formula: active at
+`W + 32` and inactive at `W + 30`, from `PAD_ON 16` and `PAD_OFF 15`. This repo does not price a tab;
+it measures one. `src/components/strand/LensBar.tsx:106` to `117` reads a hidden probe through
+`getBoundingClientRect()` and needs `8 + others * 2 + activeMax + others * inactiveMax`, where the
+probe tab renders at `padding: 0 14px` active and `0 8px` inactive (line 209), `fontSize: 15` (210),
+`gap: 8` beside a 20px icon box (208, 217). The leading 8 is the track's own `padding: 4` and the 2 is
+its `gap: 2` (lines 235, 236); both are identical in the two formulas, so both cancel.
+
+The side padding does not cancel. Against `W`, the content inside the padding, Strand asks 32 on an
+active tab where this repo asks 28, and 30 on an inactive tab where this repo asks 16. On the Feed's
+five lenses, one active and four inactive, that is `5W + 168` against `5W + 108`: a structural 60px,
+Strand higher, before a label is measured and before any column enters. It is the dominant term of the
+91px the two tests disagreed by, and the 2px the G37 question was about is inside it.
+
+**A correction to that arithmetic, read in the tree.** `W + 28` and `W + 16` are the padding alone.
+The probe tab also carries `border: "1px solid transparent"` under `boxSizing: "border-box"`
+(`LensBar.tsx:212`, `213`), and `getBoundingClientRect()` returns the border box, so what this repo
+measures is `W + 30` active and `W + 18` inactive and its five-lens price is `5W + 118`, not
+`5W + 108`. The 60px therefore holds only if Strand's own tabs carry the same 1px border that its
+formula omits, in which case the term cancels on both sides; against Strand's formula exactly as
+written the structural difference is 50px. Which of the two is right cannot be settled from here,
+because ruling 663 keeps Strand's source out of this repo. It changes nothing about the finding: the
+term is structural, it is fixed before any label or column width enters, and it is the dominant one
+either way.
+
+**Strand's candidate cause, the column term, is refuted.** The difference above is in what each test
+charges for a tab. It is the same number at every track width, so it is present whatever column either
+test is run against, and a column term cannot explain a constant. Strand could not test this itself:
+663 keeps this repo's shell out of Strand, so the column it would have had to measure is here and not
+there. The tracks this repo measured are in the table above: 358 at 390, 616 at 744 and 1024, and
+760 at 1280.
+
+**Strand's own rejection of the icon term was right, and for the right reason.** The icon is a 20px
+box with an 8px gap beside it (`LensBar.tsx:208`, `217`), so 28px per tab and 140px across five
+lenses. That overshoots the 91px it would have to account for, and a term larger than the whole
+disagreement cannot be the disagreement.
+
+**What the G37 question actually was.** Porting `PAD_OFF 15` against this repo's 8, framed as 15px
+against 16px, is 2px per tab, one pixel a side. It was sitting inside a 12px-per-tab difference on the
+same inactive tab. The question was real and it was six times smaller than the difference it sat
+inside.
+
+**The closure condition, corrected (ruling 903).** This repo keeps `0 14px` active and `0 8px`
+inactive, and Strand's fit test is corrected to price them, so G37 no longer closes on a 15px port.
+Nor does it close on either of the other two choices above; 903 settles the question they were raised
+against. It closes on the deployed Feed at the medium tier reading labels, read on the deployed URL
+and on no fixture, because `wrangler pages dev dist` is not the environment ruling 61's exit criterion
+names.
+
+**The reading is still owed.** Session 26's PR was to take that reading and record it here, and it
+could not. This session's egress policy denied `CONNECT` with a 403 to
+`dna-web-application.pages.dev`, to `main.dna-web-application.pages.dev` and to
+`app.diasporanetwork.africa`, and to the Actions artifact host
+(`productionresultssa19.blob.core.windows.net`) that carries `matrix-out/results.json`. Ruling 371's
+clause is what was applied: stop and report, never route around a block through another tool.
+
+Two in-policy channels were checked first and neither carries the answer. The CI instrument does read
+the mode on the deployed URL: `tests/matrix.cjs:3811` to `3830` records `data-lensbar` with the track
+width, the overflow list and the probe's own measurements for every shell arm, and 820 by 1180 is one
+of them. But `record()` prints a check's detail only when the check fails (`tests/matrix.cjs:1725`),
+so on a green run that JSON reaches `results.json` inside the artifact and never the job log. And no
+other arm encodes the mode in its pass or its failure: the width arm's lens check counts five tabs and
+reads which one is selected (`tests/matrix.cjs:2254` to `2260`) and asserts nothing about labels.
+
+So this entry does not say what the medium tier shows, because this session did not see it. The
+arithmetic above is why the port was refused; it is not evidence about the deployed surface, and it is
+deliberately not read as a prediction of one. G37 stays open. One step closes it: the founder reading
+the deployed Feed at 820 in a browser, or the `chromium-820x1180-shell lens bar` record inside a
+`matrix-chromium-run-<n>` artifact, whose detail carries `mode`, `track`, `overflowing` and the probe
+widths for that run's own deployed preview. `main` at `3a6bd94` has one already, artifact
+`matrix-chromium-run-263` of run
+[35360154318](https://github.com/jodombrown/dna-web-application/actions/runs/35360154318).
 **Not this gap's scope.** The compact tier is the founder's screenshot and reads icon-first correctly;
 the expanded tier fits with 141px to spare.
 
@@ -2431,3 +2558,133 @@ decision, not this session's.
 
 **Not this gap's scope.** The `Time zone {zone}, from the country.` line under the control and the
 `Time zone GMT, from the place.` line under a resolved row are both ratified and correct as built.
+
+## G41. The C brand rung is painted under small text on five surfaces, and the worst of them bypasses the ink rung written to prevent exactly that
+
+**Severity: high for Contribute, medium for Collaborate and Convene, light theme only; Convey is the
+one dark-theme case. Not a merge blocker, and not a ruling 140 finding: this is rule 10's AA target
+(610 per 480), not visibility, RLS or consent. Opened 18 September 2026 during Session 26's doc-only
+PR, filed under ruling 597, and carrying ruling 874's contrast read, which has never had a G number
+because Strand keeps no Gap register and 638 assigns the number by the entry that is written. The
+number is assigned by this entry (ruling 638).**
+
+**The read (ruling 874).** A 15px label on Collaborate teal, `--c-collaborate: #30909C`, fails rule
+10's AA target for text below 18.66px bold or 24px regular. `src/styles/strand.css:142` carries the
+same read on the same colour, in its own comment: `--c-collaborate-ink: #ffffff; /* 3.9:1, large text
+and icons only on teal fills */`. Strand's `tokens/colors.css` carries it identically. The read is
+right and this entry is not a rebuttal of it; what follows is where it lands in this repo.
+
+**The 3.9:1 does not reproduce. 3.75:1 does, and nothing the annotation concludes moves.** White on
+`#30909C` is 3.75:1 by the WCAG 2 relative-luminance formula, not 3.9:1, computed on the sRGB
+coefficients with the 0.05 offsets. Both numbers fail 4.5:1 and both clear the 3:1 floor for large
+text and non-text, so the annotation's conclusion stands exactly as written. It is recorded because a
+number sitting in a token comment is the number the next reader quotes, and because ruling 891 asks
+that a claim about a measurement be verified before it is restated.
+
+**The mitigation is real, and it is the three-rung contract rather than a per-component habit.**
+`src/styles/strand.css:130` states it: brand (`--c-<c>`) is for fills, glyphs and the 3px accent
+stroke, locked hex, never used as small text; `text` is the contrast-safe rung, AA as text on `--bg`;
+`tint` is the wash behind badges and chips. The text rung holds by construction on the light ground:
+Connect `#1E5A3C` 7.61:1, Convey 8.17:1, Convene 6.40:1, Collaborate 5.96:1, Contribute 5.52:1, all
+on `--bg: #FAF7F2`. `LensBar` follows it: the active lens takes the brand rung on its **icon** only
+(`src/components/strand/LensBar.tsx:155`, `299`), its label is `--ink`, and the pill under both is
+`--surface`. So a surface that follows the contract cannot reach the read at all.
+
+**What was still open was whether any surface paints small text on a C rung anyway. Five do.**
+Measured light-theme ratios, one row per pairing:
+
+| Pairing                                          | Connect | Convene  | Collaborate | Contribute | Convey |
+| ------------------------------------------------ | ------- | -------- | ----------- | ---------- | ------ |
+| `--on-fill` `#FFFFFF` on `--c-<c>`               | 6.39    | **3.79** | **3.75**    | **2.10**   | 8.73   |
+| `--c-<c>-ink` on `--c-<c>` (the rung as written) | 6.39    | **3.79** | **3.75**    | 8.29       | 8.73   |
+| `--c-<c>` as text on `--c-<c>-tint`              | 5.42    | **3.19** | **3.17**    | **1.84**   | 6.97   |
+| `--c-<c>` as text on `--surface` `#FFFFFF`       | 6.39    | **3.79** | **3.75**    | **2.10**   | 8.73   |
+| `--c-<c>` as text on `--bg` `#FAF7F2`            | 5.98    | **3.55** | **3.51**    | **1.97**   | 8.17   |
+
+- `src/components/strand/Composer.tsx:1166` to `1175`, Publish. 17px, weight 500, `--on-fill` on the
+  active verb's fill through `Button`'s primary variant (`src/components/strand/Button.tsx:29`, `47`).
+  The verb is whatever the member is composing, so Contribute reads 2.10:1 and Collaborate 3.75:1.
+- `src/components/dna/PostCardRouter.tsx:101`, the post's own act in its own C (rule 3). 15px, weight
+  500, the same pairing. `src/components/strand/verb-schema.ts` gives an action to Collaborate ("Join
+  the Space"), Contribute ("Offer to help") and Convey ("Read the story"), and none to Convene, so two
+  of the three rendered are below the target and one of those is below the 3:1 floor as well.
+- `src/components/strand/VerbChip.tsx:66` to `71`, the composer's verb row, selected state. 15px,
+  weight 500, the brand rung as text on its own tint. This is the case the contract line names in so
+  many words. Dark theme is not clean here either: Convey reads 3.57:1.
+- `src/components/strand/CBadge.tsx:49` to `53`, the badge's optional label below 48px. 13px, weight
+  500, uppercase, the brand rung on the tint, the same column as the row above.
+- `src/components/strand/SectionCard.tsx:133`, the empty section's act on the owner's own profile.
+  15px, weight 500, `variant="secondary"`, whose label colour is the bare brand rung
+  (`src/components/strand/Button.tsx:50`; `ghost` is the same at `53`), on the card's `--surface`
+  ground (`SectionCard.tsx:90`). Its `c` runs over `ProfileSurface.tsx:122` to `127`'s four activity
+  Cs through `:1681`, `:1691` and `:1700`, so Contribute's "Post or fulfil a Need" reads 2.10:1,
+  Collaborate's 3.75:1 and Convene's 3.79:1, and only Convey clears the target. The first and fourth
+  rows of the table carry the same numbers because `--on-fill` and `--surface` are both `#FFFFFF` on
+  the light theme: it is one pair read from both sides, once as ink on a fill and once as a fill
+  under ink.
+
+**The worst of it bypasses the rung that exists to stop it, and one component carries both halves.**
+`Button` is in three of the five: its `primary` variant paints the fill and its `secondary` and
+`ghost` variants paint the label in the bare rung, off the same `cVar` at `Button.tsx:5`. And it never
+reads a `-ink` token: `primary` and `danger` both set `color: "var(--on-fill)"`, a flat `#FFFFFF` in
+light theme. So `--c-contribute-ink: var(--ink)` at `src/styles/strand.css:146`, whose comment says
+gold is too light for white ink, is inert on every primary button, and the Publish button on a
+Contribute post is
+white on `#D4AF37` at 2.10:1 — under the 3:1 floor that even an icon has to clear. `Chip.tsx:19` is
+the one place in the tree that reads a `-ink` rung, and no caller passes it a `c`, so the one correct
+consumer of the rung renders nowhere. Dark theme escapes all of this by coincidence rather than by
+design: `--on-fill` there is `#141412`, which is the value every dark `-ink` rung already holds, and
+its ratios clear 4.5:1 for four Cs and reach 4.22:1 for Convey.
+
+**Why no gate caught it.** `scripts/token-check.mjs` proves that every token a surface cites resolves
+in both themes (ruling 485); it is static, it reads declarations against citations, and it has no
+opinion about what a pairing measures. Nothing in the harness reads contrast at all, which is why
+874's read had nowhere to land until this entry.
+
+**Why nothing is changed here.** Session 26's PR is doc, comment and register only under ruling 903's
+re-sync, and every remedy is a colour decision the founder and Design own, not a code session's:
+`Button`'s primary could read `--c-<c>-ink` instead of `--on-fill`, which fixes Contribute and leaves
+Collaborate and Convene where they are; the Collaborate and Convene fills could darken, which is a
+D092 change and a brand one; or the small-text-on-brand pairings could be moved to the text rung on a
+tint. The first is the narrowest and it is still a rendered-pixel change on every primary button in
+the app.
+
+**Not this gap's scope.** The text rung, which is AA on the ground for all five Cs and is what almost
+every surface uses. `CBadge`'s glyph and `AppShell`'s compose tab, which paint the brand rung and the
+ink rung on graphics rather than text (`src/components/dna/AppShell.tsx:445`, `446`). The dark theme,
+except for the two Convey readings named above. And the 3px accent stroke and every border and frame
+that takes the brand rung, none of which is text.
+
+## G42. Four C tokens are declared and read by nothing, and the system category's colours are written inline instead
+
+**Severity: low, tidiness with one real consequence. Not a merge blocker. Opened 18 September 2026
+during Session 26's doc-only PR, as a follow-up found while sweeping the C rungs for G41, filed under
+ruling 597. The number is assigned by this entry (ruling 638).**
+
+**What it is.** `src/styles/strand.css` declares `--c-stroke` (`:151`) and the system category's three
+rungs, `--c-system`, `--c-system-tint` and `--c-system-ink` (`:153` to `:155`). No surface reads any
+of the four: `var(--c-stroke)`, `var(--c-system)`, `var(--c-system-tint)` and `var(--c-system-ink)`
+return nothing across `src/` and `public/`. `--c-stroke` is the 3px accent stroke width the token
+block's own contract line names, and every border that draws it writes its own width.
+
+The consequence is in the system category, and it is not only duplication.
+`src/components/strand/PostCard.tsx:118` and `:119` handle a post DIA could not type by branching on
+`c === "system"` and writing two literals inline. The frame agrees with the token by accident:
+`"var(--line-strong)"` is exactly what `--c-system` holds. The label does not: the card writes
+`"var(--ink-3)"`, `#77736C`, where `--c-system-ink` is `var(--ink)`, `#1A1A18`. So the declared
+palette and the shipped card disagree about the system category's text colour, and the token is the
+one nothing renders. The next surface that draws a system post either writes the same two literals or
+reads the tokens, and gets a different colour depending on which it picks.
+
+**Why no gate caught it.** `scripts/token-check.mjs` reads declarations against citations to prove
+every cited token resolves (ruling 485). It is deliberately one-directional: a token declared and
+never cited is not a broken reference and the check has nothing to say about it.
+
+**Why it is not fixed here.** Session 26's PR is doc, comment and register only under ruling 903's
+re-sync, and pointing `PostCard` at the tokens changes a rendered value's provenance even where the
+resolved colour is identical, which is the one thing this PR may not do. It is a small change and it
+should ride the next PR that touches the card.
+
+**Not this gap's scope.** Whether `--c-stroke` should exist at all, which is a D092 question. The
+`-ink` rung, which has a consumer (`src/components/strand/Chip.tsx:19`) even though no caller reaches
+it today; that is G41's.
