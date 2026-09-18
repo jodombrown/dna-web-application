@@ -2211,14 +2211,22 @@ at least one`, so this arm's single failure is this check. The same run's `deplo
 `matrix (chromium)` were all green on that head, and the head is a doc-and-comment diff that reaches
 no test and no surface, so nothing in it could reach this arm.
 
-**Not fixed here, and the patch is named so the next code session applies it in one step.** PR 48 is
-doc, comment and register only under ruling 759's handoff, so a harness change is outside its scope
-and is not smuggled in under a green-CI argument. The patch is the sixth sighting's, moved: the same
-in-page poll on the same two signals, its own bail and its own sentence, inserted between the
-`selectOption` at `:2819` and the `record` at `:2820`, with the assertion and the arm's declared count
-left alone so `tests/expected-counts.json` stays untouched (ruling 292). Nothing else in the file has
-earned it: the remaining fixed wait in the Convene arm is `waitForTimeout(150)` and it has still not
-been seen to fail.
+**Not fixed there, and the patch was named so the next code session applies it in one step.** PR 48
+is doc, comment and register only under ruling 759's handoff, so a harness change was outside its
+scope and was not smuggled in under a green-CI argument. The patch is the sixth sighting's, moved:
+the same in-page poll on the same two signals, its own bail and its own sentence, inserted between
+the `selectOption` at `:2819` and the `record` at `:2820`, with the assertion and the arm's declared
+count left alone so `tests/expected-counts.json` stays untouched (ruling 292). Nothing else in the
+file has earned it: the remaining fixed wait in the Convene arm is `waitForTimeout(150)` and it has
+still not been seen to fail.
+
+**Fixed, 18 September 2026, as Convene Pass 4's first commit.** The named patch is in, byte for byte
+the sixth sighting's shape, and it is this build's first commit rather than a PR of its own so that
+Pass 4's own enforcing run is not a coin flip on the one check that has been red on a head that could
+not have caused it. `record()` calls in the file: 170 before, 170 after, so
+`tests/expected-counts.json` is untouched and a real regression still fails exactly as before. Both
+instances of the 821 gate now wait on the state they assert, which is what the sixth sighting should
+have carried and what left this entry with the same defect in it twice.
 
 No re-run was spent on this. The push that carried this entry superseded run 265 and started a fresh
 run on the new head, which re-runs `matrix (webkit)` as a consequence of the commit rather than as a

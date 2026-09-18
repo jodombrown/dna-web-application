@@ -2817,6 +2817,37 @@ async function runConvene(browserType, bname, [w, h], theme) {
     await dialog
       .locator('select[data-convene="country-tz"]')
       .selectOption("America/New_York", { timeout: 5000 });
+    // G34's seventh sighting: the sixth's twin, in the arm the fix did not reach. `selectOption`'s
+    // `{ timeout: 5000 }` bounds how long it waits for the control, not how long React takes to
+    // re-render the line and re-evaluate the door, so the two signals below were read on the next
+    // tick with no wait at all. Seen red at `webkit-1280x800-dark-convene` on run 265, on a
+    // doc-and-comment-only head that reaches no surface. The wait is the sixth sighting's, moved:
+    // the same in-page poll on the same two signals, its own bail and its own sentence. The
+    // assertion and the arm's declared count are unchanged (ruling 292).
+    await dialog.evaluate(
+      (root) =>
+        new Promise((resolve, reject) => {
+          const want = "Time zone America/New_York, from the country.";
+          const done = () => {
+            const line = root.querySelector('[data-convene="country-tz-line"]');
+            const publish = [...root.querySelectorAll("button")].find((b) =>
+              /^Publish/.test(b.textContent || ""),
+            );
+            return !!line && line.textContent === want && !!publish && !publish.disabled;
+          };
+          if (done()) return resolve();
+          const t = setInterval(() => {
+            if (!done()) return;
+            clearInterval(t);
+            clearTimeout(bail);
+            resolve();
+          }, 50);
+          const bail = setTimeout(() => {
+            clearInterval(t);
+            reject(new Error("the zone line and the door never settled on the chosen zone"));
+          }, 10000);
+        }),
+    );
     record(
       tag + " and the zone the host chooses opens the door and reads from the country (821)",
       (await dialog.locator('[data-convene="country-tz-line"]').textContent()) ===
