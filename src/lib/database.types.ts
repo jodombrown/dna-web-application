@@ -1,5 +1,12 @@
 // Generated from the canonical Supabase project (dgspjevjoblujcoljvkn) after the B4 migrations.
 // Regenerate with the Supabase MCP generate_typescript_types tool or `supabase gen types`.
+//
+// `event_delivery.map_link` (Convene Pass 4, ruling 815) is written here by hand and not by the
+// generator, deliberately. Ruling 225 puts the migration in the tree before it is applied, so at
+// the moment this file is committed the canonical project does not carry the column and a
+// regeneration would take it back out. Hand-matched to
+// `supabase/migrations/20260918120000_p4_convene_map_link.sql`; the next regeneration after the
+// founder's `db push` produces the same three lines.
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
 
 export type Database = {
@@ -221,6 +228,7 @@ export type Database = {
           kind: Database["public"]["Enums"]["delivery_kind"];
           lat: number | null;
           lng: number | null;
+          map_link: string | null;
           place_id: string | null;
           place_name: string | null;
           place_text: string | null;
@@ -237,6 +245,7 @@ export type Database = {
           kind: Database["public"]["Enums"]["delivery_kind"];
           lat?: number | null;
           lng?: number | null;
+          map_link?: string | null;
           place_id?: string | null;
           place_name?: string | null;
           place_text?: string | null;
@@ -253,6 +262,7 @@ export type Database = {
           kind?: Database["public"]["Enums"]["delivery_kind"];
           lat?: number | null;
           lng?: number | null;
+          map_link?: string | null;
           place_id?: string | null;
           place_name?: string | null;
           place_text?: string | null;

@@ -25,7 +25,19 @@ export function LeftRail({ member }: { member: Member }) {
         {data?.events.map((e) => (
           <div key={e.id} style={{ ...row, display: "flex", flexDirection: "column", gap: 2 }}>
             <span style={{ fontSize: 15, fontWeight: 500, lineHeight: 1.35 }}>{e.title}</span>
-            {e.when && <span style={{ fontSize: 13, color: "var(--ink-3)" }}>{e.when}</span>}
+            {/* P4-SPEC section 2: the host's words as they wrote them, then the instant they were
+                stored as, in the event's own zone. The echo is never rewritten into the line
+                beneath it. */}
+            {e.when && (
+              <span data-rail="event-words" style={{ fontSize: 13, color: "var(--ink-3)" }}>
+                {e.when}
+              </span>
+            )}
+            {e.stored && (
+              <span data-rail="event-stored" style={{ fontSize: 13, color: "var(--ink-3)" }}>
+                {e.stored}
+              </span>
+            )}
           </div>
         ))}
       </RailWidget>
