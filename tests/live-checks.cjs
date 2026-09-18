@@ -353,6 +353,406 @@ async function get(url, headers = {}) {
       );
       if (!ownerToken || !memberToken)
         skip("ruling 218: every signed-in arm", "sign-in did not return an access token");
+
+      // -------------------------------------------------------------------------------------
+      // Convene Pass 1, PR 2: place-resolve, one check per state and per anchor (the handoff's
+      // four calls, plus Session 23's unavailable state and place anchoring). The function
+      // reaches the project by the founder's deploy from the Supabase dashboard, so a 404 from
+      // the gateway means it is not deployed yet and the arms report unproven (ruling 228), never
+      // passing and never failing on an absence. A 401 without a token is asserted first because
+      // it needs no deployment secret to be true once the function is there.
+      // What these arms cannot prove: a Mapbox outage, a bad token or a timeout on the deployed
+      // function, because breaking the founder's secret is not a test. The transport half of the
+      // unavailable state (a non-200 from the gateway) is proven here as the 400 an invalid
+      // session_token earns, which the client maps to `unavailable`; the function's own
+      // `unavailable` body is proven on the unanchored call it refuses.
+      // -------------------------------------------------------------------------------------
+      if (ownerToken) {
+        const fn = SUPABASE_URL + "/functions/v1/place-resolve";
+        const call = async (body, token) => {
+          const r = await fetch(fn, {
+            method: "POST",
+            headers: {
+              apikey: KEY,
+              ...(token ? { Authorization: "Bearer " + token } : {}),
+              "content-type": "application/json",
+            },
+            body: JSON.stringify(body),
+          });
+          const text = await r.text();
+          let parsed = null;
+          try {
+            parsed = JSON.parse(text);
+          } catch {}
+          return { status: r.status, body: parsed, text, retryAfter: r.headers.get("retry-after") };
+        };
+        const session = "live-" + Date.now().toString(36) + "-arms";
+        const ACCRA = { lng: -0.187, lat: 5.6037 };
+        const NAIROBI = { lng: 36.8219, lat: -1.2921 };
+        // Session 24 (783, 796, 797): the host-set country is the anchor of every lookup and a home
+        // narrows inside it; proximity alone anchors nothing. Every call below carries the country
+        // the form would send.
+        const probe = await call(
+          {
+            action: "suggest",
+            q: "Front Room",
+            session_token: session,
+            country_name: "Ghana",
+            proximity: ACCRA,
+          },
+          ownerToken,
+        );
+        if (probe.status === 404) {
+          skip(
+            "place-resolve: the handoff calls (one, several, none, unavailable, 401)",
+            "function not deployed on the project (gateway 404)",
+          );
+        } else {
+          const noJwt = await call({
+            action: "suggest",
+            q: "Front Room",
+            session_token: session,
+            country_name: "Ghana",
+          });
+          record(
+            "place-resolve: a call without a JWT returns 401",
+            noJwt.status === 401,
+            "status " + noJwt.status,
+          );
+          // A Mapbox answer: one, several or none. `unavailable` here means the deployed function
+          // got no answer, which is a real failure and reads as one.
+          const answered = ["one", "several", "none"];
+          const typed = (r) =>
+            r.status === 200 &&
+            r.body &&
+            answered.includes(r.body.state) &&
+            (r.body.state !== "several" || Array.isArray(r.body.places));
+          const placesOf = (r) =>
+            r.body && r.body.state === "one"
+              ? [r.body.place]
+              : r.body && r.body.state === "several"
+                ? r.body.places
+                : [];
+          const firstOf = (r) =>
+            placesOf(r)
+              .map((p) => p.place_id)
+              .join(",");
+          const brief = (r) => r.status + " " + r.text.slice(0, 60);
+          const inCountry = (r, name) => typed(r) && placesOf(r).every((p) => p.country === name);
+
+          // Proof 1: a country and a home. Front Room in Ghana near Accra is the founder's own case;
+          // in Kenya near Nairobi the same words.
+          const nairobi = await call(
+            {
+              action: "suggest",
+              q: "Front Room",
+              session_token: session,
+              country_name: "Kenya",
+              proximity: NAIROBI,
+            },
+            ownerToken,
+          );
+          const accra = probe;
+          record(
+            "place-resolve: Front Room in Kenya near Nairobi and in Ghana near Accra both answer (one, several or none)",
+            typed(nairobi) && typed(accra),
+            "nairobi " + brief(nairobi) + " | accra " + brief(accra),
+          );
+          // The row: `one` is already retrieved; `several` is retrieved here for its first place, in
+          // the same session, the way the form's pick does. Either way the row carries the point
+          // and the zone. Ghana holds no POI (G35), so the row is taken from the United Kingdom,
+          // which does.
+          const ukList = await call(
+            {
+              action: "suggest",
+              q: "Front Room",
+              session_token: session,
+              country_name: "United Kingdom",
+            },
+            ownerToken,
+          );
+          const first = placesOf(ukList)[0];
+          const row =
+            ukList.body && ukList.body.state === "one"
+              ? ukList
+              : first
+                ? await call(
+                    {
+                      action: "retrieve",
+                      q: "Front Room",
+                      session_token: session,
+                      mapbox_id: first.place_id,
+                    },
+                    ownerToken,
+                  )
+                : null;
+          record(
+            "place-resolve: a resolved row carries the place, the coordinates and the zone (proof 1)",
+            !!row &&
+              row.status === 200 &&
+              row.body &&
+              row.body.state === "one" &&
+              typeof row.body.place.timezone === "string" &&
+              row.body.place.timezone.includes("/") &&
+              Number.isFinite(row.body.place.lng) &&
+              Number.isFinite(row.body.place.lat) &&
+              !!row.body.place.label,
+            row ? brief(row) : "no suggestion to retrieve: uk " + brief(ukList),
+          );
+          // 633: a home narrows the lookup inside the country. Two proximities in one country give
+          // two orderings where Search Box knows the name near at least one of them; Portland,
+          // Maine and Los Angeles each have a Front Room.
+          const portland = await call(
+            {
+              action: "suggest",
+              q: "Front Room",
+              session_token: session,
+              country_name: "United States",
+              proximity: { lng: -70.2553, lat: 43.6591 },
+            },
+            ownerToken,
+          );
+          const losAngeles = await call(
+            {
+              action: "suggest",
+              q: "Front Room",
+              session_token: session,
+              country_name: "United States",
+              proximity: { lng: -118.2437, lat: 34.0522 },
+            },
+            ownerToken,
+          );
+          if (
+            portland.body &&
+            losAngeles.body &&
+            portland.body.state === "none" &&
+            losAngeles.body.state === "none"
+          )
+            skip(
+              "place-resolve: a home changes the ordering inside the country (633)",
+              "both calls returned none",
+            );
+          else
+            record(
+              "place-resolve: a home changes the ordering inside the country (633)",
+              typed(portland) &&
+                typed(losAngeles) &&
+                inCountry(portland, "United States") &&
+                inCountry(losAngeles, "United States") &&
+                firstOf(portland) !== firstOf(losAngeles),
+              "portland " +
+                firstOf(portland).slice(0, 40) +
+                " | los angeles " +
+                firstOf(losAngeles).slice(0, 40),
+            );
+
+          // The country filters (783). The name is what the form sends: a public.world_countries
+          // name the host chose; the function resolves it to alpha-2 through ICU and sends Search
+          // Box `country`. Every place that comes back is in that country. Ghana is the founder's
+          // case; Search Box carries no POI for Ghana (docs/GAPS.md G35), so the honest Ghana
+          // answer is `none` or an area, and the filter itself is shown on a country it does cover.
+          const ghana = await call(
+            { action: "suggest", q: "Front Room", session_token: session, country_name: "Ghana" },
+            ownerToken,
+          );
+          record(
+            "place-resolve: country Ghana, no home: a Mapbox answer with nothing outside Ghana",
+            inCountry(ghana, "Ghana"),
+            brief(ghana),
+          );
+          record(
+            "place-resolve: country United Kingdom: results, all in the United Kingdom (the country filter and the ICU conversion)",
+            inCountry(ukList, "United Kingdom") && placesOf(ukList).length > 0,
+            brief(ukList),
+          );
+          // A home narrows inside the country and never widens it: United Kingdom with a Nairobi
+          // home still answers only the United Kingdom.
+          const both = await call(
+            {
+              action: "suggest",
+              q: "Front Room",
+              session_token: session,
+              proximity: NAIROBI,
+              country_name: "United Kingdom",
+            },
+            ownerToken,
+          );
+          record(
+            "place-resolve: a home narrows inside the chosen country and never widens it (783, 633)",
+            inCountry(both, "United Kingdom") && placesOf(both).length > 0,
+            brief(both),
+          );
+          // Proximity alone anchors nothing (783): a home without a country is not a lookup.
+          const homeOnly = await call(
+            { action: "suggest", q: "Front Room", session_token: session, proximity: ACCRA },
+            ownerToken,
+          );
+          record(
+            "place-resolve: a home with no country is unavailable without a call (783)",
+            homeOnly.status === 200 && homeOnly.body && homeOnly.body.state === "unavailable",
+            brief(homeOnly),
+          );
+          // The three stored spellings ICU renders otherwise anchor through the function's own
+          // spellings (Session 24): Cabo Verde was case 3 in Session 23 and is a country now.
+          const caboVerde = await call(
+            { action: "anchor", q: "", session_token: session, country_name: "Cabo Verde" },
+            ownerToken,
+          );
+          record(
+            "place-resolve: a stored spelling ICU renders otherwise (Cabo Verde) anchors, never case 3",
+            caboVerde.status === 200 &&
+              caboVerde.body &&
+              caboVerde.body.state === "anchored" &&
+              caboVerde.body.country === "CV",
+            brief(caboVerde),
+          );
+
+          // Session 24, proof 1 owed: every public.world_countries name either anchors the lookup
+          // or returns unavailable, and none falls through to an unanchored or a differently
+          // anchored call. The dry run resolves the name exactly as suggest does and calls Mapbox
+          // never, so the walk costs nothing upstream. The list is read the way the form reads
+          // it, from the table under the member's own grant.
+          const wc = await fetch(
+            SUPABASE_URL + "/rest/v1/world_countries?select=name&order=position",
+            { headers: { apikey: KEY, Authorization: "Bearer " + ownerToken } },
+          );
+          const wcRows = wc.ok ? await wc.json() : null;
+          const wcNames = Array.isArray(wcRows) ? wcRows.map((r) => r.name).filter(Boolean) : [];
+          if (wcNames.length === 0) {
+            skip(
+              "place-resolve: every world_countries name anchors or is unavailable",
+              "world_countries returned no rows (status " + wc.status + ")",
+            );
+          } else {
+            const walk = [];
+            for (const name of wcNames) {
+              const r = await call(
+                { action: "anchor", q: "", session_token: session, country_name: name },
+                ownerToken,
+              );
+              walk.push({
+                name,
+                status: r.status,
+                state: r.body && r.body.state,
+                code: r.body && r.body.country,
+              });
+            }
+            const offShape = walk.filter(
+              (w) => w.status !== 200 || (w.state !== "anchored" && w.state !== "unavailable"),
+            );
+            const unresolved = walk.filter((w) => w.state !== "anchored").map((w) => w.name);
+            const codes = new Map();
+            for (const w of walk)
+              if (w.state === "anchored") codes.set(w.code, [...(codes.get(w.code) || []), w.name]);
+            const shared = [...codes.entries()].filter(([, v]) => v.length > 1);
+            record(
+              "place-resolve: every world_countries name anchors or is unavailable, never a third thing (" +
+                wcNames.length +
+                " names)",
+              offShape.length === 0,
+              offShape.length ? JSON.stringify(offShape.slice(0, 3)) : wcNames.length + " walked",
+            );
+            record(
+              "place-resolve: every world_countries name anchors to its own current alpha-2 code (" +
+                wcNames.length +
+                " names)",
+              // Every name anchored, not merely none unavailable: run 248's first attempt passed
+              // this vacuously against the old build, which answered none to every dry run.
+              walk.filter((w) => w.state === "anchored").length === wcNames.length &&
+                shared.length === 0 &&
+                wcNames.length >= 195,
+              (unresolved.length ? "unresolved " + JSON.stringify(unresolved) + " " : "") +
+                (shared.length ? "shared " + JSON.stringify(shared) : "") +
+                (unresolved.length || shared.length ? "" : "all " + wcNames.length + " distinct"),
+            );
+          }
+
+          // Session 23, change 2: place, locality and neighborhood join poi and address, because
+          // Search Box holds no POI and no street addressing in Ghana. Osu in Ghana near Accra
+          // answers an area, and the row says so through kind.
+          const osu = await call(
+            {
+              action: "suggest",
+              q: "Osu",
+              session_token: session,
+              country_name: "Ghana",
+              proximity: ACCRA,
+            },
+            ownerToken,
+          );
+          const osuPlaces = placesOf(osu);
+          record(
+            "place-resolve: Osu near Accra answers an area (place, locality or neighborhood) with kind area (change 2)",
+            typed(osu) &&
+              osuPlaces.length > 0 &&
+              osuPlaces.some((p) => p.kind === "area" && /osu/i.test(p.place_name || "")),
+            brief(osu),
+          );
+          record(
+            "place-resolve: a venue row carries kind venue and an area row kind area (change 2)",
+            placesOf(ukList).every((p) => p.kind === "venue" || p.kind === "area") &&
+              placesOf(ukList).some((p) => p.kind === "venue"),
+            JSON.stringify(placesOf(ukList).map((p) => p.kind)).slice(0, 80),
+          );
+
+          // Proof 3: nonsense, anchored, is Mapbox's own zero: `none`.
+          const noPlace = await call(
+            {
+              action: "suggest",
+              q: "xq7zv plk9 wmmt",
+              session_token: session,
+              country_name: "Ghana",
+              proximity: ACCRA,
+            },
+            ownerToken,
+          );
+          record(
+            "place-resolve: a nonsense string returns none (proof 3)",
+            noPlace.status === 200 && noPlace.body && noPlace.body.state === "none",
+            brief(noPlace),
+          );
+
+          // Proof 4: a deliberately broken call. An invalid session_token is refused before Mapbox
+          // with a 400, which the client reads as `unavailable`; the function's own `unavailable`
+          // body is the unanchored call (case 3: never the Edge node's IP).
+          const badSession = await call(
+            {
+              action: "suggest",
+              q: "Front Room",
+              session_token: "no",
+              country_name: "Ghana",
+              proximity: ACCRA,
+            },
+            ownerToken,
+          );
+          record(
+            "place-resolve: an invalid session_token is a 400 with an unavailable body, never none (proof 4)",
+            badSession.status === 400 && badSession.body && badSession.body.state === "unavailable",
+            brief(badSession),
+          );
+          const unanchored = await call(
+            { action: "suggest", q: "Front Room", session_token: session },
+            ownerToken,
+          );
+          record(
+            "place-resolve: no home and no country is unavailable without a call (never the Edge node's IP)",
+            unanchored.status === 200 && unanchored.body && unanchored.body.state === "unavailable",
+            brief(unanchored),
+          );
+
+          // Proof 5: under three characters is `none` before anchoring and before Mapbox.
+          const short = await call(
+            { action: "suggest", q: "Fr", session_token: session, country_name: "Ghana" },
+            ownerToken,
+          );
+          record(
+            "place-resolve: under three characters is none without a lookup (proof 5)",
+            short.status === 200 && short.body && short.body.state === "none",
+            "status " + short.status,
+          );
+        }
+      }
+
       if (ownerToken && memberToken) {
         // The fixture owner is whoever OWNER_EMAIL signs in as, read from their own session:
         // profile_view() with no handle returns the caller's own profile, switches included.
