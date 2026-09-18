@@ -2866,3 +2866,44 @@ background that ruling 499 chose. So the panel is the one part, with the geometr
 sheet on the platform mounts that one component. Separately, if nesting is to be a pattern rather than
 one surface's accident, `Sheet` should know it is inside another and hand the trap over; that is a
 Strand ask, not a repo patch.
+
+## G47. The composer's Date picker is displayed and then ignored whenever the When words parsed to a date
+
+**Severity: high for the surface, none for the register's own subject. Not a merge blocker. Opened
+18 September 2026 during Convene Pass 4, filed under ruling 597. The number is assigned by this
+entry (ruling 638). Pre-existing: `git log -S` puts the line in `b29ab90`, Convene Pass 1's PR 3, so
+Pass 4 found it rather than caused it and did not fix it — a follow-up found during a PR earns a
+number, not a patch.**
+
+**What it is.** `src/components/dna/ConveneForm.tsx` reads the moment as
+`const date = parsed?.date ?? (v("when_date") || null)`, which prefers the parse over the picker.
+The picker is mounted only in the state where `parseFailed` is true, and `parseFailed` is
+`whenWords.trim() !== "" && !(parsed && parsed.time)` — words that parsed to a date but carried no
+time. So the one state the picker exists for is a state where `parsed?.date` is non-null and takes
+precedence over everything the host types into it. The Date input renders
+`value={v("when_date") || parsed?.date || ""}`, so the host's own edit is displayed back to them and
+then discarded.
+
+**The failing input.** With `now` at 18 September 2026, the host types `16 October` into When.
+`parseWhen` returns `{ date: "2026-10-16", time: null }`, the hint reads `That did not read as a
+date and time. Pick them below.` and the pickers mount pre-filled with 2026-10-16. The host corrects
+the Date to 2026-10-17 and sets the Time to 19:00. The field shows 17 October. `date` is still
+`"2026-10-16"`, so `startsAt` is the sixteenth, `convene.starts_at` is the sixteenth, and the event
+is stored for the sixteenth. The read-back line beneath the field also reads the sixteenth, so the
+form contradicts itself on screen rather than failing silently — which is the one mercy in it.
+
+**Why the Time field does not have the same defect.** `time` reads
+`parsed?.time ?? (v("when_time") || null)`, and in this state `parsed.time` is null by construction,
+so the picker's value is what is used. The asymmetry is the whole bug: the same expression is
+correct for one field and wrong for the other, because only one of the two is guaranteed null in the
+state that mounts them.
+
+**The fix this entry names.** The picker is the later statement and should win: read the picker's
+value first and fall back to the parse, `v("when_date") || parsed?.date || null`, matching how the
+host experiences the two controls. It is one line, and it wants a check of its own in the Convene
+arm — the arm already drives this exact state at `failed parse: the hint and a date and time picker,
+Publish off` and then fills only the Time, which is why five passes over the file have not caught it.
+
+**Not this gap's scope.** Pass 4's section 9 is unaffected. The weekday contradiction names
+`dateLine(startDate, …)`, which is derived from the same `date`, so the sentence names the instant
+that is actually stored and stays true whatever this entry decides.
