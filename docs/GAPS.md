@@ -2172,6 +2172,58 @@ declared count is unchanged, so a real regression still fails exactly as before.
 against `wrangler pages dev` on Chromium at 96 of 96 for the four Convene arms; WebKit is not
 installed in that environment, so the engine the sighting came from is proven only by CI.
 
+**Seventh sighting, 18 September 2026: the sixth's twin, in the arm the fix did not reach.** Pages run
+265 on `a11529f` (PR 48, Handoff 26-A, a doc-and-comment-only head), `matrix (webkit)`, first attempt,
+at `webkit-1280x800-dark-convene`: `and the zone the host chooses opens the door and reads from the
+country (821)`, 5064 of 5065, no crash, and the run's classifier reads `1 unclassified` because this
+is neither a G5 crash nor ruling 357's aborted fetch. The one crashed arm in that job,
+`webkit-390x844-light-block-flow`, is separate and was correctly reported UNPROVEN and excluded under
+rulings 228 and 832; one crashed arm does not fail the job, and this check is what did.
+
+The 821 gate is asserted in **two** arms, not one. Ruling 821's own commit, `e3392e5`, wrote both: the
+new `-convene-zone` arm's and the existing `-convene` arm's, the second being the "wrong country"
+check extended to assert the gate and then open it the way a host would. The sixth sighting fixed
+`runConveneZone`'s instance and left this one, still as `e3392e5` wrote it, at
+`tests/matrix.cjs:2817` to `2824` (`git blame` on those lines names that commit):
+
+```js
+await dialog
+  .locator('select[data-convene="country-tz"]')
+  .selectOption("America/New_York", { timeout: 5000 });
+record(
+  tag + " and the zone the host chooses opens the door and reads from the country (821)",
+  (await dialog.locator('[data-convene="country-tz-line"]').textContent()) ===
+    "Time zone America/New_York, from the country." && !(await pub().isDisabled()),
+);
+```
+
+Byte for byte the shape the sixth sighting names: the `{ timeout: 5000 }` bounds how long
+`selectOption` waits for the control, not how long React takes to re-render the line and re-evaluate
+the door, so the two signals are read on the next tick with no wait at all. The fix went into the arm
+the failure was seen in and the twin was left, which is why this entry now has the same defect in it
+twice and why the sighting is recorded rather than folded into the sixth.
+
+**The app was not wrong here either, and this run proves it the same way.** The check's detail is
+empty, so the assertion's boolean was false rather than a locator throwing. Every other check in that
+arm passed, including the Ghana check immediately after it, which reads a resolved row and its zone
+from the same form, and the tier line reports `expanded: 76 arms | 75 with no failing check | 1 with
+at least one`, so this arm's single failure is this check. The same run's `deploy`, `live` and
+`matrix (chromium)` were all green on that head, and the head is a doc-and-comment diff that reaches
+no test and no surface, so nothing in it could reach this arm.
+
+**Not fixed here, and the patch is named so the next code session applies it in one step.** PR 48 is
+doc, comment and register only under ruling 759's handoff, so a harness change is outside its scope
+and is not smuggled in under a green-CI argument. The patch is the sixth sighting's, moved: the same
+in-page poll on the same two signals, its own bail and its own sentence, inserted between the
+`selectOption` at `:2819` and the `record` at `:2820`, with the assertion and the arm's declared count
+left alone so `tests/expected-counts.json` stays untouched (ruling 292). Nothing else in the file has
+earned it: the remaining fixed wait in the Convene arm is `waitForTimeout(150)` and it has still not
+been seen to fail.
+
+No re-run was spent on this. The push that carried this entry superseded run 265 and started a fresh
+run on the new head, which re-runs `matrix (webkit)` as a consequence of the commit rather than as a
+re-run of the job, so the head's one re-run under ruling 304 remains unspent.
+
 **Ruling 304, demonstrated again.** Run 261's two attempts on a byte-identical head failed one check
 each, in two different arms at two different widths, with **zero overlap**. That is 304's finding
 exactly: on this engine a re-run cannot confirm a WebKit failure by reproduction, so the single re-run
