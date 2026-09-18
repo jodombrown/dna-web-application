@@ -397,6 +397,18 @@ export function ConveneForm({
     reportValidity(valid);
   }, [valid, reportValidity]);
 
+  // An event that stops being in person keeps no place section, so it keeps neither of the place
+  // section's own values. Without this the host fills a map link, switches to Online, and the
+  // field is gone while its value is still in the store: `publish_post` then refuses with
+  // `A map link belongs to an event with a place.` about a field the form is no longer showing,
+  // which is a refusal nobody can act on. The drag is cleared for the same reason.
+  useEffect(() => {
+    if (physical) return;
+    for (const k of ["map_link", "pin_x", "pin_y"]) if (v(k) !== "") setField(k, "");
+    setDragging(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [physical]);
+
   // The derived fields publish_post reads (and the preview's meta, 671), written only when they
   // change so the store settles in one pass.
   const derived: Record<string, string> = {

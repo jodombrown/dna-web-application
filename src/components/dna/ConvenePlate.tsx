@@ -227,6 +227,11 @@ export function ConvenePlate(props: ConvenePlateProps) {
           onDragging(false);
         }}
         onPointerCancel={() => onDragging(false)}
+        // The capture is what makes a release outside the plate still arrive here. If it is lost
+        // some other way — the element re-rendering under the drag when a lookup settles — the
+        // drag has to end anyway, or the chip reads `Moving your point` for a point nobody is
+        // moving.
+        onLostPointerCapture={() => onDragging(false)}
       >
         {areaName && (
           <span
