@@ -19,9 +19,12 @@ import { Icon } from "@/components/strand/Icon";
 import { Input } from "@/components/strand/Input";
 import { Segment } from "@/components/strand/Segment";
 import { Select } from "@/components/strand/Select";
+import { Sheet } from "@/components/strand/Sheet";
+import { ConvenePlate, type HostPoint } from "@/components/dna/ConvenePlate";
 import { resolvePlace, type ResolvedPlace, type SuggestedPlace } from "@/lib/dia";
 import type { Home } from "@/lib/homes";
 import { placeLine, placeParts } from "@/lib/place";
+import { useMode } from "@/lib/tier";
 import {
   dateLine,
   instantFor,
@@ -148,6 +151,13 @@ export function ConveneForm({
   const [zoneList, setZoneList] = useState<{ country: string; zones: string[] | null } | null>(
     null,
   );
+  // Pass 4 (P4-SPEC sections 3 and 5). `infoOpen` is the `Why is my venue not here?` panel; the
+  // drag is transient and belongs to no field, because a point half-moved is not a point.
+  const [infoOpen, setInfoOpen] = useState(false);
+  const [dragging, setDragging] = useState(false);
+  // Ruling 814 needs the affordance reachable by touch, so the surface has to know which it is.
+  // The app already derives it from `(pointer: coarse)` and the Composer reads the same hook.
+  const mode = useMode();
   const session = useRef<string>(
     typeof crypto !== "undefined" && "randomUUID" in crypto
       ? crypto.randomUUID()
@@ -231,6 +241,28 @@ export function ConveneForm({
           : browserTz
       : browserTz;
   const tzFromPlace = physical && resolved && knownZone(placeTz);
+
+  // ---- Pass 4's place section (P4-SPEC sections 3 to 7) ----------------------------------------
+  // The map's own point is a fact about the resolution, not a position on the plate: the plate
+  // carries no projection in this build, so nothing here reads lat or lng as a place on screen.
+  const mapPoint = physical && resolved && v("lat") !== "" && v("lng") !== "";
+  const hostPoint: HostPoint | null =
+    v("pin_x") !== "" && v("pin_y") !== "" ? { x: +v("pin_x"), y: +v("pin_y") } : null;
+  const setHostPoint = (p: HostPoint) => {
+    setField("pin_x", String(p.x));
+    setField("pin_y", String(p.y));
+  };
+  const nothingFound = lookup.state === "none";
+  // 814 and G35: the claim is about this country's coverage and renders only where it is true, so
+  // the control appears once a country is chosen and the place field is still empty.
+  const infoShown = physical && !!country && !resolved && !query.trim();
+  // The plate appears once the host has said where to look: a country, and either a resolution or
+  // enough typed words for the lookup to have run.
+  const plateShown = physical && !!country && (resolved || query.trim().length >= MIN_QUERY);
+  // 815: optional, and refused at publish when it is not a link. The form says so where the member
+  // can still fix it, in the same words and the same shape the meeting link already uses.
+  const mapLink = v("map_link").trim();
+  const mapLinkOk = !mapLink || isUrl(mapLink);
   // The line reads only where the host chose (821); a country with one zone says nothing at all.
   const tzFromChoice = needsZoneChoice && !!zoneFromCountry;
 
@@ -333,7 +365,12 @@ export function ConveneForm({
   // 821: where the chosen country carries more than one zone and no place resolved, the door is not
   // satisfied until the host picks one. Nothing else about the door changes.
   const physicalOk =
-    !!country && (resolved || !!placeText) && (!needsZoneChoice || !!zoneFromCountry);
+    !!country &&
+    (resolved || !!placeText) &&
+    (!needsZoneChoice || !!zoneFromCountry) &&
+    // 815: a map link that is not a link is refused by publish_post, so the door holds it here
+    // rather than letting the member meet that refusal after the Publish.
+    mapLinkOk;
   const virtualOk = linkOk || linkTba;
   const valid =
     !!v("title").trim() &&
@@ -404,6 +441,11 @@ export function ConveneForm({
     setField("country", name);
     // The zone belongs to the country that was chosen, so both go when the country changes (813).
     setField("country_tz", "");
+    // So does the host's own point: "the point you placed" for a venue in one country is not the
+    // point for a venue in another. The map link is the host's own content and stays, like the
+    // words do.
+    setField("pin_x", "");
+    setField("pin_y", "");
     setZoneList(null);
     setEditingFrom(null);
     setLookup({ state: "idle" });
@@ -666,10 +708,14 @@ export function ConveneForm({
   const placeInput = input("place_query", "Place", {
     placeholder: "A venue or an area",
     // Session 23, the unavailable state: a lookup that did not run is never "no place found".
-    // Session 24 (798): nothing found names the country that was searched.
+    // Session 24 (798): nothing found names the country that was searched. P4-SPEC section 4
+    // (ruling 814) rewrites that sentence: the gap is the map's coverage of this country and not
+    // the host's typing, and the pin is what the host can do about it. G35 is the finding behind it.
     hint:
       lookup.state === "none"
-        ? "No place found for that. Searched: " + country + ". It is kept as you wrote it."
+        ? "The map has no venue records in " +
+          country +
+          ". Your words are kept, and you can place the pin yourself."
         : lookup.state === "several"
           ? "Several places match. Pick one, or leave it as you wrote it."
           : lookup.state === "unavailable"
@@ -686,6 +732,94 @@ export function ConveneForm({
     zoneOptions.includes(browserTz) && zoneOptions.length > 1
       ? [browserTz, ...zoneOptions.filter((z) => z !== browserTz)]
       : zoneOptions;
+  // P4-SPEC section 3 (rulings 814, 901, G35). Strand carries no popover part — the correction 17
+  // bundle was searched for eight names and returned zero — and `Tooltip` opens on hover and focus
+  // only, which 814 forbids as the sole path. So the panel is Strand's `Sheet`, one part and no
+  // variant, at every tier.
+  //
+  // The spec draws it centred at 1280 and 1440. This tree does not have that geometry to give:
+  // ruling 492 is written into `Sheet` as "One size on every sheet … canonical and not overridable
+  // per surface" — a bottom sheet on compact, a side sheet on medium and expanded — and every
+  // other caller in the tree passes exactly `tier === "compact" ? "sheet" : "drawer"`. Taking the
+  // drawn anchor would mean a per-surface geometry override, which is the thing 492 forbids and
+  // the thing "one part, no variant" is asking for. The spec's `contained` is the prototype's
+  // scaled-frame mechanism: `ComposerShell` never passes it, so in the app it is undefined and the
+  // dialog opens with `showModal()` on both sheets. Reported rather than resolved here.
+  const infoControl = infoShown ? (
+    <button
+      key="venue-info"
+      type="button"
+      data-convene="venue-info"
+      aria-haspopup="dialog"
+      aria-expanded={infoOpen}
+      onClick={() => setInfoOpen(true)}
+      style={TEXTBTN}
+    >
+      Why is my venue not here?
+    </button>
+  ) : null;
+  const infoPanel = (
+    <Sheet
+      key="venue-info-sheet"
+      open={infoOpen}
+      onClose={() => setInfoOpen(false)}
+      variant={tier === "compact" ? "sheet" : "drawer"}
+      label={"Venues in " + country}
+    >
+      <div
+        data-convene="venue-info-panel"
+        style={{ display: "flex", flexDirection: "column", gap: 12, padding: "16px 20px 24px" }}
+      >
+        <h2
+          data-sheet-heading
+          style={{
+            margin: 0,
+            fontFamily: "var(--font-display)",
+            fontSize: 22,
+            lineHeight: 1.2,
+            color: "var(--ink)",
+          }}
+        >
+          Venues in {country}
+        </h2>
+        <p style={{ margin: 0, ...QUIET }}>
+          The map holds no venue records for {country}, so searching will not find your venue. This
+          is the map&rsquo;s gap, not a mistake in what you typed.
+        </p>
+        <p style={{ margin: 0, ...QUIET }}>
+          Type the venue as you say it, then place the pin where it is. Both travel with the event.
+        </p>
+      </div>
+    </Sheet>
+  );
+  // P4-SPEC section 7 (rulings 815, 816). The hint is a promise this file keeps: the value is read
+  // from the store and written to the store and nothing else. It is never parsed, never handed to
+  // `resolvePlace`, never given to `instantFor` or `knownZone`, and no point, place or zone is
+  // derived from it anywhere in the tree. Removing the field removes no information about where
+  // the venue is, because the pin carries that.
+  const mapLinkField = input("map_link", "Map link", {
+    placeholder: "Paste a link to a map",
+    type: "url",
+    inputMode: "url",
+    hint: mapLinkOk
+      ? "Optional. It opens in the app you took it from. DNA keeps it as a link and never reads it."
+      : "A link starts with http:// or https://",
+  });
+  const plate = (
+    <ConvenePlate
+      key="plate"
+      mode={mode}
+      viewer="host"
+      areaName={v("place_area") || v("city") || ""}
+      mapPoint={mapPoint}
+      hostPoint={hostPoint}
+      dragging={dragging}
+      nothingFound={nothingFound}
+      area={areaResolved}
+      onPlace={setHostPoint}
+      onDragging={setDragging}
+    />
+  );
   const zoneSelect = needsZoneChoice ? (
     <Select
       key="country-tz"
@@ -699,9 +833,9 @@ export function ConveneForm({
       ]}
     />
   ) : null;
-  const placeBlock = resolved ? (
+  const placeInner = resolved ? (
     <div
-      key="place"
+      key="place-row"
       data-convene="place-resolved"
       data-place-kind={areaResolved ? "area" : "venue"}
       style={{ display: "flex", flexDirection: "column", gap: 8 }}
@@ -740,11 +874,7 @@ export function ConveneForm({
       )}
     </div>
   ) : (
-    <div
-      key="place"
-      data-convene="place-block"
-      style={{ display: "flex", flexDirection: "column", gap: 8 }}
-    >
+    <div key="place-controls" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
       {wide && country ? (
         <div
           style={{
@@ -762,6 +892,10 @@ export function ConveneForm({
           {country ? placeInput : null}
         </>
       )}
+      {/* P4-SPEC section 3: under the Country control, once a country is chosen and the place
+          field is still empty. The claim the panel makes is about that country's coverage, so it
+          renders only where it is true. */}
+      {infoControl}
       {zoneSelect}
       {tzFromChoice && (
         <div data-convene="country-tz-line" style={QUIET}>
@@ -821,6 +955,22 @@ export function ConveneForm({
           ))}
         </div>
       )}
+    </div>
+  );
+  // One `place-block` for both readings of the place, so the plate and the map link sit inside it
+  // in every state the extraction draws them in (P4-SPEC sections 5 and 7). The resolved row keeps
+  // its own `place-resolved` marker and its `data-place-kind`; nothing that read those reads
+  // differently.
+  const placeBlock = (
+    <div
+      key="place"
+      data-convene="place-block"
+      style={{ display: "flex", flexDirection: "column", gap: 12 }}
+    >
+      {placeInner}
+      {plateShown ? plate : null}
+      {plateShown ? mapLinkField : null}
+      {infoPanel}
     </div>
   );
   const linkBlock = linkTba ? (
