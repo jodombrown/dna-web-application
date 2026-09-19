@@ -115,6 +115,8 @@ export type ResolvedPlace = {
   place_name: string;
   area: string | null;
   city: string | null;
+  /** Mapbox's context region for the place, the admin-1 name (ruling 927). Null where there is none. */
+  region: string | null;
   country: string | null;
   lng: number;
   lat: number;

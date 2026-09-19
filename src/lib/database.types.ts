@@ -6,7 +6,13 @@
 // the moment this file is committed the canonical project does not carry the column and a
 // regeneration would take it back out. Hand-matched to
 // `supabase/migrations/20260918120000_p4_convene_map_link.sql`; the next regeneration after the
-// founder's `db push` produces the same three lines.
+// founder has applied it produces the same three lines.
+//
+// `event_delivery.region` and `member_homes.region` (Convene Pass 5, ruling 927) are here by hand
+// for the same reason and under the same ruling, matched to
+// `supabase/migrations/20260919120000_p5_region_context.sql`. Both are nullable, including on
+// `member_homes`, whose other place columns are `NOT NULL`: existing rows have no Mapbox context to
+// backfill from and inventing one is invented geography (790). Regenerate after the paste.
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
 
 export type Database = {
@@ -233,6 +239,7 @@ export type Database = {
           place_name: string | null;
           place_text: string | null;
           position: number;
+          region: string | null;
           url: string | null;
         };
         Insert: {
@@ -250,6 +257,7 @@ export type Database = {
           place_name?: string | null;
           place_text?: string | null;
           position?: number;
+          region?: string | null;
           url?: string | null;
         };
         Update: {
@@ -267,6 +275,7 @@ export type Database = {
           place_name?: string | null;
           place_text?: string | null;
           position?: number;
+          region?: string | null;
           url?: string | null;
         };
         Relationships: [
@@ -699,6 +708,7 @@ export type Database = {
           place_id: string;
           place_name: string;
           position: number;
+          region: string | null;
           timezone: string;
         };
         Insert: {
@@ -712,6 +722,7 @@ export type Database = {
           place_id: string;
           place_name: string;
           position?: number;
+          region?: string | null;
           timezone: string;
         };
         Update: {
@@ -725,6 +736,7 @@ export type Database = {
           place_id?: string;
           place_name?: string;
           position?: number;
+          region?: string | null;
           timezone?: string;
         };
         Relationships: [

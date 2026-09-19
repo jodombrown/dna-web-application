@@ -1874,13 +1874,25 @@ through the API at session open and reporting what it finds; a session that skip
 no run records that it happened. That is the gap. It was performed for PR #38 and the result written
 into that PR's body, which under G27's own reasoning is the weaker of the two places to put it.
 
-**One question this entry does not settle.** CLAUDE.md's permitted-identity list also carries
-`gpt-engineer-app[bot]`, app id `159125892` (rulings 146, 286), which is Lovable committing straight to
-`main` and which ruling 146 requires be reported and rebased onto rather than merely tolerated. Ruling
-598's allowlist names three ids and not that one. Whether the Lovable app id belongs inside the
-allowlist or stays outside it as an expected-and-reported identity is the founder's call; a session
-reading the allowlist today should treat a `159125892` commit as expected, report it, and rebase, which
-is what ruling 146 already says.
+**One question this entry did not settle, settled 19 September 2026 (rulings 920, 921).** CLAUDE.md's
+permitted-identity list also carries `gpt-engineer-app[bot]`, app id `159125892` (rulings 146, 286),
+which is Lovable committing straight to `main` and which ruling 146 requires be reported and rebased
+onto rather than merely tolerated. Ruling 598's allowlist names three ids and not that one. The
+answer is that it stays outside: the allowlist answers whether an identity may commit here at all,
+and 146 answers what is done about a Lovable commit once it has — expected, reported by SHA and by
+paths, rebased onto, the founder's visual change kept on conflict. Folding the app id into the
+allowlist would make a Lovable commit read as unremarkable, which is the one thing 146 says it is
+not. Ruling 920 also moves the check's primary axis: commits are classified by **how they landed**
+rather than by who authored them, a merge commit from a `claude/*` branch is Code's, anything else
+is reported by SHA and by paths, any change under `.lovable/` is reported by name, and the id check
+stays as a second net that is never run alone. One consequence worth recording, found at the Session
+27 open: the committer id on a merge made through the GitHub button is `19864447`, `web-flow`, which
+is in no allowlist and never will be, and which under 920 classifies by how it landed — `2bcb8e3`,
+the merge of #49, is Code's.
+
+**What stays open: the missing arm, which is the half this entry was opened for.** Nothing in
+`tests/`, `scripts/` or `.github/` reads any of these ids, and 920's landing-based classification has
+no arm either. A session that skips the check still fails nothing.
 
 ## G29. `tests/auth.cjs` section 7 waits fifteen seconds on a render instead of on the mock
 
@@ -2601,7 +2613,14 @@ one dark-theme case. Not a merge blocker, and not a ruling 140 finding: this is 
 (610 per 480), not visibility, RLS or consent. Opened 18 September 2026 during Session 26's doc-only
 PR, filed under ruling 597, and carrying ruling 874's contrast read, which has never had a G number
 because Strand keeps no Gap register and 638 assigns the number by the entry that is written. The
-number is assigned by this entry (ruling 638).**
+number is assigned by this entry (ruling 638). State, 19 September 2026 (ruling 917, Session 27's
+PR): the narrow remedy is taken and Contribute is closed — `Button`'s `primary` variant reads the C's
+own ink rung when a `c` is passed, so a Contribute fill carries `--ink` at 8.29:1 instead of
+`--on-fill` at 2.10:1. The entry stays OPEN for Collaborate (3.75:1) and Convene (3.79:1), whose ink
+rungs are themselves `--on-fill` and so do not move: both are below AA for text under 18.66px bold or
+24px regular and both clear the 3:1 large-text floor. The remedy there is darkening those two fills,
+which is a D092 brand change and the founder's and Design's rather than a code session's, and it is
+what this entry is now waiting on.**
 
 **The read (ruling 874).** A 15px label on Collaborate teal, `--c-collaborate: #30909C`, fails rule
 10's AA target for text below 18.66px bold or 24px regular. `src/styles/strand.css:142` carries the
@@ -2676,13 +2695,17 @@ in both themes (ruling 485); it is static, it reads declarations against citatio
 opinion about what a pairing measures. Nothing in the harness reads contrast at all, which is why
 874's read had nowhere to land until this entry.
 
-**Why nothing is changed here.** Session 26's PR is doc, comment and register only under ruling 903's
-re-sync, and every remedy is a colour decision the founder and Design own, not a code session's:
-`Button`'s primary could read `--c-<c>-ink` instead of `--on-fill`, which fixes Contribute and leaves
-Collaborate and Convene where they are; the Collaborate and Convene fills could darken, which is a
-D092 change and a brand one; or the small-text-on-brand pairings could be moved to the text rung on a
-tint. The first is the narrowest and it is still a rendered-pixel change on every primary button in
-the app.
+**Why nothing was changed when this was opened, and what changed since.** Session 26's PR was doc,
+comment and register only under ruling 903's re-sync. Three remedies were named: `Button`'s primary
+could read `--c-<c>-ink` instead of `--on-fill`, which fixes Contribute and leaves Collaborate and
+Convene where they are; the Collaborate and Convene fills could darken, which is a D092 change and a
+brand one; or the small-text-on-brand pairings could be moved to the text rung on a tint. Ruling 917
+took the first, in Session 27's PR, as `src/components/strand/Button.tsx`'s `onColor`: `primary` with
+a `c` reads that C's ink rung, `danger` keeps `--on-fill` because `--error` is not a C and has no
+rung, and `primary` with no `c` keeps it because the fill is `--ink` and white is correct on it. It
+is a rendered-pixel change on every primary button that carries a C, and Contribute's Publish and
+its `SectionCard` act are the two that visibly move. The second remedy is what the entry now waits
+on; the third is not taken and is not proposed.
 
 **Not this gap's scope.** The text rung, which is AA on the ground for all five Cs and is what almost
 every surface uses. `CBadge`'s glyph and `AppShell`'s compose tab, which paint the brand rung and the
@@ -2690,7 +2713,7 @@ ink rung on graphics rather than text (`src/components/dna/AppShell.tsx:445`, `4
 except for the two Convey readings named above. And the 3px accent stroke and every border and frame
 that takes the brand rung, none of which is text.
 
-## G42. Four C tokens are declared and read by nothing, and the system category's colours are written inline instead
+## G42. Four C tokens are declared and read by nothing, and the system category's colours are written inline instead — the system half closed (Session 27)
 
 **Severity: low, tidiness with one real consequence. Not a merge blocker. Opened 18 September 2026
 during Session 26's doc-only PR, as a follow-up found while sweeping the C rungs for G41, filed under
@@ -2715,10 +2738,22 @@ reads the tokens, and gets a different colour depending on which it picks.
 every cited token resolves (ruling 485). It is deliberately one-directional: a token declared and
 never cited is not a broken reference and the check has nothing to say about it.
 
-**Why it is not fixed here.** Session 26's PR is doc, comment and register only under ruling 903's
-re-sync, and pointing `PostCard` at the tokens changes a rendered value's provenance even where the
-resolved colour is identical, which is the one thing this PR may not do. It is a small change and it
-should ride the next PR that touches the card.
+**Closed 19 September 2026, in Session 27's PR, which is the next PR that touched the card.**
+`src/components/strand/PostCard.tsx` now reads `var(--c-system)` for the frame and
+`var(--c-system-ink)` for the label. The frame's resolved colour is unchanged, because
+`--c-system` holds `--line-strong` and that is what the literal said. The label's is not: a system
+post's C line goes from `#77736C` to `#1A1A18` in light theme, and in dark from `#9B958A` to
+`#F2EDE5`, because `--c-system-ink` is `var(--ink)` and follows the theme where the literal did not.
+That is the rendered-pixel change Session 26's doc-only PR could not make, and it is the correction
+rather than a side effect: the declared palette and the shipped card no longer disagree about what
+colour the system category's text is. `scripts/token-check.mjs` reads clean on both new citations.
+
+**Why it was not fixed when it was opened.** Session 26's PR was doc, comment and register only
+under ruling 903's re-sync, and pointing `PostCard` at the tokens changes a rendered value's
+provenance even where the resolved colour is identical, which was the one thing that PR could not do.
+
+**What stays open under this number: nothing.** `--c-stroke` is still declared and read by nothing,
+and that is the D092 question below rather than an open half of this entry.
 
 **Not this gap's scope.** Whether `--c-stroke` should exist at all, which is a D092 question. The
 `-ink` rung, which has a consumer (`src/components/strand/Chip.tsx:19`) even though no caller reaches
@@ -2727,7 +2762,14 @@ it today; that is G41's.
 ## G43. The map plate carries no projection, so the host's own point is not a coordinate and does not travel with the event
 
 **Severity: medium for the surface, none for the code. Not a merge blocker. Opened 18 September 2026
-during Convene Pass 4, filed under ruling 597. The number is assigned by this entry (ruling 638).**
+during Convene Pass 4, filed under ruling 597. The number is assigned by this entry (ruling 638).
+State, 19 September 2026 (ruling 929, Session 27's PR): the host-placed pin is withdrawn from the
+build. What this entry described as "a surface that reads correctly and stores nothing" no longer
+renders — the plate, the pointer and keyboard placement, the act, the copper dot, the host readings
+of the chip, and `pin_x` and `pin_y` in the composer's store are all gone, and 897's panel line no
+longer says the pin travels. The plate, the area chip and the map's own point stay. The entry stays
+OPEN, because what it names as the fix is unchanged: the pin returns when the plate has tiles and
+therefore a projection, and that pass is still owed.**
 
 **What it is.** P4-SPEC section 5 orders a map plate and two pin kinds, and its own guardrail 3 says
 the plate "renders no tiles and no invented geography in this build". Both were built:
@@ -2907,3 +2949,202 @@ Publish off` and then fills only the Time, which is why five passes over the fil
 **Not this gap's scope.** Pass 4's section 9 is unaffected. The weekday contradiction names
 `dateLine(startDate, …)`, which is derived from the same `date`, so the sentence names the instant
 that is actually stored and stays true whatever this entry decides.
+
+## G48. Selecting a lens re-divides the track, so every seat moves under the finger that chose it
+
+**Severity: high for the surface, and it is shipping to members today on every surface that mounts
+the part. Not a merge blocker under ruling 140 — this is not a visibility, RLS or consent finding —
+but it is the one item on Session 27's list that is live rather than latent. Opened 19 September
+2026 during Session 27 under ruling 952, filed under ruling 597. The number is assigned by this
+entry (ruling 638). Fixed in the same PR that opens it; the entry stays because 638 assigns the
+number by the entry and because the mechanism outlives this fix.**
+
+**The read.** `src/components/strand/LensBar.tsx` gives the active tab `flex: on ? "none" : "1 1 0"`
+and every other tab an equal share of what is left. Selection is therefore a layout input: when it
+moves, the outgoing tab collapses from its content width to a share and the incoming one does the
+reverse, and every seat between and beside them changes x. The member's next tap lands on the seat
+that has slid under their finger rather than the one they aimed at, which on a four-lens bar is
+usually the neighbour.
+
+**Where it ships.** Three mounts, all on `main`: the Feed (`src/components/dna/FeedSurface.tsx:549`),
+Connect (`src/components/dna/ConnectSurface.tsx:880`) and the header's dense rendering
+(`src/components/strand/AppHeader.tsx:130`), which is the compact and medium tiers once the member
+has scrolled into the list. It is not Brief 9's, it is not the bundle's, and no surface opts out of
+it: the distribution rule is the part's own.
+
+**The prototype reaches it by the same mechanism.** Handoff 27-A records the reading taken on
+Strand's own part at compact: seats at 4-81, 83-127, 129-173 and 175-219 with `All` active, and
+4-48, 50-94 and 96-219 with the third lens active, up to 79px of shift. That reading is carried here
+as the prototype's and not as this repo's: it is quoted from the handoff rather than re-measured,
+and its second row lists three seats where the first lists four, so the transcription is not exact
+even though the mechanism it describes is the one in this tree. The repo's own reading is the
+harness check named below, which measures seat x on the deployed build rather than in a prototype.
+
+**Ruling 936's reflow is a different one.** 936 measures 12px at a tier boundary, where the bar's
+rendering changes because the tier changed. This one needs no resize and no tier change: it fires on
+a plain selection at a fixed width, and its magnitude is the difference between a label's content
+width and an equal share rather than a padding step.
+
+**Why no gate caught it.** The shell arm has read the bar's layout since G36 (`tests/matrix.cjs`, the
+`lensFit` check): it asserts that no tab's content exceeds its box and that the track does not
+scroll. Both of those are true of a bar whose seats move, because they are read once, in one
+selection state. Nothing in the harness had ever read the same seat twice, and a check that never
+compares two states cannot see a state change. The check this entry adds does exactly that and
+nothing more.
+
+**The fix, and the constraint it had to clear.** Every tab now takes `flex: "1 1 0"`, so the track is
+divided equally and selection is no longer a layout input. Ruling 488's constraint holds: the active
+tab's own background is still the indicator, painted on the first frame, and nothing returns to a
+measured absolute chip moved by transform, which is W34 and which 488 removed. `--target-min` and
+the 44 floor are untouched. Ruling 723's labels-fit switch still decides labels against icon-first on
+the same probe, re-measured on resize and on font load; its arithmetic follows the layout it decides
+for, as the part's own comment requires, so the per-seat requirement it tests is now a seat of the
+track's equal division rather than the active tab's content width plus the others' shares.
+
+**What that arithmetic costs, stated plainly.** Equal seats are a stricter fit test than content-sized
+active plus equal inactive, because the widest label has to fit one seat rather than the whole track
+minus the others' shares. At widths where the old test answered "fits" by a few pixels the bar now
+renders icon-first, which is G37's band and G37's question. This entry does not decide it; it records
+that the boundary moved and why.
+
+**Not this gap's scope.** Ruling 905's 44px seat, whose mechanism is pending Design and which nothing
+here implements. G37's icon-first threshold at the medium tier. The labels-fit switch itself, which
+is G36's and is unchanged in substance. And `docs/shell/LENS_BAR_SPEC.md`'s Distribution line, which
+named the superseded mechanism and is corrected in the same PR rather than left to be rebuilt from.
+
+## G49. The ruling 919 focus-ring sweep: an inline `all: unset` outranks every focus rule in the stylesheet, and 41 of 42 sites carry one
+
+**Severity: high for keyboard accessibility, both themes, every tier. Not a merge blocker and not a
+ruling 140 finding. Opened 19 September 2026 during Session 27 under ruling 919, filed under ruling
+597. The number is assigned by this entry (ruling 638). Recorded, not fixed: the remedy is 41 sites
+across 29 files and a decision about which mechanism gives the ring back, which is Design's and the
+founder's rather than a code session's.**
+
+**Why the sweep exists.** Session 26 recorded a ring with nowhere to draw and the finding lived in a
+session's prose. A finding in prose cannot be re-run, so this entry carries the scope, the hits and
+the sites the sweep cleared. A sweep that records only its hits cannot be checked against its own
+scope by the next reader, which is the whole reason 919 asks for an entry.
+
+**The mechanism, measured rather than reasoned (ruling 891).** `src/styles/strand.css:368` declares
+the ring globally, `:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px }`, and
+`src/components/strand/LensBar.tsx:171` injects its own copy for the tabs. Both are author stylesheet
+rules. An inline `style` declaration outranks an author stylesheet rule that carries no `!important`,
+and `all: unset` sets every longhand to its initial value, which for `outline-style` is `none`.
+So an element with an inline `all: unset` matches `:focus-visible`, is focused, and computes
+`outline-style: none`. Read in Chromium on a synthetic page: the `all: unset` tab reads
+`focusVisible: true, outlineStyle: "none", outlineWidth: "0px"` while the plain tab beside it under
+the same two rules reads `solid 2px rgb(74, 141, 119)`.
+
+**And measured on the running app, not only on a probe.** `/sign-in` at 390, every focusable control,
+each focused in turn and its computed outline read:
+
+| Control | Part | Computed outline when focused |
+| --- | --- | --- |
+| `Sign in` | `Button` | `solid 2px rgb(74, 141, 119)` |
+| `Continue with Google` | `Button` | `solid 2px rgb(74, 141, 119)` |
+| `Sign in with LinkedIn` | `Button` | `solid 2px rgb(74, 141, 119)` |
+| `Show password` | `PasswordField.tsx:79` | `none 0px` |
+| `Forgot your password?` | `sign-in.tsx` text button | `none 0px` |
+| `Create an account` | `sign-in.tsx:247` | `none 0px` |
+
+`Button` does not use `all: unset` and its ring draws. The three that do not draw are the three that
+do. One surface, one reading, both halves of the rule in the same screenshot.
+
+**The scope, so it can be re-run.** Every inline `all: "unset"` under `src/`, walked back to the JSX
+tag or the shared style constant that owns it: 42 sites in 29 files.
+`grep -rn 'all: "unset"' src/` is the whole scope and the count is the check.
+
+**The hits: 41 sites.** Four in `AppShell.tsx` (`:488`, `:546`, `:569`, `:592`), two each in
+`FeedSurface.tsx` (`:430`, `:478`), `AppHeader.tsx` (`:118`, `:145`, `:190`, `:216` — four),
+`ConveneForm.tsx` (`:90`'s shared `TEXTBTN`, `:989`), `OnboardingSurface.tsx` (`:223`, `:494`,
+`:826` — three), `ProfileSurface.tsx` (`:271`'s shared `LINK_STYLE`, `:683`, `:1120` — three) and
+`PostCard.tsx` (`:129`'s `linkStyle`, `:459`), and one each in `AuthSurface.tsx:284`,
+`NotificationPanel.tsx:169`, `ProfileBlockControl.tsx:53` (`ITEM`, the overflow menu item),
+`Rails.tsx:70`, `AudienceSelect.tsx:46`, `BackRow.tsx:30`, `BadgeRow.tsx:54`, `Chip.tsx:53`,
+`DiaLine.tsx:61`, `LensBar.tsx:272`, `MediaBlock.tsx:188`, `NotificationListItem.tsx:115`,
+`PasswordField.tsx:79`, `PatternPicker.tsx:44`, `ProfileHeader.tsx:333`, `PulseDock.tsx:100`,
+`Segment.tsx:43`, `Toast.tsx:37`, `VerbChip.tsx:54`, `VocabularyPicker.tsx:51` and
+`src/routes/sign-in.tsx:247`. Every one is a focusable control or a style constant spread onto one.
+
+**`LensBar` is the sharpest case and is the ring with nowhere to draw.** The part injects
+`.strand-lens [role=tab]:focus-visible{outline:2px solid var(--focus);outline-offset:2px}` — a rule
+written for these tabs and these tabs only — and then sets `all: "unset"` inline on each tab, which
+outranks it. The rule matches, the element is focused, and the outline computes to none. The spec
+asks for it in so many words (`docs/shell/LENS_BAR_SPEC.md`: "Focus: 2px `--focus` (emerald) outline,
+2px offset, on every lens, both themes"), so this is a shortfall against a ratified contract and not
+a design question.
+
+**The sites the sweep cleared.** One of the 42: `src/components/strand/Composer.tsx:924`, a
+`fieldset` that sets `outlineStyle: "dashed"` in the same inline object, so the shorthand's reset is
+overwritten by a later longhand on the same element. It is a decoration rather than a focus ring and
+the fieldset is not focusable, so it is cleared for two reasons and neither of them generalises.
+Cleared outside the `all: unset` set, and named so the next sweep knows they were looked at:
+`MemberCard`'s name button (`.strand-mc-name`, `strand.css:404`) and `PlaceTile`
+(`.strand-placetile`, `:409`), which take the ring from the stylesheet with nothing inline to beat
+it; `Button`, `Input`, `Select` and `PasswordField`'s own field, which either carry no `all: unset`
+or replace the ring with a drawn border of their own; and every `outline: "none"` in the tree
+(`Input.tsx:54`, `Select.tsx:40`, `AuthHead.tsx:63`, `Composer.tsx:1031` and `:1121`,
+`OnboardingSurface.tsx:666` and `:936`, `AuthSurface.tsx:69` and `:117`,
+`ProfileBlockControl.tsx:169`), which are deliberate suppressions on fields that draw a focus border
+instead and are not this sweep's subject.
+
+**Why no gate caught it.** `scripts/token-check.mjs` proves every cited token resolves in both themes
+(ruling 485); `--focus` resolves, and it is cited, and the check has no opinion about whether the
+declaration that cites it wins its cascade. Nothing in the harness focuses a control and reads its
+computed outline. The matrix's `block-focus` arms read focus *order* and not focus *paint*, which is
+why nine of them pass on every run while the ring is absent.
+
+**The fix this entry names.** One decision, then a mechanical change: either stop using `all: unset`
+on focusable elements in favour of a narrower reset, or give the ring back where the reset removed
+it — a shared `:focus-visible` rule carrying `!important`, or the outline restored inline in each
+part. The first is correct and large; the second is small and is the kind of thing that decays. The
+choice is Design's with the founder, and it wants a harness arm that focuses one control per part and
+reads `outlineStyle`, because this is a defect that a screenshot of a passing run does not show.
+
+**Not this gap's scope.** The ring's colour, offset and radius, all of which the spec settles and
+none of which is in question. The `outline: "none"` suppressions on fields, listed above as cleared.
+Focus order, roving tabindex and the dialog focus traps, which the block-focus and keyboard arms
+already read.
+
+## G50. Sixteen files are not prettier-clean, and CI enforces prettier on every file type except theirs
+
+**Severity: low, tidiness with one decision behind it. Not a merge blocker. Opened 19 September 2026
+during Session 27, filed under ruling 597. The number is assigned by this entry (ruling 638). Not
+fixed here on purpose: a whitespace diff across sixteen files would bury every other change in
+Session 27's PR, which is the reason the handoff asks for a number rather than a reformat.**
+
+**What it is.** `npx prettier --check .` reports sixteen files:
+
+`.claude/settings.json`, `docs/audit/CONFORMANCE-01.md`, `docs/audit/FIX-PR-03.md`,
+`docs/composer/SPEC.md`, `docs/connect/SPEC.md`, `docs/convene/P1-EXTRACTION.md`,
+`docs/convene/P1-SPEC-R5.md`, `docs/convene/P1-SPEC.md`, `docs/onboarding/SPEC.md`,
+`docs/profile/B4A-SPEC.md`, `docs/profile/SPEC.md`, `docs/security/PASS-01.md`,
+`docs/security/PASS-02.md`, `docs/shell/SPEC.md`, `src/styles/strand.css`, `wrangler.jsonc`.
+
+**Whether the repo enforces prettier in CI: it does, and that is what makes the sixteen readable as
+a set rather than as an accident.** `pages.yml:39` runs `bun run lint`, which is `eslint .`, and
+`eslint.config.js` ends with `eslintPluginPrettier` from `eslint-plugin-prettier/recommended`, so a
+prettier violation is an eslint **error** and fails the job. What it does not do is reach these
+files. Flat config lints `**/*.js`, `**/*.cjs` and `**/*.mjs` by default and the one `files` block
+adds `**/*.{ts,tsx}`; nothing adds `.md`, `.json`, `.jsonc` or `.css`. Every one of the sixteen is
+one of those four extensions, and every `.ts`, `.tsx` and `.cjs` file in the tree is clean. The
+sixteen are not sixteen files that slipped past a gate; they are the exact complement of the gate's
+reach.
+
+**The decision this entry exists to surface.** Two coherent answers and the repo currently states
+neither. Add `npx prettier --check .` as its own step in `pages.yml` beside `bun run lint` and
+reformat the sixteen in a PR that does nothing else — which makes the formatter's authority match
+its configuration, at the cost of one whitespace commit across the docs. Or narrow prettier's own
+scope with a `.prettierignore` that names what is not enforced, so `--check` and CI agree and a
+contributor running `bun run format` does not produce a diff CI never asked for. What should not
+stand is the present state, where `bun run format` rewrites sixteen files that no gate will ever
+complain about and no reader can tell whether that is policy or drift.
+
+**Why no gate caught it.** It is not a gate's miss: the gate is doing exactly what it is configured
+to do, over exactly the files it is configured to see. This is a scope question, which is why it is
+an entry and not a fix.
+
+**Not this gap's scope.** `.claude/settings.json`'s contents. An agent never writes its own
+permission rules at any scope (ruling 378), so that file is named here as one of the sixteen and is
+not touched, and whoever takes the reformat decision should note that it is the founder's file
+whichever answer they pick.
