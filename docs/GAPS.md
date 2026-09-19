@@ -2614,13 +2614,28 @@ one dark-theme case. Not a merge blocker, and not a ruling 140 finding: this is 
 PR, filed under ruling 597, and carrying ruling 874's contrast read, which has never had a G number
 because Strand keeps no Gap register and 638 assigns the number by the entry that is written. The
 number is assigned by this entry (ruling 638). State, 19 September 2026 (ruling 917, Session 27's
-PR): the narrow remedy is taken and Contribute is closed — `Button`'s `primary` variant reads the C's
-own ink rung when a `c` is passed, so a Contribute fill carries `--ink` at 8.29:1 instead of
-`--on-fill` at 2.10:1. The entry stays OPEN for Collaborate (3.75:1) and Convene (3.79:1), whose ink
-rungs are themselves `--on-fill` and so do not move: both are below AA for text under 18.66px bold or
-24px regular and both clear the 3:1 large-text floor. The remedy there is darkening those two fills,
-which is a D092 brand change and the founder's and Design's rather than a code session's, and it is
-what this entry is now waiting on.**
+PR): the narrow remedy is taken. `Button`'s `primary` variant reads the C's own ink rung when a `c`
+is passed, so a **Contribute fill** carries `--ink` at 8.29:1 instead of `--on-fill` at 2.10:1. That
+closes the first row of the table below for Contribute and nothing else. The entry stays OPEN on
+three counts, and it is worth being exact about which, because 917's change is narrower than "G41 is
+fixed for Contribute":
+
+1. **Collaborate (3.75:1) and Convene (3.79:1) on their own fills.** Their ink rungs are themselves
+   `--on-fill`, so reading the rung moves nothing. Below AA for text under 18.66px bold or 24px
+   regular, above the 3:1 large-text floor. The remedy is darkening the two fills, a D092 brand
+   change and the founder's and Design's.
+2. **Every `secondary` and `ghost` label, Contribute included, which is the fourth and fifth rows of
+   the table.** 917 changes `primary` only. `Button`'s `secondary` and `ghost` paint the label in the
+   bare brand rung off `cVar` (`Button.tsx:50`, `:53`), so `SectionCard`'s empty-section act
+   (`SectionCard.tsx:133`, `variant="secondary"` with the section's `c`) still reads
+   **2.10:1** for Contribute on `--surface`, unchanged by this PR. Handoff 27-A's proof owed for
+   this item asks for a Contribute `SectionCard` act to be read at 360 and 1280; the reading is that
+   it did not move, and under the change 917 specifies it could not have. The remedy here is not an
+   ink rung at all — the ink rung is for text on a fill — but the text rung, `--c-contribute-text`
+   `#7E6000`, which is the third candidate this entry named when it was opened and is equally
+   Design's.
+3. **`VerbChip` and `CBadge`**, the brand rung as text on its own tint, untouched and unaddressed by
+   917.**
 
 **The read (ruling 874).** A 15px label on Collaborate teal, `--c-collaborate: #30909C`, fails rule
 10's AA target for text below 18.66px bold or 24px regular. `src/styles/strand.css:142` carries the
@@ -2703,9 +2718,10 @@ brand one; or the small-text-on-brand pairings could be moved to the text rung o
 took the first, in Session 27's PR, as `src/components/strand/Button.tsx`'s `onColor`: `primary` with
 a `c` reads that C's ink rung, `danger` keeps `--on-fill` because `--error` is not a C and has no
 rung, and `primary` with no `c` keeps it because the fill is `--ink` and white is correct on it. It
-is a rendered-pixel change on every primary button that carries a C, and Contribute's Publish and
-its `SectionCard` act are the two that visibly move. The second remedy is what the entry now waits
-on; the third is not taken and is not proposed.
+is a rendered-pixel change on every primary button that carries a C, and Contribute's Publish is the
+one that visibly moves. Its `SectionCard` act does **not**: that is a `secondary` button and the
+first remedy does not reach `secondary` or `ghost`, which is the state note above. The second and
+third remedies are both still open and both belong to Design and the founder.
 
 **Not this gap's scope.** The text rung, which is AA on the ground for all five Cs and is what almost
 every surface uses. `CBadge`'s glyph and `AppShell`'s compose tab, which paint the brand rung and the
@@ -3015,8 +3031,7 @@ named the superseded mechanism and is corrected in the same PR rather than left 
 ## G49. The ruling 919 focus-ring sweep: an inline `all: unset` outranks every focus rule in the stylesheet, and 41 of 42 sites carry one
 
 **Severity: high for keyboard accessibility, both themes, every tier. Not a merge blocker and not a
-ruling 140 finding. Opened 19 September 2026 during Session 27 under ruling 919, filed under ruling
-597. The number is assigned by this entry (ruling 638). Recorded, not fixed: the remedy is 41 sites
+ruling 140 finding. Opened 19 September 2026 during Session 27 under ruling 919, filed under ruling 597. The number is assigned by this entry (ruling 638). Recorded, not fixed: the remedy is 41 sites
 across 29 files and a decision about which mechanism gives the ring back, which is Design's and the
 founder's rather than a code session's.**
 
@@ -3038,14 +3053,14 @@ the same two rules reads `solid 2px rgb(74, 141, 119)`.
 **And measured on the running app, not only on a probe.** `/sign-in` at 390, every focusable control,
 each focused in turn and its computed outline read:
 
-| Control | Part | Computed outline when focused |
-| --- | --- | --- |
-| `Sign in` | `Button` | `solid 2px rgb(74, 141, 119)` |
-| `Continue with Google` | `Button` | `solid 2px rgb(74, 141, 119)` |
-| `Sign in with LinkedIn` | `Button` | `solid 2px rgb(74, 141, 119)` |
-| `Show password` | `PasswordField.tsx:79` | `none 0px` |
-| `Forgot your password?` | `sign-in.tsx` text button | `none 0px` |
-| `Create an account` | `sign-in.tsx:247` | `none 0px` |
+| Control                 | Part                      | Computed outline when focused |
+| ----------------------- | ------------------------- | ----------------------------- |
+| `Sign in`               | `Button`                  | `solid 2px rgb(74, 141, 119)` |
+| `Continue with Google`  | `Button`                  | `solid 2px rgb(74, 141, 119)` |
+| `Sign in with LinkedIn` | `Button`                  | `solid 2px rgb(74, 141, 119)` |
+| `Show password`         | `PasswordField.tsx:79`    | `none 0px`                    |
+| `Forgot your password?` | `sign-in.tsx` text button | `none 0px`                    |
+| `Create an account`     | `sign-in.tsx:247`         | `none 0px`                    |
 
 `Button` does not use `all: unset` and its ring draws. The three that do not draw are the three that
 do. One surface, one reading, both halves of the rule in the same screenshot.
@@ -3091,7 +3106,7 @@ instead and are not this sweep's subject.
 **Why no gate caught it.** `scripts/token-check.mjs` proves every cited token resolves in both themes
 (ruling 485); `--focus` resolves, and it is cited, and the check has no opinion about whether the
 declaration that cites it wins its cascade. Nothing in the harness focuses a control and reads its
-computed outline. The matrix's `block-focus` arms read focus *order* and not focus *paint*, which is
+computed outline. The matrix's `block-focus` arms read focus _order_ and not focus _paint_, which is
 why nine of them pass on every run while the ring is absent.
 
 **The fix this entry names.** One decision, then a mechanical change: either stop using `all: unset`
