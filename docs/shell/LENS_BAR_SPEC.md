@@ -27,7 +27,7 @@ Lens sets, canonical order:
 ## Structure
 
 - Track: `--bg-sunken` fill, `--radius-m` (10), 4 padding, 2 gap, 44 tall at every breakpoint, bounded left and right so the row's start and end are visible. No border, no hairlines. Horizontal scroll only when the set cannot fit; nothing truncates or compresses.
-- Distribution: the active lens is content-sized (`flex: none`) and never stretches; inactive lenses share the remaining width equally (`flex: 1 1 0`), min 44 wide, 36 tall.
+- Distribution (ruling 952, superseding the content-sized active lens): every lens takes an equal share of the track (`flex: 1 1 0`), min 44 wide, 36 tall. Selection is not a layout input — no seat changes width or position when the selection moves. The active lens was content-sized (`flex: none`) until 952; that made a tap re-divide the track and slide every other seat under the finger, measured at 390 on the Feed's five lenses as up to 27px of shift, and it is logged as G48.
 - Active chip (ruling 488, Design pass 01 item 6, closing W34): the active tab **is** the chip. It
   carries the `--surface` ground (`--radius-badge`, 8) and `--shadow-1` as its own background, so the
   indicator is painted on the first frame and on every resize and cannot be missing. The absolutely

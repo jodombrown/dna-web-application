@@ -23,7 +23,7 @@
 //                                              ran out, the token is not configured, or the call could
 //                                              not be anchored (below). Never `none`: nothing was
 //                                              found or not found, because the search did not run.
-// Place    = { place_id, place_name, area, city, country, lng, lat, timezone, label, kind }
+// Place    = { place_id, place_name, area, city, region, country, lng, lat, timezone, label, kind }
 //            kind is 'venue' for a poi or an address and 'area' for a place, locality or
 //            neighborhood (Session 23, change 2): Search Box holds no POI and no street addressing
 //            for Ghana, so a venue there resolves to its area at best, and the form keeps the
@@ -103,6 +103,13 @@ export type Place = {
   place_name: string;
   area: string | null;
   city: string | null;
+  /**
+   * Mapbox's context region for the place: the admin-1 name, "Ashanti" for a venue in Kumasi
+   * (ruling 927). It was already in every response and was dropped, so a surface that wanted to
+   * name a region had to issue a second lookup for a value the first one carried. Null where the
+   * response has no region, never guessed from the city or the country.
+   */
+  region: string | null;
   country: string | null;
   lng: number;
   lat: number;
@@ -278,6 +285,11 @@ function named(s: Suggestion): Suggested | null {
   const ctx = s.context ?? {};
   const area = ctx.neighborhood?.name ?? ctx.locality?.name ?? ctx.district?.name ?? null;
   const city = ctx.place?.name ?? ctx.locality?.name ?? ctx.region?.name ?? null;
+  // Ruling 927. `city` above may already have fallen back to the region where Mapbox gave no
+  // place or locality; that fallback is unchanged and this is not derived from it. This is the
+  // region in its own right, and where the two hold the same string that is the response saying
+  // so rather than this function copying one into the other.
+  const region = ctx.region?.name ?? null;
   const country = ctx.country?.name ?? null;
   const parts = [name, area, city].filter((p, i, a) => p && a.indexOf(p) === i) as string[];
   const label =
@@ -289,7 +301,7 @@ function named(s: Suggestion): Suggested | null {
   const kind = VENUE_TYPES.has(typeof s.feature_type === "string" ? s.feature_type : "")
     ? "venue"
     : "area";
-  return { place_id: id, place_name: name, area, city, country, label, kind };
+  return { place_id: id, place_name: name, area, city, region, country, label, kind };
 }
 
 function zoneFor(lng: number, lat: number): string | null {

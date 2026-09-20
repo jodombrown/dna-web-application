@@ -24,6 +24,13 @@ export function Button({
   ...rest
 }: ButtonProps) {
   const color = variant === "danger" ? "var(--error)" : cVar(c);
+  // G41 (ruling 917): the three-rung contract writes an ink rung per C so a fill never carries
+  // unreadable text, and `primary` never read it: white on --c-contribute #D4AF37 is 2.10:1, under
+  // the 3:1 floor an icon has to clear. The rung fixes Contribute to 8.29:1. `danger` keeps
+  // --on-fill because --error is not a C and has no rung, and `primary` with no `c` keeps it
+  // because the fill is --ink. Collaborate (3.75:1) and Convene (3.79:1) do not move, because their
+  // rungs are --on-fill; darkening those fills is a D092 brand change and G41 stays open for them.
+  const onColor = variant === "primary" && c ? "var(--c-" + c + "-ink)" : "var(--on-fill)";
   const base: CSSProperties = {
     fontFamily: "var(--font-sans)",
     fontSize: size === "sm" ? 15 : 17,
@@ -44,7 +51,7 @@ export function Button({
     whiteSpace: "nowrap",
   };
   const v: Record<NonNullable<ButtonProps["variant"]>, CSSProperties> = {
-    primary: { background: color, color: "var(--on-fill)" },
+    primary: { background: color, color: onColor },
     secondary: {
       background: "transparent",
       color,

@@ -58,7 +58,9 @@ Panel contents, verbatim:
 
 - Title: `Venues in Ghana`
 - Body: `The map holds no venue records for Ghana, so searching will not find your venue. This is the map's gap, not a mistake in what you typed.`
-- Second line: `Type the venue as you say it, then place the pin where it is. Both travel with the event.`
+- Second line (929): `Type the venue as you say it. Your words travel with the event.` It read
+  `Type the venue as you say it, then place the pin where it is. Both travel with the event.`;
+  the pin never travelled and the clause that named the act went with the act.
 
 The country name in the title and body is the country the host chose. The claim is about that country's coverage and renders only where it is true.
 
@@ -66,9 +68,19 @@ The country name in the title and body is the country the host chose. The claim 
 
 The nothing-found state's hint reads, verbatim:
 
-`The map has no venue records in Ghana. Your words are kept, and you can place the pin yourself.`
+`The map has no venue records in Ghana. Your words are kept, and you can publish.` (929; it
+ended `and you can place the pin yourself` until the pin was withdrawn.)
 
-## 5. The pin and the map plate (790, 792)
+## 5. The pin and the map plate (790, 792; amended by 929)
+
+> **Ruling 929, 19 September 2026 — the host-placed pin is withdrawn from this build.** The plate
+> carries no projection, so the point the host placed was a fraction of a drawn plate and not a
+> coordinate; `publish_post` read neither `pin_x` nor `pin_y` and never could without writing
+> invented geography into `event_delivery` (gap G43). A control that names an act and does not
+> perform it is the defect commit `c4acd39` was written about, so the control is removed rather than
+> hidden, along with the copy that names it. What section 5 orders below is the contract for the
+> pass that gives this plate real tiles from the provider; what ships today is the plate, the area
+> chip and the map's own point. The clauses this ruling changes are marked inline.
 
 A map plate renders inside `data-convene="place-block"` in the states the extraction lists. It is a drawn plate: a hairline grid on `--bg-sunken` with the matched area named in a chip. **It renders no tiles and no invented geography.** Its own line, in the unplaced state: `No point yet. Map tiles come from the provider in the built surface.`
 
@@ -90,12 +102,22 @@ The remaining instruction lines, which do not vary by input mode:
 - Pin placed by the host, and both map-link states: `You placed this point. People see it as your own, not as the map's.`
 - Host-placed beside resolver-derived: `Ink is the point the map holds. Copper, ringed, is the point you placed.`
 - Nothing found, rewritten: `The map has no record here, so the point is yours to place.`
+  Under 929, with no point for the host to place: `The map has no record here. Your words are what the event carries.`
 - Single suggestion, pin makes it moot: `This point is the map's. If it is not your venue, place your own.`
+  Under 929: `This point is the map's own record for the place you picked.`
+- Under 929, the plate up with no point at all: `No point yet. Pick a place above and the map shows the point it holds for it.`
+  This replaces the `Map shown, pin unplaced` row of the table above, which was one of the two
+  input-mode states; both were host-pin states, so nothing in this section varies by input mode
+  in the shipped build.
 - Area beside the words: `This point is the area the map matched, not the venue.`
 
-The pin's act, by state: `Place the pin` in the unplaced and nothing-found states; `Move the pin` in pin-placed, host-placed-beside-derived and both map-link states; `Place it yourself` in single-suggestion-moot.
+The pin's act, by state: `Place the pin` in the unplaced and nothing-found states; `Move the pin` in pin-placed, host-placed-beside-derived and both map-link states; `Place it yourself` in single-suggestion-moot. **Withdrawn by 929: no act renders, and the arms assert its absence rather than its label.**
 
-## 6. The host-placed chip, four readings (copy section 4)
+## 6. The host-placed chip, four readings (copy section 4; amended by 929)
+
+> **929:** three of the four readings belong to a host-placed point and are withdrawn with it.
+> The fourth, `From the map's records`, is the only one this build renders, and it carries the
+> ink-dot treatment as the table below already says.
 
 One visual in every case: Convene copper on `--surface`, `--c-convene` hairline, `--c-convene-text` ink, inside a dashed `--c-convene` ring around a copper dot. Only the words change, and they change by who is reading.
 

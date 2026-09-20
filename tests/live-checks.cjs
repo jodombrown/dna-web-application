@@ -720,6 +720,22 @@ async function get(url, headers = {}) {
               osuPlaces.some((p) => p.kind === "area" && /osu/i.test(p.place_name || "")),
             brief(osu),
           );
+          // Ruling 927, read on the deployed function rather than on the payload: every place
+          // place-resolve answers carries `region` — a string where Mapbox's context held one, null
+          // where it did not. Never absent, because a surface that wants to name a region must be
+          // able to tell "Mapbox gave none" from "this build drops it", and never derived from the
+          // city or the country, which is 790's guardrail. Which regions Mapbox actually knows is
+          // Mapbox's business and is reported rather than asserted; the contract is the key and its
+          // type. This is the Ghana side of Pass 5's column — G35 means Ghana returns areas rather
+          // than venues, so this is the Ghana reading that exists to be taken.
+          record(
+            "place-resolve: every place carries a region, a string or null, never absent (927)",
+            osuPlaces.length > 0 &&
+              osuPlaces.every(
+                (p) => "region" in p && (typeof p.region === "string" || p.region === null),
+              ),
+            "Ghana/Osu regions " + JSON.stringify(osuPlaces.map((p) => p.region)),
+          );
           record(
             "place-resolve: a venue row carries kind venue and an area row kind area (change 2)",
             placesOf(ukList).every((p) => p.kind === "venue" || p.kind === "area") &&

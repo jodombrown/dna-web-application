@@ -839,6 +839,9 @@ async function mockSupabase(page, db, opts = {}) {
         place_name: "Front Room",
         area: "Osu",
         city: "Accra",
+        // Ruling 927: the region Mapbox returns in the same context block as the city and the
+        // country. It was dropped before Pass 5 and a surface wanting to say it had to look twice.
+        region: "Greater Accra",
         country: "Ghana",
         lng: -0.1747,
         lat: 5.5559,
@@ -853,6 +856,9 @@ async function mockSupabase(page, db, opts = {}) {
         place_name: "Osu",
         area: null,
         city: "Accra",
+        // Ruling 927's other half: a response that carries no region. Null here, "" through the
+        // composer, and `nullif(trim(...), '')` makes it null in the column rather than a guess.
+        region: null,
         country: "Ghana",
         lng: -0.1794,
         lat: 5.5557,
@@ -868,6 +874,7 @@ async function mockSupabase(page, db, opts = {}) {
         place_name: "Labadi Villas",
         area: "Labadi Villas",
         city: "Accra",
+        region: null,
         country: "Ghana",
         lng: -0.1553,
         lat: 5.5606,
@@ -1642,6 +1649,15 @@ async function launch(browserType) {
 const results = [];
 const armLog = [];
 const crashSightings = [];
+/**
+ * Ruling 916: the lens bar's rendered mode, per viewport, on the run that is cited. It used to live
+ * only in the `lensFit` check's detail string, and `record()` prints a detail when the check fails
+ * and never when it passes, so the one run whose reading anyone wants to quote — a green one — was
+ * the one run that said nothing. The 820 reading is the standing instance, because that is the tier
+ * whose icon-first boundary G37 leaves open. This is a record and not an assertion (ruling 930): it
+ * states what the bar did and fails nothing, and the check beside it is what judges.
+ */
+const lensModes = [];
 let openArm = null;
 /** Ruling 830: the zero the per-arm progress line counts from. */
 const runStart = Date.now();
@@ -1942,6 +1958,24 @@ function finish({ full = false, engines = [] } = {}) {
     console.log(
       `${tier}: ${t.arms} arms | ${t.arms - t.failed.size} with no failing check | ` +
         `${t.failed.size} with at least one | ${t.crashed} that lost a web process`,
+    );
+  }
+
+  // Ruling 916. Inside the tail both workflows re-emit into the job summary (they take everything
+  // from `=== arms by tier` on), so this reaches the summary of a passing run, which is the whole
+  // point: a record that only appears on failure cannot say which mode the cited run rendered.
+  if (lensModes.length) {
+    console.log("\n=== lens bar mode by viewport (ruling 916: a record, not an assertion) ===");
+    for (const r of lensModes)
+      console.log(
+        `${String(r.width).padStart(4)}  ${String(r.mode)}  track ${r.track}  ${r.arm}` +
+          (r.probe && r.probe.length ? `  probe ${r.probe.join(" ")}` : ""),
+      );
+    const at820 = lensModes.filter((r) => r.width === 820);
+    console.log(
+      at820.length
+        ? "820: " + at820.map((r) => `${r.mode} (${r.arm})`).join(", ")
+        : "820: not read on this run (no shell arm at 820)",
     );
   }
 
@@ -2665,11 +2699,10 @@ async function runConvene(browserType, bname, [w, h], theme) {
     colorScheme: theme,
   });
   const page = await ctx.newPage();
-  // P4-SPEC section 5's two input-mode states. `src/lib/tier.ts`'s `useMode` reads exactly this
-  // query, so asking the page for it proves the mapping — the words follow the input mode — rather
-  // than proving that a given engine's mobile emulation flips the query, which is not this suite's
-  // subject and differs between Chromium and WebKit.
-  const coarse = await page.evaluate(() => matchMedia("(pointer: coarse)").matches);
+  // P4-SPEC section 5's two input-mode states were both host-pin states — `Map shown, pin
+  // unplaced` and `Pin being dragged` — and ruling 929 removed the pin. Nothing in the place
+  // section varies by input mode any more, so the `coarse` read that proved the mapping went with
+  // them rather than sitting here unread. It comes back with the pin.
   const db = makeMockDb();
   seedPosts(db, 2);
   const cancelledId = seedEvent(db, "cancelled");
@@ -2812,7 +2845,7 @@ async function runConvene(browserType, bname, [w, h], theme) {
     await countrySelect.selectOption("United States");
     await dialog
       .getByText(
-        "The map has no venue records in United States. Your words are kept, and you can place the pin yourself.",
+        "The map has no venue records in United States. Your words are kept, and you can publish.",
       )
       .waitFor({ timeout: 5000 });
     const usCall = db.placeCalls[db.placeCalls.length - 1];
@@ -2907,11 +2940,14 @@ async function runConvene(browserType, bname, [w, h], theme) {
         (await dialog.locator('[data-convene="pin-chip"]').getAttribute("data-pin-source")) ===
           "map" &&
         (await dialog.locator('[data-convene="plate-grid"] [data-pin-kind="map"]').count()) === 1 &&
+        // Ruling 929: the host's pin is gone, so `[data-pin-kind="host"]` is absent everywhere
+        // rather than absent in this state. The count that mattered here was the map's, and the
+        // line beside it describes the map's point instead of inviting the host to place one.
         (await dialog.locator('[data-convene="plate-grid"] [data-pin-kind="host"]').count()) ===
           0 &&
         (await dialog.locator('[data-convene="pin-instruction"]').textContent()) ===
-          "This point is the map's. If it is not your venue, place your own." &&
-        (await dialog.locator('[data-convene="pin-act"]').textContent()) === "Place it yourself" &&
+          "This point is the map's own record for the place you picked." &&
+        (await dialog.locator('[data-convene="pin-act"]').count()) === 0 &&
         (await dialog.locator('[data-convene="door-line"]').textContent()) ===
           "Posting publishes this event. It goes to the Feed and to Convene." &&
         !!anchored &&
@@ -2966,9 +3002,7 @@ async function runConvene(browserType, bname, [w, h], theme) {
     );
     await dialog.locator('[data-convene="homes"] button', { hasText: "Nairobi" }).click();
     await dialog
-      .getByText(
-        "The map has no venue records in Kenya. Your words are kept, and you can place the pin yourself.",
-      )
+      .getByText("The map has no venue records in Kenya. Your words are kept, and you can publish.")
       .waitFor({ timeout: 5000 });
     const homeCall = db.placeCalls[db.placeCalls.length - 1];
     record(
@@ -3013,12 +3047,11 @@ async function runConvene(browserType, bname, [w, h], theme) {
           .getByRole("option")
           .count()) === 2 &&
         (await dialog.locator('[data-convene="place-resolved"]').count()) === 0 &&
-        // P4-SPEC section 5, `Map shown, pin unplaced`: the plate is up, no point stands behind
-        // it, and this is one of the two states where input mode changes the words.
+        // P4-SPEC section 5, `Map shown, no point`: the plate is up and nothing stands behind it.
+        // This was one of the two states where input mode changed the words, and both of those
+        // were host-pin states, so ruling 929 leaves the line the same on either input mode.
         (await dialog.locator('[data-convene="pin-instruction"]').textContent()) ===
-          (coarse
-            ? "Press the map where the venue is, then drag to adjust."
-            : "Click the map where the venue is, or drag the pin.") &&
+          "No point yet. Pick a place above and the map shows the point it holds for it." &&
         !!last &&
         last.country_name === "Ghana" &&
         last.proximity == null &&
@@ -3088,9 +3121,7 @@ async function runConvene(browserType, bname, [w, h], theme) {
     await dialog.getByRole("button", { name: "Change" }).click();
     await field("place_query").fill("Kwame's rooftop");
     await dialog
-      .getByText(
-        "The map has no venue records in Ghana. Your words are kept, and you can place the pin yourself.",
-      )
+      .getByText("The map has no venue records in Ghana. Your words are kept, and you can publish.")
       .waitFor({ timeout: 5000 });
     record(
       tag +
@@ -3135,9 +3166,13 @@ async function runConvene(browserType, bname, [w, h], theme) {
         venuePanel.includes(
           "The map holds no venue records for Ghana, so searching will not find your venue. This is the map\u2019s gap, not a mistake in what you typed.",
         ) &&
-        venuePanel.includes(
-          "Type the venue as you say it, then place the pin where it is. Both travel with the event.",
-        ) &&
+        // Ruling 929 on 897's line: it claimed the pin travelled with the event and it never did
+        // (G43). The clause that named the act goes with the act, and the panel now claims only
+        // what `place_text` keeps. Asserted as an exact absence as well as a presence, so a
+        // half-reverted edit fails here rather than reading as a pass.
+        venuePanel.includes("Type the venue as you say it. Your words travel with the event.") &&
+        !venuePanel.includes("place the pin") &&
+        !venuePanel.includes("Both travel with the event") &&
         (await dialog.locator('[data-convene="map-plate"]').count()) === 0,
       venuePanel.slice(0, 200),
     );
@@ -3161,81 +3196,45 @@ async function runConvene(browserType, bname, [w, h], theme) {
     // no invented geography, so there is nothing on it to read as a street (P4-SPEC guardrail 3).
     await field("place_query").fill("Kwame's rooftop");
     await dialog
-      .getByText(
-        "The map has no venue records in Ghana. Your words are kept, and you can place the pin yourself.",
-      )
+      .getByText("The map has no venue records in Ghana. Your words are kept, and you can publish.")
       .waitFor({ timeout: 5000 });
     await dialog.locator('[data-convene="map-plate"]').waitFor({ timeout: 5000 });
     record(
       tag +
-        " Pass 4: the plate is drawn and unplaced, its own line says where tiles come from, and the act is Place the pin (790, 792)",
+        " Pass 4: the plate is drawn with no point, its own line says where tiles come from, and no control offers to place one (790, 792, 929)",
       (await dialog.locator('[data-convene="map-plate"]').getAttribute("data-pin-state")) ===
         "unplaced" &&
         (await dialog.locator('[data-convene="plate-line"]').textContent()) ===
           "No point yet. Map tiles come from the provider in the built surface." &&
         (await dialog.locator('[data-convene="pin-instruction"]').textContent()) ===
-          "The map has no record here, so the point is yours to place." &&
-        (await dialog.locator('[data-convene="pin-act"]').textContent()) === "Place the pin" &&
+          "The map has no record here. Your words are what the event carries." &&
+        // Ruling 929, asserted as an absence: the act is gone from the DOM rather than disabled or
+        // relabelled, so this reads as a removal and cannot pass on a control that still exists.
+        (await dialog.locator('[data-convene="pin-act"]').count()) === 0 &&
+        (await dialog.locator('[data-convene="host-point"]').count()) === 0 &&
+        (await dialog.locator('[data-pin-kind="host"]').count()) === 0 &&
         (await dialog.locator('[data-convene="pin-chip"]').count()) === 0 &&
         (await dialog.locator('[data-convene="plate-grid"] [data-pin-kind]').count()) === 0 &&
         (await dialog.locator('[data-convene="plate-grid"] img').count()) === 0,
     );
 
-    // The host places it, by pressing the plate where the venue is. That opens the drag, which is
-    // section 5's other input-mode state and the chip's second reading.
-    // Into view first: at 390 the plate sits below the fold of the composer's own scroller, and a
-    // press at a point outside the viewport reaches nothing.
-    await dialog.locator('[data-convene="plate-grid"]').scrollIntoViewIfNeeded();
-    const grid = await dialog.locator('[data-convene="plate-grid"]').boundingBox();
-    await page.mouse.move(grid.x + grid.width * 0.4, grid.y + grid.height * 0.6);
-    await page.mouse.down();
-    await dialog
-      .locator('[data-convene="map-plate"][data-pin-state="dragging"]')
-      .waitFor({ timeout: 5000 });
-    record(
-      tag +
-        " Pass 4: a point being moved says so, and the drag's words follow the input mode (790, 792, section 6)",
-      (await dialog.locator('[data-convene="pin-chip"]').textContent()) === "Moving your point" &&
-        (await dialog.locator('[data-convene="pin-instruction"]').textContent()) ===
-          (coarse ? "Keep dragging. Lift your finger to place it." : "Release to place it."),
-      "coarse " + coarse,
-    );
-    await page.mouse.up();
-    await dialog
-      .locator('[data-convene="map-plate"][data-pin-state="placed"]')
-      .waitFor({ timeout: 5000 });
-    // The act is activated rather than only read. A control named `Move the pin` that moves nothing
-    // reads correct in a label assertion and is useless, and this branch shipped exactly that for
-    // three commits: the act wrote the same fraction back and the plate had no keyboard path at
-    // all. So the act is pressed, focus is followed onto the plate, and an arrow has to move the
-    // point — which is the whole of what a keyboard or AT host can do here.
-    const hostX = () => dialog.locator('[data-convene="host-point"]').getAttribute("data-pin-x");
-    const beforeKeys = await hostX();
-    await dialog.locator('[data-convene="pin-act"]').click();
-    const focusedOnPlate = await page.evaluate(
-      () => document.activeElement && document.activeElement.getAttribute("data-convene"),
-    );
-    await page.keyboard.press("ArrowRight");
-    await dialog
-      .locator(`[data-convene="host-point"]:not([data-pin-x="${beforeKeys}"])`)
-      .waitFor({ timeout: 5000 });
-    const afterKeys = await hostX();
-    record(
-      tag +
-        " Pass 4: the host's own point reads as the host's, the chip says so, the act becomes Move the pin, and pressing it hands the keyboard the plate (790, 792, section 6)",
-      focusedOnPlate === "plate-grid" &&
-        Number(afterKeys) > Number(beforeKeys) &&
-        (await dialog.locator('[data-convene="pin-chip"]').textContent()) === "Placed by you" &&
-        (await dialog.locator('[data-convene="pin-chip"]').getAttribute("data-pin-source")) ===
-          "host" &&
-        (await dialog.locator('[data-convene="plate-grid"] [data-pin-kind="host"]').count()) ===
-          1 &&
-        (await dialog.locator('[data-convene="plate-grid"] [data-pin-kind="map"]').count()) === 0 &&
-        (await dialog.locator('[data-convene="pin-instruction"]').textContent()) ===
-          "You placed this point. People see it as your own, not as the map's." &&
-        (await dialog.locator('[data-convene="pin-act"]').textContent()) === "Move the pin" &&
-        (await dialog.locator('[data-convene="plate-line"]').count()) === 0,
-    );
+    // Ruling 929 removed two checks here, and they are removed rather than left passing on an
+    // absent control (ruling 228: an arm that cannot run is not an arm that passed).
+    //
+    //   - `a point being moved says so, and the drag's words follow the input mode`, which pressed
+    //     the plate, held the drag open and read `Moving your point`.
+    //   - `the host's own point reads as the host's, the chip says so, the act becomes Move the
+    //     pin, and pressing it hands the keyboard the plate`, which pressed the act, followed focus
+    //     onto the grid and drove an arrow key.
+    //
+    // Both drove the host-placed pin, whose position `publish_post` never read and never could,
+    // because a drawn plate carries no projection (G43). Nothing else in this arm exercised them,
+    // so there is no behaviour left behind them to cover: the pin's absence is now asserted in the
+    // check above, as an absence, and the plate's remaining point is the map's own. The drag and
+    // the keyboard path come back with the pin, in the pass that gives this plate real tiles.
+    //
+    // What that costs the declaration is two checks on each of the two `convene` arms, from 44 to
+    // 42, which is a deliberate edit of tests/expected-counts.json and not a regeneration.
 
     // The map link (815, 816). The promise the hint makes is that DNA keeps it as a link and never
     // reads it, and the check that proves it is the one that counts lookups: the link goes in and
@@ -3282,9 +3281,7 @@ async function runConvene(browserType, bname, [w, h], theme) {
     await shot(page, `${tag}-03b-place-unavailable`);
     await field("place_query").fill("Kwame's rooftop");
     await dialog
-      .getByText(
-        "The map has no venue records in Ghana. Your words are kept, and you can place the pin yourself.",
-      )
+      .getByText("The map has no venue records in Ghana. Your words are kept, and you can publish.")
       .waitFor({ timeout: 5000 });
 
     // The moment: a failed parse mounts the pickers; a window is words (520, 634).
@@ -3442,6 +3439,10 @@ async function runConvene(browserType, bname, [w, h], theme) {
         // SPEC Revision 5's exit check (799): event_delivery.country is the chosen country on every
         // published in-person event, and place_text never contains it.
         payload.fields["convene.country"] === "Ghana" &&
+        // Ruling 927: the region rides the same payload as the city and the country, so the write
+        // that stores them stores it too and no surface has to look the place up a second time to
+        // name it. Front Room's Mapbox context carries `Greater Accra`.
+        payload.fields["convene.region"] === "Greater Accra" &&
         !String(payload.fields["convene.place_text"] || "").includes("Ghana") &&
         payload.fields["convene.delivery_intent"] ===
           "In person at Front Room, Osu, Accra and Online, link to be announced." &&
@@ -3541,9 +3542,7 @@ async function runConveneZone(browserType, bname, [w, h], theme) {
     await country().selectOption("Ghana");
     await field("place_query").fill("Kwame's rooftop");
     await dialog
-      .getByText(
-        "The map has no venue records in Ghana. Your words are kept, and you can place the pin yourself.",
-      )
+      .getByText("The map has no venue records in Ghana. Your words are kept, and you can publish.")
       .waitFor({ timeout: 5000 });
     record(
       tag + " Ghana with words only: no zone control, no zone line, publishable (813, 821)",
@@ -3567,7 +3566,11 @@ async function runConveneZone(browserType, bname, [w, h], theme) {
       !!paid &&
         paid.fields["convene.timezone"] === "Africa/Accra" &&
         /T19:00/.test(String(paid.fields["convene.starts_at"])) &&
-        paid.fields["convene.country"] === "Ghana",
+        paid.fields["convene.country"] === "Ghana" &&
+        // Ruling 927's null half, at the write boundary: this event is words only, nothing
+        // resolved, so no region reaches the payload and `publish_post`'s nullif writes null.
+        // Nothing is derived from the country or the city to fill it, which is 790's guardrail.
+        !paid.fields["convene.region"],
       paid
         ? String(paid.fields["convene.starts_at"]) + " " + paid.fields["convene.timezone"]
         : "no payload",
@@ -4094,10 +4097,67 @@ async function runShell(browserType, bname, [w, h]) {
       !!lensFit && lensFit.overflowing.length === 0 && !lensFit.barOverflow,
       JSON.stringify(lensFit),
     );
+    // Ruling 916: kept for the closing summary, so a green run states the mode it read.
+    if (lensFit)
+      lensModes.push({
+        arm: tag,
+        width: w,
+        mode: lensFit.mode,
+        track: lensFit.track,
+        probe: lensFit.probe,
+      });
+    // G48 (ruling 952): selection must not be a layout input. The bar used to give the active tab
+    // its content width and the others an equal share of what was left, so moving the selection
+    // moved every seat and the member's next tap landed on the neighbour. The G36 check above reads
+    // the bar in one selection state and cannot see that; this one reads the same seats twice,
+    // across the selection the arm was already going to make. Compact only, at 390, which is where
+    // the taps are and where the prototype's reading was taken.
+    const seatsNow = () =>
+      page.evaluate(() => {
+        const bar = document.querySelector('[role="tablist"][aria-label="Lens"]');
+        if (!bar) return null;
+        const t = bar.getBoundingClientRect();
+        return {
+          track: { x: +t.x.toFixed(2), w: +t.width.toFixed(2) },
+          seats: Array.from(bar.querySelectorAll('[role="tab"]')).map((el) => {
+            const r = el.getBoundingClientRect();
+            return {
+              id: el.getAttribute("data-lens"),
+              x: +r.x.toFixed(2),
+              w: +r.width.toFixed(2),
+              on: el.getAttribute("aria-selected") === "true",
+            };
+          }),
+        };
+      });
+    const seatsBefore = w === 390 ? await seatsNow() : null;
     // Lens in the URL, back-button safe.
     await page.click('[role="tablist"][aria-label="Lens"] [data-lens="saved"]');
     await page.waitForURL("**/feed?lens=saved");
     await page.locator('[data-testid="feed-empty"][data-lens="saved"]').waitFor({ timeout: 10000 });
+    if (w === 390) {
+      const seatsAfter = await seatsNow();
+      // The track itself must not have moved either, or the comparison is measuring the column and
+      // not the distribution. Reported in the detail so a failure says which of the two it was.
+      const trackSame =
+        !!seatsBefore &&
+        !!seatsAfter &&
+        Math.abs(seatsBefore.track.x - seatsAfter.track.x) < 0.5 &&
+        Math.abs(seatsBefore.track.w - seatsAfter.track.w) < 0.5;
+      const moved = [];
+      if (seatsBefore && seatsAfter)
+        for (const b of seatsBefore.seats) {
+          const a = seatsAfter.seats.find((s) => s.id === b.id);
+          if (!a) moved.push(`${b.id}:gone`);
+          else if (Math.abs(a.x - b.x) >= 0.5 || Math.abs(a.w - b.w) >= 0.5)
+            moved.push(`${b.id}:${b.x}+${b.w}->${a.x}+${a.w}`);
+        }
+      record(
+        tag + " lens bar: selecting a lens moves no seat (G48, ruling 952)",
+        trackSame && moved.length === 0 && !!seatsBefore && seatsBefore.seats.length > 1,
+        JSON.stringify({ trackSame, moved, before: seatsBefore, after: seatsAfter }),
+      );
+    }
     record(
       tag + " Saved lens: ?lens=saved, honest empty state, scope line",
       (await page.locator("[data-lens-scope]").textContent()).includes("saved"),

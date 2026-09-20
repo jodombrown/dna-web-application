@@ -6,8 +6,10 @@
 // tab carries the --surface chip itself (--radius-badge, --shadow-1), so the indicator is painted
 // on the first frame and on every resize and cannot be missing (W34, ruling 488); the measured
 // absolute chip that used to be the only indicator is gone, and nothing about the indicator depends
-// on a layout read any more. Inactive lenses are bare icons sharing the remaining width (icon only
-// below expanded, icon plus label at expanded via `labels`). The explainer collapse is latched for
+// on a layout read any more. Every lens takes an equal share of the track (ruling 952): the active
+// tab used to be content-sized, which made selecting one re-divide the track and move every seat
+// under the finger that chose it, logged as G48. Inactive lenses are bare icons (icon only below
+// expanded, icon plus label at expanded via `labels`). The explainer collapse is latched for
 // the visit (405): the first scroll the host reports collapses the descriptor and it stays
 // collapsed; tapping the active lens brings it back, and that tap does not unlatch the scroll rule.
 // Tabs resolve to --target-min (ruling 498): minHeight always, and minWidth only under `compact`,
@@ -19,8 +21,9 @@
 // slot, no descriptor, inactive lenses minWidth --target-min, which is 24 and not 32. `dense`: the
 // active lens shows its name in place of its icon, and nothing else moves — the icon is suppressed
 // on the active lens only, every other lens keeps its icon, every lens still renders as a tab, the
-// tablist and the labels-fit switch below are untouched, and the active tab's side padding tightens
-// to 0 10px. Its only caller is `AppHeader`. Ruling 905 takes the seat to 44; the mechanism is
+// tablist and the labels-fit switch below are untouched. Its only caller is `AppHeader`. Its own
+// active-tab padding step is gone with ruling 952: one padding for every state, because a padding
+// that varies by selection varies the seat (see the tab's style below). Ruling 905 takes the seat to 44; the mechanism is
 // pending Design, which chooses between a 52px track and a zero-padding 44px track, and nothing
 // here implements it.
 // Correction 14 (ruling 723, re-synced at compile v1789537371639386): labels-fit. The bar measures
@@ -96,13 +99,15 @@ export function LensBar<Id extends string = string>({
       setFit(true);
       return;
     }
-    // The fit test matches the layout it decides for. The track gives the active tab its content
-    // width (flex: none) and every other tab an equal share of what is left (flex: 1 1 0), so a
-    // label fits only if it fits its share, not only if the labels' sum fits the track: run 239
-    // on this branch read "network" at 86px of content inside a 72px share at 390 with the sum
-    // test answering "fits", which is the founder's screenshot. Whichever lens is active, the
-    // widest label as an active tab plus the widest as an inactive tab times the others, with the
-    // gaps and the track's padding, has to fit; otherwise the bar renders icon-first.
+    // The fit test matches the layout it decides for. That rule is why run 239 caught the founder's
+    // screenshot — the sum test passed while "network" sat at 86px of content inside a 72px share —
+    // and it is why this arithmetic changed when ruling 952 changed the distribution. The track now
+    // divides equally: every tab takes flex: 1 1 0 and a seat is the same width whichever lens is
+    // active. So the test is one seat against the widest label in either shape it can be rendered
+    // in, times the number of seats, with the gaps and the track's padding; otherwise icon-first.
+    // Equal seats are the stricter test of the two, because the widest label has to fit one seat
+    // rather than the whole track minus the others' shares. That moves G37's boundary and G48
+    // records it.
     const measure = () => {
       if (!track.current || !probe.current) return;
       let activeMax = 0;
@@ -112,8 +117,14 @@ export function LensBar<Id extends string = string>({
         if (el.getAttribute("data-probe") === "active") activeMax = Math.max(activeMax, w);
         else inactiveMax = Math.max(inactiveMax, w);
       });
-      const others = Math.max(0, lenses.length - 1);
-      const need = 8 + others * 2 + activeMax + others * inactiveMax;
+      const n = lenses.length;
+      const others = Math.max(0, n - 1);
+      // A seat has to hold its label as the active tab (bold, 14px sides) and as an inactive one
+      // (medium, 8px sides), because any lens can be the selected one. Both shapes are measured
+      // rather than the wider one assumed: the probe renders each label twice and the seat takes
+      // whichever answered larger.
+      const seat = Math.max(activeMax, inactiveMax);
+      const need = 8 + others * 2 + n * seat;
       setFit(Math.ceil(need) <= track.current.clientWidth);
     };
     measure();
@@ -197,8 +208,9 @@ export function LensBar<Id extends string = string>({
           >
             {lenses.map((l) =>
               (["active", "inactive"] as const).map((role) => (
-                // Each label twice: as the active tab (bold, 14px sides) and as an inactive one
-                // (medium, 8px sides), the two shapes the track renders.
+                // Each label twice: as the active tab (bold) and as an inactive one (medium), the
+                // two shapes the track renders. The side padding is the track's own single value
+                // (952), so weight is the only thing that separates the two measurements.
                 <span
                   key={l.id + ":" + role}
                   data-probe={role}
@@ -206,7 +218,7 @@ export function LensBar<Id extends string = string>({
                     display: "inline-flex",
                     alignItems: "center",
                     gap: 8,
-                    padding: role === "active" ? "0 14px" : "0 8px",
+                    padding: "0 8px",
                     fontSize: 15,
                     fontWeight: role === "active" ? 700 : 500,
                     border: "1px solid transparent",
@@ -274,11 +286,24 @@ export function LensBar<Id extends string = string>({
                 position: "relative",
                 zIndex: 1,
                 cursor: dis ? "default" : "pointer",
-                flex: on ? "none" : "1 1 0",
+                // Ruling 952 (G48): every seat takes the same share, so selection is not a layout
+                // input. The active tab used to take `none` and size to its content, which made a
+                // tap re-divide the track and slide every other seat under the finger — measured at
+                // 390 on the Feed's five lenses as up to 27px of shift on one selection. Nothing
+                // about the indicator changes: it is still this tab's own background (488).
+                flex: "1 1 0",
                 minWidth: compact ? "var(--target-min)" : 44,
                 minHeight: "var(--target-min)",
                 height: 36,
-                padding: on ? (dense ? "0 10px" : "0 14px") : "0 8px",
+                // One padding for every state, and this is part of 952 rather than a tidy-up.
+                // `flex-basis: 0` under `box-sizing: border-box` cannot take a border box below its
+                // own padding, so the padding is a floor on the base size and only what is left
+                // over is divided equally: with the active tab at 14px sides and the others at 8,
+                // the seats came out 78 and 66 at 390 and the tap still moved them. Under equal
+                // seats the side padding has no visual role — the chip is the seat and the content
+                // is centred in it — so it is uniform, and the smaller value leaves the label the
+                // most room before it overflows its seat.
+                padding: "0 8px",
                 borderRadius: "var(--radius-badge)",
                 // The active tab is its own indicator (ruling 488): the chip is the tab's own
                 // background, painted on the first frame, never measured and never missing.

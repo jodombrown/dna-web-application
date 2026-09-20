@@ -115,8 +115,13 @@ export function PostCard({
 }: PostCardProps) {
   const [, setHover] = useState(false);
   const sys = c === "system";
-  const frame = sys ? "var(--line-strong)" : "var(--c-" + c + ")";
-  const cColor = sys ? "var(--ink-3)" : "var(--c-" + c + "-text)";
+  // G42: the system category has three declared rungs and the card used to write two literals here
+  // instead. The frame agreed with --c-system by accident (it holds --line-strong); the label did
+  // not, writing --ink-3 where --c-system-ink is --ink. Both now read the tokens, so the declared
+  // palette and the shipped card cannot disagree about the system category again. This moves a
+  // rendered pixel: a system post's label goes from #77736C to #1A1A18 in light theme.
+  const frame = sys ? "var(--c-system)" : "var(--c-" + c + ")";
+  const cColor = sys ? "var(--c-system-ink)" : "var(--c-" + c + "-text)";
   const rows = (fields || []).filter((f) => f && f.value);
   const clamp = !!onReadMore && !expanded;
   // Hover intent (ruling 84): the host's prefetch fires after an 80ms mouseenter hold, never on touch.

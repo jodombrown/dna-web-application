@@ -20,11 +20,10 @@ import { Input } from "@/components/strand/Input";
 import { Segment } from "@/components/strand/Segment";
 import { Select } from "@/components/strand/Select";
 import { Sheet } from "@/components/strand/Sheet";
-import { ConvenePlate, type HostPoint } from "@/components/dna/ConvenePlate";
+import { ConvenePlate } from "@/components/dna/ConvenePlate";
 import { resolvePlace, type ResolvedPlace, type SuggestedPlace } from "@/lib/dia";
 import type { Home } from "@/lib/homes";
 import { placeLine, placeParts } from "@/lib/place";
-import { useMode } from "@/lib/tier";
 import {
   dateLine,
   instantFor,
@@ -156,8 +155,8 @@ export function ConveneForm({
   const [zoneList, setZoneList] = useState<{ country: string; zones: string[] | null } | null>(
     null,
   );
-  // Pass 4 (P4-SPEC sections 3 and 5). `infoOpen` is the `Why is my venue not here?` panel; the
-  // drag is transient and belongs to no field, because a point half-moved is not a point.
+  // Pass 4 (P4-SPEC section 3). `infoOpen` is the `Why is my venue not here?` panel. The drag state
+  // that sat beside it went with the host-placed pin (ruling 929).
   const [infoOpen, setInfoOpen] = useState(false);
   // The country whose lookup has answered with nothing at least once. P4-SPEC section 3 asks for
   // the info control in `Country chosen, place empty`, and says the panel's claim "renders only
@@ -169,10 +168,6 @@ export function ConveneForm({
   // words this host typed in this country came back with nothing, which is the map's own zero and
   // is the only true thing the surface can say. Reported as the finding and logged as gap G44.
   const [noVenues, setNoVenues] = useState<string | null>(null);
-  const [dragging, setDragging] = useState(false);
-  // Ruling 814 needs the affordance reachable by touch, so the surface has to know which it is.
-  // The app already derives it from `(pointer: coarse)` and the Composer reads the same hook.
-  const mode = useMode();
   const session = useRef<string>(
     typeof crypto !== "undefined" && "randomUUID" in crypto
       ? crypto.randomUUID()
@@ -261,12 +256,9 @@ export function ConveneForm({
   // The map's own point is a fact about the resolution, not a position on the plate: the plate
   // carries no projection in this build, so nothing here reads lat or lng as a place on screen.
   const mapPoint = physical && resolved && v("lat") !== "" && v("lng") !== "";
-  const hostPoint: HostPoint | null =
-    v("pin_x") !== "" && v("pin_y") !== "" ? { x: +v("pin_x"), y: +v("pin_y") } : null;
-  const setHostPoint = (p: HostPoint) => {
-    setField("pin_x", String(p.x));
-    setField("pin_y", String(p.y));
-  };
+  // Ruling 929: the host-placed point is gone with the control that produced it. `pin_x` and
+  // `pin_y` are not read, not written and not carried in the payload; the plate's remaining point
+  // is the map's own, which has a coordinate behind it. See ConvenePlate's header and gap G43.
   const nothingFound = lookup.state === "none";
   // 814 and G35: the claim is about this country's coverage and renders only where it is true, so
   // the control appears once a country is chosen and the place field is still empty.
@@ -406,11 +398,11 @@ export function ConveneForm({
   // section's own values. Without this the host fills a map link, switches to Online, and the
   // field is gone while its value is still in the store: `publish_post` then refuses with
   // `A map link belongs to an event with a place.` about a field the form is no longer showing,
-  // which is a refusal nobody can act on. The drag is cleared for the same reason.
+  // which is a refusal nobody can act on. `pin_x` and `pin_y` left this list with the control that
+  // wrote them (ruling 929).
   useEffect(() => {
     if (physical) return;
-    for (const k of ["map_link", "pin_x", "pin_y"]) if (v(k) !== "") setField(k, "");
-    setDragging(false);
+    if (v("map_link") !== "") setField("map_link", "");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [physical]);
 
@@ -440,6 +432,9 @@ export function ConveneForm({
     setField("place_name", p.place_name);
     setField("place_area", p.area ?? "");
     setField("city", p.city ?? "");
+    // Ruling 927: the region Mapbox already returned, stored so a surface can name it without a
+    // second lookup. Empty where the response carried none, which `publish_post` turns into null.
+    setField("region", p.region ?? "");
     setField("lng", String(p.lng));
     setField("lat", String(p.lat));
     setField("place_tz", p.timezone);
@@ -456,6 +451,7 @@ export function ConveneForm({
       "place_name",
       "place_area",
       "city",
+      "region",
       "lng",
       "lat",
       "place_tz",
@@ -472,11 +468,10 @@ export function ConveneForm({
     setField("country", name);
     // The zone belongs to the country that was chosen, so both go when the country changes (813).
     setField("country_tz", "");
-    // So does the host's own point: "the point you placed" for a venue in one country is not the
-    // point for a venue in another. The map link is the host's own content and stays, like the
-    // words do.
-    setField("pin_x", "");
-    setField("pin_y", "");
+    // The host's own point used to be cleared here too, for the same reason: "the point you
+    // placed" for a venue in one country is not the point for a venue in another. Ruling 929
+    // removed the point, so there is nothing left to clear. The map link is the host's own content
+    // and stays, like the words do.
     // The coverage claim belongs to the country it was observed in.
     setNoVenues(null);
     setZoneList(null);
@@ -751,12 +746,14 @@ export function ConveneForm({
     // Session 23, the unavailable state: a lookup that did not run is never "no place found".
     // Session 24 (798): nothing found names the country that was searched. P4-SPEC section 4
     // (ruling 814) rewrites that sentence: the gap is the map's coverage of this country and not
-    // the host's typing, and the pin is what the host can do about it. G35 is the finding behind it.
+    // the host's typing. It used to end `and you can place the pin yourself`; ruling 929 removed
+    // the pin, so the sentence ends where the `unavailable` one does — the words are the event's
+    // record of the place and they are enough to publish. G35 is the finding behind it.
     hint:
       lookup.state === "none"
         ? "The map has no venue records in " +
           country +
-          ". Your words are kept, and you can place the pin yourself."
+          ". Your words are kept, and you can publish."
         : lookup.state === "several"
           ? "Several places match. Pick one, or leave it as you wrote it."
           : lookup.state === "unavailable"
@@ -827,8 +824,13 @@ export function ConveneForm({
           The map holds no venue records for {country}, so searching will not find your venue. This
           is the map&rsquo;s gap, not a mistake in what you typed.
         </p>
+        {/* Ruling 929 on 897's panel line. It read `Type the venue as you say it, then place the
+            pin where it is. Both travel with the event.` The second sentence claimed the pin
+            travelled and it never did (G43), and the first named the act that produced it, so both
+            clauses go with the control. What is left is the half that is true: the words travel, in
+            `place_text`. */}
         <p style={{ margin: 0, ...QUIET }}>
-          Type the venue as you say it, then place the pin where it is. Both travel with the event.
+          Type the venue as you say it. Your words travel with the event.
         </p>
       </div>
     </Sheet>
@@ -837,7 +839,9 @@ export function ConveneForm({
   // from the store and written to the store and nothing else. It is never parsed, never handed to
   // `resolvePlace`, never given to `instantFor` or `knownZone`, and no point, place or zone is
   // derived from it anywhere in the tree. Removing the field removes no information about where
-  // the venue is, because the pin carries that.
+  // the venue is: the words carry that, in `place_text`, and the resolver's own point carries it
+  // where a place resolved. It used to say the pin carried it, which ruling 929 retired along with
+  // the pin.
   const mapLinkField = input("map_link", "Map link", {
     placeholder: "Paste a link to a map",
     type: "url",
@@ -857,16 +861,10 @@ export function ConveneForm({
   const plate = (
     <ConvenePlate
       key="plate"
-      mode={mode}
-      viewer="host"
       areaName={v("place_area") || v("city") || ""}
       mapPoint={mapPoint}
-      hostPoint={hostPoint}
-      dragging={dragging}
       nothingFound={nothingFound}
       area={areaResolved}
-      onPlace={setHostPoint}
-      onDragging={setDragging}
     />
   );
   const zoneSelect = needsZoneChoice ? (

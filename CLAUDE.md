@@ -117,14 +117,17 @@ legitimate backfill is a check somebody disables, which is how a guardrail dies.
 are scanned: an applied migration is never amended (466), so flagging one would be a gate nobody can
 pass.
 
-A migration reaches the canonical project by `supabase db push` from the founder's machine, and never
-by the Supabase MCP's `apply_migration` (ruling 553, extending 269). `apply_migration` mints its own
+A migration reaches the canonical project by SQL Editor paste on supabase.com, or by dispatch-only
+GitHub Actions with a required reviewer (ruling 562), and never by the Supabase MCP's
+`apply_migration` (ruling 553, extending 269). Every paste carries its own
+`supabase_migrations.schema_migrations` rows in the same transaction as the DDL, so the project never
+records the statements without recording the version that explains them. `apply_migration` mints its own
 version rather than honouring the file's: applying `20260913220000` through it recorded the statements
 byte-identically, md5 and all, under `20260913220047`. That trades one drift row for two and
 manufactures exactly the divergence ruling 444's arm exists to catch, and the only way back is hand
 editing `supabase_migrations.schema_migrations`, which is what PASS-01 was written about.
 
-Between that push and the merge, the project records a version the branch has no file for, and the
+Between that paste and the merge, the project records a version the branch has no file for, and the
 drift arm reads `FAIL … recorded on the project, no file in the tree` and exits 1. That is not an
 `EMPTY` row: the arm reaches `EMPTY` only at `if (!row.n)`, a recorded row whose `statements` array is
 empty, which is the PASS-01 pair and nothing else. The two conditions are deliberately separate and
@@ -136,7 +139,7 @@ window, and the merge is itself the push that triggers one — by which point th
 the run is green. **The exposure is every other branch**, because `migration-drift.cjs` reads
 `supabase/migrations` from the running checkout and the `live` job runs on every branch: during the
 window any branch that does not carry the file goes red at step 8 for a reason that has nothing to do
-with it. So the ordering is not "push then merge promptly" but: `db push` immediately before merging,
+with it. So the ordering is not "apply then merge promptly" but: paste immediately before merging,
 and cut or push nothing else in between. The window should be minutes, and its cost falls on other
 people's branches rather than on the one being merged.
 
@@ -314,6 +317,27 @@ Lovable commits straight to `main` (ruling 146) as `gpt-engineer-app[bot]`, app 
 (ruling 286). Check `main`'s recent commits at the start of any code session, report
 `gpt-engineer-app[bot]` commits, and rebase onto them. On conflict keep the founder's visual change
 and report it rather than resolving it silently.
+
+Classify `main`'s recent commits by how they landed, not by who authored them (ruling 920). A merge
+commit from a `claude/*` branch is Code's. Anything else is reported by SHA and by the paths it
+touched, and any change under `.lovable/` is reported by name whatever identity carried it. The
+`159125892` check stays as a second net and is never the only check run: an author string is what
+the committer chose to write, and how a commit reached `main` is not.
+
+The committer id on a merge made through the GitHub button is `19864447`, `web-flow`. It is not in
+598's allowlist and never will be, because it is GitHub's own identity for a button press rather
+than a person or an app. Under 920 that costs nothing: the commit classifies by how it landed, and
+`2bcb8e3` — the merge of #49 — lands as Code's. Written down here so it is not re-derived at every
+session open.
+
+Ruling 921's line, written from the register rather than from the ruling's own text, which this
+session did not read: G28's one unsettled question is whether Lovable's app id belongs inside 598's
+allowlist, and the answer is that it stays outside it. The allowlist answers "may this identity
+commit here at all", and 146 answers "what is done about a Lovable commit when it appears" —
+expected, reported by SHA and by paths, rebased onto, the founder's visual change kept on conflict.
+Folding `159125892` into the allowlist would make a Lovable commit read as unremarkable, which is
+the one thing 146 says it is not. G28 is amended to that effect and stays open on its other half,
+the missing arm.
 
 Commit identity is checked by the GitHub account login or app id from the API, never by the git
 author name or email string (ruling 379). The permitted identities are `jodombrown`, `claude`,
