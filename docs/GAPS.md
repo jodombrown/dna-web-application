@@ -2250,6 +2250,48 @@ exactly: on this engine a re-run cannot confirm a WebKit failure by reproduction
 neither confirmed the fifth sighting nor cleared it, and the head's one re-run bought a different red
 rather than a green.
 
+**Eighth sighting, 20 September 2026: the fifth's mode, a second time, with the evidence the fifth
+was missing.** Pages run 274 on `5481522` (PR 50, Session 27's types regeneration), `matrix (webkit)`,
+first attempt, at `webkit-1536x960-dark` — the same check, the same arm and the same width as the
+fifth, and the same message to the character:
+
+```
+FAIL [no crash] webkit-1536x960-dark flow TimeoutError: locator.waitFor: Timeout 10000ms exceeded.
+  - waiting for locator('…[data-testid="continue-draft"]') to be detached
+    24 × locator resolved to visible <button type="button" data-testid="continue-draft">Continue your dr
+```
+
+The fifth sighting is the only other instance against the fixed wait, and it closed by naming two
+possible causes and refusing to choose between them from one observation. This is the second
+observation, and it carries something the fifth could not: **the same job lost three web processes** —
+`webkit-820x1180-dark`, `webkit 744x1133 dark connect` and `webkit-1280x800-light-auth flows`, with
+the classifier reading `7 behind a web-process crash (G5) | 0 an aborted fetch on mocked REST | 2
+unclassified` and 4969 of 4971. Ruling 828 measured G5 at about one crashed arm per four to five
+WebKit passes; three in one job is roughly three times that rate, which is not a healthy runner. That
+discriminates between the fifth's two candidates and favours the second: ten seconds is still short
+for WebKit at 1536x960 **under load**, rather than the restore genuinely never completing. It does not
+prove it, and this entry is not going to claim it does.
+
+**It is not the PR's, and that is checkable rather than asserted.** The immediately preceding head,
+`17b3102`, read `matrix (webkit)` at 5090 of 5090 with zero crashes and zero unclassified — this arm
+among them. The whole diff between that head and `5481522` is two files: `src/lib/database.types.ts`,
+which is generated types that erase at compile plus an `export const Constants` that nothing under
+`src/` imports and whose only change is key ordering, and `tests/live-checks.cjs`, which
+`tests/matrix.cjs` does not reference at all. The failing arm ran byte-identical application code on
+the run where it was green.
+
+**Still open, still not fixed, and now for a second reason.** Raising the ten seconds is the guess the
+fifth sighting refused, and this entry has already named two causes confidently and withdrawn both. A
+second sighting is not a diagnosis. What would settle it is a reading that separates load from
+behaviour — the restore's own elapsed time recorded on a healthy run and on a degraded one, so the
+question becomes how long the restore takes rather than whether ten seconds is enough. That is a
+harness change worth making deliberately, not on the way past.
+
+**No re-run was spent on this either.** The push that carries this entry supersedes run 274 and starts
+a fresh run on the new head, which re-runs `matrix (webkit)` as a consequence of the commit rather
+than as a re-run of the job — the same route the seventh sighting took, and for the same reason: under
+ruling 304 a re-run cannot confirm a WebKit failure by reproduction, so spending one buys little.
+
 **Not this gap's scope.** The check's assertions and the arms' declared counts stay as they are.
 
 ## G35. Mapbox Search Box carries no POI for Ghana, Kenya or Nigeria, so a Convene host there always falls to their words
