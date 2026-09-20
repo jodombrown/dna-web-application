@@ -1,18 +1,17 @@
-// Generated from the canonical Supabase project (dgspjevjoblujcoljvkn) after the B4 migrations.
-// Regenerate with the Supabase MCP generate_typescript_types tool or `supabase gen types`.
+// Generated from the canonical Supabase project (dgspjevjoblujcoljvkn) with the Supabase MCP
+// generate_typescript_types tool, after Convene Pass 5’s two migrations were applied and recorded
+// (20260919120000_p5_region_context, 20260919120100_p5_publish_post_region).
 //
-// `event_delivery.map_link` (Convene Pass 4, ruling 815) is written here by hand and not by the
-// generator, deliberately. Ruling 225 puts the migration in the tree before it is applied, so at
-// the moment this file is committed the canonical project does not carry the column and a
-// regeneration would take it back out. Hand-matched to
-// `supabase/migrations/20260918120000_p4_convene_map_link.sql`; the next regeneration after the
-// founder has applied it produces the same three lines.
+// Nothing here is hand-written any more, and that is the point of regenerating now.
+// `event_delivery.map_link` (ruling 815) and then `event_delivery.region` and `member_homes.region`
+// (ruling 927) each had to be carried by hand while ruling 225’s window was open: the migration is
+// committed before it is applied, so a regeneration taken inside that window reads the project as it
+// was and removes the columns again. The window is closed for all three — every version is recorded
+// on the project, the drift arm reads them, and the generator returns them.
 //
-// `event_delivery.region` and `member_homes.region` (Convene Pass 5, ruling 927) are here by hand
-// for the same reason and under the same ruling, matched to
-// `supabase/migrations/20260919120000_p5_region_context.sql`. Both are nullable, including on
-// `member_homes`, whose other place columns are `NOT NULL`: existing rows have no Mapbox context to
-// backfill from and inventing one is invented geography (790). Regenerate after the paste.
+// `member_homes.region` is nullable where that table’s other place columns are NOT NULL. That is the
+// migration’s deliberate choice rather than an oversight: existing rows hold no Mapbox context to
+// backfill from and deriving one would be invented geography (ruling 790).
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
 
 export type Database = {
@@ -80,6 +79,7 @@ export type Database = {
       connection_requests: {
         Row: {
           created_at: string;
+          expires_at: string | null;
           from_member_id: string;
           id: string;
           message: string;
@@ -91,6 +91,7 @@ export type Database = {
         };
         Insert: {
           created_at?: string;
+          expires_at?: string | null;
           from_member_id: string;
           id?: string;
           message: string;
@@ -102,6 +103,7 @@ export type Database = {
         };
         Update: {
           created_at?: string;
+          expires_at?: string | null;
           from_member_id?: string;
           id?: string;
           message?: string;
@@ -471,6 +473,62 @@ export type Database = {
           position?: number;
         };
         Relationships: [];
+      };
+      media: {
+        Row: {
+          bucket: string;
+          byte_size: number;
+          created_at: string;
+          crop: Json | null;
+          focal_point: Json | null;
+          height: number;
+          id: string;
+          kind: string;
+          mime: string;
+          optimized: boolean;
+          owner_id: string;
+          storage_path: string;
+          width: number;
+        };
+        Insert: {
+          bucket: string;
+          byte_size: number;
+          created_at?: string;
+          crop?: Json | null;
+          focal_point?: Json | null;
+          height: number;
+          id?: string;
+          kind: string;
+          mime: string;
+          optimized?: boolean;
+          owner_id: string;
+          storage_path: string;
+          width: number;
+        };
+        Update: {
+          bucket?: string;
+          byte_size?: number;
+          created_at?: string;
+          crop?: Json | null;
+          focal_point?: Json | null;
+          height?: number;
+          id?: string;
+          kind?: string;
+          mime?: string;
+          optimized?: boolean;
+          owner_id?: string;
+          storage_path?: string;
+          width?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "media_owner_id_fkey";
+            columns: ["owner_id"];
+            isOneToOne: false;
+            referencedRelation: "members";
+            referencedColumns: ["id"];
+          },
+        ];
       };
       member_about: {
         Row: {
@@ -980,6 +1038,36 @@ export type Database = {
           },
         ];
       };
+      member_skills: {
+        Row: {
+          member_id: string;
+          name: string;
+        };
+        Insert: {
+          member_id: string;
+          name: string;
+        };
+        Update: {
+          member_id?: string;
+          name?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "member_skills_member_id_fkey";
+            columns: ["member_id"];
+            isOneToOne: false;
+            referencedRelation: "members";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "member_skills_name_fkey";
+            columns: ["name"];
+            isOneToOne: false;
+            referencedRelation: "skills";
+            referencedColumns: ["name"];
+          },
+        ];
+      };
       member_stance_details: {
         Row: {
           base: string | null;
@@ -1039,36 +1127,6 @@ export type Database = {
         };
         Relationships: [];
       };
-      member_skills: {
-        Row: {
-          member_id: string;
-          name: string;
-        };
-        Insert: {
-          member_id: string;
-          name: string;
-        };
-        Update: {
-          member_id?: string;
-          name?: string;
-        };
-        Relationships: [
-          {
-            foreignKeyName: "member_skills_member_id_fkey";
-            columns: ["member_id"];
-            isOneToOne: false;
-            referencedRelation: "members";
-            referencedColumns: ["id"];
-          },
-          {
-            foreignKeyName: "member_skills_name_fkey";
-            columns: ["name"];
-            isOneToOne: false;
-            referencedRelation: "skills";
-            referencedColumns: ["name"];
-          },
-        ];
-      };
       member_visibility: {
         Row: {
           audience: Database["public"]["Enums"]["audience"];
@@ -1109,16 +1167,16 @@ export type Database = {
           identified_at: string | null;
           local_tz: string | null;
           name: string;
+          onboarded_at: string | null;
           origin_country: string | null;
           pattern: Database["public"]["Enums"]["masthead_pattern"];
           profile_private: boolean;
           profile_shared: boolean;
           stance: Database["public"]["Enums"]["stance"];
           stance_declared_at: string | null;
-          onboarded_at: string | null;
-          who_completed_at: string | null;
-          username_changes: number;
           updated_at: string;
+          username_changes: number;
+          who_completed_at: string | null;
         };
         Insert: {
           avatar_path?: string | null;
@@ -1133,16 +1191,16 @@ export type Database = {
           identified_at?: string | null;
           local_tz?: string | null;
           name: string;
+          onboarded_at?: string | null;
           origin_country?: string | null;
           pattern?: Database["public"]["Enums"]["masthead_pattern"];
           profile_private?: boolean;
           profile_shared?: boolean;
           stance?: Database["public"]["Enums"]["stance"];
           stance_declared_at?: string | null;
-          onboarded_at?: string | null;
-          who_completed_at?: string | null;
-          username_changes?: number;
           updated_at?: string;
+          username_changes?: number;
+          who_completed_at?: string | null;
         };
         Update: {
           avatar_path?: string | null;
@@ -1157,16 +1215,16 @@ export type Database = {
           identified_at?: string | null;
           local_tz?: string | null;
           name?: string;
+          onboarded_at?: string | null;
           origin_country?: string | null;
           pattern?: Database["public"]["Enums"]["masthead_pattern"];
           profile_private?: boolean;
           profile_shared?: boolean;
           stance?: Database["public"]["Enums"]["stance"];
           stance_declared_at?: string | null;
-          onboarded_at?: string | null;
-          who_completed_at?: string | null;
-          username_changes?: number;
           updated_at?: string;
+          username_changes?: number;
+          who_completed_at?: string | null;
         };
         Relationships: [
           {
@@ -1770,44 +1828,6 @@ export type Database = {
           published_at: string | null;
           status: Database["public"]["Enums"]["post_status"] | null;
         };
-        Insert: {
-          anchor_id?: string | null;
-          anchor_kind?: Database["public"]["Enums"]["anchor_kind"] | null;
-          audience?: Database["public"]["Enums"]["audience"] | null;
-          author_avatar_path?: string | null;
-          author_handle?: string | null;
-          author_id?: string | null;
-          author_kind?: Database["public"]["Enums"]["anchor_kind"] | null;
-          author_name?: string | null;
-          body?: string | null;
-          c_category?: Database["public"]["Enums"]["c_category"] | null;
-          created_at?: string | null;
-          created_by?: string | null;
-          created_object_id?: string | null;
-          created_object_kind?: Database["public"]["Enums"]["anchor_kind"] | null;
-          id?: string | null;
-          published_at?: string | null;
-          status?: Database["public"]["Enums"]["post_status"] | null;
-        };
-        Update: {
-          anchor_id?: string | null;
-          anchor_kind?: Database["public"]["Enums"]["anchor_kind"] | null;
-          audience?: Database["public"]["Enums"]["audience"] | null;
-          author_avatar_path?: string | null;
-          author_handle?: string | null;
-          author_id?: string | null;
-          author_kind?: Database["public"]["Enums"]["anchor_kind"] | null;
-          author_name?: string | null;
-          body?: string | null;
-          c_category?: Database["public"]["Enums"]["c_category"] | null;
-          created_at?: string | null;
-          created_by?: string | null;
-          created_object_id?: string | null;
-          created_object_kind?: Database["public"]["Enums"]["anchor_kind"] | null;
-          id?: string | null;
-          published_at?: string | null;
-          status?: Database["public"]["Enums"]["post_status"] | null;
-        };
         Relationships: [];
       };
     };
@@ -1837,12 +1857,18 @@ export type Database = {
       };
       dismiss_suggestion: { Args: { p_target: string }; Returns: undefined };
       onboard_relationship: {
-        Args: { p_stance: Database["public"]["Enums"]["stance"] | null; p_touched: boolean };
+        Args: {
+          p_stance: Database["public"]["Enums"]["stance"];
+          p_touched: boolean;
+        };
         Returns: Json;
       };
-      onboard_where: { Args: { p_city: string; p_country: string }; Returns: Json };
+      onboard_where: {
+        Args: { p_city: string; p_country: string };
+        Returns: Json;
+      };
       onboard_who: {
-        Args: { p_avatar_path?: string | null; p_name: string; p_username?: string | null };
+        Args: { p_avatar_path?: string; p_name: string; p_username?: string };
         Returns: Json;
       };
       onboarding_state: { Args: never; Returns: Json };
@@ -1877,6 +1903,7 @@ export type Database = {
       audience: "everyone" | "connections" | "anchored";
       c_category: "connect" | "convene" | "collaborate" | "contribute" | "convey" | "system";
       contribute_instrument: "time" | "skills" | "in_kind";
+      delivery_kind: "physical" | "meeting_link" | "to_be_announced";
       edge_type:
         | "connect"
         | "follow"
@@ -1887,14 +1914,12 @@ export type Database = {
         | "contribution_fulfilled"
         | "story_about"
         | "authored";
-      delivery_kind: "physical" | "meeting_link" | "to_be_announced";
       event_mode: "in_person" | "virtual" | "hybrid";
       event_status: "draft" | "published" | "cancelled";
       heritage_kind:
         "First generation" | "Second generation" | "Third generation or later" | "Continental";
       link_kind: "website" | "linkedin" | "x" | "instagram";
       masthead_pattern: "kente" | "adinkra" | "mudcloth";
-      stance: "returnee" | "kin" | "anchor" | "ally" | "exploring";
       notification_kind:
         "connection_accepted" | "attestation_received" | "space_role_approved" | "event_reminder";
       post_status: "draft" | "published";
@@ -1924,6 +1949,7 @@ export type Database = {
       space_role: "lead" | "member";
       space_role_status: "active" | "invited" | "left";
       space_status: "active" | "paused" | "completed";
+      stance: "returnee" | "kin" | "anchor" | "ally" | "exploring";
       ticket_kind: "free" | "paid" | "donation";
     };
     CompositeTypes: {
@@ -2050,6 +2076,7 @@ export const Constants = {
       audience: ["everyone", "connections", "anchored"],
       c_category: ["connect", "convene", "collaborate", "contribute", "convey", "system"],
       contribute_instrument: ["time", "skills", "in_kind"],
+      delivery_kind: ["physical", "meeting_link", "to_be_announced"],
       edge_type: [
         "connect",
         "follow",
@@ -2061,7 +2088,6 @@ export const Constants = {
         "story_about",
         "authored",
       ],
-      delivery_kind: ["physical", "meeting_link", "to_be_announced"],
       event_mode: ["in_person", "virtual", "hybrid"],
       event_status: ["draft", "published", "cancelled"],
       heritage_kind: [
@@ -2072,7 +2098,6 @@ export const Constants = {
       ],
       link_kind: ["website", "linkedin", "x", "instagram"],
       masthead_pattern: ["kente", "adinkra", "mudcloth"],
-      stance: ["returnee", "kin", "anchor", "ally", "exploring"],
       notification_kind: [
         "connection_accepted",
         "attestation_received",
@@ -2112,6 +2137,7 @@ export const Constants = {
       space_role: ["lead", "member"],
       space_role_status: ["active", "invited", "left"],
       space_status: ["active", "paused", "completed"],
+      stance: ["returnee", "kin", "anchor", "ally", "exploring"],
       ticket_kind: ["free", "paid", "donation"],
     },
   },
