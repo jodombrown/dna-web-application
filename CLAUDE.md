@@ -69,7 +69,7 @@ Before you start, say in one line what you are about to do. Brief updates while 
 [absolute] Every new table ships with RLS enabled and explicit policies for every persona (member, Space lead, event host, admin, service role). A table without RLS is a failed task.
 [absolute] No secrets in code, logs, or commit messages.
 [absolute] Lovable never creates or alters schema.
-[absolute] Fixed vocabularies (focus areas, industries, regional expertise, skills, languages, countries) are database tables read at runtime, never hardcoded arrays in a component. The legacy build kept them in a React file with a comment admitting they had to be hand-synced with the database; that is the named anti-pattern.
+[absolute] Fixed vocabularies (focus areas, industries, regional expertise, skills, languages, countries) are database tables read at runtime, never hardcoded arrays in a component. The legacy build kept them in a React file with a comment admitting they had to be hand-synced with the database; that is the named anti-pattern. What this governs is content vocabularies — the values a member's record can hold and a surface must display a label for — and not navigation (ruling 999, withdrawing 997's data half). `src/lib/lens.ts` is the standing instance of the distinction: a lens set is the surface's own corpus switch, it names no member data, nothing reads a label for it out of a row, and it is not a breach of this line. There is no lens vocabulary table and lenses do not enter `public.vocabularies()`.
 [absolute] One read projection and one write path per surface. Profile ships profile_view and save_profile_section; every surface after it follows the same shape. The legacy build had ten-plus duplicate profile-read functions.
 [absolute] The attestations table is chassis and already exists. Every engine writes to it; no engine creates its own attestation, endorsement, or trust table.
 [absolute] No numeric score, percentage, progress indicator, match score, trust score, or completion score is ever computed for display, in any surface, in any form.
@@ -117,9 +117,18 @@ legitimate backfill is a check somebody disables, which is how a guardrail dies.
 are scanned: an applied migration is never amended (466), so flagging one would be a gate nobody can
 pass.
 
-A migration reaches the canonical project by SQL Editor paste on supabase.com, or by dispatch-only
-GitHub Actions with a required reviewer (ruling 562), and never by the Supabase MCP's
-`apply_migration` (ruling 553, extending 269). Every paste carries its own
+A migration reaches the canonical project by one of three paths, and never by the Supabase MCP's
+`apply_migration` (ruling 553, extending 269): SQL Editor paste on supabase.com, dispatch-only
+GitHub Actions with a required reviewer (ruling 562), or the Supabase MCP's `execute_sql`, which is
+write-capable and is the path Chat applies a migration through under rulings 963 and 965 (Chat
+deploys Edge Functions through `deploy_edge_function` on the same footing). The line named two paths
+and there were three; what was wrong was the enumeration, not the refusal (963). `execute_sql`
+carries its own guard, in this order. Guard first: the migration file is in the tree and committed
+under 225, and the statements about to run are that file's. Then write. Then verify: read back the
+recorded `supabase_migrations.schema_migrations` row and compare it against the file's own bytes,
+which is the md5 comparison `tests/migration-drift.cjs` makes, so a write whose read-back does not
+match the file is named as drift the moment it lands rather than at the next run of the arm. 553's
+refusal of `apply_migration` is unchanged and its reason is unchanged. Every paste carries its own
 `supabase_migrations.schema_migrations` rows in the same transaction as the DDL, so the project never
 records the statements without recording the version that explains them. `apply_migration` mints its own
 version rather than honouring the file's: applying `20260913220000` through it recorded the statements

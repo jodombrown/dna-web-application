@@ -2405,6 +2405,31 @@ look, not what was different; the next time it may be the other way round, and a
 **Not this gap's scope.** Connect's lens bar carries its own set and is not read by the shell check; if
 its set ever loses an icon it fails the same way, silently, until a check reads it.
 
+### Addendum, 21 September 2026: point 1 is closed by ruling 997, and ruling 999 says where the constraint lives (997, 999, 636, 638)
+
+**No new G number. This is G36's own point 1**, and it is recorded here under 638 rather than in a
+report or a PR comment, because the register is what the next reader opens.
+
+**Point 1 is closed by 997.** The combination is refused: a lens set that cannot render icon-first
+never enters a compact bar. That closes the hole this entry's point 1 named — a set the fit test can
+never rescue, rendering labels at a width where they do not fit — as a rule, rather than by the one
+repair that removed the Feed's instance of it (`all` gained `globe`).
+
+**999 withdrew 997's data half, and that changes nothing here.** There is no lens vocabulary table,
+lenses do not enter `public.vocabularies()`, and `src/lib/lens.ts` is not a breach of the
+fixed-vocabularies absolute: lenses are navigation, not a content vocabulary. `CLAUDE.md`'s absolute
+now carries that clause. No migration was written for this and none is owed.
+
+**999's consequence, which is the part still open.** The constraint lives on the array's contents,
+not on the type. Read in the tree today: `Lens.icon` is `icon?: string | undefined`, so `Lens[]`
+cannot require an icon on every member, and `LensBar` has no refusal — `canSwitch` is
+`!labels && lenses.length > 0 && lenses.every((l) => !!l.icon)`, and when it is false the bar sets
+`fit` true and renders labels at every width, `compact` included. So 997's refusal is today a rule a
+caller keeps rather than a shape the compiler or the part enforces, and a set that breaches it still
+renders exactly the way this gap opened. Whether `Lens[]` can express the constraint in a form
+`compact` can require — a variant of the type whose `icon` is required, or a `compact` that will not
+accept a set without one — is Strand's under 636, not this repository's.
+
 ## G37. With the fit test corrected, the medium tier reads icon-first for a 3px shortfall that `main` hid inside a label's padding
 
 **Severity: low, a Design decision rather than a defect. Opened 17 September 2026 during Session 23 on
@@ -3205,3 +3230,46 @@ an entry and not a fix.
 permission rules at any scope (ruling 378), so that file is named here as one of the sixteen and is
 not touched, and whoever takes the reformat decision should note that it is the founder's file
 whichever answer they pick.
+
+## G51. The design-system bundle's runtime errors were fixed at cause in correction 21, and this repository holds no record of what they were
+
+**Severity: low for this repository's own code, which loads none of the bundle; medium for the
+register, because a defect class closed with no written symptom cannot be checked off when the
+compile that closed it arrives. Opened 21 September 2026 during Session 28 from handoff 28-A item 7,
+filed under ruling 597. The number is assigned by this entry (ruling 638).**
+
+**Why the entry exists at all.** The number is owed. 638 says a G number is assigned by writing the
+entry into this file and is never reserved in a report, a PR body or a chat message, so the number
+is written here with the description missing rather than promised somewhere the next reader will not
+look.
+
+**What this repository carries, read today.** `docs/strand/` holds exactly one compile,
+`v1789720800167997`, which its own `README-EXPORT.md` names as correction 17. Its rules are in
+`docs/strand/README.md`: one directory per compile, named from the bundle's own
+`@ds-compile-id`; a directory is never overwritten and never deleted; nothing here is built into the
+app or served to visitors, so no module imports the bundle, no route serves it and no build step
+reads it. `LENSBAR-CHANGES-14-16.md` carries corrections 14, 16 and 17 and nothing later.
+
+**What the tree does not carry, and this is the gap.** Correction 21 appears nowhere in this
+repository: not in `docs/`, not in `CLAUDE.md`, not in any commit message on any branch. Neither do
+corrections 18 to 20. No file here describes a runtime error raised by the bundle — not which error,
+not where it was raised, not on which compile, not what correction 21 changed at cause. The entry is
+therefore opened with its symptom record blank on purpose. Reconstructing a mechanism nobody read in
+the tree is what rulings 943, 955, 957, 958 and 960 were written about, and ruling 555 says a
+mechanism a handoff asserts is a lead to verify and never a fact to build on.
+
+**What is owed, and from whom.** From Design or the founder: which errors the bundle raised, on which
+compile, in which host, and what correction 21 changed at cause. That is four sentences from someone
+who watched them, and it is the whole of what this entry needs to become useful.
+
+**Why it matters here even though nothing in `src/` loads the bundle.** Rulings 888 and 907 bind the
+app Design project to a named artifact in this tree, and 855 and 858 bind a ratification to that
+named artifact, which is why 18 lands beside 17 and never on top of it. When the compile carrying
+correction 21 is exported into `docs/strand/`, this entry is where its fix is checked off and
+closed; without the symptom record there is nothing to check it off against, and the closure would
+rest on the export's own prose about itself, which is the shape ruling 891 refuses.
+
+**Not this gap's scope.** The app project's bound `_adherence.oxlintrc.json` and which compile it
+belongs to (handoff 28-A item 1, ruling 996). That is held on a statement from the founder or from
+Design and is a separate question: this repository carries no adherence config at all, at root, in
+`scripts/` or in `tests/`.
