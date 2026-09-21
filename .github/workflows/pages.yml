@@ -153,6 +153,17 @@ jobs:
         env:
           LIVE_DB_URL: ${{ secrets.LIVE_DB_URL }}
         run: node tests/migration-drift.cjs
+      # Ruling 1002: public.event_registrations is the truth for attendance and the event_rsvp edge
+      # is derived from it inside private.rsvp_write, in the same transaction and never by a
+      # trigger. private.rsvp_edge_drift() names every place the two disagree; this arm reads it as
+      # live_arms and fails on any row. Before Chat applies 20260921120100 the function is not on
+      # the project and the arm reports UNPROVEN (ruling 228), which is the reading on every branch
+      # until then.
+      - name: RSVP edge drift (ruling 1002)
+        if: always()
+        env:
+          LIVE_DB_URL: ${{ secrets.LIVE_DB_URL }}
+        run: node tests/rsvp-drift.cjs
       # Ruling 267. `if: always()` because the arms are most worth reading in the tail on the run
       # where one of them failed, which is the run where the step above stopped early.
       - name: Live-check arms, re-emitted in the tail (ruling 267)

@@ -3802,3 +3802,110 @@ a rail collapse control will bind get named alongside the contract, or the check
 `public/strand/icons/` and poll what it finds. The second is the honest one and it is the one that
 cannot rot, because a glyph added later is covered without anyone remembering. Either is a line in
 `scripts/deployment-serves.sh`, which the `deploy`, `live` and both `matrix` jobs already run.
+
+## G56. Three rows the build already derives by trigger, which is the shape ruling 1002's absolute now forbids
+
+**Severity: low today, medium at the next change to any of the three. Opened 21 September 2026
+during handoff 29-B, filed under ruling 597. The number is assigned by this entry (ruling 638). Not
+fixed here: the handoff names item 3 as record and change none of them, and two of the three are
+held in place by rulings that point the other way.**
+
+**The rule, read forwards.** Ruling 1002 puts the absolute in `CLAUDE.md`: a derived row, one table
+restating a fact whose truth lives in another, is written by its source's write path in the same
+transaction that writes the source, and never by a trigger. Convene Pass 2 is built to it —
+`public.event_registrations` is the truth, `private.rsvp_write` writes the `event_rsvp` edge beside
+it, and `private.rsvp_edge_drift()` plus `tests/rsvp-drift.cjs` enforce the derivation rather than
+asserting it. Read backwards, the rule is a question about the rows already here. Three answer to it.
+
+**1. The accept derives four rows by trigger.** `private.on_connection_accepted()`
+(`20260908233543_b4_connect_rls.sql:88`), on `on_connection_request_accepted_graph`, fires after an
+update of `status` on `public.connection_requests` and inserts two `connect` rows into `public.edges`
+and two rows into `public.member_connections`. The source's write path is
+`public.respond_to_request` (`20260908233909_b4_connect_rpcs.sql:478`), which writes the status and
+nothing else. Under 1002 those four inserts belong inside `respond_to_request`, and nothing measures
+the agreement: there is no `connect_edge_drift`, so a request accepted by any path the trigger does
+not see leaves the graph short an edge and nobody learns of it. This is the nearest kin to the RSVP
+derivation and the one a drift function would be cheapest to add to.
+
+**2. Second degree is maintained by trigger on a derived table.**
+`private.second_degree_on_connect()` (`:114`), on `on_member_connection_second_degree`, fires after
+an insert on `public.member_connections` — itself a row written by the trigger above — and writes
+`public.second_degree`. So it is a derivation of a derivation, two triggers deep from the write path.
+**This one is doctrine, not drift.** `CLAUDE.md`'s Connection Engine section carries ruling 111's
+words: second degree is "served from a materialized set, refreshed incrementally on new connections
+and fully overnight". 1002 and 111 point in different directions here, and which wins is a decision
+rather than a repair. The nightly `private.refresh_second_degree()` is already the drift correction
+1002 would otherwise ask for, which is the argument for leaving it exactly where it is.
+
+**3. The follow mirror, the lead the handoff named, and it is real.**
+`private.mirror_follow_edge()` (`:197`), on `on_edge_follow_mirror`, fires after an insert or an
+update of `revoked_at` on `public.edges` and mirrors a live `follow` edge into
+`public.member_follows`, deleting the mirror when the edge is revoked. The source's write path is
+`public.set_follow` (`20260908233909_b4_connect_rpcs.sql:514`), which writes the edge and nothing
+else. Under 1002 the mirror belongs inside `set_follow`, in the same transaction, with a drift
+function beside it. Of the three this is the plainest breach: the mirror restates the edge and
+nothing else, exactly as the `event_rsvp` edge restates the registration.
+
+**Considered and excluded, with the reason, so the next reader does not re-derive them.**
+
+- `private.notify_connection_accepted()` (`20260908142054_b3_rulings_141_142_144.sql:269`), on
+  `on_connection_request_accepted`, inserts a `public.notifications` row on accept. A notification is
+  a consequence with a life of its own — it is read, it is dismissed — not a second statement of the
+  source's fact, and no drift function could compare the two once that life begins. Ruling 144 is
+  what puts it there.
+- `private.on_member_blocked()` (`20260909051055_r198_block_semantics.sql:33`) revokes edges and
+  deletes adjacency and mirror rows on a block. It removes derived rows rather than writing them, and
+  `CLAUDE.md` already names "the ruling 198 trigger carries every consequence". Worth recording all
+  the same: `public.member_blocks` has **no write path function at all** — ruling 216's control
+  inserts the row directly under RLS through `src/lib/blocks.ts` — so there is no write path for
+  those consequences to move into. It is the one place in the tree where 1002's absolute has no
+  landing site, and closing it would mean giving block a write path first.
+- `private.handle_new_user()` (`20260908072031_b3_profile_rpcs.sql:42`) derives the `public.members`
+  row from `auth.users`. The source is written by GoTrue and we own no write path on it, so a trigger
+  is the only mechanism there is.
+- `private.stance_declared()` (`20260911052909_b5_stance_onboarding.sql:111`) is a BEFORE trigger
+  setting `stance_declared_at` on the row being written. Same row, same statement; no second table.
+- `private.edges_purge_member()` (`20260908233543_b4_connect_rls.sql:219`) deletes inbound edges on
+  member delete, standing in for the foreign key `edges.to_id` cannot carry because it is
+  polymorphic. Cleanup, not derivation.
+- `private.enforce_vocab_cap()` (the seven `member_*_cap` triggers) and `on_member_block_rate_limit`
+  (`20260912090557_fix_pr_02_rulings_408_444.sql:143`) raise or refuse. They write no row at all.
+
+**What closing it needs.** Item 3 for the follow mirror: move the `member_follows` write into
+`set_follow` and add a drift function and an arm in `rsvp-drift.cjs`'s shape. Item 1 the same, inside
+`respond_to_request`, and it is the larger of the two because four rows across two tables move at
+once. Item 2 needs a ruling that says which of 1002 and 111 governs a set that is already rebuilt
+nightly, and that is the founder's, not a PR's.
+
+## G57. The RSVP drift arm cannot state the denominator its own PASS line is specified to carry
+
+**Severity: low. The agreement is measured whole either way; what is missing is the number standing
+behind it. Opened 21 September 2026 during handoff 29-B, filed under ruling 597. The number is
+assigned by this entry (ruling 638). Not fixed here: the fix is a grant, and it belongs in a
+migration file, which under rulings 466 and 225 has to come from the file's author.**
+
+**The mechanism, read in the tree.** Handoff 29-B item 2 specifies the arm's passing outcome as "a
+`PASS` that states how many going member registrations it measured", and in the same paragraph
+specifies the role it connects as: "the second file grants that role `USAGE` on `private` and
+`EXECUTE` on the function and nothing else". Both are true of
+`20260921120100_p2_event_registrations.sql` as written — lines 283 and 284 make exactly those two
+grants — and together they do not admit the count. `private.rsvp_edge_drift()` returns disagreements
+only, never a total, and `live_arms` holds no `select` on `public.event_registrations`: the file
+revokes all from `anon` and `authenticated`, grants `select` to `authenticated` and `all` to
+`service_role`, and names `live_arms` nowhere on the table. Switching into `authenticated` does not
+reach it either, because `live_arms` holds that role with `inherit false` and `auth.uid()` is null
+under it, so `event_registrations_member_select` admits no row.
+
+**What the arm does instead.** `tests/rsvp-drift.cjs` reads the count in its own statement, outside
+the drift read, and prints the number when the connecting role can see it and the reason when it
+cannot. The PASS line therefore states the agreement — every going member registration carries one
+live `event_rsvp` edge and every live edge carries a going registration, which
+`private.rsvp_edge_drift()` measures whole because it is SECURITY DEFINER — and names this gap where
+the denominator would be. The moment a later migration grants the select, the number appears with no
+edit to the arm.
+
+**What closing it needs.** One line in a future migration from the file's author:
+`grant select (event_id, member_id, status) on table public.event_registrations to live_arms;`, which
+is the narrowest grant that answers the count and stays inside ruling 382. Not this PR's to write:
+`20260921120100` is committed byte for byte under item 1 and is never amended (ruling 466), and a new
+file that changes what Chat is about to apply has to come from Chat.
