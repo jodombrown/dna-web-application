@@ -1,17 +1,21 @@
 // Generated from the canonical Supabase project (dgspjevjoblujcoljvkn) with the Supabase MCP
-// generate_typescript_types tool, after Convene Pass 5’s two migrations were applied and recorded
-// (20260919120000_p5_region_context, 20260919120100_p5_publish_post_region).
+// generate_typescript_types tool, after Convene Pass 2's two migrations were applied and recorded
+// (20260921120000_r1004_1010_audience_helpers, 20260921120100_p2_event_registrations).
 //
-// Nothing here is hand-written any more, and that is the point of regenerating now.
-// `event_delivery.map_link` (ruling 815) and then `event_delivery.region` and `member_homes.region`
-// (ruling 927) each had to be carried by hand while ruling 225’s window was open: the migration is
-// committed before it is applied, so a regeneration taken inside that window reads the project as it
-// was and removes the columns again. The window is closed for all three — every version is recorded
-// on the project, the drift arm reads them, and the generator returns them.
+// Nothing here is hand-written, and the regeneration waits for the apply for the reason Pass 5's
+// header already gives: ruling 225 commits a migration before it is applied, so a regeneration taken
+// inside that window reads the project as it was and silently removes what the window is holding.
+// Both versions are recorded on the project now, their md5s match the files byte for byte, and
+// `tests/migration-drift.cjs` reads them, so the generator returns them.
 //
-// `member_homes.region` is nullable where that table’s other place columns are NOT NULL. That is the
-// migration’s deliberate choice rather than an oversight: existing rows hold no Mapbox context to
-// backfill from and deriving one would be invented geography (ruling 790).
+// What Pass 2 adds here: `event_registrations`, the truth for attendance (ruling 1002); the
+// `registration_status` enum, going and not_going and nothing else until a brief draws maybe
+// (ruling 1009); and `rsvp_event`, the one write path, which derives the `event_rsvp` edge inside
+// `private.rsvp_write` in the same transaction rather than by a trigger.
+//
+// `private.admit_audience` (ruling 1010) and `private.rsvp_edge_drift()` are absent by design: the
+// private schema is not exposed by PostgREST, so the generator does not see it and no surface may
+// reach it. The drift function is read by `tests/rsvp-drift.cjs` as `live_arms`, not from the app.
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
 
 export type Database = {
@@ -312,6 +316,57 @@ export type Database = {
             columns: ["event_id"];
             isOneToOne: true;
             referencedRelation: "events";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      event_registrations: {
+        Row: {
+          audience_override: Database["public"]["Enums"]["audience"] | null;
+          contact_consent: boolean;
+          created_at: string;
+          event_id: string;
+          guest_email: string | null;
+          id: string;
+          member_id: string | null;
+          status: Database["public"]["Enums"]["registration_status"];
+          updated_at: string;
+        };
+        Insert: {
+          audience_override?: Database["public"]["Enums"]["audience"] | null;
+          contact_consent?: boolean;
+          created_at?: string;
+          event_id: string;
+          guest_email?: string | null;
+          id?: string;
+          member_id?: string | null;
+          status: Database["public"]["Enums"]["registration_status"];
+          updated_at?: string;
+        };
+        Update: {
+          audience_override?: Database["public"]["Enums"]["audience"] | null;
+          contact_consent?: boolean;
+          created_at?: string;
+          event_id?: string;
+          guest_email?: string | null;
+          id?: string;
+          member_id?: string | null;
+          status?: Database["public"]["Enums"]["registration_status"];
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "event_registrations_event_id_fkey";
+            columns: ["event_id"];
+            isOneToOne: false;
+            referencedRelation: "events";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "event_registrations_member_id_fkey";
+            columns: ["member_id"];
+            isOneToOne: false;
+            referencedRelation: "members";
             referencedColumns: ["id"];
           },
         ];
@@ -1883,6 +1938,15 @@ export type Database = {
         Args: { p_accept: boolean; p_sender: string };
         Returns: undefined;
       };
+      rsvp_event: {
+        Args: {
+          p_audience_override?: Database["public"]["Enums"]["audience"];
+          p_contact_consent?: boolean;
+          p_event: string;
+          p_status: Database["public"]["Enums"]["registration_status"];
+        };
+        Returns: Json;
+      };
       save_profile_section: {
         Args: { payload: Json; section: string };
         Returns: undefined;
@@ -1938,6 +2002,7 @@ export type Database = {
         | "contribute"
         | "convey"
         | "badges";
+      registration_status: "going" | "not_going";
       request_status: "pending" | "accepted" | "declined" | "withdrawn";
       return_pathway:
         | "Already returned"
@@ -2121,6 +2186,7 @@ export const Constants = {
         "convey",
         "badges",
       ],
+      registration_status: ["going", "not_going"],
       request_status: ["pending", "accepted", "declined", "withdrawn"],
       return_pathway: [
         "Already returned",
