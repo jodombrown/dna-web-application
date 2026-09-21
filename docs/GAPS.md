@@ -3956,3 +3956,53 @@ stating plainly that a migration PR's own `live` job is red between commit and a
 reader stops at the log instead of at the diff. The first is the better guardrail and the one that
 needs a ruling, because `PENDING` is a hole in a gate and the argument for it is that 225 puts the
 hole there deliberately. The second is a sentence and could ride any PR.
+
+## G59. First sighting: the vocabulary arm's 5 s attach wait timed out once on WebKit, and did not reproduce
+
+**Severity: low. One sighting, not reproduced, on an arm whose subject is a deliberately empty
+control. Opened 21 September 2026 during handoff 29-B, filed under ruling 597. The number is assigned
+by this entry (ruling 638). Not fixed here: one sighting is not a pattern, and `tests/matrix.cjs`
+says plainly that a class is added to the ruling 357 list "when a sighting is understood, never to
+make a tail read cleaner".**
+
+**What failed.** Run 286 attempt 1, `matrix (webkit)`, head `1e63c04`, 5087 of 5089 checks passing:
+
+```
+FAIL [no crash] webkit-390x844-dark-vocab-failed: flow completed TimeoutError: locator.waitFor: Timeout 5000ms exceeded.
+Call log:
+  - waiting for locator('section[role="dialog"][aria-label="Compose"]').locator('[role="radiogroup"][aria-label="Instrument"]')
+
+FAIL [no crash] ruling 292 | webkit-390x844-dark-vocab-failed: emitted every check it declares UNPROVEN (228): emitted 3 of 4; the 1 checks behind the failure never ran
+```
+
+The second is ruling 292's consequence arm reporting the check the timeout swallowed. One finding.
+
+**The arm, read in the tree.** `tests/vocabulary.cjs:92` to `98`, the `vocab-failed` variant of
+rulings 193 and 194, where the `vocabularies()` read is forced to fail so a flow can check the
+controls behave. It opens the composer, waits up to 10 s for the Compose dialog, clicks the "Post a
+Need (Contribute)" radio, then waits for the Instrument radiogroup with
+`waitFor({ state: "attached", timeout: 5000 })`. The wait is for attachment rather than visibility on
+purpose — the file's own comment says "a radiogroup with no options has no box, which is the point",
+because under the forced failure the group renders empty. So the 5 s is the budget for the composer
+to mount the group after the failing vocabulary request settles.
+
+**Why it reads as a flake rather than a defect.** Four readings, none of them the arm's own:
+
+- `matrix (chromium)` passed on the **same head**, `1e63c04`.
+- `matrix (webkit)` was green on `main` at `1a71ee8`.
+- The re-run of the same job, same head, same deployment, passed.
+- Within the failing job, compact was 77 of 78 clean and medium and expanded were 55 of 55 and 76 of
+  76. Ruling 554's tell: a real defect in that radiogroup would fail the arm at every viewport, in
+  both themes and on both engines.
+
+**Why it landed `unclassified`, correctly.** Ruling 357's class matches the WebKit wording for an
+aborted fetch on the mocked REST origin, `… due to access control checks`, against a failure's page
+errors. This failure's detail is a Playwright locator timeout, so `ABORTED_MOCK_FETCH` did not match
+and should not have. The tail said `0 behind a web-process crash (G5) | 0 an aborted fetch on mocked
+REST | 2 unclassified`, which is the honest reading.
+
+**What closing it needs.** A second sighting, which turns one timeout into a pattern worth acting on;
+or changing the wait to key on the settled state the composer reaches after the forced failure rather
+than on a fixed 5 s. The second is **G34's shape exactly** — a fixed wait standing in for the thing
+actually being waited on — and if G34 is ever closed by teaching `matrix.cjs` to wait on states
+rather than clocks, this wait belongs in the same pass.
