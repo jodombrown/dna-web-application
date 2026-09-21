@@ -132,7 +132,8 @@ const AUD_LABEL: Record<Audience, string> = {
 };
 const TITLES: Record<SectionKey, string> = {
   about: "About",
-  stance: "Segment",
+  // Ruling 397: the section is labelled Stance, never Segment.
+  stance: "Stance",
   origin: "Origin and heritage",
   where: "Where I am",
   work: "What I work on",
@@ -1626,7 +1627,7 @@ function ProfileBody(p: BodyProps) {
         <SectionCard
           key="stance"
           testId="section-stance"
-          title={segLabel ?? "Segment"}
+          title={segLabel ?? "Stance"}
           owner={owner}
           editing={segEditing}
           keepVisibility={editMode}
@@ -1636,12 +1637,19 @@ function ProfileBody(p: BodyProps) {
           save={p.saveWord.stance ?? null}
           visibility={vis.stance ?? "everyone"}
           onVisibility={owner ? (v) => p.setVisibility("stance", v) : undefined}
+          // Ruling 397 for the word, and ruling 187 for the enumeration. The line used to read
+          // "Say where you stand: returning, anchored on the continent, an ally, or still
+          // exploring." — four of the five stances ruling 300 locks, with Kin missing, and a stance
+          // label map written as prose, which 187 says no component keeps. Naming the fifth would
+          // keep the map; the line names none and the chooser reads public.member_stances, which is
+          // the one label source. Whether a prompt may enumerate a vocabulary at all is raised for
+          // a ruling, not settled here.
           empty={
             segEmpty && !segEditing
-              ? "Say where you stand: returning, anchored on the continent, an ally, or still exploring."
+              ? "Say where you stand. The stance you choose sets what this section asks for."
               : null
           }
-          emptyAct={segEmpty && !segEditing ? "Choose your segment" : null}
+          emptyAct={segEmpty && !segEditing ? "Choose your stance" : null}
           onEmptyAct={() => p.startEdit("stance")}
         >
           <SegmentBlock

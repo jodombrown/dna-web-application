@@ -185,7 +185,6 @@ export function AppShell({
           lenses: LENSES,
           value: lens,
           onChange: (id: string) => onLens(id as LensId),
-          dense: compact,
         }
       : null;
   const bottomPad = compact
@@ -219,6 +218,7 @@ export function AppShell({
       >
         <AppHeader
           variant={expanded ? "expanded" : "compact"}
+          tier={tier}
           homeActive={homeActive}
           homeHref={homeHref}
           onHome={(e) => {

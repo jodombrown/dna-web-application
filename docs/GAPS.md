@@ -1114,6 +1114,38 @@ on its first navigation, so the arm emitted 16 of 22 and read incomplete. The ca
 close separately — a crash charged to an arm after its last check has already passed, where the count
 matches and nothing fails — is still unobserved in the wild and remains owed under ruling 849.
 
+### The nineteenth sighting: the PR path captured frames, which the eighteenth said it never had (rulings 830, 850, 832, 228)
+
+Run [278](https://github.com/jodombrown/dna-web-application/actions/runs/35552933642) on `d1e9e611`,
+21 September, Session 28's enforcing run, `matrix (webkit)`. Recorded here because the entry above
+names this exact run as the thing that was owed: "offsets and frames still have never been captured
+on the PR path, and the next crash there is the first real test of that half of 830." This was it,
+and it worked.
+
+| Fact                | Value                                                                                       |
+| ------------------- | ------------------------------------------------------------------------------------------- |
+| Arm                 | `webkit-1280x800-dark-convene`                                                              |
+| Playwright's error  | `locator.count: Target page, context or browser has been closed`                            |
+| Emitted             | 39 of a declared 42, so `UNPROVEN (228)`; the 3 checks behind the failure never ran         |
+| Job outcome         | stood down on one crashed arm under ruling 832; the job exits 0 and says so in its own tail |
+| **Core extraction** | **`frames extracted; core not retained (284M)`** — gdb ran and returned frames              |
+
+**What the nineteenth settles.** Ruling 830's capture works on the PR path. The eighteenth sighting's
+extraction died before gdb ran and the frames were lost; this one ran, printed a per-thread walk, and
+retained no core because it did not need to — which is the branch of ruling 850's `degraded()` that
+means nothing degraded. The frames name `libWPEWebKit-2.0.so.1` throughout, and the walk prints its
+own cycle guard: repeating offsets `+0x27b76f4` ten times, `+0x27b555f` nine, `+0x27b23f1` eight,
+which the step labels as a recursive walk rather than as distinct frames.
+
+**Still the short-count path.** 39 of 42 with three behind the failure, so ruling 849's teardown case
+— a crash charged after an arm's last check has already passed, count matching, nothing failing —
+remains unobserved and remains owed.
+
+**Not this entry's scope.** Whether the browser survived. The eighteenth answered that with
+`browser.isConnected()` read inside the crash handler; this entry does not repeat the claim from a
+Playwright error string, which G5 already records cannot distinguish the two. The run's artefact
+(`matrix-webkit-run-278`) carries the full capture.
+
 ## G6. Withdraw separated the two states ruling 214 joined — closed (ruling 229)
 
 **Opened and closed 9 September 2026, both inside Fix PR 01. Ruling 227 stated the requirement,
@@ -2292,6 +2324,50 @@ a fresh run on the new head, which re-runs `matrix (webkit)` as a consequence of
 than as a re-run of the job — the same route the seventh sighting took, and for the same reason: under
 ruling 304 a re-run cannot confirm a WebKit failure by reproduction, so spending one buys little.
 
+**Ninth sighting, 21 September 2026: the fifth's mode a third time, on a healthy runner, which is
+what the eighth was missing.** Pages run
+[279](https://github.com/jodombrown/dna-web-application/actions/runs/35554896651) on `6ca7d623`
+(PR 51, Session 28), `matrix (webkit)`, first attempt, at `webkit-1366x1024-light` — the second
+sighting's width, the fifth and eighth sighting's mode, and the same message to the character:
+
+```
+FAIL [no crash] webkit-1366x1024-light flow TimeoutError: locator.waitFor: Timeout 10000ms exceeded.
+  - waiting for locator('…[data-testid="continue-draft"]') to be detached
+    24 × locator resolved to visible <button type="button" data-testid="continue-draft">Continue your dr
+```
+
+5087 of 5089, `emitted 31 of 32`, and the classifier reads
+`0 behind a web-process crash (G5) | 0 an aborted fetch on mocked REST | 2 unclassified`.
+
+**The runner was healthy, and that is the whole value of this sighting.** The eighth had three
+crashed web processes in the one job — roughly three times ruling 828's measured rate — and used that
+to favour the second of the fifth sighting's two candidates: ten seconds is still short for WebKit
+**under load**, rather than the restore never completing. This job lost **zero** web processes, at
+every tier: `compact: 78 arms … 0 that lost a web process`, `medium: 55 … 0`, `expanded: 76 … 0`. So
+the load reading does not cover this one, and the eighth's tentative preference between the two
+candidates does not survive a healthy runner producing the identical failure. Neither candidate is
+established; what has changed is that the eighth's discriminator has been withdrawn by the next
+observation, which is the third time this entry has had to give back a cause it leaned towards.
+
+**It is not the PR's, and this is the cleanest instance of that the entry has.** The immediately
+preceding head, `d1e9e611`, read this arm green on run 278. The entire diff between that head and
+`6ca7d623` is **one file, `docs/GAPS.md`** — markdown that reaches no test, no surface and no build
+output. The failing arm ran byte-identical application code and byte-identical harness code on the
+run where it was green, one run earlier.
+
+**Still open, still not fixed, and the reading the eighth asked for is now the only way forward.**
+What would settle it is the restore's own elapsed time recorded on a healthy run and on a degraded
+one, so the question becomes how long the restore takes rather than whether ten seconds is enough.
+This sighting supplies the healthy half of that comparison as a bare fact — it failed — without the
+timing that would make it useful, because the harness does not record it. That is the harness change
+worth making deliberately.
+
+**No re-run was spent on this one either**, for the third time and the same reason: the push that
+carries this entry supersedes run 279 and starts a fresh run on the new head, which re-runs
+`matrix (webkit)` as a consequence of the commit rather than as a re-run of the job. Under ruling 304
+a re-run cannot confirm a WebKit failure by reproduction, so the head's one re-run stays unspent and
+is available if the next head reds on this same check.
+
 **Not this gap's scope.** The check's assertions and the arms' declared counts stay as they are.
 
 ## G35. Mapbox Search Box carries no POI for Ghana, Kenya or Nigeria, so a Convene host there always falls to their words
@@ -2404,6 +2480,31 @@ look, not what was different; the next time it may be the other way round, and a
 
 **Not this gap's scope.** Connect's lens bar carries its own set and is not read by the shell check; if
 its set ever loses an icon it fails the same way, silently, until a check reads it.
+
+### Addendum, 21 September 2026: point 1 is closed by ruling 997, and ruling 999 says where the constraint lives (997, 999, 636, 638)
+
+**No new G number. This is G36's own point 1**, and it is recorded here under 638 rather than in a
+report or a PR comment, because the register is what the next reader opens.
+
+**Point 1 is closed by 997.** The combination is refused: a lens set that cannot render icon-first
+never enters a compact bar. That closes the hole this entry's point 1 named — a set the fit test can
+never rescue, rendering labels at a width where they do not fit — as a rule, rather than by the one
+repair that removed the Feed's instance of it (`all` gained `globe`).
+
+**999 withdrew 997's data half, and that changes nothing here.** There is no lens vocabulary table,
+lenses do not enter `public.vocabularies()`, and `src/lib/lens.ts` is not a breach of the
+fixed-vocabularies absolute: lenses are navigation, not a content vocabulary. `CLAUDE.md`'s absolute
+now carries that clause. No migration was written for this and none is owed.
+
+**999's consequence, which is the part still open.** The constraint lives on the array's contents,
+not on the type. Read in the tree today: `Lens.icon` is `icon?: string | undefined`, so `Lens[]`
+cannot require an icon on every member, and `LensBar` has no refusal — `canSwitch` is
+`!labels && lenses.length > 0 && lenses.every((l) => !!l.icon)`, and when it is false the bar sets
+`fit` true and renders labels at every width, `compact` included. So 997's refusal is today a rule a
+caller keeps rather than a shape the compiler or the part enforces, and a set that breaches it still
+renders exactly the way this gap opened. Whether `Lens[]` can express the constraint in a form
+`compact` can require — a variant of the type whose `icon` is required, or a `compact` that will not
+accept a set without one — is Strand's under 636, not this repository's.
 
 ## G37. With the fit test corrected, the medium tier reads icon-first for a 3px shortfall that `main` hid inside a label's padding
 
@@ -3205,3 +3306,152 @@ an entry and not a fix.
 permission rules at any scope (ruling 378), so that file is named here as one of the sixteen and is
 not touched, and whoever takes the reformat decision should note that it is the founder's file
 whichever answer they pick.
+
+## G51. The design-system bundle's runtime errors were fixed at cause in correction 21, and this repository holds no record of what they were
+
+**Severity: low for this repository's own code, which loads none of the bundle; medium for the
+register, because a defect class closed with no written symptom cannot be checked off when the
+compile that closed it arrives. Opened 21 September 2026 during Session 28 from handoff 28-A item 7,
+filed under ruling 597. The number is assigned by this entry (ruling 638).**
+
+**Why the entry exists at all.** The number is owed. 638 says a G number is assigned by writing the
+entry into this file and is never reserved in a report, a PR body or a chat message, so the number
+is written here with the description missing rather than promised somewhere the next reader will not
+look.
+
+**What this repository carries, read today.** `docs/strand/` holds exactly one compile,
+`v1789720800167997`, which its own `README-EXPORT.md` names as correction 17. Its rules are in
+`docs/strand/README.md`: one directory per compile, named from the bundle's own
+`@ds-compile-id`; a directory is never overwritten and never deleted; nothing here is built into the
+app or served to visitors, so no module imports the bundle, no route serves it and no build step
+reads it. `LENSBAR-CHANGES-14-16.md` carries corrections 14, 16 and 17 and nothing later.
+
+**What the tree does not carry, and this is the gap.** Correction 21 appears nowhere in this
+repository: not in `docs/`, not in `CLAUDE.md`, not in any commit message on any branch. Neither do
+corrections 18 to 20. No file here describes a runtime error raised by the bundle — not which error,
+not where it was raised, not on which compile, not what correction 21 changed at cause. The entry is
+therefore opened with its symptom record blank on purpose. Reconstructing a mechanism nobody read in
+the tree is what rulings 943, 955, 957, 958 and 960 were written about, and ruling 555 says a
+mechanism a handoff asserts is a lead to verify and never a fact to build on.
+
+**What is owed, and from whom.** From Design or the founder: which errors the bundle raised, on which
+compile, in which host, and what correction 21 changed at cause. That is four sentences from someone
+who watched them, and it is the whole of what this entry needs to become useful.
+
+**Why it matters here even though nothing in `src/` loads the bundle.** Rulings 888 and 907 bind the
+app Design project to a named artifact in this tree, and 855 and 858 bind a ratification to that
+named artifact, which is why 18 lands beside 17 and never on top of it. When the compile carrying
+correction 21 is exported into `docs/strand/`, this entry is where its fix is checked off and
+closed; without the symptom record there is nothing to check it off against, and the closure would
+rest on the export's own prose about itself, which is the shape ruling 891 refuses.
+
+**Not this gap's scope.** The app project's bound `_adherence.oxlintrc.json` and which compile it
+belongs to (handoff 28-A item 1, ruling 996). That is held on a statement from the founder or from
+Design and is a separate question: this repository carries no adherence config at all, at root, in
+`scripts/` or in `tests/`.
+
+## G52. At the medium tier the lens bar's recorded mode disagrees with the lens bar's own recorded measurement, on the same run, in the same evaluate
+
+**Severity: low as a rendering outcome — icon-first is a legible bar and nothing overflows, every
+`lensFit` check on the run passed — and medium as a measurement problem, because a mode that does
+not follow from the numbers printed beside it makes ruling 916's record unusable for pricing Brief
+9's redraw, which is the job ruling 975 promoted the baseline to a gate for. Opened 21 September
+2026 during Session 28, from handoff 28-A item 8's re-read, filed under ruling 597. The number is
+assigned by this entry (ruling 638). Not fixed here: item 8 says a re-read that disagrees with 981
+is reported and not reconciled, and no cause has been established.**
+
+**Where the numbers come from.** `main` at `f36df8b9`, `matrix.yml` run 56, `special: shell`, against
+`https://dna-web-application.pages.dev`. 596 of 596 checks passed, 18 arms, no crashed web process.
+The mode, the track and the probe are all read in the one `page.evaluate` at `tests/matrix.cjs:4076`,
+after `document.fonts.ready`, so they are the same moment by construction.
+
+**The price, from `src/components/strand/LensBar.tsx` as it stands on that head.** Ruling 981: under
+fill packing the price is `n × seat(widest)`, which the file spells
+`need = 8 + others * 2 + n * seat`, with `seat = Math.max(activeMax, inactiveMax)` and labels chosen
+when `Math.ceil(need) <= track.clientWidth`. On the Feed's five lenses that is
+`need = 16 + 5 × seat`, so labels require `seat <= (track - 16) / 5`. At the medium tier the track is
+616 at every width, so the threshold is **seat ≤ 120.0**.
+
+**What run 56 recorded at 744, 820 and 1024.** Both engines measured below the threshold at all six
+readings, and four of the six rendered icon-first anyway.
+
+| Engine   | seat (widest probe) | `need` | track | price says | mode recorded                             |
+| -------- | ------------------- | ------ | ----- | ---------- | ----------------------------------------- |
+| chromium | 118                 | 606    | 616   | labels     | icon-first at 744, 820, 1024              |
+| webkit   | 119                 | 611    | 616   | labels     | icon-first at 744; labels at 820 and 1024 |
+
+The probe rounds to whole pixels in the harness, so chromium's seat is in `[117.5, 118.5)` and
+webkit's in `[118.5, 119.5)`; the whole of both intervals sits under 120.0, so rounding does not
+reach the disagreement. Nor does the engines' own spread: they differ by one pixel and land on
+opposite answers at 820.
+
+**Where the price and the mode do agree.** Everywhere else on the run. At the compact tier the
+thresholds are seat ≤ 62.4 (track 328, 360 wide), ≤ 68.4 (358, 390) and ≤ 76.4 (398, 430), every
+measured seat is 118 or 119, and all six compact readings are icon-first, as priced. At the expanded
+tier `FeedSurface` passes `labels={expandedTier}`, so `canSwitch` is false, the bar never measures
+and no probe is rendered — which the record shows as three chromium and three webkit lines carrying
+a mode and a track and no probe at all. The disagreement is the medium tier and nothing else.
+
+**What this is not.** It is not ruling 981 being wrong, and it is not the arithmetic being wrong:
+apply the file's own expression to the file's own measurement and it answers labels. It is that the
+mode the bar was rendering when the check read it does not follow from the measurement the same check
+read. The two must therefore have come from different moments — the bar's `fit` is state, set by a
+`measure()` that runs in a layout effect at mount and again on `ResizeObserver` and on the font
+events, while the probe and the track are read once at check time. Anything more than that is a
+guess, and this entry does not make one.
+
+**What is worth knowing when it is picked up.** `useTier` starts at `compact` and corrects in an
+effect, so every medium-tier mount lays out twice and the track's width changes underneath the bar.
+And this repository's port carries no equivalent of the Strand bundle's correction 16 item 16, the
+zero-measurement guard that keeps the rendering it has and retries rather than treating a zero as an
+answer — `LENSBAR-CHANGES-14-16.md` in `docs/strand/v1789720800167997/` describes it and
+`LensBar.tsx` does not have it. Both are places to look. Neither is established as the cause.
+
+**The branch's own enforcing run moved the mode without moving the measurement, which is the
+strongest thing this entry has.** Run
+[278](https://github.com/jodombrown/dna-web-application/actions/runs/35552933642) on `d1e9e611`,
+against the branch preview, read webkit as **icon-first at 744, 820 and 1024** where run 56 on `main`
+read **labels at 820 and 1024**. The probe is byte-identical across the two runs
+(`a63 i62 a90 i89 a119 i118 a77 i76 a82 i81`) and so is the track (616). Chromium's nine lines are
+byte-identical between the two runs as well. So the same engine, given the same measurement against
+the same track, answered differently on two runs: the mode is not a function of the measurement, and
+what separates 820 on `main` from 820 on the branch is timing rather than pixels. The cross-engine
+split the table above records is the same phenomenon caught once; this is it caught twice.
+
+**Session 28's diff cannot account for it (confidence: high).** Ruling 1000 removed `dense`, which
+was read in exactly two places: `ico` at render time in `LensBar`, and `AppHeader`'s bell predicate.
+It never entered `canSwitch`, `measure()`, the probe's markup or the track, and the probe rendered
+its 20px icon spacer with or without it, so the fit computation is the same code on both heads. The
+shell arm also reads the Feed's own in-column bar, not the compact header bar, because it runs before
+any scroll. That leaves the race (confidence: moderate to high) rather than the change.
+
+**One consequence worth stating plainly.** On run 278 all six medium readings are icon-first on both
+engines, so the disagreement with the price is uniform there rather than split. That is a tidier
+record and not a better one: it is six readings the arithmetic says should have been labels.
+
+**A third reading, and it is a third answer.** Run
+[279](https://github.com/jodombrown/dna-web-application/actions/runs/35554896651) on `6ca7d623` — a
+head whose only difference from `d1e9e611` is this file — read webkit's medium tier as **labels at
+744**, icon-first at 820 and icon-first at 1024. So webkit's three medium widths have now produced
+three different triples on three runs, on two heads whose fit code is identical and against a probe
+and a track that never moved:
+
+| Run                  | Head       | 744        | 820        | 1024       |
+| -------------------- | ---------- | ---------- | ---------- | ---------- |
+| 56 (`main` baseline) | `f36df8b9` | icon-first | labels     | labels     |
+| 278                  | `d1e9e611` | icon-first | icon-first | icon-first |
+| 279                  | `6ca7d623` | labels     | icon-first | icon-first |
+
+Every one of those nine readings carries the same probe
+(`a63 i62 a90 i89 a119 i118 a77 i76 a82 i81`) and the same 616 track, and the price says labels for
+all nine. 744 has now answered both ways. This is no longer a split to be attributed to an engine or
+to a head: within one engine, one measurement and one track, the mode is settled per run and per
+width by something the record does not capture.
+
+**What it costs elsewhere.** G37 is about this tier and its numbers are older than the code: its
+table prices the widest label as an active tab at 131px under the pre-952 probe, which rendered
+`padding: 0 14px` active against `0 8px` inactive, and its 619 comes from the pre-952 expression
+`8 + others * 2 + activeMax + others * inactiveMax`. Ruling 952 made the probe's side padding uniform
+and made every seat equal, and run 56 measures that same label at 118 (chromium) and 119 (webkit).
+G37's finding may still stand; its arithmetic no longer describes the file, and that is recorded here
+rather than edited into G37, which is not this PR's to reopen.
