@@ -1198,6 +1198,25 @@ a fresh run on a new head — which re-runs `matrix (webkit)` as a consequence o
 than as a re-run of the job, exactly as the seventh, eighth and ninth sightings of G34 were handled.
 The head's one re-run stays unspent.
 
+**It recurred on the very next run, and the over-count shape with it.** Run
+[287](https://github.com/jodombrown/dna-web-application/actions/runs/35585047043) on `63982f6`, the
+head that superseded 284, lost **one** web process: `webkit-1024x1366-dark`, waiting for the Compose
+dialog to detach, `4 x locator resolved to visible`. One arm, so ruling 832 stood the job down and it
+exits 0 — with the tail refusing to let that read as a pass: *"STOOD DOWN ON ONE CRASHED ARM. THIS IS
+NOT A CLEAN RUN … Do not read this green as the arm above having run."* The arm emitted **33 against
+a declared 32**, over rather than short, the flow catch-all on the error path again.
+
+That is the fact worth keeping: **the over-count shape was new at the twentieth and recurred at the
+next opportunity**, so it is a shape of this defect rather than a one-off, and ruling 292's refusal to
+regenerate a declaration from a crashed run earns its keep twice in two runs. Everything else is the
+same defect at a different viewport.
+
+**This is where the sighting log stops for this class.** A recurrence that carries no new fact is a
+tally mark, and a register that grows a section per tally is one nobody reads to the end. Recording
+each one would also mean a push per sighting, each push starting the run that produces the next — so
+from here a G5 crash is recorded only when it changes something: a new shape, a new count, a job that
+ruling 832 cannot stand down, or ruling 849's teardown case, which is still unobserved and still owed.
+
 ## G6. Withdraw separated the two states ruling 214 joined — closed (ruling 229)
 
 **Opened and closed 9 September 2026, both inside Fix PR 01. Ruling 227 stated the requirement,
