@@ -3273,3 +3273,68 @@ rest on the export's own prose about itself, which is the shape ruling 891 refus
 belongs to (handoff 28-A item 1, ruling 996). That is held on a statement from the founder or from
 Design and is a separate question: this repository carries no adherence config at all, at root, in
 `scripts/` or in `tests/`.
+
+## G52. At the medium tier the lens bar's recorded mode disagrees with the lens bar's own recorded measurement, on the same run, in the same evaluate
+
+**Severity: low as a rendering outcome — icon-first is a legible bar and nothing overflows, every
+`lensFit` check on the run passed — and medium as a measurement problem, because a mode that does
+not follow from the numbers printed beside it makes ruling 916's record unusable for pricing Brief
+9's redraw, which is the job ruling 975 promoted the baseline to a gate for. Opened 21 September
+2026 during Session 28, from handoff 28-A item 8's re-read, filed under ruling 597. The number is
+assigned by this entry (ruling 638). Not fixed here: item 8 says a re-read that disagrees with 981
+is reported and not reconciled, and no cause has been established.**
+
+**Where the numbers come from.** `main` at `f36df8b9`, `matrix.yml` run 56, `special: shell`, against
+`https://dna-web-application.pages.dev`. 596 of 596 checks passed, 18 arms, no crashed web process.
+The mode, the track and the probe are all read in the one `page.evaluate` at `tests/matrix.cjs:4076`,
+after `document.fonts.ready`, so they are the same moment by construction.
+
+**The price, from `src/components/strand/LensBar.tsx` as it stands on that head.** Ruling 981: under
+fill packing the price is `n × seat(widest)`, which the file spells
+`need = 8 + others * 2 + n * seat`, with `seat = Math.max(activeMax, inactiveMax)` and labels chosen
+when `Math.ceil(need) <= track.clientWidth`. On the Feed's five lenses that is
+`need = 16 + 5 × seat`, so labels require `seat <= (track - 16) / 5`. At the medium tier the track is
+616 at every width, so the threshold is **seat ≤ 120.0**.
+
+**What run 56 recorded at 744, 820 and 1024.** Both engines measured below the threshold at all six
+readings, and four of the six rendered icon-first anyway.
+
+| Engine   | seat (widest probe) | `need` | track | price says | mode recorded                             |
+| -------- | ------------------- | ------ | ----- | ---------- | ----------------------------------------- |
+| chromium | 118                 | 606    | 616   | labels     | icon-first at 744, 820, 1024              |
+| webkit   | 119                 | 611    | 616   | labels     | icon-first at 744; labels at 820 and 1024 |
+
+The probe rounds to whole pixels in the harness, so chromium's seat is in `[117.5, 118.5)` and
+webkit's in `[118.5, 119.5)`; the whole of both intervals sits under 120.0, so rounding does not
+reach the disagreement. Nor does the engines' own spread: they differ by one pixel and land on
+opposite answers at 820.
+
+**Where the price and the mode do agree.** Everywhere else on the run. At the compact tier the
+thresholds are seat ≤ 62.4 (track 328, 360 wide), ≤ 68.4 (358, 390) and ≤ 76.4 (398, 430), every
+measured seat is 118 or 119, and all six compact readings are icon-first, as priced. At the expanded
+tier `FeedSurface` passes `labels={expandedTier}`, so `canSwitch` is false, the bar never measures
+and no probe is rendered — which the record shows as three chromium and three webkit lines carrying
+a mode and a track and no probe at all. The disagreement is the medium tier and nothing else.
+
+**What this is not.** It is not ruling 981 being wrong, and it is not the arithmetic being wrong:
+apply the file's own expression to the file's own measurement and it answers labels. It is that the
+mode the bar was rendering when the check read it does not follow from the measurement the same check
+read. The two must therefore have come from different moments — the bar's `fit` is state, set by a
+`measure()` that runs in a layout effect at mount and again on `ResizeObserver` and on the font
+events, while the probe and the track are read once at check time. Anything more than that is a
+guess, and this entry does not make one.
+
+**What is worth knowing when it is picked up.** `useTier` starts at `compact` and corrects in an
+effect, so every medium-tier mount lays out twice and the track's width changes underneath the bar.
+And this repository's port carries no equivalent of the Strand bundle's correction 16 item 16, the
+zero-measurement guard that keeps the rendering it has and retries rather than treating a zero as an
+answer — `LENSBAR-CHANGES-14-16.md` in `docs/strand/v1789720800167997/` describes it and
+`LensBar.tsx` does not have it. Both are places to look. Neither is established as the cause.
+
+**What it costs elsewhere.** G37 is about this tier and its numbers are older than the code: its
+table prices the widest label as an active tab at 131px under the pre-952 probe, which rendered
+`padding: 0 14px` active against `0 8px` inactive, and its 619 comes from the pre-952 expression
+`8 + others * 2 + activeMax + others * inactiveMax`. Ruling 952 made the probe's side padding uniform
+and made every seat equal, and run 56 measures that same label at 118 (chromium) and 119 (webkit).
+G37's finding may still stand; its arithmetic no longer describes the file, and that is recorded here
+rather than edited into G37, which is not this PR's to reopen.
