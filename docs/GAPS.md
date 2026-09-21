@@ -1114,6 +1114,38 @@ on its first navigation, so the arm emitted 16 of 22 and read incomplete. The ca
 close separately — a crash charged to an arm after its last check has already passed, where the count
 matches and nothing fails — is still unobserved in the wild and remains owed under ruling 849.
 
+### The nineteenth sighting: the PR path captured frames, which the eighteenth said it never had (rulings 830, 850, 832, 228)
+
+Run [278](https://github.com/jodombrown/dna-web-application/actions/runs/35552933642) on `d1e9e611`,
+21 September, Session 28's enforcing run, `matrix (webkit)`. Recorded here because the entry above
+names this exact run as the thing that was owed: "offsets and frames still have never been captured
+on the PR path, and the next crash there is the first real test of that half of 830." This was it,
+and it worked.
+
+| Fact                | Value                                                                                       |
+| ------------------- | ------------------------------------------------------------------------------------------- |
+| Arm                 | `webkit-1280x800-dark-convene`                                                              |
+| Playwright's error  | `locator.count: Target page, context or browser has been closed`                            |
+| Emitted             | 39 of a declared 42, so `UNPROVEN (228)`; the 3 checks behind the failure never ran         |
+| Job outcome         | stood down on one crashed arm under ruling 832; the job exits 0 and says so in its own tail |
+| **Core extraction** | **`frames extracted; core not retained (284M)`** — gdb ran and returned frames              |
+
+**What the nineteenth settles.** Ruling 830's capture works on the PR path. The eighteenth sighting's
+extraction died before gdb ran and the frames were lost; this one ran, printed a per-thread walk, and
+retained no core because it did not need to — which is the branch of ruling 850's `degraded()` that
+means nothing degraded. The frames name `libWPEWebKit-2.0.so.1` throughout, and the walk prints its
+own cycle guard: repeating offsets `+0x27b76f4` ten times, `+0x27b555f` nine, `+0x27b23f1` eight,
+which the step labels as a recursive walk rather than as distinct frames.
+
+**Still the short-count path.** 39 of 42 with three behind the failure, so ruling 849's teardown case
+— a crash charged after an arm's last check has already passed, count matching, nothing failing —
+remains unobserved and remains owed.
+
+**Not this entry's scope.** Whether the browser survived. The eighteenth answered that with
+`browser.isConnected()` read inside the crash handler; this entry does not repeat the claim from a
+Playwright error string, which G5 already records cannot distinguish the two. The run's artefact
+(`matrix-webkit-run-278`) carries the full capture.
+
 ## G6. Withdraw separated the two states ruling 214 joined — closed (ruling 229)
 
 **Opened and closed 9 September 2026, both inside Fix PR 01. Ruling 227 stated the requirement,
@@ -3330,6 +3362,28 @@ And this repository's port carries no equivalent of the Strand bundle's correcti
 zero-measurement guard that keeps the rendering it has and retries rather than treating a zero as an
 answer — `LENSBAR-CHANGES-14-16.md` in `docs/strand/v1789720800167997/` describes it and
 `LensBar.tsx` does not have it. Both are places to look. Neither is established as the cause.
+
+**The branch's own enforcing run moved the mode without moving the measurement, which is the
+strongest thing this entry has.** Run
+[278](https://github.com/jodombrown/dna-web-application/actions/runs/35552933642) on `d1e9e611`,
+against the branch preview, read webkit as **icon-first at 744, 820 and 1024** where run 56 on `main`
+read **labels at 820 and 1024**. The probe is byte-identical across the two runs
+(`a63 i62 a90 i89 a119 i118 a77 i76 a82 i81`) and so is the track (616). Chromium's nine lines are
+byte-identical between the two runs as well. So the same engine, given the same measurement against
+the same track, answered differently on two runs: the mode is not a function of the measurement, and
+what separates 820 on `main` from 820 on the branch is timing rather than pixels. The cross-engine
+split the table above records is the same phenomenon caught once; this is it caught twice.
+
+**Session 28's diff cannot account for it (confidence: high).** Ruling 1000 removed `dense`, which
+was read in exactly two places: `ico` at render time in `LensBar`, and `AppHeader`'s bell predicate.
+It never entered `canSwitch`, `measure()`, the probe's markup or the track, and the probe rendered
+its 20px icon spacer with or without it, so the fit computation is the same code on both heads. The
+shell arm also reads the Feed's own in-column bar, not the compact header bar, because it runs before
+any scroll. That leaves the race (confidence: moderate to high) rather than the change.
+
+**One consequence worth stating plainly.** On the branch all six medium readings are icon-first on
+both engines, so the disagreement with the price is now uniform rather than split. That is a tidier
+record and not a better one: it is six readings the arithmetic says should have been labels.
 
 **What it costs elsewhere.** G37 is about this tier and its numbers are older than the code: its
 table prices the widest label as an active tab at 131px under the pre-952 probe, which rendered
