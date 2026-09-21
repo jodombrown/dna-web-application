@@ -3,9 +3,15 @@
 // then at right Home (unlabelled house icon), bell (children), avatar. No second C row. Compact and
 // medium: logo, centre slot, bell, avatar. The centre slot is the composer entry (the Lens Bar
 // track's shape: --bg-sunken, --radius-m, 44 tall, not a pill) or the compact LensBar once the
-// member has scrolled into the Feed (`lensBar`). lensBar.dense (under 640): the bell leaves with the
-// composer and the LensBar's active lens shows its name in place of its icon; avatar stays at the far
-// right. Bell and composer return at the top. The logo always goes Home (/feed).
+// member has scrolled into the Feed (`lensBar`). At the compact tier the bell leaves with the
+// composer, because logo, lens bar, bell and avatar do not fit one 360-wide row; avatar stays at the
+// far right. Bell and composer return at the top. The logo always goes Home (/feed).
+// Ruling 1000 retired `lensBar.dense`, which said both "suppress the active lens's icon" and "this
+// is the compact tier": the first is gone (see `LensBar`) and the second is what the bell needs, so
+// the bell reads `tier` and the flag that answered two questions is not replaced by another one.
+// `variant` stays the layout switch — expanded is a different row — and `tier` is the shell's own
+// three-way tier, which is the axis the bell asks about, because `variant` reads "compact" at the
+// medium tier too and the bell belongs in the row there.
 // Production additions: homeHref renders the logo and Home item as real links (hover-intent prefetch,
 // ruling 84); onIntentC prefetches a C route from the inline dock.
 import { useState, type CSSProperties, type MouseEvent, type ReactNode } from "react";
@@ -19,11 +25,12 @@ export type HeaderLensBar<Id extends string = string> = {
   lenses: Lens<Id>[];
   value: Id;
   onChange?: ((id: Id) => void) | undefined;
-  dense?: boolean | undefined;
 };
 
 export type AppHeaderProps = {
   variant?: "compact" | "expanded";
+  /** The shell's tier (rulings 58 to 60). The bell's compact-row rule reads this, not `variant`. */
+  tier?: "compact" | "medium" | "expanded";
   homeActive?: boolean | undefined;
   onHome?: ((e: MouseEvent<HTMLElement>) => void) | undefined;
   /** Home link target, rendered as an anchor so it prefetches and opens in a new tab. */
@@ -49,6 +56,7 @@ export type AppHeaderProps = {
 /** App shell header (ruling 69). Mounted once at the app root; no surface composes its own. */
 export function AppHeader({
   variant = "compact",
+  tier = "compact",
   homeActive,
   onHome,
   homeHref,
@@ -129,7 +137,6 @@ export function AppHeader({
           (showLens && lensBar ? (
             <LensBar
               compact
-              dense={lensBar.dense}
               lenses={lensBar.lenses}
               value={lensBar.value}
               onChange={lensBar.onChange}
@@ -205,7 +212,7 @@ export function AppHeader({
             <Icon name="house" size={22} />
           </HomeTag>
         )}
-        {!(showLens && lensBar?.dense) && children}
+        {!(showLens && tier === "compact") && children}
         <button
           type="button"
           onClick={onAvatar}

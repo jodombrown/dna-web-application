@@ -18,14 +18,16 @@
 // sans italic, --ink-3, 12 below the track; collapses (max-height) when `collapsed` flips true,
 // latched; tapping the active lens toggles it back. Disabled lenses keep their seat (dashed
 // hairline). Accessible name "{label}: {scope}". Light haptic on accepted taps. `compact`: header
-// slot, no descriptor, inactive lenses minWidth --target-min, which is 24 and not 32. `dense`: the
-// active lens shows its name in place of its icon, and nothing else moves — the icon is suppressed
-// on the active lens only, every other lens keeps its icon, every lens still renders as a tab, the
-// tablist and the labels-fit switch below are untouched. Its only caller is `AppHeader`. Its own
-// active-tab padding step is gone with ruling 952: one padding for every state, because a padding
-// that varies by selection varies the seat (see the tab's style below). Ruling 905 takes the seat to 44; the mechanism is
-// pending Design, which chooses between a 52px track and a zero-padding 44px track, and nothing
-// here implements it.
+// slot, no descriptor, inactive lenses minWidth --target-min, which is 24 and not 32. `dense` is
+// gone with ruling 1000: it suppressed the active lens's icon, so the one lens the member had just
+// chosen was the one lens that stopped showing what it was, and the active tab is the only tab that
+// already renders its label. The active lens now renders its icon at every tier, like every other
+// lens. Its only caller was `AppHeader`, whose bell condition read the same flag for an unrelated
+// question and now reads the tier instead (see `AppHeader`). Its own active-tab padding step is gone
+// with ruling 952: one padding for every state, because a padding that varies by selection varies
+// the seat (see the tab's style below). Ruling 905 takes the seat to 44; the mechanism is pending
+// Design, which chooses between a 52px track and a zero-padding 44px track, and nothing here
+// implements it.
 // Correction 14 (ruling 723, re-synced at compile v1789537371639386): labels-fit. The bar measures
 // whether every lens label fits the track at once; when it does, every lens renders its label; when
 // it does not, the bar renders icon-first: the active lens its icon and label, every other lens its
@@ -54,7 +56,6 @@ export type LensBarProps<Id extends string = string> = {
   /** The surface's C for the active icon. Feed passes nothing. */
   c?: C | "brand" | undefined;
   compact?: boolean | undefined;
-  dense?: boolean | undefined;
   /** Forces labels on every lens (723's `labels="always"`); otherwise the bar measures. */
   labels?: boolean | "always" | undefined;
   /** Host signal: the member scrolled down; the descriptor collapses, latched. */
@@ -70,7 +71,6 @@ export function LensBar<Id extends string = string>({
   scope,
   c,
   compact,
-  dense,
   labels,
   collapsed,
   label = "Lens",
@@ -108,6 +108,16 @@ export function LensBar<Id extends string = string>({
     // Equal seats are the stricter test of the two, because the widest label has to fit one seat
     // rather than the whole track minus the others' shares. That moves G37's boundary and G48
     // records it.
+    //
+    // Ruling 981 names why: the fit price is packing-specific, not a property of the labels. Under
+    // fill packing — every tab `flex: 1 1 0`, which is what this track does since 952 — the price is
+    // `n × seat(widest)`, because the widest label sets a floor every seat must clear. Under content
+    // packing, where each tab sizes to its own label, the price is the exact sum of the labels. Both
+    // are correct arithmetic for the layout they price, and the sum test that run 239 caught was the
+    // content price applied to a track that fills. So the one thing that must never drift is the
+    // pairing: change the packing and this expression changes with it, in the same commit. This
+    // component has no packing prop and always fills, so `n × seat` is its price and the only price
+    // it has.
     const measure = () => {
       if (!track.current || !probe.current) return;
       let activeMax = 0;
@@ -256,7 +266,7 @@ export function LensBar<Id extends string = string>({
           const on = l.id === value;
           const dis = !!l.disabled;
           const txt = on || !iconFirst;
-          const ico = !!l.icon && !(on && dense);
+          const ico = !!l.icon;
           const tap = () => {
             if (dis) return;
             if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(8);
