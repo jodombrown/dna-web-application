@@ -65,7 +65,7 @@ export function BadgeRow({ badges = [], style }: BadgeRowProps) {
                 fontSize: 15,
                 fontWeight: 500,
                 color: "var(--c-" + b.c + "-text)",
-                transition: "background var(--dur-fast) var(--ease)",
+                transition: "background var(--dur-default) var(--ease)",
               }}
             >
               <CBadge c={b.c} size={24} />

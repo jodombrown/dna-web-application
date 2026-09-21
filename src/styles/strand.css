@@ -17,7 +17,10 @@
   font-weight: 400 700;
   font-display: swap;
   src: url("/strand/fonts/bodoni-moda-400-700-normal-latin-ext.woff2") format("woff2");
-  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+  unicode-range:
+    U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329,
+    U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F,
+    U+A720-A7FF;
 }
 @font-face {
   font-family: "Bodoni Moda";
@@ -25,7 +28,9 @@
   font-weight: 400 700;
   font-display: swap;
   src: url("/strand/fonts/bodoni-moda-400-700-normal-latin.woff2") format("woff2");
-  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 @font-face {
   font-family: "Bodoni Moda";
@@ -33,7 +38,10 @@
   font-weight: 400 700;
   font-display: swap;
   src: url("/strand/fonts/bodoni-moda-400-700-italic-latin-ext.woff2") format("woff2");
-  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+  unicode-range:
+    U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329,
+    U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F,
+    U+A720-A7FF;
 }
 @font-face {
   font-family: "Bodoni Moda";
@@ -41,7 +49,9 @@
   font-weight: 400 700;
   font-display: swap;
   src: url("/strand/fonts/bodoni-moda-400-700-italic-latin.woff2") format("woff2");
-  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 @font-face {
   font-family: "Alegreya Sans";
@@ -49,7 +59,10 @@
   font-weight: 400;
   font-display: swap;
   src: url("/strand/fonts/alegreya-sans-400-normal-latin-ext.woff2") format("woff2");
-  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+  unicode-range:
+    U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329,
+    U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F,
+    U+A720-A7FF;
 }
 @font-face {
   font-family: "Alegreya Sans";
@@ -57,7 +70,9 @@
   font-weight: 400;
   font-display: swap;
   src: url("/strand/fonts/alegreya-sans-400-normal-latin.woff2") format("woff2");
-  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 @font-face {
   font-family: "Alegreya Sans";
@@ -65,7 +80,10 @@
   font-weight: 400;
   font-display: swap;
   src: url("/strand/fonts/alegreya-sans-400-italic-latin-ext.woff2") format("woff2");
-  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+  unicode-range:
+    U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329,
+    U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F,
+    U+A720-A7FF;
 }
 @font-face {
   font-family: "Alegreya Sans";
@@ -73,7 +91,9 @@
   font-weight: 400;
   font-display: swap;
   src: url("/strand/fonts/alegreya-sans-400-italic-latin.woff2") format("woff2");
-  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 @font-face {
   font-family: "Alegreya Sans";
@@ -81,7 +101,10 @@
   font-weight: 500;
   font-display: swap;
   src: url("/strand/fonts/alegreya-sans-500-normal-latin-ext.woff2") format("woff2");
-  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+  unicode-range:
+    U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329,
+    U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F,
+    U+A720-A7FF;
 }
 @font-face {
   font-family: "Alegreya Sans";
@@ -89,7 +112,9 @@
   font-weight: 500;
   font-display: swap;
   src: url("/strand/fonts/alegreya-sans-500-normal-latin.woff2") format("woff2");
-  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 @font-face {
   font-family: "Alegreya Sans";
@@ -97,7 +122,10 @@
   font-weight: 700;
   font-display: swap;
   src: url("/strand/fonts/alegreya-sans-700-normal-latin-ext.woff2") format("woff2");
-  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+  unicode-range:
+    U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329,
+    U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F,
+    U+A720-A7FF;
 }
 @font-face {
   font-family: "Alegreya Sans";
@@ -105,7 +133,9 @@
   font-weight: 700;
   font-display: swap;
   src: url("/strand/fonts/alegreya-sans-700-normal-latin.woff2") format("woff2");
-  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 
 /* ---- tokens/colors.css ---- */
@@ -171,6 +201,8 @@
   --info-tint: #e0eef1;
   --destructive: hsl(0 65% 45%);
   --destructive-tint: #f8dede;
+  --danger: var(--error);
+  --danger-tint: var(--error-tint); /* legacy alias */
   --focus: #4a8d77; /* emerald. Never blue. */
   --glow-dia:
     0 0 0 2px #faf7f2, 0 0 0 4px #e8b830, 0 0 18px rgba(232, 184, 48, 0.45); /* DIA only. Never on any other component. */
@@ -307,10 +339,11 @@
   --shadow-2: 0 1px 2px rgba(26, 26, 24, 0.06), 0 4px 10px rgba(26, 26, 24, 0.07);
   --shadow-3: 0 1px 2px rgba(26, 26, 24, 0.06), 0 6px 16px rgba(26, 26, 24, 0.08);
   --shadow-4: 0 2px 4px rgba(26, 26, 24, 0.06), 0 12px 28px rgba(26, 26, 24, 0.1);
-  --shadow-none: var(--shadow-0);
-  --shadow-stack: var(--shadow-3); /* legacy aliases */
-
-  --touch-min: 44px;
+  /* Ruling 609 struck --shadow-stack and ruling 619 struck --shadow-none, the last alias; every
+     site that cited either now cites --shadow-3 or --shadow-0 by name. Ruling 908 renamed
+     --touch-min to --target-primary, which is declared below at the same 44px. The compile
+     v1789885868097915 still carries --shadow-none in tokens/spacing.css; that is carried back to
+     Strand's next correction brief and nothing here waits on it. */
   --dock-height: 64px;
   --content-max: 680px;
   --page-max: 1120px;
@@ -320,6 +353,43 @@
      its own, 24 the floor for a control inside a line of text or a row that is itself the target. */
   --target-min: 24px;
   --target-primary: 44px;
+
+  /* ---- Strand compile v1789885868097915: the 23 tokens the compile declares and this app did
+     not, at the compile's own values and under the compile's own selector (handoff 29-A item 4,
+     rulings 908, 604, 609, 619, 996). None had a reference in src/ before this commit; FacetRail
+     and Pane are the first parts to cite --z-rail, --z-pane, --z-sticky, --pane-gap and
+     --pane-list-width. ---- */
+  /* Tier breakpoints (583, 603). The three frames: compact under 640, medium 640 to 1024,
+     expanded over 1024. src/lib/tier.ts carries the same numbers in TypeScript. */
+  --tier-medium: 640px;
+  --tier-expanded: 1024px;
+
+  /* Sheet geometry (584, 603). Ruling 492's two named exceptions are carried, not re-derived. */
+  --sheet-compact-height: 80%;
+  --sheet-medium-width: 40%;
+  --sheet-expanded-width: 40%;
+  --sheet-expanded-max-height: 80%;
+  --sheet-composer-ratio: 50%; /* 492 exception: the composer's stacked preview */
+  --sheet-notification-width: 380px; /* 492 exception: the pointer notification panel */
+  --sheet-radius: var(--radius-l);
+  --sheet-drag-dismiss: 120px;
+
+  /* Pane geometry (603). The pane is navigated into, so it is laid out, never summoned. */
+  --pane-list-width: 360px;
+  --pane-gap: var(--space-6);
+
+  /* Lane geometry (731). A card laid in a lane; read by the caller that lays the lane. */
+  --lane-card-width: 320px;
+
+  /* Z-index scale (603). Ruled order. No component hardcodes a z-index. */
+  --z-pane: 1; /* @kind other */ /* navigated into, page content, never over chrome */
+  --z-rail: 2; /* @kind other */ /* FacetRail as a rail, sticky in its column */
+  --z-sticky: 20; /* @kind other */ /* AppHeader, PulseDock, sticky bars */
+  --z-scrim: 50; /* @kind other */ /* scrim behind any summoned layer */
+  --z-sheet: 60; /* @kind other */ /* sheet, and FacetRail's collapsed sheet form under 640 */
+  --z-dialog: 65; /* @kind other */ /* 606: a dialog over a sheet stacks by DOM order */
+  --z-notification: 70; /* @kind other */ /* pointer notification panel, above a sheet */
+  --z-toast: 80; /* @kind other */
   /* Auth head (ruling 491): the logo band's height never changes with content, and the logo is
      top-aligned in it, so the space under the wordmark is the same on every screen. */
   --auth-logo-band-compact: 84px;
@@ -335,8 +405,9 @@
   --dur-micro: 100ms; /* @kind other */ /* checkbox, switch */
   --dur-default: 150ms; /* @kind other */ /* hover, press, focus */
   --dur-slow: 300ms; /* @kind other */ /* modals, sheets, page */
-  --dur-fast: var(--dur-default); /* @kind other */
-  --dur-base: var(--dur-default); /* @kind other */ /* legacy aliases */
+  /* Ruling 604 struck --dur-fast and --dur-base rather than repointing them (194 applied to a
+     token); every site that cited either now cites --dur-default by name. Assignment: sheet
+     --dur-slow, pane --dur-slow, FacetRail --dur-default. */
 
   /* ---- Design pass 01 motion block (ruling 489) ---- */
   /* A card loses opacity across this distance, measured up from the sticky bar's bottom edge.

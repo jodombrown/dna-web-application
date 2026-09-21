@@ -53,3 +53,7 @@ export * from "./CardFade";
 export * from "./VerbRow";
 // Convene Pass 1 (ruling 673): the Segment part, the Composer its first caller.
 export * from "./Segment";
+// Strand re-sync to compile v1789885868097915 (handoff 29-A item 3, ruling 851): the two parts the
+// compile carries and this tree did not. Neither is bound by a page yet.
+export * from "./FacetRail";
+export * from "./Pane";

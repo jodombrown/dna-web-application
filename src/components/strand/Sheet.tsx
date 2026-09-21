@@ -349,7 +349,7 @@ export function Sheet({
         data-kb={keyboardHeight > 0 ? "1" : undefined}
         style={{
           background: "var(--surface)",
-          boxShadow: "var(--shadow-stack)",
+          boxShadow: "var(--shadow-3)",
           display: "flex",
           flexDirection: "column",
           boxSizing: "border-box",

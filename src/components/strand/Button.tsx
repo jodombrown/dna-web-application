@@ -47,7 +47,7 @@ export function Button({
     gap: 8,
     width: full ? "100%" : undefined,
     opacity: disabled ? 0.45 : 1,
-    transition: "filter var(--dur-fast) var(--ease), background var(--dur-fast) var(--ease)",
+    transition: "filter var(--dur-default) var(--ease), background var(--dur-default) var(--ease)",
     whiteSpace: "nowrap",
   };
   const v: Record<NonNullable<ButtonProps["variant"]>, CSSProperties> = {

@@ -49,7 +49,7 @@ export function Switch({ label, checked, onChange, disabled, style }: SwitchProp
           background: checked ? "var(--ink)" : "var(--line-strong)",
           position: "relative",
           flex: "none",
-          transition: "background var(--dur-base) var(--ease)",
+          transition: "background var(--dur-default) var(--ease)",
         }}
       >
         <span
@@ -61,7 +61,7 @@ export function Switch({ label, checked, onChange, disabled, style }: SwitchProp
             height: 20,
             borderRadius: 999,
             background: "var(--surface)",
-            transition: "left var(--dur-base) var(--ease)",
+            transition: "left var(--dur-default) var(--ease)",
           }}
         />
       </span>

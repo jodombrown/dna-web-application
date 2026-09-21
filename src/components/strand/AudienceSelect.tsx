@@ -58,7 +58,7 @@ export function AudienceSelect({
                 color: on ? "var(--on-fill)" : "var(--ink)",
                 background: on ? "var(--ink)" : "transparent",
                 border: on ? "1px solid var(--ink)" : "1px solid var(--line)",
-                transition: "background var(--dur-fast) var(--ease)",
+                transition: "background var(--dur-default) var(--ease)",
               }}
             >
               <Icon name={o.icon} size={18} />

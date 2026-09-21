@@ -46,7 +46,7 @@ export function DiaLine({ state, text, onNotThis, style }: DiaLineProps) {
       role="status"
       aria-live="polite"
       data-dia="done"
-      style={{ ...base, animation: "strand-fade var(--dur-base) var(--ease)" }}
+      style={{ ...base, animation: "strand-fade var(--dur-default) var(--ease)" }}
     >
       <span
         aria-hidden="true"

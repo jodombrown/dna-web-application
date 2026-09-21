@@ -31,7 +31,7 @@ export function IconButton({ name, label, c, active, size = 44, style, ...rest }
         alignItems: "center",
         justifyContent: "center",
         cursor: "pointer",
-        transition: "background var(--dur-fast) var(--ease)",
+        transition: "background var(--dur-default) var(--ease)",
         ...style,
       }}
       onMouseEnter={() => setHover(true)}

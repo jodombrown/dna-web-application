@@ -74,7 +74,7 @@ export function VerbChip({
             : "transparent",
         border: selected ? "1.5px solid " + color : "1px solid var(--line)",
         transition:
-          "background var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease)",
+          "background var(--dur-default) var(--ease), border-color var(--dur-default) var(--ease)",
         ...style,
       }}
     >

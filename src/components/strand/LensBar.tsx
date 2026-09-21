@@ -1,42 +1,107 @@
-// Design pass 01, strand-patch/LensBar.jsx (rulings 405, 488; supersedes the B2-Shell-Feed-v3
-// patch). Icon-first control that switches the corpus of a list surface.
-// Track: --bg-sunken, --radius-m, 4 padding, 44 tall at every tier, compact included (W35),
-// bounded left and right. The 44 is the track's own height and not the seat's: each tab inside it
-// is height 36 with minHeight --target-min, which `src/styles/strand.css` sets to 24px. The active
-// tab carries the --surface chip itself (--radius-badge, --shadow-1), so the indicator is painted
-// on the first frame and on every resize and cannot be missing (W34, ruling 488); the measured
-// absolute chip that used to be the only indicator is gone, and nothing about the indicator depends
-// on a layout read any more. Every lens takes an equal share of the track (ruling 952): the active
-// tab used to be content-sized, which made selecting one re-divide the track and move every seat
-// under the finger that chose it, logged as G48. Inactive lenses are bare icons (icon only below
-// expanded, icon plus label at expanded via `labels`). The explainer collapse is latched for
-// the visit (405): the first scroll the host reports collapses the descriptor and it stays
-// collapsed; tapping the active lens brings it back, and that tap does not unlatch the scroll rule.
-// Tabs resolve to --target-min (ruling 498): minHeight always, and minWidth only under `compact`,
-// which is 44 otherwise. Active icon carries the surface's C brand rung (`c`); Feed is not a C, so
-// --ink, and the active label is --ink on the --surface chip rather than any C rung. Descriptor:
-// sans italic, --ink-3, 12 below the track; collapses (max-height) when `collapsed` flips true,
-// latched; tapping the active lens toggles it back. Disabled lenses keep their seat (dashed
-// hairline). Accessible name "{label}: {scope}". Light haptic on accepted taps. `compact`: header
-// slot, no descriptor, inactive lenses minWidth --target-min, which is 24 and not 32. `dense` is
-// gone with ruling 1000: it suppressed the active lens's icon, so the one lens the member had just
-// chosen was the one lens that stopped showing what it was, and the active tab is the only tab that
-// already renders its label. The active lens now renders its icon at every tier, like every other
-// lens. Its only caller was `AppHeader`, whose bell condition read the same flag for an unrelated
-// question and now reads the tier instead (see `AppHeader`). Its own active-tab padding step is gone
-// with ruling 952: one padding for every state, because a padding that varies by selection varies
-// the seat (see the tab's style below). Ruling 905 takes the seat to 44; the mechanism is pending
-// Design, which chooses between a 52px track and a zero-padding 44px track, and nothing here
-// implements it.
-// Correction 14 (ruling 723, re-synced at compile v1789537371639386): labels-fit. The bar measures
-// whether every lens label fits the track at once; when it does, every lens renders its label; when
-// it does not, the bar renders icon-first: the active lens its icon and label, every other lens its
-// icon with an accessible name. The switch is a rendering decision inside the part, not a caller
-// prop; `labels` forces labels for sets that always fit. No motion on the switch. A set without
-// icons on every lens never switches, because it has nothing to fall back to.
+// Strand `components/dna/LensBar.jsx`, re-synced to compile v1789885868097915 (correction 21 with
+// rulings 978, 981 and 984). Icon-first control that switches the corpus of a list surface.
+//
+// Geometry comes from the compile (ruling 844 carrying 618's lesson: where the port and the compile
+// disagree about a size, a padding, a track or a floor, the compile wins). The constants below are
+// the compile's own, read out of `docs/strand/v1789885868097915/_ds_bundle.js`:
+//   GAP 2, SEAT 44, TRACK_PAD 4, TRACK_BORDER 0, SEAT_BORDER 1, PAD 14, ICON 20, ICON_GAP 8.
+// The track is 52 and composed 4 + 44 + 4 (ruling 918, change-list item 35): the seat is the 44 and
+// the track's own padding is the 4 either side. It was a 44 track holding a 36 seat until this
+// commit. Item 36 says a port matches one number, 4, and it does: the compile keeps its hairline as
+// `inset 0 0 0 1px var(--line)` where it used to carry a border, and this bar has never had either
+// (LENS_BAR_SPEC: "No border, no hairlines"), so TRACK_BORDER is 0 on both sides and no pixel moves.
+// Every seat carries `minWidth: SEAT` in every mode, `compact` included (rulings 905, 498; items 50
+// and 54a): a lens tab is a standalone thumb target wherever it renders, so the header slot's
+// `--target-min` 24 is retired. A track that cannot fit its seats at 44 scrolls; it does not shrink
+// them.
+//
+// What a seat renders is `resolveSeat`, ported whole and exported (items 49, 58). R1 (ruling 936,
+// item 40): in icon-first every seat is one 44px glyph and the active state is the chip alone — the
+// active seat no longer swaps to its word, which is what made it overflow its own equal share. Since
+// ruling 978 retired `dense`, nothing about what a seat renders depends on whether it is selected
+// (item 56); `on` is accepted by the resolver and deliberately never read. `icons` (item 51) renders
+// each seat's glyph beside its word in labels mode: this bar has drawn glyph-plus-word in labels
+// mode since Brief 2, so `FeedSurface` and `ConnectSurface` pass it and render exactly as before,
+// and the fit test prices the glyph and its gap when it is set.
+//
+// The fit test prices the packing it decides for (ruling 981, item 57), and the packing is named by
+// the caller (`width`, item 24) rather than assumed:
+//   seat(w) = max(SEAT, w + 2·PAD + 2·SEAT_BORDER + (icons ? ICON + ICON_GAP : 0))
+//   need    = 2(TRACK_PAD + TRACK_BORDER) + GAP(n−1) + body
+//   body    = n · seat(widest)   under width="fill"     — every seat is equal, so each holds the widest
+//   body    = Σ seat(wᵢ)         under width="content"  — every seat is exactly its own label
+// 981 writes the condition in rather than the answer: a packing where seats share takes the widest
+// branch, and the test is extended, never assumed. Every caller here passes `fill`, which is what
+// ruling 952's equal seats are, so `n · seat(widest)` is the price this app pays today.
+// The probe measures the label and nothing else; the seat's own padding, border and glyph are added
+// by `seat()` above, so one arithmetic change cannot pass silently through the probe's markup.
+// A measurement of zero is not a measurement (item 16): the bar keeps the rendering it has and
+// retries on a frame and on a 120ms timer, bounded, because a paused view never delivers a frame.
+// A measurement in the wrong space is not one either (item 17): label widths come back in screen
+// pixels, so they are divided by the wrapper's own scale (rect width over offsetWidth, both
+// border-box, exactly 1 unscaled) before they are priced. The probe sits in a 0×0 `overflow: hidden`
+// box (item 54b) so it stops contributing its own width to the scrollable overflow of the container
+// it is measuring. It re-measures on resize, when the document's fonts settle and on every later
+// font load (item 14), and every listener, frame and timer is released on unmount (item 18).
+//
+// What this port keeps against the compile, each for a named reason, is recorded in full in
+// `docs/strand-ports/v1789885868097915.md`. In short: the active chip is the tab's own background
+// (ruling 488) and its label is 15/700 `--ink` with the C brand rung on the icon (LENS_BAR_SPEC);
+// the track is `--radius-m` and the seat `--radius-badge`, not pills, because the header's composer
+// entry is built to share the track's shape; the disabled seat, the haptic, the hover rung and the
+// accessible name folding `scope` are the app's chassis; and the descriptor collapses by max-height
+// and is latched for the visit (ruling 405), where the compile re-latches on every `collapsed`.
+// Rulings 997 and 999: `Lens.icon` stays optional and `compact` requiring a glyph on every lens is a
+// rule its caller keeps. Ruling 1000: `dense` is gone, and `AppHeader`'s bell reads the tier.
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
+import { useMode } from "@/lib/tier";
 import { Icon } from "./Icon";
 import type { C } from "./cmeta";
+
+/** The compile's own constants, read from `docs/strand/v1789885868097915/_ds_bundle.js`. */
+const GAP = 2;
+const SEAT = 44;
+const TRACK_PAD = 4;
+const TRACK_BORDER = 0;
+const SEAT_BORDER = 1;
+const PAD = 14;
+const ICON = 20;
+const ICON_GAP = 8;
+const TRACK = 2 * (TRACK_PAD + TRACK_BORDER);
+
+/** Exported so a reader can price a bar without re-deriving it from the style objects. */
+export const LENS_BAR_METRICS = {
+  GAP,
+  SEAT,
+  TRACK_PAD,
+  TRACK_BORDER,
+  SEAT_BORDER,
+  PAD,
+  ICON,
+  ICON_GAP,
+  TRACK,
+} as const;
+
+/**
+ * What a seat renders (change-list items 49 and 58, ruling 984). Exhaustive by domination in both
+ * branches rather than by joint resolution: `iconFirst` sets `ico` unconditionally and never reads
+ * `icons`, and `!iconFirst` sets `txt` unconditionally. `on` is accepted and deliberately never
+ * read — since ruling 978 retired `dense`, nothing about a seat's content depends on whether it is
+ * active, which is what makes the reflow unreachable rather than merely fixed.
+ *
+ * The final guard is not decoration. Its one live case is `iconFirst` with a lens carrying no glyph,
+ * reachable only through `compact`, never through the fit test, because `canSwitch` is false unless
+ * every lens has an icon (G36 point 1). That seat falls back to its word rather than rendering
+ * nothing. Change-list item 59 carries the open Design question about that state; nothing here
+ * decides it.
+ */
+export function resolveSeat(iconFirst: boolean, on: boolean, icons: boolean, hasIcon: boolean) {
+  let ico = iconFirst ? true : !!(icons && hasIcon);
+  let txt = !iconFirst;
+  if (ico && !hasIcon) ico = false;
+  if (!ico && !txt) txt = true;
+  return { ico, txt };
+}
 
 export type Lens<Id extends string = string> = {
   id: Id;
@@ -55,9 +120,23 @@ export type LensBarProps<Id extends string = string> = {
   scope?: string | undefined;
   /** The surface's C for the active icon. Feed passes nothing. */
   c?: C | "brand" | undefined;
+  /**
+   * Header slot: forces icon-first regardless of fit, stretches the track, renders no descriptor,
+   * at the full 44 seat (change-list item 50). Rulings 997 and 999: the caller keeps the rule that
+   * every lens in a `compact` bar carries a glyph.
+   */
   compact?: boolean | undefined;
   /** Forces labels on every lens (723's `labels="always"`); otherwise the bar measures. */
   labels?: boolean | "always" | undefined;
+  /**
+   * The packing this bar renders, and therefore the one its fit test prices (ruling 981, item 24).
+   * `fill` stretches the track and divides it into equal seats, which is ruling 952's distribution
+   * and what every caller in this app renders. `content` lets each seat hug its own label; it is the
+   * compile's default and is named here so the default can never change a page silently.
+   */
+  width?: "content" | "fill" | undefined;
+  /** Renders each seat's glyph beside its word in labels mode (item 51). Priced by the fit test. */
+  icons?: boolean | undefined;
   /** Host signal: the member scrolled down; the descriptor collapses, latched. */
   collapsed?: boolean | undefined;
   label?: string;
@@ -72,95 +151,104 @@ export function LensBar<Id extends string = string>({
   c,
   compact,
   labels,
+  width = "content",
+  icons,
   collapsed,
   label = "Lens",
   style,
 }: LensBarProps<Id>) {
-  const track = useRef<HTMLDivElement>(null);
+  const wrap = useRef<HTMLDivElement>(null);
   const probe = useRef<HTMLDivElement>(null);
   const [showScope, setShowScope] = useState(true);
-  // 723: does every label fit the track at once? Measured on a hidden probe laid out as labels.
-  const [fit, setFit] = useState(false);
-  const canSwitch = !labels && lenses.length > 0 && lenses.every((l) => !!l.icon);
-  const key = lenses.map((l) => l.label).join("\u0001");
-  // Session 23 (the founder's iPhone at 390 against the deployed bar): labels rendered over their
-  // neighbours' icons because the measurement had answered "fits" for labels that did not. Two
-  // things in the first version could do that and both are gone. The probe sat inside a zero-size
-  // clipped box and was read through scrollWidth, a value a clipped ancestor is allowed to change
-  // (iOS Safari is the suspect; unproven here, Moderate); it now sits off-screen to the left,
-  // unclipped and unconstrained, and is read through getBoundingClientRect, which is the box's own
-  // laid-out width on every engine. And the measurement ran once at mount and again only when the
-  // track resized, so a web font arriving after hydration (font-display: swap on a phone link)
-  // widened every label with no re-measure; it now re-measures when the document's fonts settle
-  // and on every later font load. Off-screen to the left adds no scrollable overflow in a
-  // left-to-right document, which is what the clipped box was for.
+  // The compile's own initial state: the bar assumes it fits and corrects on its first measurement,
+  // so a zero measurement under the guard below keeps labels rather than latching icon-first.
+  const [fit, setFit] = useState(true);
+  const [hov, setHov] = useState<string | null>(null);
+  // Item 53 (ruling 62): `title` is a pointer affordance — it never opens on touch and it duplicates
+  // the accessible name — so it renders for pointer only. `aria-label` is unconditional. Strand's
+  // `useInputMode` watches `(pointer: coarse)` and falls back to `pointer`; `useMode` already does
+  // exactly that, so there is no second input-mode hook and no render-prop component.
+  const pointer = useMode() === "pointer";
+  // `compact` forces icon-first, so it never measures (item 50).
+  const canSwitch = !compact && !labels && lenses.length > 0 && lenses.every((l) => !!l.icon);
+  const key =
+    lenses.map((l) => l.label).join("\u0001") + "\u0002" + (icons ? "1" : "0") + "\u0002" + width;
   useLayoutEffect(() => {
     if (!canSwitch) {
       setFit(true);
       return;
     }
-    // The fit test matches the layout it decides for. That rule is why run 239 caught the founder's
-    // screenshot — the sum test passed while "network" sat at 86px of content inside a 72px share —
-    // and it is why this arithmetic changed when ruling 952 changed the distribution. The track now
-    // divides equally: every tab takes flex: 1 1 0 and a seat is the same width whichever lens is
-    // active. So the test is one seat against the widest label in either shape it can be rendered
-    // in, times the number of seats, with the gaps and the track's padding; otherwise icon-first.
-    // Equal seats are the stricter test of the two, because the widest label has to fit one seat
-    // rather than the whole track minus the others' shares. That moves G37's boundary and G48
-    // records it.
-    //
-    // Ruling 981 names why: the fit price is packing-specific, not a property of the labels. Under
-    // fill packing — every tab `flex: 1 1 0`, which is what this track does since 952 — the price is
-    // `n × seat(widest)`, because the widest label sets a floor every seat must clear. Under content
-    // packing, where each tab sizes to its own label, the price is the exact sum of the labels. Both
-    // are correct arithmetic for the layout they price, and the sum test that run 239 caught was the
-    // content price applied to a track that fills. So the one thing that must never drift is the
-    // pairing: change the packing and this expression changes with it, in the same commit. This
-    // component has no packing prop and always fills, so `n × seat` is its price and the only price
-    // it has.
+    let alive = true;
+    let raf = 0;
+    let tid = 0;
+    let retries = 0;
     const measure = () => {
-      if (!track.current || !probe.current) return;
-      let activeMax = 0;
-      let inactiveMax = 0;
-      probe.current.querySelectorAll<HTMLElement>("[data-probe]").forEach((el) => {
-        const w = el.getBoundingClientRect().width;
-        if (el.getAttribute("data-probe") === "active") activeMax = Math.max(activeMax, w);
-        else inactiveMax = Math.max(inactiveMax, w);
-      });
+      if (!alive || !wrap.current || !probe.current) return;
+      // Two spans per lens, in order: the label as the active tab (700) and as an inactive one
+      // (500). Either shape can be the rendered one, because any lens can be the selected one, so a
+      // seat is priced at whichever answered larger. The compile measures one shape because its
+      // seat carries one weight; this bar's active label is 15/700 (LENS_BAR_SPEC), so it measures
+      // the two shapes it actually draws.
+      const nodes = Array.from(probe.current.querySelectorAll<HTMLElement>("[data-probe]"));
+      const per: number[] = [];
+      let raw = 0;
+      for (let i = 0; i < lenses.length; i++) {
+        const a = nodes[2 * i]?.getBoundingClientRect().width ?? 0;
+        const b = nodes[2 * i + 1]?.getBoundingClientRect().width ?? 0;
+        const w = Math.max(a, b);
+        per.push(w);
+        raw = Math.max(raw, w);
+      }
+      const col = wrap.current.clientWidth;
+      const box = wrap.current.offsetWidth;
+      // Screen px per layout px; both terms are border-box, so exactly 1 unscaled (item 17).
+      const scale = box > 0 ? wrap.current.getBoundingClientRect().width / box : 1;
+      const widest = Math.ceil(raw / scale);
+      // Item 16. A hidden or backgrounded view pauses rAF, so the retry also runs on a timer.
+      if ((widest <= 0 || col <= 0) && retries < 20) {
+        retries++;
+        raf = requestAnimationFrame(measure);
+        tid = window.setTimeout(measure, 120);
+        return;
+      }
+      if (widest <= 0 || col <= 0) return;
+      retries = 0;
       const n = lenses.length;
-      const others = Math.max(0, n - 1);
-      // A seat has to hold its label as the active tab (bold, 14px sides) and as an inactive one
-      // (medium, 8px sides), because any lens can be the selected one. Both shapes are measured
-      // rather than the wider one assumed: the probe renders each label twice and the seat takes
-      // whichever answered larger.
-      const seat = Math.max(activeMax, inactiveMax);
-      const need = 8 + others * 2 + n * seat;
-      setFit(Math.ceil(need) <= track.current.clientWidth);
+      const extra = icons ? ICON + ICON_GAP : 0;
+      const seatW = (lw: number) => Math.max(SEAT, lw + 2 * PAD + 2 * SEAT_BORDER + extra);
+      const body =
+        width === "fill"
+          ? n * seatW(widest)
+          : per.reduce((a, r) => a + seatW(Math.ceil(r / scale)), 0);
+      setFit(TRACK + GAP * (n - 1) + body <= col);
     };
     measure();
+    raf = requestAnimationFrame(measure);
     const cleanups: (() => void)[] = [];
-    if (typeof ResizeObserver !== "undefined" && track.current) {
+    if (typeof ResizeObserver !== "undefined" && wrap.current) {
       const ro = new ResizeObserver(measure);
-      ro.observe(track.current);
+      ro.observe(wrap.current);
       cleanups.push(() => ro.disconnect());
     }
     const fonts = typeof document !== "undefined" ? document.fonts : undefined;
     if (fonts) {
-      let live = true;
-      fonts.ready.then(() => {
-        if (live) measure();
-      });
-      const onDone = () => measure();
-      fonts.addEventListener("loadingdone", onDone);
-      cleanups.push(() => {
-        live = false;
-        fonts.removeEventListener("loadingdone", onDone);
-      });
+      fonts.ready.then(() => measure());
+      fonts.addEventListener("loadingdone", measure);
+      cleanups.push(() => fonts.removeEventListener("loadingdone", measure));
     }
-    return () => cleanups.forEach((c) => c());
+    return () => {
+      alive = false;
+      if (raf) cancelAnimationFrame(raf);
+      if (tid) clearTimeout(tid);
+      cleanups.forEach((f) => f());
+    };
   }, [canSwitch, key]);
-  const iconFirst = canSwitch && !fit;
-  const [hov, setHov] = useState<string | null>(null);
+  const iconFirst = !!compact || (canSwitch && !fit);
+  const stretch = width === "fill" || !!compact;
+  // One value for the whole bar, so every seat's flex base is floored by the same padding (973).
+  // `flex-basis: 0` under `box-sizing: border-box` cannot take a border box below its own padding,
+  // so a padding that varies by seat divides the track unequally even when the flex does not.
+  const barPad = iconFirst ? 0 : PAD;
   // Latched for the visit (405). The host reports the first scroll once; a later report never
   // re-collapses a descriptor the member has brought back by tapping the active lens.
   const latched = useRef(false);
@@ -176,6 +264,7 @@ export function LensBar<Id extends string = string>({
   const hue = c && c !== "brand" ? "var(--c-" + c + ")" : "var(--ink)";
   return (
     <div
+      ref={wrap}
       className="strand-lens"
       data-lens-bar={compact ? "compact" : "flow"}
       style={{
@@ -192,51 +281,39 @@ export function LensBar<Id extends string = string>({
         {".strand-lens [role=tab]:focus-visible{outline:2px solid var(--focus);outline-offset:2px}"}
       </style>
       {canSwitch && (
-        // The probe: the labels laid out as the track lays them out, hidden and off-screen to the
-        // left, where it adds no scrollable overflow and nothing clips it, so its own laid-out width
-        // is the labels' natural width (see the measurement above).
+        // Item 54b: the probe sits inside a 0×0 `overflow: hidden` box — clipped for overflow, so it
+        // adds nothing to the scrollable width of the container it measures, still laid out, still
+        // read through getBoundingClientRect, which is the box's own laid-out width on every engine.
         <div
           aria-hidden="true"
           style={{
             position: "absolute",
             top: 0,
-            left: -10000,
-            visibility: "hidden",
+            left: 0,
+            width: 0,
+            height: 0,
+            overflow: "hidden",
             pointerEvents: "none",
           }}
         >
           <div
             ref={probe}
-            style={{
-              display: "inline-flex",
-              width: "max-content",
-              gap: 2,
-              padding: 4,
-              boxSizing: "border-box",
-              whiteSpace: "nowrap",
-            }}
+            style={{ position: "absolute", top: 0, left: 0, display: "inline-flex" }}
           >
             {lenses.map((l) =>
               (["active", "inactive"] as const).map((role) => (
-                // Each label twice: as the active tab (bold) and as an inactive one (medium), the
-                // two shapes the track renders. The side padding is the track's own single value
-                // (952), so weight is the only thing that separates the two measurements.
+                // The label and nothing else. Its seat's padding, border and glyph are added by
+                // `seatW` in the measurement, so the price and the markup cannot drift apart.
                 <span
                   key={l.id + ":" + role}
                   data-probe={role}
                   style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: 8,
-                    padding: "0 8px",
+                    fontFamily: "var(--font-sans)",
                     fontSize: 15,
                     fontWeight: role === "active" ? 700 : 500,
-                    border: "1px solid transparent",
-                    boxSizing: "border-box",
                     whiteSpace: "nowrap",
                   }}
                 >
-                  {l.icon && <span style={{ width: 20, height: 20, flex: "none" }} />}
                   {l.label}
                 </span>
               )),
@@ -245,17 +322,21 @@ export function LensBar<Id extends string = string>({
         </div>
       )}
       <div
-        ref={track}
         role="tablist"
         aria-label={label}
         data-lensbar={iconFirst ? "icon-first" : "labels"}
+        data-lensbar-width={width}
         style={{
           position: "relative",
           display: "flex",
           alignItems: "center",
-          height: 44,
-          padding: 4,
-          gap: 2,
+          alignSelf: stretch ? "stretch" : "flex-start",
+          width: stretch ? "100%" : undefined,
+          maxWidth: "100%",
+          // 4 + 44 + 4 = 52 (918, item 35). The height is the seats' own floor plus this padding;
+          // nothing here sets a track height, so the seat is what the track is made of.
+          padding: TRACK_PAD,
+          gap: GAP,
           background: "var(--bg-sunken)",
           borderRadius: "var(--radius-m)",
           overflowX: "auto",
@@ -265,8 +346,7 @@ export function LensBar<Id extends string = string>({
         {lenses.map((l) => {
           const on = l.id === value;
           const dis = !!l.disabled;
-          const txt = on || !iconFirst;
-          const ico = !!l.icon;
+          const { ico, txt } = resolveSeat(iconFirst, on, !!icons, !!l.icon);
           const tap = () => {
             if (dis) return;
             if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(8);
@@ -284,7 +364,7 @@ export function LensBar<Id extends string = string>({
               aria-disabled={dis || undefined}
               tabIndex={dis ? -1 : undefined}
               aria-label={l.scope ? l.label + ": " + l.scope : l.label}
-              title={!txt ? l.label : undefined}
+              title={!txt && pointer ? l.label : undefined}
               type="button"
               data-lens={l.id}
               onClick={tap}
@@ -296,42 +376,39 @@ export function LensBar<Id extends string = string>({
                 position: "relative",
                 zIndex: 1,
                 cursor: dis ? "default" : "pointer",
-                // Ruling 952 (G48): every seat takes the same share, so selection is not a layout
-                // input. The active tab used to take `none` and size to its content, which made a
-                // tap re-divide the track and slide every other seat under the finger — measured at
-                // 390 on the Feed's five lenses as up to 27px of shift on one selection. Nothing
-                // about the indicator changes: it is still this tab's own background (488).
-                flex: "1 1 0",
-                minWidth: compact ? "var(--target-min)" : 44,
-                minHeight: "var(--target-min)",
-                height: 36,
-                // One padding for every state, and this is part of 952 rather than a tidy-up.
-                // `flex-basis: 0` under `box-sizing: border-box` cannot take a border box below its
-                // own padding, so the padding is a floor on the base size and only what is left
-                // over is divided equally: with the active tab at 14px sides and the others at 8,
-                // the seats came out 78 and 66 at 390 and the tap still moved them. Under equal
-                // seats the side padding has no visual role — the chip is the seat and the content
-                // is centred in it — so it is uniform, and the smaller value leaves the label the
-                // most room before it overflows its seat.
-                padding: "0 8px",
+                // Ruling 952 (G48) and item 46: every seat takes the same share, so selection is not
+                // a layout input. Equal flex is what `fill` means; under `content` each seat hugs its
+                // own label, which is the compile's own default and no caller here passes it.
+                flex: stretch ? "1 1 0" : undefined,
+                // Item 54a, rulings 905 and 498: the floor is 44 in every mode, `compact` included.
+                // It was `--target-min` (24) in the header slot and unset in labels mode.
+                minWidth: SEAT,
+                minHeight: SEAT,
+                padding: "0 " + barPad + "px",
                 borderRadius: "var(--radius-badge)",
                 // The active tab is its own indicator (ruling 488): the chip is the tab's own
                 // background, painted on the first frame, never measured and never missing.
                 background: on ? "var(--surface)" : "transparent",
                 boxShadow: on ? "var(--shadow-1)" : "none",
-                border: dis ? "1px dashed var(--line-strong)" : "1px solid transparent",
+                // Item 42: the placeholder border is load-bearing, because the disabled seat draws a
+                // dashed one and the seat must not change width when a flag flips. `box-sizing:
+                // border-box` is what keeps it at 44 rather than 46 under `all: unset` (item 43).
+                border: dis
+                  ? SEAT_BORDER + "px dashed var(--line-strong)"
+                  : SEAT_BORDER + "px solid transparent",
+                fontFamily: "var(--font-sans)",
                 fontSize: 15,
                 fontWeight: on ? 700 : 500,
                 whiteSpace: "nowrap",
                 display: "inline-flex",
                 alignItems: "center",
                 justifyContent: "center",
-                gap: 8,
+                gap: ICON_GAP,
                 color: dis ? "var(--ink-4)" : on || hov === l.id ? "var(--ink)" : "var(--ink-3)",
                 transition: tr(["color", "background"]),
               }}
             >
-              {ico && l.icon && <Icon name={l.icon} size={20} style={on ? { color: hue } : {}} />}
+              {ico && l.icon && <Icon name={l.icon} size={ICON} style={on ? { color: hue } : {}} />}
               {txt && <span>{l.label}</span>}
             </button>
           );
@@ -366,3 +443,8 @@ export function LensBar<Id extends string = string>({
     </div>
   );
 }
+
+// The compile exposes both on the part itself, so a state table is a table over the real resolver
+// rather than a copy of it (item 49).
+LensBar.resolveSeat = resolveSeat;
+LensBar.metrics = LENS_BAR_METRICS;

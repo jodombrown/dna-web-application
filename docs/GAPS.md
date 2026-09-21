@@ -1984,6 +1984,20 @@ nothing else until something asks.
 different, shadcn `Sheet` with a `side` prop, untouched by this and its own question under rulings 70
 and 72.
 
+**A second prop the mapping has to answer, found 21 September 2026 porting `FacetRail` (handoff 29-A
+item 3, ruling 851).** Below `--tier-medium` Strand's compiled `FacetRail` renders through Strand's
+`Sheet` as `{ open, onClose, tier: "compact", title, contained }`. `tier: "compact"` maps cleanly to
+`variant="sheet"` under ruling 618. **`title` has nowhere to go.** This repository's `Sheet` has no
+`title` and renders no heading of its own: it focuses `[data-sheet-heading]` when a caller supplies
+one (`Sheet.tsx:158`), and all five callers that draw a heading — `ConnectSurface`,
+`NotificationPanel`, `ConveneForm`, `OnboardingSurface`, `ProfileBlockControl` — supply it themselves.
+Strand's `Sheet` draws it from the prop. So the two parts disagree about who owns the heading, and
+ruling 605's migration has to say which: either `tier` and `size` arrive and `title` does not, and
+every caller keeps drawing its own, or `title` arrives too and the five existing headings become
+duplicates. `src/components/strand/FacetRail.tsx` passes `label` and draws its own heading in the
+meantime, which is the repository's convention and not the compile's. No second sheet was added and
+`Sheet` was not rewritten (handoff 29-A item 3's instruction).
+
 ## G31. A chromium sighting on the public profile at 1280 by 800, seen once and not reproduced
 
 **Severity: none as a defect; recorded as a sighting, so that a second one has a first to sit beside.
@@ -3307,7 +3321,7 @@ permission rules at any scope (ruling 378), so that file is named here as one of
 not touched, and whoever takes the reformat decision should note that it is the founder's file
 whichever answer they pick.
 
-## G51. The design-system bundle's runtime errors were fixed at cause in correction 21, and this repository holds no record of what they were
+## G51. The design-system bundle's runtime errors were fixed at cause in correction 21, and this repository holds no record of what they were — closed (Session 29, compile `v1789885868097915`)
 
 **Severity: low for this repository's own code, which loads none of the bundle; medium for the
 register, because a defect class closed with no written symptom cannot be checked off when the
@@ -3334,9 +3348,65 @@ therefore opened with its symptom record blank on purpose. Reconstructing a mech
 the tree is what rulings 943, 955, 957, 958 and 960 were written about, and ruling 555 says a
 mechanism a handoff asserts is a lead to verify and never a fact to build on.
 
-**What is owed, and from whom.** From Design or the founder: which errors the bundle raised, on which
+**What was owed, and from whom.** From Design or the founder: which errors the bundle raised, on which
 compile, in which host, and what correction 21 changed at cause. That is four sentences from someone
-who watched them, and it is the whole of what this entry needs to become useful.
+who watched them, and it is the whole of what this entry needed to become useful.
+
+## The symptom record, written from the artifact (21 September 2026, handoff 29-A item 6)
+
+The compile carrying correction 21 landed in this tree as `docs/strand/v1789885868097915/`, and it
+answers all four. Quoted rather than paraphrased, because a paraphrase of a defect is a mechanism
+nobody read.
+
+**Which errors, and where.** `docs/strand/v1789885868097915/STRAND-CORRECTION-21-EXTRACTION.md` §1(c):
+
+> **(c) Item 11 is three errors, not five.** `NS.__errors` holds three entries: one React #299 in
+> `ui_kits/dna/app.jsx`, one in `ui_kits/dna/composer/proto.jsx`, and `Can't find variable: IMG` in
+> `ui_kits/dna/connect.jsx`. Not two and two and one. The correction's reading of the count is the
+> only thing that changes; every cause it names is real and all three are fixed.
+
+So: **three**, not the five the correction reported. Two React #299 (a `createRoot` with no container)
+and one `ReferenceError` on an undefined binding.
+
+**On which compile they were raised, and on which they are gone.** The pre-fix state is correction
+20's `v1789787827785362`. `STRAND-CORRECTION-21-EXTRACTION.md` §0 tabulates it against the loaded
+pre-fix bundle, with `the bundle's own demo errors` reading **3**, and the compile stamp in the same
+file records the after side as `BUNDLE_ERRORS: "none"` at `v1789885868097915`. `README-EXPORT.md`'s
+"Fixed" section states it plainly:
+
+> **The bundle's `__errors` array is empty.** It held **three** entries — one React #299 in
+> `app.jsx`, one in `composer/proto.jsx`, one `Can't find variable: IMG` in `connect.jsx`. Both
+> mounts now check for `#root`; `connect.jsx` defines its own asset constant instead of reading one
+> `shell.jsx` assigns after it has already been evaluated. No demo was removed.
+
+**In which host.** The artifact names no browser, and it does not need to: each component in
+`_ds_bundle.js` is wrapped in its own `try { … } catch (e) { __ds_ns.__errors.push({ path, error }) }`,
+so `__errors` collects throws at module-evaluation time and the three entries are three demo pages of
+Strand's own kit failing to evaluate — not a rendering that differs by engine. The host is therefore
+any page that loads the bundle without the `#root` the two mounts assumed, which is what the fix
+addresses. That is the honest answer to the fourth question and it is read off the artifact rather
+than supplied by a witness.
+
+**What correction 21 changed at cause.** `STRAND-CORRECTION-21-EXTRACTION.md` §3, "Item 11 — the
+bundle's own errors":
+
+> All three fixed at cause: both `createRoot` calls mount only when a `#root` exists, and
+> `connect.jsx` defines its own `DEMO_IMG` rather than reading a binding `shell.jsx` assigns to
+> `window` after `connect.jsx` has already been evaluated. No demo is removed. **`feed.jsx` has the
+> same `IMG` pattern and does not error**, because its references are inside function bodies rather
+> than at module scope; it is not one of the three and is left alone.
+
+**Status: closed.** The record is what this entry was opened without, and the compile that closed it is
+in the tree at a path that is never overwritten and never deleted (907). Two things are deliberately
+not claimed. The closure rests on the artifact's own statement about itself, which is the shape ruling
+891 refuses for a claim a harness could check — so this entry closes on a **record**, not on a check:
+nothing in `src/` loads the bundle, no arm here can read `__errors`, and building one would mean
+serving an artifact this tree deliberately does not serve. And `feed.jsx` carrying the same pattern
+without erroring is recorded above because it is the kind of detail a later reader would otherwise
+re-derive.
+
+**Still not this gap's scope.** The app project's bound `_adherence.oxlintrc.json` and which compile it
+belongs to; see the paragraph below, which is unchanged.
 
 **Why it matters here even though nothing in `src/` loads the bundle.** Rulings 888 and 907 bind the
 app Design project to a named artifact in this tree, and 855 and 858 bind a ratification to that
@@ -3455,3 +3525,75 @@ table prices the widest label as an active tab at 131px under the pre-952 probe,
 and made every seat equal, and run 56 measures that same label at 118 (chromium) and 119 (webkit).
 G37's finding may still stand; its arithmetic no longer describes the file, and that is recorded here
 rather than edited into G37, which is not this PR's to reopen.
+
+## G53. The Lens Bar's visual contract now describes a bar this repository does not build, and the header's two centre-slot states no longer share a height
+
+**Severity: low as a rendering — every frame the code produces is the one the compile governs — and
+medium as a contract, because ruling 62 makes SPEC.md the visual contract and a contract that
+disagrees with the build is read as the build being wrong. Opened 21 September 2026 during handoff
+29-A's Strand re-sync, filed under ruling 597. The number is assigned by this entry (ruling 638). Not
+fixed here: 29-A's scope is the re-sync, and a SPEC is Design's document under rulings 62, 663 and
+129.**
+
+**What moved.** The re-sync to compile `v1789885868097915` took the geometry from the compile, under
+ruling 844 carrying 618's lesson. Four lines of `docs/shell/LENS_BAR_SPEC.md` no longer describe
+`src/components/strand/LensBar.tsx`:
+
+| LENS_BAR_SPEC says | the build now does | why |
+| --- | --- | --- |
+| Track "44 tall at every breakpoint" | 52, composed 4 + 44 + 4 | ruling 918, change-list item 35 |
+| Seats "min 44 wide, 36 tall" | 44 wide and 44 tall | ruling 918, items 35 and 54a |
+| Compact variant "inactive lenses min `--target-min`" | 44, in every mode | rulings 905 and 498, items 50 and 54a |
+| "Active content: icon 20 plus label ... at every breakpoint except the compact-tier header slot" | in icon-first every seat is one 44px glyph, the active one included | R1, ruling 936, item 40 |
+
+`docs/shell/SPEC.md` line 15 is stale on the same control for an older reason: it still describes the
+header slot as `dense` with "the active lens shows its name in place of its icon" and seats at "36
+tall" and "32 min". Ruling 1000 retired `dense` before this PR and the prop no longer exists.
+
+**The second half, which is a real consequence and not only a document.** LENS_BAR_SPEC's "Composer
+entry, same language" says the composer entry "shares the track's shape, not a pill: `--bg-sunken`,
+`--radius-m`, 44 tall". `AppHeader` builds it at `minHeight: 44` and the header row is 56 tall at
+compact and medium. The two states of that one centre slot are now 44 (composer entry) and 52
+(LensBar track). Both fit the row and they never render at the same time — `data-centre` is `lens` or
+`compose` — so nothing clips and nothing overflows. But the slot's two states no longer share a
+height, and the sentence that said they share a shape is the sentence that made them one control in
+two states.
+
+**What closing it needs.** A Design decision on one question — does the composer entry follow the
+track to 52, or do the two states stop sharing a height — and then one pass over `LENS_BAR_SPEC.md`
+and `SPEC.md` line 15 against compile `v1789885868097915`. Neither is code this PR may write: the
+extraction and SPEC.md are the visual contract (ruling 62) and Strand does not open the app project
+(663).
+
+## G54. `width="content"` is reachable and this bar's active seat is bolder than its inactive one, so that packing would re-lay the row on every selection
+
+**Severity: low, because no caller passes it — `FeedSurface`, `ConnectSurface` and `AppHeader` all
+name `fill` — and medium if one ever does, because the failure is G48's exactly and G48 is closed.
+Opened 21 September 2026 during handoff 29-A's Strand re-sync, filed under ruling 597. The number is
+assigned by this entry (ruling 638). Not fixed here: the fix is a decision about the active seat's
+weight, which is LENS_BAR_SPEC's and therefore Design's (rulings 62, 663).**
+
+**The mechanism, read in the tree.** Change-list item 24 adds `width`, and ruling 981's fit test
+prices the packing it names. Under `fill` every seat takes `flex: 1 1 0` and every seat is the same
+width whichever lens is active, which is ruling 952 and what closed G48. Under `content` the compiled
+part leaves `flex` undefined and each seat sizes to its own label — which is safe in Strand, because
+Strand's `TAB` carries `fontWeight: 500` for every seat and a label is the same width selected or
+not.
+
+**This bar is not Strand's on that one point.** `LENS_BAR_SPEC.md` specifies "Active content: icon 20
+plus label 15/700" against "Inactive lenses ... icon plus label 15/500", and
+`src/components/strand/LensBar.tsx` renders `fontWeight: on ? 700 : 500`. Under `content` packing the
+selected seat would therefore be wider than the same seat unselected, every other seat would move to
+make room, and selecting a lens would slide the row under the finger that chose it. That is G48's
+defect, in a packing G48's fix does not reach, because the fix was equal flex rather than equal
+content.
+
+**Why the prop exists anyway.** Handoff 29-A Done Means 3 requires every call site to name its
+packing, precisely so the compile's `content` default cannot change a page silently; all three name
+`fill`. The measurement already handles `content` correctly — it prices `Σ seat(wᵢ)` from each lens's
+own widest measured shape, so the fit verdict would be right even where the rendering reflows.
+
+**What closing it needs, and the two ways out.** Either the active seat's weight stops varying, which
+is what Strand did and what would make `content` safe here as it is there, or `width="content"` is
+refused by the type until it does. Both are one line; neither is this PR's to choose, because the
+15/700 active label is the visual contract's (ruling 62) and this handoff's scope is the re-sync.

@@ -53,7 +53,7 @@ export function Input({ label, hint, error, multiline, rows = 4, id, style, ...r
     minHeight: 44,
     outline: "none",
     resize: "vertical",
-    transition: "border-color var(--dur-fast) var(--ease)",
+    transition: "border-color var(--dur-default) var(--ease)",
   };
   const common = {
     id: uid,
