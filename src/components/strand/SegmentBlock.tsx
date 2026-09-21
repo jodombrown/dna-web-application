@@ -1,5 +1,9 @@
 // Ported from profile/strand-patch/Profile.jsx (B3-Profile-v3, ruling 122). Behavior unchanged.
 // One component, five variants; the host keeps the other variants' data when the stance changes.
+// Ruling 397: the visible label is Stance, never Segment. The chooser's label below carried the
+// ruled-against word. The identifiers do not move — `SegmentBlock`, `SegmentField`, `SegmentData`,
+// `SegmentBlockProps` and `SEG` keep their names until the founder rules on whether 397 reaches
+// them; 397 governs what a member reads.
 import type { CSSProperties } from "react";
 import { Chip } from "./Chip";
 import { Input } from "./Input";
@@ -89,7 +93,7 @@ export function SegmentBlock({
     >
       {editing && (
         <Select
-          label="Segment"
+          label="Stance"
           value={stance}
           options={stanceOptions}
           onChange={(e) => onChange && onChange({ ...data, stance: e.target.value as Stance })}
