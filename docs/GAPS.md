@@ -3420,7 +3420,7 @@ belongs to (handoff 28-A item 1, ruling 996). That is held on a statement from t
 Design and is a separate question: this repository carries no adherence config at all, at root, in
 `scripts/` or in `tests/`.
 
-## G52. At the medium tier the lens bar's recorded mode disagrees with the lens bar's own recorded measurement, on the same run, in the same evaluate
+## G52. At the medium tier the lens bar's recorded mode disagrees with the lens bar's own recorded measurement, on the same run, in the same evaluate — closed (Session 29, handoff 29-A item 7)
 
 **Severity: low as a rendering outcome — icon-first is a legible bar and nothing overflows, every
 `lensFit` check on the run passed — and medium as a measurement problem, because a mode that does
@@ -3526,6 +3526,99 @@ and made every seat equal, and run 56 measures that same label at 118 (chromium)
 G37's finding may still stand; its arithmetic no longer describes the file, and that is recorded here
 rather than edited into G37, which is not this PR's to reopen.
 
+## Closed: the mode now follows from the measurement, on three readings and two engines (21 September 2026)
+
+**Handoff 29-A item 7, the named proof, taken after the enforcing run on the final head (ruling 556)
+and recorded here in a post-merge commit because a PR body dies with the thread (597). Readings are
+CI's, never Code's (916).** The subject is `claude/handoff-29-a-8h9ozv` at
+`496c4cbd85fca1382e1658664c6e524bd083075b`, merged to `main` as `1a71ee8`, against
+`https://claude-handoff-29-a-8h9ozv.dna-web-application.pages.dev`.
+
+**(a) Reproducibility.** The enforcing matrix, `pages.yml` run
+[282](https://github.com/jodombrown/dna-web-application/actions/runs/35578165589) — 5090 of 5090 on
+chromium and 5090 of 5090 on webkit, 209 arms each, no crashed web process, no unclassified failure —
+and one further `matrix.yml` dispatch, run
+[57](https://github.com/jodombrown/dna-web-application/actions/runs/35581148853) with `special: shell`
+on the same head and the same `base_url`, 596 of 596. The two agree **line for line at every width on
+both engines: mode, track and probe.**
+
+| width | track | chromium probe | webkit probe | mode, runs 282 and 57 |
+| ----- | ----- | -------------- | ------------ | --------------------- |
+| 360 | 328 | `a17 i17 a43 i43 a72 i72 a31 i31 a36 i36` | `a17 i16 a44 i43 a73 i72 a31 i30 a36 i35` | icon-first |
+| 390 | 358 | same | same | icon-first |
+| 430 | 398 | same | same | icon-first |
+| 744 | 616 | same | same | icon-first |
+| 820 | 616 | same | same | icon-first |
+| 1024 | 616 | same | same | icon-first |
+| 1366 | 760 | no probe | no probe | labels |
+| 1280 | 760 | no probe | no probe | labels |
+| 1536 | 748 | no probe | no probe | labels |
+
+The three expanded lines carry no probe because `FeedSurface` passes `labels={expandedTier}`, so
+`canSwitch` is false and the bar never measures — the same shape run 56 recorded on `main`.
+
+**(b) Agreement with the price.** The bar names its packing now (`width="fill"` at every call site,
+change-list item 24) and the test prices the packing it decides for (ruling 981, item 57). With
+`icons` set, `seat(w) = max(44, w + 2·14 + 2·1 + 20 + 8)` and
+`need = 2(TRACK_PAD) + GAP(n−1) + n · seat(widest)` on five lenses:
+
+- chromium: widest 72, `seat = 130`, `need = 8 + 8 + 5 × 130 = 666`.
+- webkit: widest 73, `seat = 131`, `need = 8 + 8 + 5 × 131 = 671`.
+
+666 and 671 are above every track the bar measures against — 328, 358, 398 and 616 — so the price says
+icon-first at all six widths on both engines, and icon-first is what all twelve lines rendered, twice.
+**Every line's mode equals its own line's price.** That is what this entry recorded as not holding.
+
+**The counterfactual (984).** The packing is doing the work, and naming it is what makes the answer
+legible rather than lucky. Under `content` the price would be `Σ seat(wᵢ)`: chromium
+`75 + 101 + 130 + 89 + 94 = 489`, plus 16, is **505**; webkit `75 + 102 + 131 + 89 + 94 = 491`, plus
+16, is **507**. Both sit under the 616 medium track, so a `content`-packed bar would render labels
+there. It does not, because this track stretches and divides equally under ruling 952, which is `fill`,
+and `fill` is what all three call sites name.
+
+**(c) Against run 56's `main` baseline (975), with the arithmetic for every line that changed.**
+
+| | run 56 (`f36df8b9`) | runs 282 and 57 (`496c4cb`) |
+| --- | --- | --- |
+| chromium probe | `a63 i63 a89 i89 a118 i118 a77 i77 a82 i82` | `a17 i17 a43 i43 a72 i72 a31 i31 a36 i36` |
+| webkit probe | `a63 i62 a90 i89 a119 i118 a77 i76 a82 i81` | `a17 i16 a44 i43 a73 i72 a31 i30 a36 i35` |
+| chromium medium | icon-first, icon-first, icon-first — price said **labels** | icon-first ×3 — price says icon-first |
+| webkit medium | icon-first, **labels**, **labels** — price said labels ×3 | icon-first ×3 — price says icon-first |
+| compact, both engines | icon-first ×6, priced icon-first | icon-first ×6, priced icon-first |
+| expanded, both engines | labels ×6, no probe | labels ×6, no probe |
+
+**Every one of the twenty probe readings moved by exactly −46**, on both engines and in both the
+active and the inactive shape. That is the whole of the change and it is arithmetic, not measurement:
+the probe span used to carry the seat's glyph (20), its gap (8), its side padding (16) and its border
+(2) inside its own markup, and those 46 pixels now live in `seat()` instead, so the probe reports the
+label and nothing else. The seat's own price rose by 12 at the same time, because the bar's side
+padding went 8 to `PAD` 14 (item 47, ruling 973). Net on the Feed's five lenses at medium: the old
+price was `8 + 8 + 5 × 118 = 606` against a 616 track, which said labels; the new price is 666, which
+says icon-first.
+
+**The two lines that changed mode are webkit at 820 and at 1024**, labels to icon-first. Both were
+lines where the old price said labels and the old rendering said labels on run 56 but icon-first on
+runs 278 and 279 — the instability this entry exists for. They are now icon-first with the price
+agreeing, on two independent runs.
+
+**Why this closes rather than merely improves.** The entry's finding was never that icon-first was
+wrong; it was that "the mode the bar was rendering when the check read it does not follow from the
+measurement the same check read", and that three runs on two heads produced three different triples
+from one probe and one track. Two things in handoff 29-A's item 2 reach that directly. The
+zero-measurement guard (correction 16 item 16) was this entry's own second candidate, named in "what is
+worth knowing when it is picked up", and it is now ported: a measurement of zero keeps the rendering
+the bar has and retries on a frame and on a 120ms timer, bounded, rather than collapsing `need` below
+any column. The scale normalisation (item 17) landed with it. And the price moved 60px clear of the
+616 track, where it had been 10px under it, so a race that lands on either side of a 10px margin no
+longer has a boundary to land on. The first is a cause the entry had already named; the second is why
+the margin that made it visible is gone.
+
+**What is not claimed.** `useTier` starting at `compact`, this entry's first candidate, is unchanged —
+handoff 29-A item 7 holds it out as shell-wide with its own blast radius. So the race is not proven
+absent; it is proven not to change this bar's answer at any width in ruling 61's matrix, twice, on both
+engines. If a future reading disagrees with its own line's price, that is a new sighting and this entry
+is where it starts, reopened rather than rewritten.
+
 ## G53. The Lens Bar's visual contract now describes a bar this repository does not build, and the header's two centre-slot states no longer share a height
 
 **Severity: low as a rendering — every frame the code produces is the one the compile governs — and
@@ -3597,3 +3690,34 @@ own widest measured shape, so the fit verdict would be right even where the rend
 is what Strand did and what would make `content` safe here as it is there, or `width="content"` is
 refused by the type until it does. Both are one line; neither is this PR's to choose, because the
 15/700 active label is the visual contract's (ruling 62) and this handoff's scope is the re-sync.
+
+## G55. Nothing in the harness proves that a file under `public/strand/icons/` serves from the deployment
+
+**Severity: low. No icon is missing today and every surface that draws one renders correctly across
+ruling 61's matrix. It is recorded because it is the reason a proof this session owed could not be
+taken. Opened 21 September 2026 during handoff 29-A, filed under ruling 597. The number is assigned by
+this entry (ruling 638).**
+
+**What was owed and what was taken.** Handoff 29-A item 5 asks that the two new glyphs,
+`panel-left-close.svg` and `chevron-left.svg`, hash identically to their copies under
+`docs/strand/v1789885868097915/assets/icons/` **and that each resolves on the deployed preview**. The
+hashes were taken and match (`d4e8abae…4bbd0` and `40cff7c3…4f758`), and both served 200 from
+`wrangler pages dev dist` of the built worker. The deployed half was not taken and is reported unproven
+rather than passing (ruling 228).
+
+**Why it could not be taken, and why that is the gap rather than the session's problem.** The session
+that would have fetched them had no egress to `*.pages.dev` — the proxy answered 403 to CONNECT — so it
+fell to the harness, and the harness does not ask. `scripts/deployment-serves.sh` polls every path the
+suites open plus ruling 184's asset contract: `/strand/logo.png`, `/favicon.png`,
+`/apple-touch-icon.png`, `/icon-192.png`, `/icon-512.png`, `/manifest.webmanifest` and exactly one
+Adinkra mark, `/strand/adinkra/mate-masie.svg`. **No path under `/strand/icons/` is in it**, and
+`Icon.tsx` draws every glyph as a CSS mask, which paints nothing and raises nothing when the URL 404s.
+So an icon that failed to ship would be invisible to CI and visible only to a person looking at the
+page.
+
+**What closing it needs.** One decision and one line. The decision is scope: ruling 184's block is an
+asset *contract*, a named table, and forty-four icons are not that — so either the two or three glyphs
+a rail collapse control will bind get named alongside the contract, or the check learns to walk
+`public/strand/icons/` and poll what it finds. The second is the honest one and it is the one that
+cannot rot, because a glyph added later is covered without anyone remembering. Either is a line in
+`scripts/deployment-serves.sh`, which the `deploy`, `live` and both `matrix` jobs already run.
