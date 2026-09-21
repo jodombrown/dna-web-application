@@ -1146,6 +1146,58 @@ remains unobserved and remains owed.
 Playwright error string, which G5 already records cannot distinguish the two. The run's artefact
 (`matrix-webkit-run-278`) carries the full capture.
 
+### The twentieth sighting: two arms in one job, which ruling 832's exemption is not wide enough for (rulings 828, 832, 830, 850, 228, 292)
+
+Run [284](https://github.com/jodombrown/dna-web-application/actions/runs/35581795427) on
+`ddf5314e163c376e6f5d35a77e4ba7f6c5f3aa22`, PR #53's own `matrix (webkit)`, 21 September, against
+`https://claude-handoff-29-a-post-mer.dna-web-application.pages.dev`. **The first job in this record
+to lose two web processes**, which is the one fact that makes it worth an entry rather than a tally
+mark.
+
+| Fact | Value |
+| --- | --- |
+| Arms | `webkit-1280x800-light profile visitor stranger` **and** `webkit-1280x800-light-auth flows` |
+| Tier | expanded, both; 74 of 76 expanded arms clean, compact and medium clean at 78 and 55 |
+| Playwright's errors | `page.goto: Page crashed` navigating to `/m/thandiwe-dube`, with `state unavailable: page.evaluate: Target crashed`; and `page.waitForSelector: Target page, context or browser has been closed` |
+| Classification | `5 behind a web-process crash (G5) \| 0 an aborted fetch \| 0 unclassified` |
+| Emitted | 5038 of 5038 passed, with both arms `UNPROVEN` and excluded from the count (228) |
+| **Core extraction** | **`frames extracted; core not retained (171M)`** — gdb ran, per-thread walk printed |
+| Job outcome | **red.** `ruling 832 does NOT cover this run: 2 arms lost a web process` |
+
+**What the twentieth settles, and what it does not.** Ruling 830's capture worked on the PR path for
+the **second** time, so the nineteenth's result was not a one-off: the frames name
+`libWPEWebKit-2.0.so.1` throughout and no core was retained, which is ruling 850's "nothing degraded"
+branch. It settles nothing new about the cause. The fault is still engine code and under ruling 200's
+guardrail it is reported rather than changed, which is why there is no fix to port into any PR that
+meets it.
+
+**Ruling 832's width is now a measured question rather than a hypothetical one.** The exemption is
+one arm wide "because one is the rate ruling 828 measured and two is not", and this is the first
+observation of two. One observation does not move a measured rate, and this entry does not propose
+widening the exemption — a gate that widens itself on its first counterexample is a gate that stops
+gating. It records that the case 832 was written to fail has now happened, on a diff that could not
+have caused it.
+
+**The second arm is a shape neither the eighteenth nor the nineteenth saw.** Both of those were the
+short-count path, an arm crashing with checks still to emit. This job carried one of each:
+`profile visitor stranger` emitted **16 of 22**, short, and `auth flows` emitted **29 against a
+declared 28** — over, because the flow catch-all fires on the error path — with the harness saying so
+in its own words and refusing to let the declaration be regenerated from the run. Ruling 849's
+teardown case, a crash charged after an arm's last check has already passed with the count matching
+and nothing failing, is still unobserved and still owed.
+
+**Whose diff.** Not PR #53's. Its entire change is two markdown files, `docs/GAPS.md` and
+`docs/strand-ports/v1789885868097915.md`, 134 insertions, nothing under `src/`, `tests/`, `public/`
+or `.github/`. The identical application code had just read **5090 of 5090 on webkit with zero
+crashed web processes** on run 282, the enforcing run for PR #52. `matrix (chromium)`, `deploy` and
+`live` were all green on run 284.
+
+**No re-run was spent.** Ruling 304: a re-run cannot confirm a WebKit failure by reproduction. The
+commit that writes this entry is itself a push, so it supersedes run 284 under ruling 556 and starts
+a fresh run on a new head — which re-runs `matrix (webkit)` as a consequence of the commit rather
+than as a re-run of the job, exactly as the seventh, eighth and ninth sightings of G34 were handled.
+The head's one re-run stays unspent.
+
 ## G6. Withdraw separated the two states ruling 214 joined — closed (ruling 229)
 
 **Opened and closed 9 September 2026, both inside Fix PR 01. Ruling 227 stated the requirement,
@@ -3612,6 +3664,16 @@ any column. The scale normalisation (item 17) landed with it. And the price move
 616 track, where it had been 10px under it, so a race that lands on either side of a 10px margin no
 longer has a boundary to land on. The first is a cause the entry had already named; the second is why
 the margin that made it visible is gone.
+
+**A third reading, on a third deployment, taken the same day.** Run
+[284](https://github.com/jodombrown/dna-web-application/actions/runs/35581795427), PR #53's own
+`matrix (webkit)` against a different Pages preview
+(`claude-handoff-29-a-post-mer.dna-web-application.pages.dev`), read the bar at all nine viewports
+**byte-identically to runs 282 and 57**: `a17 i16 a44 i43 a73 i72 a31 i30 a36 i35` on tracks of 328,
+358, 398, 616, 616 and 616, icon-first at every one, and labels with no probe at 760, 760 and 748.
+That job went red on G5's twentieth sighting, two crashed web processes at 1280x800 in unrelated
+arms; its lens record is untouched by that and is recorded here because a third agreement on a third
+deployment is what this entry spent three runs failing to get.
 
 **What is not claimed.** `useTier` starting at `compact`, this entry's first candidate, is unchanged —
 handoff 29-A item 7 holds it out as shell-wide with its own blast radius. So the race is not proven
