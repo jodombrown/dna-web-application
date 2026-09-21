@@ -3802,3 +3802,207 @@ a rail collapse control will bind get named alongside the contract, or the check
 `public/strand/icons/` and poll what it finds. The second is the honest one and it is the one that
 cannot rot, because a glyph added later is covered without anyone remembering. Either is a line in
 `scripts/deployment-serves.sh`, which the `deploy`, `live` and both `matrix` jobs already run.
+
+## G56. Three rows the build already derives by trigger, which is the shape ruling 1002's absolute now forbids
+
+**Severity: low today, medium at the next change to any of the three. Opened 21 September 2026
+during handoff 29-B, filed under ruling 597. The number is assigned by this entry (ruling 638). Not
+fixed here: the handoff names item 3 as record and change none of them, and two of the three are
+held in place by rulings that point the other way.**
+
+**The rule, read forwards.** Ruling 1002 puts the absolute in `CLAUDE.md`: a derived row, one table
+restating a fact whose truth lives in another, is written by its source's write path in the same
+transaction that writes the source, and never by a trigger. Convene Pass 2 is built to it —
+`public.event_registrations` is the truth, `private.rsvp_write` writes the `event_rsvp` edge beside
+it, and `private.rsvp_edge_drift()` plus `tests/rsvp-drift.cjs` enforce the derivation rather than
+asserting it. Read backwards, the rule is a question about the rows already here. Three answer to it.
+
+**1. The accept derives four rows by trigger.** `private.on_connection_accepted()`
+(`20260908233543_b4_connect_rls.sql:88`), on `on_connection_request_accepted_graph`, fires after an
+update of `status` on `public.connection_requests` and inserts two `connect` rows into `public.edges`
+and two rows into `public.member_connections`. The source's write path is
+`public.respond_to_request` (`20260908233909_b4_connect_rpcs.sql:478`), which writes the status and
+nothing else. Under 1002 those four inserts belong inside `respond_to_request`, and nothing measures
+the agreement: there is no `connect_edge_drift`, so a request accepted by any path the trigger does
+not see leaves the graph short an edge and nobody learns of it. This is the nearest kin to the RSVP
+derivation and the one a drift function would be cheapest to add to.
+
+**2. Second degree is maintained by trigger on a derived table.**
+`private.second_degree_on_connect()` (`:114`), on `on_member_connection_second_degree`, fires after
+an insert on `public.member_connections` — itself a row written by the trigger above — and writes
+`public.second_degree`. So it is a derivation of a derivation, two triggers deep from the write path.
+**This one is doctrine, not drift.** `CLAUDE.md`'s Connection Engine section carries ruling 111's
+words: second degree is "served from a materialized set, refreshed incrementally on new connections
+and fully overnight". 1002 and 111 point in different directions here, and which wins is a decision
+rather than a repair. The nightly `private.refresh_second_degree()` is already the drift correction
+1002 would otherwise ask for, which is the argument for leaving it exactly where it is.
+
+**3. The follow mirror, the lead the handoff named, and it is real.**
+`private.mirror_follow_edge()` (`:197`), on `on_edge_follow_mirror`, fires after an insert or an
+update of `revoked_at` on `public.edges` and mirrors a live `follow` edge into
+`public.member_follows`, deleting the mirror when the edge is revoked. The source's write path is
+`public.set_follow` (`20260908233909_b4_connect_rpcs.sql:514`), which writes the edge and nothing
+else. Under 1002 the mirror belongs inside `set_follow`, in the same transaction, with a drift
+function beside it. Of the three this is the plainest breach: the mirror restates the edge and
+nothing else, exactly as the `event_rsvp` edge restates the registration.
+
+**Considered and excluded, with the reason, so the next reader does not re-derive them.**
+
+- `private.notify_connection_accepted()` (`20260908142054_b3_rulings_141_142_144.sql:269`), on
+  `on_connection_request_accepted`, inserts a `public.notifications` row on accept. A notification is
+  a consequence with a life of its own — it is read, it is dismissed — not a second statement of the
+  source's fact, and no drift function could compare the two once that life begins. Ruling 144 is
+  what puts it there.
+- `private.on_member_blocked()` (`20260909051055_r198_block_semantics.sql:33`) revokes edges and
+  deletes adjacency and mirror rows on a block. It removes derived rows rather than writing them, and
+  `CLAUDE.md` already names "the ruling 198 trigger carries every consequence". Worth recording all
+  the same: `public.member_blocks` has **no write path function at all** — ruling 216's control
+  inserts the row directly under RLS through `src/lib/blocks.ts` — so there is no write path for
+  those consequences to move into. It is the one place in the tree where 1002's absolute has no
+  landing site, and closing it would mean giving block a write path first.
+- `private.handle_new_user()` (`20260908072031_b3_profile_rpcs.sql:42`) derives the `public.members`
+  row from `auth.users`. The source is written by GoTrue and we own no write path on it, so a trigger
+  is the only mechanism there is.
+- `private.stance_declared()` (`20260911052909_b5_stance_onboarding.sql:111`) is a BEFORE trigger
+  setting `stance_declared_at` on the row being written. Same row, same statement; no second table.
+- `private.edges_purge_member()` (`20260908233543_b4_connect_rls.sql:219`) deletes inbound edges on
+  member delete, standing in for the foreign key `edges.to_id` cannot carry because it is
+  polymorphic. Cleanup, not derivation.
+- `private.enforce_vocab_cap()` (the seven `member_*_cap` triggers) and `on_member_block_rate_limit`
+  (`20260912090557_fix_pr_02_rulings_408_444.sql:143`) raise or refuse. They write no row at all.
+
+**What closing it needs.** Item 3 for the follow mirror: move the `member_follows` write into
+`set_follow` and add a drift function and an arm in `rsvp-drift.cjs`'s shape. Item 1 the same, inside
+`respond_to_request`, and it is the larger of the two because four rows across two tables move at
+once. Item 2 needs a ruling that says which of 1002 and 111 governs a set that is already rebuilt
+nightly, and that is the founder's, not a PR's.
+
+## G57. The RSVP drift arm cannot state the denominator its own PASS line is specified to carry
+
+**Severity: low. The agreement is measured whole either way; what is missing is the number standing
+behind it. Opened 21 September 2026 during handoff 29-B, filed under ruling 597. The number is
+assigned by this entry (ruling 638). Not fixed here: the fix is a grant, and it belongs in a
+migration file, which under rulings 466 and 225 has to come from the file's author.**
+
+**The mechanism, read in the tree.** Handoff 29-B item 2 specifies the arm's passing outcome as "a
+`PASS` that states how many going member registrations it measured", and in the same paragraph
+specifies the role it connects as: "the second file grants that role `USAGE` on `private` and
+`EXECUTE` on the function and nothing else". Both are true of
+`20260921120100_p2_event_registrations.sql` as written — lines 283 and 284 make exactly those two
+grants — and together they do not admit the count. `private.rsvp_edge_drift()` returns disagreements
+only, never a total, and `live_arms` holds no `select` on `public.event_registrations`: the file
+revokes all from `anon` and `authenticated`, grants `select` to `authenticated` and `all` to
+`service_role`, and names `live_arms` nowhere on the table. Switching into `authenticated` does not
+reach it either, because `live_arms` holds that role with `inherit false` and `auth.uid()` is null
+under it, so `event_registrations_member_select` admits no row.
+
+**What the arm does instead.** `tests/rsvp-drift.cjs` reads the count in its own statement, outside
+the drift read, and prints the number when the connecting role can see it and the reason when it
+cannot. The PASS line therefore states the agreement — every going member registration carries one
+live `event_rsvp` edge and every live edge carries a going registration, which
+`private.rsvp_edge_drift()` measures whole because it is SECURITY DEFINER — and names this gap where
+the denominator would be. The moment a later migration grants the select, the number appears with no
+edit to the arm.
+
+**What closing it needs.** One line in a future migration from the file's author:
+`grant select (event_id, member_id, status) on table public.event_registrations to live_arms;`, which
+is the narrowest grant that answers the count and stays inside ruling 382. Not this PR's to write:
+`20260921120100` is committed byte for byte under item 1 and is never amended (ruling 466), and a new
+file that changes what Chat is about to apply has to come from Chat.
+
+## G58. Ruling 225's ordering turns the drift arm red on the branch that obeys it, and the doctrine records only the other direction
+
+**Severity: low in effect, medium in cost to the next reader — the whole `live` job reads red for the
+length of the window, so a real failure arriving beside it is easy to miss. Opened 21 September 2026
+during handoff 29-B, filed under ruling 597. The number is assigned by this entry (ruling 638). Not
+fixed here: the two ways to clear it are Chat's apply and a change to the arm, and neither belongs in
+this PR.**
+
+**The mechanism, measured rather than reasoned.** Run 285 on `claude/handoff-29-b-dna-web-7k9lf7`,
+head `3a14918`, job `live`, step 8:
+
+```
+FAIL 20260921120000 r1004_1010_audience_helpers: in the tree as 20260921120000_r1004_1010_audience_helpers.sql, not recorded on the project
+FAIL 20260921120100 p2_event_registrations: in the tree as 20260921120100_p2_event_registrations.sql, not recorded on the project
+```
+
+That is `tests/migration-drift.cjs`'s second loop — the one that walks the repo map and fails any
+version the project did not return — and it fires on exactly the state ruling 225 mandates. 225 says
+a migration is committed before the state it describes is applied. From the commit until Chat's
+apply, the branch carries a file the project has no row for, and the arm calls that drift, because
+from inside the arm the two directions are indistinguishable: it cannot tell a migration waiting to
+be applied from one that was applied and then lost its row.
+
+**`CLAUDE.md` analyses the mirror case only.** Its paragraph on the paste window works through
+`recorded on the project, no file in the tree` in detail — that the FAIL is latent on `main` because
+no workflow here carries a `schedule` and the merge is itself the triggering push, that **the
+exposure is every other branch**, and that the remedy is to paste immediately before merging and cut
+nothing in between. Every word of that is about the direction that opens *after* the apply. The
+direction that opens *before* it, on the PR branch itself, is not written down anywhere, and it is
+the longer of the two whenever a handoff puts a relay between the commit and the apply, as 29-B does:
+PR #52 had to merge, then the founder relays, then Chat applies.
+
+**Why it matters beyond the noise.** Step 8 failing fails the whole `live` job, and the job carries
+the ruling 218 arms, the migration drift and now the RSVP drift. A reader seeing `live` red on a
+migration PR learns nothing about which of those is speaking without opening the log. On this run
+step 7 read `120/120` and step 9 read its intended UNPROVEN, so the red was step 8 alone — but that
+had to be read out of the log rather than off the job.
+
+**What closing it needs, and the two shapes it could take.** Either a fourth outcome in the arm —
+a version in the tree with no row on the project, and no row for any *later* version either, is
+`PENDING` rather than `FAIL`, which distinguishes a migration waiting to be applied from one whose
+row was lost, since a lost row would sit behind versions that did apply — or a line in `CLAUDE.md`
+stating plainly that a migration PR's own `live` job is red between commit and apply, so the next
+reader stops at the log instead of at the diff. The first is the better guardrail and the one that
+needs a ruling, because `PENDING` is a hole in a gate and the argument for it is that 225 puts the
+hole there deliberately. The second is a sentence and could ride any PR.
+
+## G59. First sighting: the vocabulary arm's 5 s attach wait timed out once on WebKit, and did not reproduce
+
+**Severity: low. One sighting, not reproduced, on an arm whose subject is a deliberately empty
+control. Opened 21 September 2026 during handoff 29-B, filed under ruling 597. The number is assigned
+by this entry (ruling 638). Not fixed here: one sighting is not a pattern, and `tests/matrix.cjs`
+says plainly that a class is added to the ruling 357 list "when a sighting is understood, never to
+make a tail read cleaner".**
+
+**What failed.** Run 286 attempt 1, `matrix (webkit)`, head `1e63c04`, 5087 of 5089 checks passing:
+
+```
+FAIL [no crash] webkit-390x844-dark-vocab-failed: flow completed TimeoutError: locator.waitFor: Timeout 5000ms exceeded.
+Call log:
+  - waiting for locator('section[role="dialog"][aria-label="Compose"]').locator('[role="radiogroup"][aria-label="Instrument"]')
+
+FAIL [no crash] ruling 292 | webkit-390x844-dark-vocab-failed: emitted every check it declares UNPROVEN (228): emitted 3 of 4; the 1 checks behind the failure never ran
+```
+
+The second is ruling 292's consequence arm reporting the check the timeout swallowed. One finding.
+
+**The arm, read in the tree.** `tests/vocabulary.cjs:92` to `98`, the `vocab-failed` variant of
+rulings 193 and 194, where the `vocabularies()` read is forced to fail so a flow can check the
+controls behave. It opens the composer, waits up to 10 s for the Compose dialog, clicks the "Post a
+Need (Contribute)" radio, then waits for the Instrument radiogroup with
+`waitFor({ state: "attached", timeout: 5000 })`. The wait is for attachment rather than visibility on
+purpose — the file's own comment says "a radiogroup with no options has no box, which is the point",
+because under the forced failure the group renders empty. So the 5 s is the budget for the composer
+to mount the group after the failing vocabulary request settles.
+
+**Why it reads as a flake rather than a defect.** Four readings, none of them the arm's own:
+
+- `matrix (chromium)` passed on the **same head**, `1e63c04`.
+- `matrix (webkit)` was green on `main` at `1a71ee8`.
+- The re-run of the same job, same head, same deployment, passed.
+- Within the failing job, compact was 77 of 78 clean and medium and expanded were 55 of 55 and 76 of
+  76. Ruling 554's tell: a real defect in that radiogroup would fail the arm at every viewport, in
+  both themes and on both engines.
+
+**Why it landed `unclassified`, correctly.** Ruling 357's class matches the WebKit wording for an
+aborted fetch on the mocked REST origin, `… due to access control checks`, against a failure's page
+errors. This failure's detail is a Playwright locator timeout, so `ABORTED_MOCK_FETCH` did not match
+and should not have. The tail said `0 behind a web-process crash (G5) | 0 an aborted fetch on mocked
+REST | 2 unclassified`, which is the honest reading.
+
+**What closing it needs.** A second sighting, which turns one timeout into a pattern worth acting on;
+or changing the wait to key on the settled state the composer reaches after the forced failure rather
+than on a fixed 5 s. The second is **G34's shape exactly** — a fixed wait standing in for the thing
+actually being waited on — and if G34 is ever closed by teaching `matrix.cjs` to wait on states
+rather than clocks, this wait belongs in the same pass.
