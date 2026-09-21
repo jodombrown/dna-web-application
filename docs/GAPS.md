@@ -3909,3 +3909,50 @@ edit to the arm.
 is the narrowest grant that answers the count and stays inside ruling 382. Not this PR's to write:
 `20260921120100` is committed byte for byte under item 1 and is never amended (ruling 466), and a new
 file that changes what Chat is about to apply has to come from Chat.
+
+## G58. Ruling 225's ordering turns the drift arm red on the branch that obeys it, and the doctrine records only the other direction
+
+**Severity: low in effect, medium in cost to the next reader — the whole `live` job reads red for the
+length of the window, so a real failure arriving beside it is easy to miss. Opened 21 September 2026
+during handoff 29-B, filed under ruling 597. The number is assigned by this entry (ruling 638). Not
+fixed here: the two ways to clear it are Chat's apply and a change to the arm, and neither belongs in
+this PR.**
+
+**The mechanism, measured rather than reasoned.** Run 285 on `claude/handoff-29-b-dna-web-7k9lf7`,
+head `3a14918`, job `live`, step 8:
+
+```
+FAIL 20260921120000 r1004_1010_audience_helpers: in the tree as 20260921120000_r1004_1010_audience_helpers.sql, not recorded on the project
+FAIL 20260921120100 p2_event_registrations: in the tree as 20260921120100_p2_event_registrations.sql, not recorded on the project
+```
+
+That is `tests/migration-drift.cjs`'s second loop — the one that walks the repo map and fails any
+version the project did not return — and it fires on exactly the state ruling 225 mandates. 225 says
+a migration is committed before the state it describes is applied. From the commit until Chat's
+apply, the branch carries a file the project has no row for, and the arm calls that drift, because
+from inside the arm the two directions are indistinguishable: it cannot tell a migration waiting to
+be applied from one that was applied and then lost its row.
+
+**`CLAUDE.md` analyses the mirror case only.** Its paragraph on the paste window works through
+`recorded on the project, no file in the tree` in detail — that the FAIL is latent on `main` because
+no workflow here carries a `schedule` and the merge is itself the triggering push, that **the
+exposure is every other branch**, and that the remedy is to paste immediately before merging and cut
+nothing in between. Every word of that is about the direction that opens *after* the apply. The
+direction that opens *before* it, on the PR branch itself, is not written down anywhere, and it is
+the longer of the two whenever a handoff puts a relay between the commit and the apply, as 29-B does:
+PR #52 had to merge, then the founder relays, then Chat applies.
+
+**Why it matters beyond the noise.** Step 8 failing fails the whole `live` job, and the job carries
+the ruling 218 arms, the migration drift and now the RSVP drift. A reader seeing `live` red on a
+migration PR learns nothing about which of those is speaking without opening the log. On this run
+step 7 read `120/120` and step 9 read its intended UNPROVEN, so the red was step 8 alone — but that
+had to be read out of the log rather than off the job.
+
+**What closing it needs, and the two shapes it could take.** Either a fourth outcome in the arm —
+a version in the tree with no row on the project, and no row for any *later* version either, is
+`PENDING` rather than `FAIL`, which distinguishes a migration waiting to be applied from one whose
+row was lost, since a lost row would sit behind versions that did apply — or a line in `CLAUDE.md`
+stating plainly that a migration PR's own `live` job is red between commit and apply, so the next
+reader stops at the log instead of at the diff. The first is the better guardrail and the one that
+needs a ruling, because `PENDING` is a hole in a gate and the argument for it is that 225 puts the
+hole there deliberately. The second is a sentence and could ride any PR.
