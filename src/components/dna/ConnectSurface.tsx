@@ -877,6 +877,9 @@ export function ConnectSurface({ member, search }: { member: Member; search: Con
           marginBottom: -8,
         }}
       >
+        {/* Ruling 981 (items 24 and 57): `fill` is the packing this track renders under 952's
+            equal seats, and it is named here so the compile's `content` default changes nothing
+            silently. `icons` keeps the glyph beside the word in labels mode. */}
         <LensBar
           lenses={CONNECT_LENSES}
           value={lens}
@@ -885,6 +888,8 @@ export function ConnectSurface({ member, search }: { member: Member; search: Con
           c="connect"
           label="Connect lens"
           labels={expanded}
+          width="fill"
+          icons
           collapsed={scrolled}
         />
       </div>

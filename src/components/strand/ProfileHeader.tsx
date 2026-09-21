@@ -410,7 +410,7 @@ export function ProfileHeader({
               height: condensed ? 0 : coverHeight,
               overflow: "hidden",
               background: member.cover ? "var(--bg-sunken)" : "var(--bg-sunken) url(" + tile + ")",
-              transition: "height var(--dur-base) var(--ease)",
+              transition: "height var(--dur-default) var(--ease)",
             }}
           >
             {member.cover && (

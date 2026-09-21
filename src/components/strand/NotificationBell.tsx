@@ -37,7 +37,7 @@ export function NotificationBell({ unread, active, onClick, style }: Notificatio
             border: "2px solid var(--bg)",
             boxSizing: "content-box",
             pointerEvents: "none",
-            transition: "background var(--dur-base) var(--ease)",
+            transition: "background var(--dur-default) var(--ease)",
           }}
         />
       )}

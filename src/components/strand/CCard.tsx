@@ -38,7 +38,7 @@ export function CCard({ c, onOpen, style }: CCardProps) {
         border: "1px solid " + (h ? "var(--c-" + c + ")" : "var(--line)"),
         boxShadow: "var(--shadow-2)",
         fontFamily: "var(--font-sans)",
-        transition: "border-color var(--dur-fast) var(--ease)",
+        transition: "border-color var(--dur-default) var(--ease)",
         minHeight: 44,
         width: "100%",
         ...style,
@@ -51,7 +51,7 @@ export function CCard({ c, onOpen, style }: CCardProps) {
           fontSize: 22,
           lineHeight: 1.2,
           color: h ? "var(--c-" + c + "-text)" : "var(--ink)",
-          transition: "color var(--dur-fast) var(--ease)",
+          transition: "color var(--dur-default) var(--ease)",
         }}
       >
         {info.label}

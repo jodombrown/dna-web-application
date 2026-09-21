@@ -23,7 +23,7 @@ export function Toast({ children, action, onAction, style }: ToastProps) {
         padding: "12px 16px",
         fontSize: 15,
         lineHeight: 1.4,
-        boxShadow: "var(--shadow-stack)",
+        boxShadow: "var(--shadow-3)",
         maxWidth: 420,
         ...style,
       }}

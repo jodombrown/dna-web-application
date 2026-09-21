@@ -52,7 +52,7 @@ export function Checkbox({ label, checked, onChange, disabled, id, style }: Chec
           backgroundSize: "contain",
           cursor: disabled ? "default" : "pointer",
           transition:
-            "background var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease)",
+            "background var(--dur-default) var(--ease), border-color var(--dur-default) var(--ease)",
         }}
       />
       {label}

@@ -937,7 +937,7 @@ export function Composer({
         background: armed ? "var(--c-" + c + "-tint)" : "transparent",
         opacity: pending ? 0.6 : 1,
         transition:
-          "background var(--dur-fast) var(--ease), opacity var(--dur-default) var(--ease)",
+          "background var(--dur-default) var(--ease), opacity var(--dur-default) var(--ease)",
       }}
     >
       {armed && (
@@ -968,7 +968,7 @@ export function Composer({
               color: "var(--ink)",
               fontSize: 15,
               fontWeight: 500,
-              boxShadow: "var(--shadow-stack)",
+              boxShadow: "var(--shadow-3)",
             }}
           >
             <Icon name="upload" size={20} style={{ color: "var(--c-" + c + "-text)" }} />

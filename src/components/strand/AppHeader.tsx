@@ -135,8 +135,12 @@ export function AppHeader({
         </HomeTag>
         {!exp &&
           (showLens && lensBar ? (
+            // `compact` already stretches the track (change-list item 50); the packing is named
+            // anyway so no call site leaves it to a default. `icons` is not passed: a compact bar
+            // renders icon-first, where the prop is not read.
             <LensBar
               compact
+              width="fill"
               lenses={lensBar.lenses}
               value={lensBar.value}
               onChange={lensBar.onChange}
@@ -206,7 +210,7 @@ export function AppHeader({
               color: homeActive ? "var(--ink)" : "var(--ink-3)",
               background: hh ? "var(--bg-sunken)" : "transparent",
               transition:
-                "background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease)",
+                "background var(--dur-default) var(--ease), color var(--dur-default) var(--ease)",
             }}
           >
             <Icon name="house" size={22} />

@@ -45,7 +45,7 @@ function Glyph({ c, size, color }: { c: C; size: number; color: string }) {
         background: color,
         WebkitMask: m,
         mask: m,
-        transition: "background var(--dur-fast) var(--ease)",
+        transition: "background var(--dur-default) var(--ease)",
       }}
     />
   );
@@ -114,7 +114,8 @@ export function PulseDock({
           fontWeight: 500,
           color: label,
           transform: h ? "translateY(-1px)" : "none",
-          transition: "color var(--dur-fast) var(--ease), transform var(--dur-fast) var(--ease)",
+          transition:
+            "color var(--dur-default) var(--ease), transform var(--dur-default) var(--ease)",
         }}
       >
         <span style={{ position: "relative", display: "inline-flex" }}>
@@ -131,7 +132,7 @@ export function PulseDock({
               background: DOT[st],
               border: st === "none" ? "none" : "2px solid var(--bg)",
               boxSizing: "content-box",
-              transition: "background var(--dur-base) var(--ease)",
+              transition: "background var(--dur-default) var(--ease)",
             }}
           />
         </span>

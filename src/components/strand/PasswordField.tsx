@@ -65,7 +65,7 @@ export function PasswordField({ label, hint, error, id, style, ...rest }: Passwo
             padding: "0 var(--target-primary) 0 14px",
             minHeight: "var(--target-primary)",
             outline: "none",
-            transition: "border-color var(--dur-fast) var(--ease)",
+            transition: "border-color var(--dur-default) var(--ease)",
           }}
         />
         <button

@@ -546,12 +546,19 @@ export function FeedSurface({ member, view }: { member: Member; view: FeedView }
                   }
             }
           >
+            {/* Ruling 981 (change-list items 24 and 57): the packing is named, never inferred, so
+                the compile's `content` default cannot change this page silently. This bar has
+                stretched its track and divided it into equal seats since ruling 952, which is
+                `fill`, and `fill` is what its fit test therefore prices. `icons` keeps the glyph
+                beside the word in labels mode, which is what this bar has drawn since Brief 2. */}
             <LensBar
               lenses={LENSES}
               value={lens}
               onChange={setLens}
               scope={scope}
               labels={expandedTier}
+              width="fill"
+              icons
               collapsed={expandedTier ? stuck : scrolled}
             />
           </div>

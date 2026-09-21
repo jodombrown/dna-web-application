@@ -44,11 +44,11 @@ export const POPOVER_STYLE = {
   background: "var(--surface)",
   border: "1px solid var(--line)",
   borderRadius: 14,
-  boxShadow: "var(--shadow-stack)",
+  boxShadow: "var(--shadow-3)",
   display: "flex",
   flexDirection: "column" as const,
   overflow: "hidden",
-  animation: "strand-fade var(--dur-base) var(--ease)",
+  animation: "strand-fade var(--dur-default) var(--ease)",
 };
 
 const DRAG_OPEN_PX = 24;
@@ -449,7 +449,7 @@ export function AppShell({
                       boxSizing: "border-box",
                       justifyContent: "center",
                       transform: fabShown ? "translateY(0)" : "translateY(30px)",
-                      transition: "transform var(--dur-base) var(--ease)",
+                      transition: "transform var(--dur-default) var(--ease)",
                     }
                   : {
                       appearance: "none",
@@ -470,7 +470,7 @@ export function AppShell({
                       boxShadow: "var(--shadow-2)",
                       opacity: 0.92,
                       transform: fabShown ? "translateX(0)" : "translateX(40px)",
-                      transition: "transform var(--dur-base) var(--ease)",
+                      transition: "transform var(--dur-default) var(--ease)",
                     }
               }
             >
@@ -504,7 +504,7 @@ export function AppShell({
                       display: "flex",
                       flexDirection: "column",
                       boxSizing: "border-box",
-                      animation: "strand-slide var(--dur-base) var(--ease)",
+                      animation: "strand-slide var(--dur-default) var(--ease)",
                     }
               }
             >

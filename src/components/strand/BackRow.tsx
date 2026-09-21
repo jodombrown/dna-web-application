@@ -41,7 +41,7 @@ export function BackRow({ label, onClick, style }: BackRowProps) {
         fontSize: 15,
         fontWeight: 500,
         color: hover ? "var(--ink)" : "var(--ink-2)",
-        transition: "color var(--dur-fast) var(--ease)",
+        transition: "color var(--dur-default) var(--ease)",
         ...style,
       }}
     >

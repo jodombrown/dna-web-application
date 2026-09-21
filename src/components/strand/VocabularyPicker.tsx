@@ -63,7 +63,7 @@ export function VocabularyPicker({
                 background: on ? "var(--ink)" : "var(--bg-sunken)",
                 color: on ? "var(--on-fill)" : blocked ? "var(--ink-4)" : "var(--ink-2)",
                 border: "1px solid " + (on ? "var(--ink)" : "transparent"),
-                transition: "background var(--dur-fast) var(--ease)",
+                transition: "background var(--dur-default) var(--ease)",
               }}
             >
               {on && <Icon name="check" size={14} />}

@@ -44,7 +44,7 @@ const PANEL: CSSProperties = {
   background: "var(--surface)",
   border: "1px solid var(--line)",
   borderRadius: 14,
-  boxShadow: "var(--shadow-stack)",
+  boxShadow: "var(--shadow-3)",
   padding: "6px 0",
   zIndex: 20,
 };

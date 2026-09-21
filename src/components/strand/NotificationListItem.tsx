@@ -125,7 +125,7 @@ export function NotificationListItem({
         fontFamily: "var(--font-sans)",
         color: "var(--ink)",
         textAlign: "left",
-        transition: "background var(--dur-fast) var(--ease)",
+        transition: "background var(--dur-default) var(--ease)",
         ...style,
       }}
     >
