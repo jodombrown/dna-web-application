@@ -2324,6 +2324,50 @@ a fresh run on the new head, which re-runs `matrix (webkit)` as a consequence of
 than as a re-run of the job — the same route the seventh sighting took, and for the same reason: under
 ruling 304 a re-run cannot confirm a WebKit failure by reproduction, so spending one buys little.
 
+**Ninth sighting, 21 September 2026: the fifth's mode a third time, on a healthy runner, which is
+what the eighth was missing.** Pages run
+[279](https://github.com/jodombrown/dna-web-application/actions/runs/35554896651) on `6ca7d623`
+(PR 51, Session 28), `matrix (webkit)`, first attempt, at `webkit-1366x1024-light` — the second
+sighting's width, the fifth and eighth sighting's mode, and the same message to the character:
+
+```
+FAIL [no crash] webkit-1366x1024-light flow TimeoutError: locator.waitFor: Timeout 10000ms exceeded.
+  - waiting for locator('…[data-testid="continue-draft"]') to be detached
+    24 × locator resolved to visible <button type="button" data-testid="continue-draft">Continue your dr
+```
+
+5087 of 5089, `emitted 31 of 32`, and the classifier reads
+`0 behind a web-process crash (G5) | 0 an aborted fetch on mocked REST | 2 unclassified`.
+
+**The runner was healthy, and that is the whole value of this sighting.** The eighth had three
+crashed web processes in the one job — roughly three times ruling 828's measured rate — and used that
+to favour the second of the fifth sighting's two candidates: ten seconds is still short for WebKit
+**under load**, rather than the restore never completing. This job lost **zero** web processes, at
+every tier: `compact: 78 arms … 0 that lost a web process`, `medium: 55 … 0`, `expanded: 76 … 0`. So
+the load reading does not cover this one, and the eighth's tentative preference between the two
+candidates does not survive a healthy runner producing the identical failure. Neither candidate is
+established; what has changed is that the eighth's discriminator has been withdrawn by the next
+observation, which is the third time this entry has had to give back a cause it leaned towards.
+
+**It is not the PR's, and this is the cleanest instance of that the entry has.** The immediately
+preceding head, `d1e9e611`, read this arm green on run 278. The entire diff between that head and
+`6ca7d623` is **one file, `docs/GAPS.md`** — markdown that reaches no test, no surface and no build
+output. The failing arm ran byte-identical application code and byte-identical harness code on the
+run where it was green, one run earlier.
+
+**Still open, still not fixed, and the reading the eighth asked for is now the only way forward.**
+What would settle it is the restore's own elapsed time recorded on a healthy run and on a degraded
+one, so the question becomes how long the restore takes rather than whether ten seconds is enough.
+This sighting supplies the healthy half of that comparison as a bare fact — it failed — without the
+timing that would make it useful, because the harness does not record it. That is the harness change
+worth making deliberately.
+
+**No re-run was spent on this one either**, for the third time and the same reason: the push that
+carries this entry supersedes run 279 and starts a fresh run on the new head, which re-runs
+`matrix (webkit)` as a consequence of the commit rather than as a re-run of the job. Under ruling 304
+a re-run cannot confirm a WebKit failure by reproduction, so the head's one re-run stays unspent and
+is available if the next head reds on this same check.
+
 **Not this gap's scope.** The check's assertions and the arms' declared counts stay as they are.
 
 ## G35. Mapbox Search Box carries no POI for Ghana, Kenya or Nigeria, so a Convene host there always falls to their words
@@ -3381,9 +3425,28 @@ its 20px icon spacer with or without it, so the fit computation is the same code
 shell arm also reads the Feed's own in-column bar, not the compact header bar, because it runs before
 any scroll. That leaves the race (confidence: moderate to high) rather than the change.
 
-**One consequence worth stating plainly.** On the branch all six medium readings are icon-first on
-both engines, so the disagreement with the price is now uniform rather than split. That is a tidier
+**One consequence worth stating plainly.** On run 278 all six medium readings are icon-first on both
+engines, so the disagreement with the price is uniform there rather than split. That is a tidier
 record and not a better one: it is six readings the arithmetic says should have been labels.
+
+**A third reading, and it is a third answer.** Run
+[279](https://github.com/jodombrown/dna-web-application/actions/runs/35554896651) on `6ca7d623` — a
+head whose only difference from `d1e9e611` is this file — read webkit's medium tier as **labels at
+744**, icon-first at 820 and icon-first at 1024. So webkit's three medium widths have now produced
+three different triples on three runs, on two heads whose fit code is identical and against a probe
+and a track that never moved:
+
+| Run                  | Head       | 744        | 820        | 1024       |
+| -------------------- | ---------- | ---------- | ---------- | ---------- |
+| 56 (`main` baseline) | `f36df8b9` | icon-first | labels     | labels     |
+| 278                  | `d1e9e611` | icon-first | icon-first | icon-first |
+| 279                  | `6ca7d623` | labels     | icon-first | icon-first |
+
+Every one of those nine readings carries the same probe
+(`a63 i62 a90 i89 a119 i118 a77 i76 a82 i81`) and the same 616 track, and the price says labels for
+all nine. 744 has now answered both ways. This is no longer a split to be attributed to an engine or
+to a head: within one engine, one measurement and one track, the mode is settled per run and per
+width by something the record does not capture.
 
 **What it costs elsewhere.** G37 is about this tier and its numbers are older than the code: its
 table prices the widest label as an active tab at 131px under the pre-952 probe, which rendered
