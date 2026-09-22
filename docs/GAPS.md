@@ -4174,3 +4174,25 @@ facet ships one option per home under 1042. `public.convene_discovery`'s `p_home
 in-person and hybrid events whose physical delivery city matches the chosen home's city, and
 nothing wider. Owed: a Design correction drawing the rungs on FacetRail's home axis, and the
 projection's rung predicate against `member_homes.region` and the event's place, in a new migration.
+
+## G66. The event arms' page-error checks do not filter ruling 357's aborted-fetch class
+
+**Severity: low. Opened 22 September 2026 during handoff 31-A, filed under ruling 597. The number
+is assigned by this entry (ruling 638). Not fixed here: the arm is Brief 10's (30-C), and this PR
+changes no event surface and no test in `tests/event.cjs`.**
+
+`tests/event.cjs` records `<tag> no page errors` over every `pageerror` the page raised
+(`runEvent` and `runEventFlows`, around lines 460 and 746) with no filter. WebKit words a fetch the
+navigation cancelled on the mocked REST origin as an access-control denial, `Fetch API cannot load
+<SB>/rest/v1/... due to access control checks.`, which is ruling 357's known class
+(`ABORTED_MOCK_FETCH` in `tests/matrix.cjs`). Every request to that origin is fulfilled in-process,
+so the line is neither the app nor a crash. `tests/connect.cjs` and `tests/profile.cjs` already
+drop it from their own page-error checks through `CANCELLED_MOCK_FETCH`; the event arms were
+written after them and do not.
+
+Two sightings, both WebKit at 1280x800 and never on Chromium: run 303 on `main` at `5c49c6b`,
+`webkit-1280x800-dark-event` on `post_saves` (5457 of 5458); run 306 on #59 at `fca818a`,
+`webkit-1280x800-{light,dark}-event-flows` on `post_media` and `post_links` (5456 of 5458). Run
+304 on #58 at `c5c63c3` was green on the same arms, so it is intermittent. Owed: the same
+`CANCELLED_MOCK_FETCH` filter applied to the event arms' `errors` before the check records, with the
+filtered lines still printed so the class stays visible, as the connect and profile arms do.
