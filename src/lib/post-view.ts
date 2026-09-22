@@ -18,11 +18,22 @@ export type LinkView = {
  * when the event is linked to one (Canon 6), for the expanded card's hook row.
  */
 export type EventView = {
+  /** The event's id: the expanded card's hook into its page (Brief 10, ruling 1023). */
+  id: string;
   cancelled: boolean;
   past: boolean;
   /** The cancelled card's body: the fact and the host's reason verbatim (SPEC 2). */
   cancelledBody: string | null;
   space: { id: string; name: string } | null;
+  /** Brief 10 (679): the accepted speakers, from `event_speakers`, for the card's row. */
+  speakers: EventSpeakerView[];
+};
+
+export type EventSpeakerView = {
+  party_id: string;
+  name: string;
+  label: string;
+  avatar?: string | undefined;
 };
 
 export type PostView = {

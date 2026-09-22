@@ -5,7 +5,7 @@
 import type { C } from "@/components/strand/cmeta";
 import type { FieldValues } from "@/components/strand/verb-schema";
 import type { Member } from "./auth";
-import type { Tables, Views } from "./database.types";
+import type { Database, Tables, Views } from "./database.types";
 import { signedMediaUrl } from "./dia";
 import { deliverImageUrl } from "./media";
 import { placeLine } from "./place";
@@ -131,7 +131,7 @@ export async function hydratePosts(
   const eventSpaceIds = eventRows
     .map((e) => e.space_id)
     .filter((id): id is string => !!id && !spaceIds.has(id));
-  const [delivery, hookSpaces] = await Promise.all([
+  const [delivery, hookSpaces, speakers] = await Promise.all([
     eventRows.length
       ? sb
           .from("event_delivery")
@@ -147,7 +147,20 @@ export async function hydratePosts(
     eventSpaceIds.length
       ? sb.from("spaces").select("id, title").in("id", eventSpaceIds)
       : Promise.resolve({ data: [] as Pick<Tables<"spaces">, "id" | "title">[] }),
+    // Brief 10 (679): each card's accepted speakers in one call beside the other per-kind reads,
+    // under the named-party policy; a pending invitation is nothing on the card (678).
+    eventRows.length
+      ? sb.rpc("event_speakers", { p_events: eventRows.map((e) => e.id) })
+      : Promise.resolve({
+          data: [] as Database["public"]["Functions"]["event_speakers"]["Returns"],
+        }),
   ]);
+  const speakersByEvent = new Map<string, NonNullable<typeof speakers.data>>();
+  for (const sp of speakers.data ?? []) {
+    const list = speakersByEvent.get(sp.event_id) ?? [];
+    list.push(sp);
+    speakersByEvent.set(sp.event_id, list);
+  }
   const deliveryByEvent = new Map<string, NonNullable<typeof delivery.data>>();
   for (const d of delivery.data ?? []) {
     const list = deliveryByEvent.get(d.event_id) ?? [];
@@ -179,6 +192,15 @@ export async function hydratePosts(
   const NO_AUTHOR: FeedAuthor = { name: null, handle: null, avatar_path: null };
   for (const p of posts) {
     const path = (p.feed_author ?? NO_AUTHOR).avatar_path;
+    if (!path || avatarUrls.has(path)) continue;
+    avatarUrls.set(
+      path,
+      await deliverImageUrl("profile-media", path, { width: 80, height: 80, resize: "cover" }),
+    );
+  }
+  // Brief 10 (679): one delivery URL per speaker photo, the same size as the author avatar.
+  for (const sp of speakers.data ?? []) {
+    const path = sp.avatar_path;
     if (!path || avatarUrls.has(path)) continue;
     avatarUrls.set(
       path,
@@ -251,6 +273,7 @@ export async function hydratePosts(
           ? ["Was set for " + wasSetFor, where || null].filter(Boolean).join(" · ")
           : ["Presented by " + hostName, when || null, where || null].filter(Boolean).join(" · ");
         eventView = {
+          id: e.id,
           cancelled,
           past,
           cancelledBody: cancelled
@@ -269,6 +292,12 @@ export async function hydratePosts(
           space: e.space_id
             ? { id: e.space_id, name: spaceNames.get(e.space_id) ?? "Space" }
             : null,
+          speakers: (speakersByEvent.get(e.id) ?? []).map((sp) => ({
+            party_id: sp.party_id,
+            name: sp.name,
+            label: sp.label,
+            avatar: sp.avatar_path ? avatarUrls.get(sp.avatar_path) : undefined,
+          })),
         };
       }
     } else if (verb === "collaborate") {
