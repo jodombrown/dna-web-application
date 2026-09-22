@@ -3926,12 +3926,12 @@ apply and the PASS says the count function is not applied yet; `42501`, the func
 executable by this role, is drift of the kind the arm already calls a FAIL for `rsvp_edge_drift()`,
 because the same file grants it. After the apply the PASS line states the number, zero included.
 
-**Closed** on the enforcing run whose `live` job prints the number: the run on the head that carries
-the regenerated types (handoff 30-A item 7), which is the first head on which the function is both
-committed and applied. Its number cannot be written here by that same head, because a run number
-exists only once the run starts and ruling 556 commits nothing to the branch after the enforcing run
-starts; PR #55 reports it, and handoff 30-B writes it into this paragraph. Until then the entry reads
-as corrected, with the closing run named on the PR and not yet in the register.
+**Closed** on run 294 (35681550980), the enforcing run on `3d1e430`, the head that carries the
+regenerated types (handoff 30-A item 7) and the first on which the function is both committed and
+applied. Green on all four jobs; its `live` job printed 0 going member registrations from
+`private.rsvp_going_member_count()`. The number could not be written here by that same head, because
+a run number exists only once the run starts and ruling 556 commits nothing to the branch after the
+enforcing run starts; PR #55 reported it, and handoff 30-B wrote it into this paragraph.
 
 ## G58. Ruling 225's ordering turns the drift arm red on the branch that obeys it, and the doctrine records only the other direction
 
