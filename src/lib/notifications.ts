@@ -4,6 +4,7 @@
 import { isRenderedKind } from "@/components/strand/NotificationListItem";
 import type { Tables } from "./database.types";
 import { getSupabase } from "./supabase";
+import { loadVocabularies } from "./vocabularies";
 import { whenLabel } from "./when";
 
 export type NotificationRow = Tables<"notifications">;
@@ -15,6 +16,8 @@ export type NotificationView = NotificationRow & {
   actorHandle?: string | undefined;
   object?: string | undefined;
   detail?: string | undefined;
+  /** Brief 10 (1027): the event an `event_party` row belongs to, so the row can open its page. */
+  eventId?: string | undefined;
 };
 
 export async function loadNotifications(memberId: string, limit = 50): Promise<NotificationView[]> {
@@ -43,7 +46,11 @@ export async function loadNotifications(memberId: string, limit = 50): Promise<N
   const memberActorIds = rows
     .filter((r) => r.actor_kind === "member" && r.actor_id)
     .map((r) => r.actor_id as string);
-  const [spaces, events, opps, actors, roles] = await Promise.all([
+  // Brief 10 (736, 1027): an event_party object is the member's own event_parties row, readable
+  // under its policy, and its event's title; the verb comes from the event_roles vocabulary (1018),
+  // never from a literal here (ruling 194: a read that fails leaves the row's verb absent).
+  const partyIds = ids("event_party");
+  const [spaces, events, opps, actors, roles, parties, vocab] = await Promise.all([
     spaceIds.length
       ? sb.from("spaces").select("id,title").in("id", spaceIds)
       : Promise.resolve({ data: [] as { id: string; title: string }[] }),
@@ -63,9 +70,23 @@ export async function loadNotifications(memberId: string, limit = 50): Promise<N
           .eq("member_id", memberId)
           .in("space_id", ids("space"))
       : Promise.resolve({ data: [] as { space_id: string; role: "lead" | "member" }[] }),
+    partyIds.length
+      ? sb.from("event_parties").select("id,event_id,role").in("id", partyIds)
+      : Promise.resolve({ data: [] as { id: string; event_id: string; role: string }[] }),
+    partyIds.length ? loadVocabularies().catch(() => null) : Promise.resolve(null),
   ]);
+  const party = new Map((parties.data ?? []).map((p) => [p.id, p]));
+  const partyEventIds = [...new Set((parties.data ?? []).map((p) => p.event_id))].filter(
+    (eid) => !ids("event").includes(eid),
+  );
+  const partyEvents = partyEventIds.length
+    ? await sb.from("events").select("id,title,starts_at").in("id", partyEventIds)
+    : { data: [] as { id: string; title: string; starts_at: string | null }[] };
+  const roleVerb = new Map((vocab?.event_roles ?? []).map((r) => [r.value, r.verb]));
   const space = new Map((spaces.data ?? []).map((s) => [s.id, s.title]));
-  const event = new Map((events.data ?? []).map((e) => [e.id, e]));
+  const event = new Map(
+    [...(events.data ?? []), ...(partyEvents.data ?? [])].map((e) => [e.id, e]),
+  );
   const opp = new Map((opps.data ?? []).map((o) => [o.id, o.title]));
   const actorName = new Map((actors.data ?? []).map((a) => [a.id, a.name]));
   const actorHandle = new Map((actors.data ?? []).map((a) => [a.id, a.handle]));
@@ -73,6 +94,7 @@ export async function loadNotifications(memberId: string, limit = 50): Promise<N
 
   return rows.map((r): NotificationView => {
     const oid = r.object_id ?? "";
+    const partyRow = r.object_kind === "event_party" ? party.get(oid) : undefined;
     const objectName =
       r.object_kind === "space"
         ? space.get(oid)
@@ -80,7 +102,9 @@ export async function loadNotifications(memberId: string, limit = 50): Promise<N
           ? event.get(oid)?.title
           : r.object_kind === "opportunity"
             ? opp.get(oid)
-            : undefined;
+            : partyRow
+              ? event.get(partyRow.event_id)?.title
+              : undefined;
     // A Space actor has a title; a member actor is named from the members core row (Brief 3), which
     // every signed-in member may read. The request row itself is never read by the sender (ruling 157).
     const actor =
@@ -91,6 +115,8 @@ export async function loadNotifications(memberId: string, limit = 50): Promise<N
       detail = rl === "lead" ? "a lead" : rl === "member" ? "a member" : undefined;
     } else if (r.kind === "event_reminder") {
       detail = whenLabel(event.get(oid)?.starts_at) || undefined;
+    } else if (r.kind === "role_invitation" && partyRow) {
+      detail = roleVerb.get(partyRow.role);
     }
     return {
       ...r,
@@ -99,6 +125,7 @@ export async function loadNotifications(memberId: string, limit = 50): Promise<N
         r.actor_kind === "member" ? (actorHandle.get(r.actor_id ?? "") ?? undefined) : undefined,
       object: objectName || undefined,
       detail,
+      eventId: partyRow?.event_id,
     };
   });
 }

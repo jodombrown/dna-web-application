@@ -20,9 +20,11 @@ import { Route as ShellCRouteImport } from './routes/_shell/$c'
 import { Route as ShellConnectRouteImport } from './routes/_shell/connect'
 import { Route as ShellFeedRouteImport } from './routes/_shell/feed'
 import { Route as ShellPasswordRouteImport } from './routes/_shell/password'
+import { Route as ESlugRouteImport } from './routes/e.$slug'
 import { Route as ResetNewRouteImport } from './routes/reset_.new'
 import { Route as ShellMHandleRouteImport } from './routes/_shell/m.$handle'
 import { Route as ShellPostsIdRouteImport } from './routes/_shell/posts.$id'
+import { Route as ShellConveneEventsIdRouteImport } from './routes/_shell/convene.events.$id'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -78,6 +80,11 @@ const ShellPasswordRoute = ShellPasswordRouteImport.update({
   path: '/password',
   getParentRoute: () => ShellRoute,
 } as any)
+const ESlugRoute = ESlugRouteImport.update({
+  id: '/e/$slug',
+  path: '/e/$slug',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ResetNewRoute = ResetNewRouteImport.update({
   id: '/reset_/new',
   path: '/reset/new',
@@ -93,6 +100,11 @@ const ShellPostsIdRoute = ShellPostsIdRouteImport.update({
   path: '/posts/$id',
   getParentRoute: () => ShellRoute,
 } as any)
+const ShellConveneEventsIdRoute = ShellConveneEventsIdRouteImport.update({
+  id: '/convene/events/$id',
+  path: '/convene/events/$id',
+  getParentRoute: () => ShellRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -105,9 +117,11 @@ export interface FileRoutesByFullPath {
   '/connect': typeof ShellConnectRoute
   '/feed': typeof ShellFeedRoute
   '/password': typeof ShellPasswordRoute
+  '/e/$slug': typeof ESlugRoute
   '/reset/new': typeof ResetNewRoute
   '/m/$handle': typeof ShellMHandleRoute
   '/posts/$id': typeof ShellPostsIdRoute
+  '/convene/events/$id': typeof ShellConveneEventsIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -120,9 +134,11 @@ export interface FileRoutesByTo {
   '/connect': typeof ShellConnectRoute
   '/feed': typeof ShellFeedRoute
   '/password': typeof ShellPasswordRoute
+  '/e/$slug': typeof ESlugRoute
   '/reset/new': typeof ResetNewRoute
   '/m/$handle': typeof ShellMHandleRoute
   '/posts/$id': typeof ShellPostsIdRoute
+  '/convene/events/$id': typeof ShellConveneEventsIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -137,9 +153,11 @@ export interface FileRoutesById {
   '/_shell/connect': typeof ShellConnectRoute
   '/_shell/feed': typeof ShellFeedRoute
   '/_shell/password': typeof ShellPasswordRoute
+  '/e/$slug': typeof ESlugRoute
   '/reset_/new': typeof ResetNewRoute
   '/_shell/m/$handle': typeof ShellMHandleRoute
   '/_shell/posts/$id': typeof ShellPostsIdRoute
+  '/_shell/convene/events/$id': typeof ShellConveneEventsIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -154,9 +172,11 @@ export interface FileRouteTypes {
     | '/connect'
     | '/feed'
     | '/password'
+    | '/e/$slug'
     | '/reset/new'
     | '/m/$handle'
     | '/posts/$id'
+    | '/convene/events/$id'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -169,9 +189,11 @@ export interface FileRouteTypes {
     | '/connect'
     | '/feed'
     | '/password'
+    | '/e/$slug'
     | '/reset/new'
     | '/m/$handle'
     | '/posts/$id'
+    | '/convene/events/$id'
   id:
     | '__root__'
     | '/'
@@ -185,9 +207,11 @@ export interface FileRouteTypes {
     | '/_shell/connect'
     | '/_shell/feed'
     | '/_shell/password'
+    | '/e/$slug'
     | '/reset_/new'
     | '/_shell/m/$handle'
     | '/_shell/posts/$id'
+    | '/_shell/convene/events/$id'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -198,6 +222,7 @@ export interface RootRouteChildren {
   SignInRoute: typeof SignInRoute
   WelcomeRoute: typeof WelcomeRoute
   WhereRoute: typeof WhereRoute
+  ESlugRoute: typeof ESlugRoute
   ResetNewRoute: typeof ResetNewRoute
 }
 
@@ -280,6 +305,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ShellPasswordRouteImport
       parentRoute: typeof ShellRoute
     }
+    '/e/$slug': {
+      id: '/e/$slug'
+      path: '/e/$slug'
+      fullPath: '/e/$slug'
+      preLoaderRoute: typeof ESlugRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/reset_/new': {
       id: '/reset_/new'
       path: '/reset/new'
@@ -301,6 +333,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ShellPostsIdRouteImport
       parentRoute: typeof ShellRoute
     }
+    '/_shell/convene/events/$id': {
+      id: '/_shell/convene/events/$id'
+      path: '/convene/events/$id'
+      fullPath: '/convene/events/$id'
+      preLoaderRoute: typeof ShellConveneEventsIdRouteImport
+      parentRoute: typeof ShellRoute
+    }
   }
 }
 
@@ -311,6 +350,7 @@ interface ShellRouteChildren {
   ShellPasswordRoute: typeof ShellPasswordRoute
   ShellMHandleRoute: typeof ShellMHandleRoute
   ShellPostsIdRoute: typeof ShellPostsIdRoute
+  ShellConveneEventsIdRoute: typeof ShellConveneEventsIdRoute
 }
 
 const ShellRouteChildren: ShellRouteChildren = {
@@ -320,6 +360,7 @@ const ShellRouteChildren: ShellRouteChildren = {
   ShellPasswordRoute: ShellPasswordRoute,
   ShellMHandleRoute: ShellMHandleRoute,
   ShellPostsIdRoute: ShellPostsIdRoute,
+  ShellConveneEventsIdRoute: ShellConveneEventsIdRoute,
 }
 
 const ShellRouteWithChildren = ShellRoute._addFileChildren(ShellRouteChildren)
@@ -332,6 +373,7 @@ const rootRouteChildren: RootRouteChildren = {
   SignInRoute: SignInRoute,
   WelcomeRoute: WelcomeRoute,
   WhereRoute: WhereRoute,
+  ESlugRoute: ESlugRoute,
   ResetNewRoute: ResetNewRoute,
 }
 export const routeTree = rootRouteImport
