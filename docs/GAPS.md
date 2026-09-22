@@ -4219,21 +4219,25 @@ new migration that records the ask only once the send succeeded (a second functi
 Function calls after Resend answers), or that lets the function delete its own row on a failed
 send, with `tests/live-db.cjs`'s guest arm extended to the failure case.
 
-## G69. The canonical project carries tables, functions and a column that no migration in this tree defines and no schema_migrations row records
+## G69. The canonical project carried Handoff 31-A's schema before its migrations reached `main`, and the types regeneration returned it
 
-**Severity: medium. Opened 22 September 2026 during handoff 30-D item 7, filed under ruling 597.
-The number is assigned by this entry (ruling 638).**
+**Severity: low. Opened 22 September 2026 during handoff 30-D item 7, filed under ruling 597. The
+number is assigned by this entry (ruling 638). Amended the same day: first written as unrecorded
+schema, which was true at the regeneration and not an hour later.**
 
 The types regeneration taken after `20260922120000` was applied returned, beside the migration's
-five additions, objects that exist on the project and nowhere in `supabase/migrations`: the tables
-`convene_families`, `convene_lenses`, `convene_picks`, `discovery_dismissals`, `editors` and
-`member_subscriptions`; the functions `convene_discovery`, `dismiss_discovery_item` and
-`set_subscription`; and the column `events.family` with a foreign key to `convene_families`.
-`tests/migration-drift.cjs` reads PASS on the same head, so no `supabase_migrations.schema_migrations`
-row names them either: they reached the project by a path that recorded no version, which is what
-ruling 225 and the three paths of 553 exist to prevent. They are left out of
-`src/lib/database.types.ts` (its header says so), because a type there is a licence for a surface
-to reach them. What closes this: the migration files that define them, committed and recorded
-under 225 and 553, or their removal from the project; and a drift arm that compares the project's
-catalog against the tree, not only its `schema_migrations` rows, so an unrecorded object reads FAIL
-rather than passing unseen.
+five additions, objects that exist on the project and nowhere in `supabase/migrations` on this
+branch: the tables `convene_families`, `convene_lenses`, `convene_picks`, `discovery_dismissals`,
+`editors` and `member_subscriptions`; the functions `convene_discovery`, `dismiss_discovery_item`
+and `set_subscription`; and the column `events.family` with a foreign key to `convene_families`.
+At the regeneration `tests/migration-drift.cjs` read PASS, so no `schema_migrations` row named
+them; by the enforcing run on `3805792` the same arm read FAIL for `20260922150000
+p2_discovery_schema` and `20260922150100 p2_discovery_projection`, recorded on the project with no
+file in this tree. They are Handoff 31-A's (#59), applied by Chat ahead of that PR's merge: the
+regeneration landed inside the moment between the objects' creation and their rows' recording,
+and this branch then sat in G58's second half. They are left out of `src/lib/database.types.ts`
+(its header says so), because a type here is a licence for a surface to reach what this tree does
+not define; #59's own regeneration carries them. What remains open: a drift arm that compares the
+project's catalog against the tree and not only its `schema_migrations` rows, so an object that
+reaches the project ahead of its row reads as drift rather than passing unseen for however long
+the recording takes.

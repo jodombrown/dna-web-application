@@ -34,7 +34,22 @@ const {
   noOverflow,
   BASE,
   UID,
+  SB,
 } = M;
+
+/**
+ * Ruling 357, as tests/profile.cjs and tests/connect.cjs already apply it: WebKit words a fetch the
+ * navigation cancelled as an access-control denial ("… due to access control checks."), and
+ * Playwright delivers it as a page error. Every request to the mocked Supabase origin is fulfilled
+ * in-process with access-control-allow-origin: *, so a real denial cannot happen there. Only this
+ * wording, and only for that origin, is ignored; any other page error still fails the check. Seen
+ * on run 35792037361 in two event arms whose flows navigate away from the Feed while its card
+ * hydration is still in flight.
+ */
+const SB_RE = SB.replace(/\./g, "\\.");
+const CANCELLED_MOCK_FETCH = new RegExp(
+  `(?:^|[\\s/])${SB_RE}\\S*\\s+due to access control checks\\.?$`,
+);
 
 /** The mocked events' ids: UUIDs, because the page's read refuses anything else (item 11.1). */
 const EV = { loaded: eventId("loaded"), private: eventId("private") };
@@ -296,7 +311,10 @@ async function context(browserType, [w, h], theme, db) {
   );
   await mockSupabase(page, db);
   const errors = [];
-  page.on("pageerror", (e) => errors.push(String(e)));
+  page.on("pageerror", (e) => {
+    const text = String(e);
+    if (!CANCELLED_MOCK_FETCH.test(text)) errors.push(text);
+  });
   return { browser, page, errors };
 }
 
