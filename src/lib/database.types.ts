@@ -1,21 +1,23 @@
 // Generated from the canonical Supabase project (dgspjevjoblujcoljvkn) with the Supabase MCP
-// generate_typescript_types tool, after Convene Pass 2's two migrations were applied and recorded
-// (20260921120000_r1004_1010_audience_helpers, 20260921120100_p2_event_registrations).
+// generate_typescript_types tool, after handoff 30-A's two migrations were applied and recorded
+// (20260921140000_r1021_role_notice_kinds, 20260921140100_p2_event_parties).
 //
-// Nothing here is hand-written, and the regeneration waits for the apply for the reason Pass 5's
-// header already gives: ruling 225 commits a migration before it is applied, so a regeneration taken
-// inside that window reads the project as it was and silently removes what the window is holding.
-// Both versions are recorded on the project now, their md5s match the files byte for byte, and
-// `tests/migration-drift.cjs` reads them, so the generator returns them.
+// Nothing here is hand-written except this header and the `Views` helper at the end, which the
+// generator drops and every regeneration restores (`src/lib/feed.ts` reads it). The regeneration
+// waits for the apply for the reason the earlier headers give: ruling 225 commits a migration before
+// it is applied, so a regeneration taken inside that window reads the project as it was and silently
+// removes what the window is holding. Both versions are recorded on the project, their md5s match the
+// files byte for byte, and `tests/migration-drift.cjs` reads them, so the generator returns them.
 //
-// What Pass 2 adds here: `event_registrations`, the truth for attendance (ruling 1002); the
-// `registration_status` enum, going and not_going and nothing else until a brief draws maybe
-// (ruling 1009); and `rsvp_event`, the one write path, which derives the `event_rsvp` edge inside
-// `private.rsvp_write` in the same transaction rather than by a trigger.
+// What 30-A adds here: `event_role_kinds`, the runtime vocabulary of the roles a host can name on an
+// event (ruling 1018); `event_parties`, one member in one role on one event with its
+// `event_party_status` of invited, accepted or declined; `notification_kind` gaining
+// `role_invitation` and `role_accepted` and `anchor_kind` gaining `event_party` (ruling 1021); and
+// the three write paths `invite_event_party`, `respond_to_event_role` and `remove_event_party`.
 //
-// `private.admit_audience` (ruling 1010) and `private.rsvp_edge_drift()` are absent by design: the
-// private schema is not exposed by PostgREST, so the generator does not see it and no surface may
-// reach it. The drift function is read by `tests/rsvp-drift.cjs` as `live_arms`, not from the app.
+// `private.is_event_party` and `private.rsvp_going_member_count()` are absent by design: the private
+// schema is not exposed by PostgREST, so the generator does not see it and no surface may reach it.
+// The count is read by `tests/rsvp-drift.cjs` as `live_arms`, not from the app.
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
 
 export type Database = {
@@ -320,6 +322,61 @@ export type Database = {
           },
         ];
       };
+      event_parties: {
+        Row: {
+          created_at: string;
+          event_id: string;
+          id: string;
+          member_id: string;
+          responded_at: string | null;
+          role: string;
+          status: Database["public"]["Enums"]["event_party_status"];
+          updated_at: string;
+        };
+        Insert: {
+          created_at?: string;
+          event_id: string;
+          id?: string;
+          member_id: string;
+          responded_at?: string | null;
+          role: string;
+          status?: Database["public"]["Enums"]["event_party_status"];
+          updated_at?: string;
+        };
+        Update: {
+          created_at?: string;
+          event_id?: string;
+          id?: string;
+          member_id?: string;
+          responded_at?: string | null;
+          role?: string;
+          status?: Database["public"]["Enums"]["event_party_status"];
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "event_parties_event_id_fkey";
+            columns: ["event_id"];
+            isOneToOne: false;
+            referencedRelation: "events";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "event_parties_member_id_fkey";
+            columns: ["member_id"];
+            isOneToOne: false;
+            referencedRelation: "members";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "event_parties_role_fkey";
+            columns: ["role"];
+            isOneToOne: false;
+            referencedRelation: "event_role_kinds";
+            referencedColumns: ["role"];
+          },
+        ];
+      };
       event_registrations: {
         Row: {
           audience_override: Database["public"]["Enums"]["audience"] | null;
@@ -370,6 +427,27 @@ export type Database = {
             referencedColumns: ["id"];
           },
         ];
+      };
+      event_role_kinds: {
+        Row: {
+          label: string;
+          position: number;
+          role: string;
+          verb: string;
+        };
+        Insert: {
+          label: string;
+          position: number;
+          role: string;
+          verb: string;
+        };
+        Update: {
+          label?: string;
+          position?: number;
+          role?: string;
+          verb?: string;
+        };
+        Relationships: [];
       };
       events: {
         Row: {
@@ -1911,6 +1989,10 @@ export type Database = {
         }[];
       };
       dismiss_suggestion: { Args: { p_target: string }; Returns: undefined };
+      invite_event_party: {
+        Args: { p_event: string; p_member: string; p_role: string };
+        Returns: Json;
+      };
       onboard_relationship: {
         Args: {
           p_stance: Database["public"]["Enums"]["stance"];
@@ -1934,6 +2016,11 @@ export type Database = {
       public_attestations: { Args: never; Returns: Json };
       publish_post: { Args: { payload: Json }; Returns: string };
       rate_limit_check: { Args: { p_action: string }; Returns: boolean };
+      remove_event_party: { Args: { p_party: string }; Returns: Json };
+      respond_to_event_role: {
+        Args: { p_accept: boolean; p_party: string };
+        Returns: Json;
+      };
       respond_to_request: {
         Args: { p_accept: boolean; p_sender: string };
         Returns: undefined;
@@ -1963,7 +2050,14 @@ export type Database = {
       withdraw_request: { Args: { p_recipient: string }; Returns: undefined };
     };
     Enums: {
-      anchor_kind: "member" | "space" | "event" | "opportunity" | "connection_request" | "story";
+      anchor_kind:
+        | "member"
+        | "space"
+        | "event"
+        | "opportunity"
+        | "connection_request"
+        | "story"
+        | "event_party";
       audience: "everyone" | "connections" | "anchored";
       c_category: "connect" | "convene" | "collaborate" | "contribute" | "convey" | "system";
       contribute_instrument: "time" | "skills" | "in_kind";
@@ -1979,13 +2073,19 @@ export type Database = {
         | "story_about"
         | "authored";
       event_mode: "in_person" | "virtual" | "hybrid";
+      event_party_status: "invited" | "accepted" | "declined";
       event_status: "draft" | "published" | "cancelled";
       heritage_kind:
         "First generation" | "Second generation" | "Third generation or later" | "Continental";
       link_kind: "website" | "linkedin" | "x" | "instagram";
       masthead_pattern: "kente" | "adinkra" | "mudcloth";
       notification_kind:
-        "connection_accepted" | "attestation_received" | "space_role_approved" | "event_reminder";
+        | "connection_accepted"
+        | "attestation_received"
+        | "space_role_approved"
+        | "event_reminder"
+        | "role_invitation"
+        | "role_accepted";
       post_status: "draft" | "published";
       profile_section:
         | "about"
@@ -2137,7 +2237,15 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      anchor_kind: ["member", "space", "event", "opportunity", "connection_request", "story"],
+      anchor_kind: [
+        "member",
+        "space",
+        "event",
+        "opportunity",
+        "connection_request",
+        "story",
+        "event_party",
+      ],
       audience: ["everyone", "connections", "anchored"],
       c_category: ["connect", "convene", "collaborate", "contribute", "convey", "system"],
       contribute_instrument: ["time", "skills", "in_kind"],
@@ -2154,6 +2262,7 @@ export const Constants = {
         "authored",
       ],
       event_mode: ["in_person", "virtual", "hybrid"],
+      event_party_status: ["invited", "accepted", "declined"],
       event_status: ["draft", "published", "cancelled"],
       heritage_kind: [
         "First generation",
@@ -2168,6 +2277,8 @@ export const Constants = {
         "attestation_received",
         "space_role_approved",
         "event_reminder",
+        "role_invitation",
+        "role_accepted",
       ],
       post_status: ["draft", "published"],
       profile_section: [
