@@ -132,6 +132,8 @@ async function runLiveDbArms({ record, skip }) {
     onboarded: "ruling 459 (W49): connect_cards excludes an account that has not onboarded",
     delivery:
       "Convene Pass 1 (521, 623): a second member reads the physical delivery row and neither the meeting link nor the host settings",
+    attend:
+      "Brief 10 (1030): a first going answer writes the convene default with no override, and a later answer writes an override only",
   };
   if (process.env.SKIP_REST) {
     for (const n of Object.values(names)) skip(n, "SKIP_REST");
@@ -715,6 +717,155 @@ async function runLiveDbArms({ record, skip }) {
           JSON.stringify(asOwner.kinds) +
           ", settings " +
           asOwner.settings,
+      );
+    });
+    // ------------------------------------------------------------------------------------------
+    // Brief 10 (handoff 30-C; rulings 680, 1023, 1028, 1029, 1030). The owner publishes a free
+    // in-person event to everyone; the member's convene default is cleared inside this transaction
+    // so the first case is reachable whatever the account holds, then the member answers going
+    // twice: the first answer sets the default and stores no override (1030), the second stores an
+    // override alone. The member's own projection carries the answer. Signed out, the public
+    // projection answers for the slug with no registrant, no going list, no viewer block and no
+    // meeting link (680, 1028), the member projection is refused (1023), and no client role may
+    // call the media lookup (1029). Everything rolls back.
+    // ------------------------------------------------------------------------------------------
+    await inTransaction(client, async () => {
+      await actAsSelf(client);
+      const present = await client.query(
+        "select (to_regprocedure('public.event_page(uuid)') is not null and to_regprocedure('public.event_public_page(text)') is not null) as ok",
+      );
+      if (!present.rows[0] || present.rows[0].ok !== true) {
+        skip(names.attend, "20260921160100_p2_event_page.sql is not on the project yet");
+        return;
+      }
+      await actAs(client, owner.id);
+      const starts = new Date(Date.now() + 21 * 86400e3);
+      starts.setUTCHours(19, 0, 0, 0);
+      const published = await attempt(client, "select public.publish_post($1::jsonb) as id", [
+        JSON.stringify({
+          verb: "convene",
+          body: "Brief 10 attend arm. Rolled back by the same run.",
+          author_kind: "member",
+          author_id: owner.id,
+          audience: "everyone",
+          host_context: "live-checks",
+          fields: {
+            "convene.title": "Attend arm supper",
+            "convene.format": "in_person",
+            "convene.when": "in three weeks at 19:00",
+            "convene.starts_at": starts.toISOString(),
+            "convene.timezone": "Africa/Accra",
+            "convene.place_id": "live-arms-place",
+            "convene.place_name": "Front Room",
+            "convene.city": "Accra",
+            "convene.country": "Ghana",
+            "convene.lng": "-0.1747",
+            "convene.lat": "5.5559",
+            "convene.price_nature": "free",
+            "convene.delivery_intent": "In the room, at a long table.",
+          },
+        }),
+      ]);
+      if (!published.ok) {
+        record(
+          names.attend,
+          false,
+          "publish_post refused: " + published.code + " " + published.message,
+        );
+        return;
+      }
+      const ev = await attempt(
+        client,
+        "select e.id, e.slug from public.posts p join public.events e on e.id = p.created_object_id where p.id = $1",
+        [published.rows[0].id],
+      );
+      const eventId = ev.ok && ev.rows[0] ? ev.rows[0].id : null;
+      const slug = ev.ok && ev.rows[0] ? ev.rows[0].slug : null;
+      if (!eventId || !slug) {
+        record(
+          names.attend,
+          false,
+          "the published post carries no event with a slug: " +
+            (ev.ok ? "no row" : ev.code + " " + ev.message),
+        );
+        return;
+      }
+      await actAs(client, member.id);
+      await attempt(
+        client,
+        "delete from public.member_visibility where member_id = $1 and section = 'convene'",
+        [member.id],
+      );
+      const first = await attempt(
+        client,
+        "select public.rsvp_event($1::uuid, 'going', 'everyone') as r",
+        [eventId],
+      );
+      const second = await attempt(
+        client,
+        "select public.rsvp_event($1::uuid, 'going', 'anchored') as r",
+        [eventId],
+      );
+      const mine = await attempt(client, "select public.event_page($1::uuid) as p", [eventId]);
+      const r1 = first.ok ? first.rows[0].r : null;
+      const r2 = second.ok ? second.rows[0].r : null;
+      const page = mine.ok ? mine.rows[0].p : null;
+      record(
+        names.attend,
+        !!r1 &&
+          r1.default_set === true &&
+          r1.audience_override === null &&
+          !!r2 &&
+          r2.default_set === false &&
+          r2.audience_override === "anchored" &&
+          !!page &&
+          page.viewer &&
+          page.viewer.registration &&
+          page.viewer.registration.status === "going" &&
+          page.viewer.registration.audience_override === "anchored" &&
+          page.viewer.has_default === true &&
+          page.viewer.default_audience === "everyone",
+        "first " +
+          (first.ok ? JSON.stringify(r1) : first.code + " " + first.message) +
+          " second " +
+          (second.ok ? JSON.stringify(r2) : second.code + " " + second.message) +
+          " page " +
+          (mine.ok ? JSON.stringify(page && page.viewer) : mine.code + " " + mine.message),
+      );
+      await client.query("set local role anon");
+      await client.query("select set_config('request.jwt.claims', '', true)");
+      const pub = await attempt(client, "select public.event_public_page($1) as p", [slug]);
+      const pp = pub.ok ? pub.rows[0].p : null;
+      const text = pp ? JSON.stringify(pp) : "";
+      record(
+        "Brief 10 (680, 1028): the signed-out page carries no registrant name, no going list, no viewer block and no meeting link",
+        !!pp &&
+          pp.event &&
+          pp.event.slug === slug &&
+          !("going" in pp) &&
+          !("viewer" in pp) &&
+          !("meeting_url" in pp) &&
+          !("invitations" in pp) &&
+          !text.includes(member.name) &&
+          !text.includes(member.id),
+        pub.ok ? "keys " + Object.keys(pp || {}).join(",") : pub.code + " " + pub.message,
+      );
+      const refused = await attempt(client, "select public.event_page($1::uuid) as p", [eventId]);
+      record(
+        "Brief 10 (1023): signed out cannot call the member projection",
+        !refused.ok && refused.code === "42501",
+        refused.ok ? "answered" : refused.code + " " + refused.message,
+      );
+      await actAs(client, member.id);
+      const media = await attempt(
+        client,
+        "select * from public.event_media_object($1, 'media', '0')",
+        [slug],
+      );
+      record(
+        "Brief 10 (1029): a client role may not call event_media_object",
+        !media.ok && media.code === "42501",
+        media.ok ? "answered " + media.rows.length + " row(s)" : media.code + " " + media.message,
       );
     });
   } finally {
