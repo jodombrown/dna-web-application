@@ -4114,3 +4114,39 @@ decision, not a revoke, on `event_delivery` and `event_host_settings`, because d
 grants there removes a path a Convene surface may already use. A harness arm that reads
 `role_table_grants` and fails on any of the four for `anon` or `authenticated` would keep it closed,
 in `tests/migration-drift.cjs`'s shape.
+
+## G62. Strand's `Segment.tsx` still names `SegmentBlock` in its own header, one line the rename under 1007 was told not to touch
+
+**Severity: cosmetic. Opened 22 September 2026 during handoff 30-B, filed under ruling 597. The
+number is assigned by this entry (ruling 638). Not fixed here: the handoff names the file as not
+edited, and its two Done Means disagree on this one line.**
+
+Ruling 1007 renamed `src/components/strand/SegmentBlock.tsx` to `StanceBlock.tsx` and its five
+identifiers with it. `src/components/strand/Segment.tsx:3`, the header of Strand's segmented
+control, reads "Not SegmentBlock: that is the Profile's stance block", written when the two parts
+shared a prefix so a reader would not confuse them. After the rename that line names an export
+that no longer exists. Handoff 30-B's Done Means 1 asks the identifier scan over `src` and `tests`
+to return nothing, and its Done Means 2 asks `git diff` to show no change to `Segment.tsx`; on this
+line they cannot both hold, and the handoff's own body says the file is not renamed and not
+edited, so the build left it and the scan returns this one comment line. Closing it is a one-line
+edit to that comment, "Not StanceBlock", in a change whose brief names Strand's `Segment` as
+editable.
+
+## G63. The "Who sees what" rail row still falls back to the literal `Stance` when `stance_label` is absent
+
+**Severity: low. Opened 22 September 2026 during handoff 30-B, filed under ruling 597. The number
+is assigned by this entry (ruling 638). Not fixed here: the handoff's scope is the stance section's
+title, and this row is a rail one surface over.**
+
+Handoff 30-B removed the stance section title's literal fallback under ruling 194: the title reads
+`public.member_stances` through `vocabularies()` and renders no text when that read fails. The
+owner's "Who sees what" rail in `src/components/dna/ProfileSurface.tsx` (around line 713) labels
+its stance row `profile.member.stance_label ?? TITLES.stance`, where `TITLES.stance` is the literal
+`"Stance"`. Two readings are open. As a section name it is navigation, the row lists every section
+by its name and 397 fixed that name as Stance, so a literal is what 999 permits. As a stance label
+it is the same shape 194 just removed from the title, one rail over, reading the saved
+`stance_label` rather than the vocabulary and a literal when that is null. The row shows the saved
+label when a stance is set and the word Stance only for an owner with no stance, so the literal
+never stands in for a failed vocabulary read the way the title's did. Whether the row should read
+the vocabulary and render empty like the title, or is a section name and stays, is a ruling to ask
+for rather than a fix to make; no test asserts either behaviour today.

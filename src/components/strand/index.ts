@@ -33,7 +33,7 @@ export * from "./VisibilitySelect";
 export * from "./ProfileHeader";
 export * from "./SectionCard";
 export * from "./VocabularyPicker";
-export * from "./SegmentBlock";
+export * from "./StanceBlock";
 export * from "./BadgeRow";
 export * from "./LinkRow";
 export * from "./PatternPicker";

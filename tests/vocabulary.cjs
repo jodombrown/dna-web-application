@@ -4,7 +4,8 @@
 // and forced to fail in the other (db.failVocab), because reading the code proves neither.
 //
 // Surfaces: the Composer's Contribute instrument (Brief 1), the Feed's instrument row on a Need
-// (Brief 2), and Profile's Return timeline select in edit mode (Brief 3).
+// (Brief 2), Profile's stance section title (rulings 187, 1007) and its Return timeline select in
+// edit mode (Brief 3).
 // Usage: BASE=https://<preview>.dna-web-application.pages.dev SPECIAL=vocab node tests/matrix.cjs
 const M = require("./matrix.cjs");
 
@@ -111,6 +112,18 @@ async function runVocabulary(browserType, bname, [w, h], theme, fail) {
     // placeholder, not a vocabulary value, so an unloaded vocabulary leaves exactly that one option.
     await page.goto(BASE + "/m/" + HANDLE, { waitUntil: "domcontentloaded" });
     await page.waitForSelector('[data-testid="edit-profile"]', { timeout: 15000 });
+    // Profile (rulings 187, 194, 1007): the stance section's title is the label from
+    // public.member_stances through vocabularies(), and no text at all when that read fails. The
+    // mock's profile_view still carries stance_label either way, so an empty title proves the
+    // heading reads the vocabulary and nothing else.
+    const stanceTitle = page.locator('[data-testid="section-stance"] h2').first();
+    await stanceTitle.waitFor({ state: "attached", timeout: 10000 });
+    const stanceTitleText = (await stanceTitle.textContent()) ?? "";
+    record(
+      tag + ": Profile stance section title",
+      fail ? stanceTitleText === "" : stanceTitleText === "Returnee",
+      JSON.stringify(stanceTitleText),
+    );
     await page.locator('[data-testid="edit-profile"]').first().click();
     await page.waitForSelector('[data-testid="profile"][data-edit="1"]', { timeout: 10000 });
     const select = page.locator("select").filter({ hasText: "Choose" }).first();

@@ -3,7 +3,7 @@
 // screen from a row it read); the writes go through the onboarding Edge Function, which calls the
 // SECURITY DEFINER RPC under the member's own JWT and emits the company-facing signal (ruling 311)
 // where connect-suggest already logs.
-import type { Stance } from "@/components/strand/SegmentBlock";
+import type { Stance } from "@/components/strand/StanceBlock";
 import { deliverImageUrl, uploadImage, type ImageUpload } from "./media";
 import { functionsUrl, getSupabase, SUPABASE_PUBLISHABLE_KEY } from "./supabase";
 

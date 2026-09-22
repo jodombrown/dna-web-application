@@ -1,9 +1,9 @@
 // Ported from profile/strand-patch/Profile.jsx (B3-Profile-v3, ruling 122). Behavior unchanged.
 // One component, five variants; the host keeps the other variants' data when the stance changes.
 // Ruling 397: the visible label is Stance, never Segment. The chooser's label below carried the
-// ruled-against word. The identifiers do not move — `SegmentBlock`, `SegmentField`, `SegmentData`,
-// `SegmentBlockProps` and `SEG` keep their names until the founder rules on whether 397 reaches
-// them; 397 governs what a member reads.
+// ruled-against word. Ruling 1007 extends 397 to the identifiers: this file was SegmentBlock.tsx and
+// declared `SegmentBlock`, `SegmentField`, `SegmentData`, `SegmentBlockProps` and `SEG`; each now
+// carries Stance. Strand's `Segment` (Segment.tsx) is a different part and keeps its name.
 import type { CSSProperties } from "react";
 import { Chip } from "./Chip";
 import { Input } from "./Input";
@@ -14,19 +14,19 @@ import { VocabularyPicker } from "./VocabularyPicker";
 // per-variant fields; a Kin member's block renders their label alone.
 export type Stance = "returnee" | "kin" | "anchor" | "ally" | "exploring";
 
-export type SegmentField =
+export type StanceField =
   | { k: "timeline"; label: string; kind: "select" }
   | { k: "needs" | "offer" | "support"; label: string; kind: "text"; short?: false }
   | { k: "base"; label: string; kind: "text"; short: true }
   | { k: "interests"; label: string; kind: "vocab" };
 
 // Ruling 187: the labels are not here. public.member_stances is the one label source, reaching
-// this component as vocabularies().stances (the chooser) and profile_view's member.stance_label
-// (the heading). Ruling 194: nor are the return_timeline values, which come in as timelineOptions
+// this component as vocabularies().stances, which the chooser and the host's section heading both
+// read (ruling 1007). Ruling 194: nor are the return_timeline values, which come in as timelineOptions
 // from the same projection; the literal that used to sit beside them as a fallback is gone, and a
-// vocabulary that does not load renders an empty control rather than a stale one. SEG carries only
+// vocabulary that does not load renders an empty control rather than a stale one. STANCE carries only
 // the per-variant field sets, which are structure, not vocabulary.
-export const SEG: Record<Stance, { fields: SegmentField[] }> = {
+export const STANCE: Record<Stance, { fields: StanceField[] }> = {
   returnee: {
     fields: [
       { k: "timeline", label: "Return timeline", kind: "select" },
@@ -46,7 +46,7 @@ export const SEG: Record<Stance, { fields: SegmentField[] }> = {
   },
 };
 
-export type SegmentData = {
+export type StanceData = {
   stance?: Stance | undefined;
   timeline?: string | undefined;
   needs?: string | undefined;
@@ -56,11 +56,11 @@ export type SegmentData = {
   interests?: string[] | undefined;
 };
 
-export type SegmentBlockProps = {
+export type StanceBlockProps = {
   stance?: Stance;
-  data?: SegmentData;
+  data?: StanceData;
   editing?: boolean | undefined;
-  onChange?: ((data: SegmentData) => void) | undefined;
+  onChange?: ((data: StanceData) => void) | undefined;
   interestOptions?: string[];
   timelineOptions?: string[] | undefined;
   /** Ruling 187: the chooser's values and labels, from vocabularies().stances. */
@@ -68,7 +68,7 @@ export type SegmentBlockProps = {
   style?: CSSProperties | undefined;
 };
 
-export function SegmentBlock({
+export function StanceBlock({
   stance = "exploring",
   data = {},
   editing,
@@ -77,9 +77,9 @@ export function SegmentBlock({
   timelineOptions,
   stanceOptions = [],
   style,
-}: SegmentBlockProps) {
-  const def = SEG[stance] || SEG.exploring;
-  const set = (k: keyof SegmentData, v: string | string[]) =>
+}: StanceBlockProps) {
+  const def = STANCE[stance] || STANCE.exploring;
+  const set = (k: keyof StanceData, v: string | string[]) =>
     onChange && onChange({ ...data, [k]: v });
   return (
     <div
