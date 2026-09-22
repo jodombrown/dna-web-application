@@ -38,7 +38,7 @@ import { ProfileHeader, type MastheadPattern } from "@/components/strand/Profile
 import { RailWidget } from "@/components/strand/RailWidget";
 import { BackRow } from "@/components/strand/BackRow";
 import { SectionCard } from "@/components/strand/SectionCard";
-import { SegmentBlock, type Stance, type SegmentData } from "@/components/strand/SegmentBlock";
+import { StanceBlock, type Stance, type StanceData } from "@/components/strand/StanceBlock";
 import { Select } from "@/components/strand/Select";
 import { Sheet } from "@/components/strand/Sheet";
 import { Switch } from "@/components/strand/Switch";
@@ -66,7 +66,7 @@ import {
   type ActivityC,
   type ProfileView,
   type SectionKey,
-  type SegmentFields,
+  type StanceFields,
 } from "@/lib/profile";
 import { setRail } from "@/lib/rail-store";
 import { useTier } from "@/lib/tier";
@@ -113,10 +113,10 @@ type SectionSpec = {
 };
 
 type Draft = Record<string, string | string[] | undefined>;
-type SegmentDraft = { stance: Stance; variants: Partial<Record<Stance, SegmentFields>> };
+type StanceDraft = { stance: Stance; variants: Partial<Record<Stance, StanceFields>> };
 type Drafts = Partial<Record<FieldId, Draft>> & {
   core?: { name: string; headline: string };
-  stance?: SegmentDraft;
+  stance?: StanceDraft;
 };
 
 const ACT: Record<ActivityC, [string, string, string]> = {
@@ -491,7 +491,7 @@ export function ProfileSurface({ handle, edit, asPublic }: ProfileSurfaceProps) 
       return;
     }
     if (id === "stance") {
-      const sd = d as SegmentDraft;
+      const sd = d as StanceDraft;
       const f = sd.variants[sd.stance] ?? {};
       saveMut.mutate({
         id,
@@ -1607,29 +1607,35 @@ function ProfileBody(p: BodyProps) {
 
   // Stance block (ruling 122; the axis is stance since Brief 5, ruling 300).
   {
-    const segEditing = !!drafts.stance;
+    const stanceEditing = !!drafts.stance;
     const sd = drafts.stance;
-    const segId: Stance | undefined = segEditing ? sd?.stance : (s.stance?.stance ?? m.stance);
-    const fields: SegmentFields = segEditing
+    const stanceId: Stance | undefined = stanceEditing
+      ? sd?.stance
+      : (s.stance?.stance ?? m.stance);
+    const fields: StanceFields = stanceEditing
       ? (sd?.variants[sd.stance] ?? {})
       : (s.stance?.fields ?? {});
     // Ruling 187: the heading follows the stance being edited, so it reads the vocabulary rather
-    // than member.stance_label, which is the saved one. Both resolve to public.member_stances.
-    const segLabel = segId
-      ? (p.vocab?.stances?.find((o) => o.value === segId)?.label ??
-        (segId === m.stance ? (m.stance_label ?? null) : null))
+    // than member.stance_label, which is the saved one. Ruling 194 (handoff 30-B): the vocabulary is
+    // the heading's only source. When it does not load the heading is empty, never the saved label
+    // and never a literal, so a failed read is visible as a failed read.
+    const stanceLabel = stanceId
+      ? (p.vocab?.stances?.find((o) => o.value === stanceId)?.label ?? null)
       : null;
-    const segEmpty = !Object.values(fields).some((v) => (Array.isArray(v) ? v.length : !!v));
-    const present = owner || (!!s.stance && !segEmpty);
+    const stanceEmpty = !Object.values(fields).some((v) => (Array.isArray(v) ? v.length : !!v));
+    const present = owner || (!!s.stance && !stanceEmpty);
     if (present) {
-      const data: SegmentData = { ...fields, stance: segId };
+      const data: StanceData = { ...fields, stance: stanceId };
       cards.push(
         <SectionCard
           key="stance"
           testId="section-stance"
-          title={segLabel ?? "Stance"}
+          // SectionCard's title is a string that feeds the h2, the section's aria-label and the edit
+          // control's label. An absent label passes the empty string, so the h2 renders no text and
+          // no literal stands in for a vocabulary that did not load (ruling 194).
+          title={stanceLabel ?? ""}
           owner={owner}
-          editing={segEditing}
+          editing={stanceEditing}
           keepVisibility={editMode}
           onEdit={() => p.startEdit("stance")}
           onCommit={() => p.commitSection("stance")}
@@ -1645,33 +1651,34 @@ function ProfileBody(p: BodyProps) {
           // the one label source. Whether a prompt may enumerate a vocabulary at all is raised for
           // a ruling, not settled here.
           empty={
-            segEmpty && !segEditing
+            stanceEmpty && !stanceEditing
               ? "Say where you stand. The stance you choose sets what this section asks for."
               : null
           }
-          emptyAct={segEmpty && !segEditing ? "Choose your stance" : null}
+          emptyAct={stanceEmpty && !stanceEditing ? "Choose your stance" : null}
           onEmptyAct={() => p.startEdit("stance")}
         >
-          <SegmentBlock
-            stance={segId ?? "exploring"}
+          <StanceBlock
+            stance={stanceId ?? "exploring"}
             data={data}
-            editing={segEditing}
+            editing={stanceEditing}
             interestOptions={p.vocab?.interests ?? []}
             timelineOptions={p.vocab?.timeline}
             stanceOptions={p.vocab?.stances}
             onChange={(d) =>
               p.setDrafts((st) => {
-                const prev = st.stance ?? { stance: segId ?? "returnee", variants: {} };
-                const nextSeg = (d.stance ?? prev.stance) as Stance;
-                if (nextSeg !== prev.stance) return { ...st, stance: { ...prev, stance: nextSeg } };
-                const { stance: _seg, ...rest } = d;
+                const prev = st.stance ?? { stance: stanceId ?? "returnee", variants: {} };
+                const nextStance = (d.stance ?? prev.stance) as Stance;
+                if (nextStance !== prev.stance)
+                  return { ...st, stance: { ...prev, stance: nextStance } };
+                const { stance: _stance, ...rest } = d;
                 return {
                   ...st,
                   stance: {
                     ...prev,
                     variants: {
                       ...prev.variants,
-                      [nextSeg]: { ...(prev.variants[nextSeg] ?? {}), ...rest },
+                      [nextStance]: { ...(prev.variants[nextStance] ?? {}), ...rest },
                     },
                   },
                 };

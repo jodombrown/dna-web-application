@@ -16,7 +16,7 @@ import type { AttestationItem } from "@/components/strand/AttestationRail";
 import type { Badge } from "@/components/strand/BadgeRow";
 import type { C } from "@/components/strand/cmeta";
 import type { MastheadPattern } from "@/components/strand/ProfileHeader";
-import type { Stance } from "@/components/strand/SegmentBlock";
+import type { Stance } from "@/components/strand/StanceBlock";
 import type { Json } from "./database.types";
 import { uploadImage, type ImageSlot, type ImageUpload } from "./media";
 import { getSupabase } from "./supabase";
@@ -47,7 +47,7 @@ export type ActivityRow = {
   post_id?: string | null | undefined;
 };
 
-export type SegmentFields = {
+export type StanceFields = {
   timeline?: string | undefined;
   needs?: string | undefined;
   base?: string | undefined;
@@ -60,8 +60,8 @@ export type ProfileSections = {
   about?: { about?: string | undefined };
   stance?: {
     stance?: Stance | undefined;
-    fields: SegmentFields;
-    variants?: Partial<Record<Stance, SegmentFields>> | undefined;
+    fields: StanceFields;
+    variants?: Partial<Record<Stance, StanceFields>> | undefined;
   };
   origin?: {
     origin_country?: string | undefined;

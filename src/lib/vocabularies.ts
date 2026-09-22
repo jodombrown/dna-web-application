@@ -5,7 +5,7 @@
 //
 // Named for the projection, not for a surface: Profile (Brief 3), the Composer (Brief 1) and the
 // Feed (Brief 2) all read this one path.
-import type { Stance } from "@/components/strand/SegmentBlock";
+import type { Stance } from "@/components/strand/StanceBlock";
 import { getSupabase, type Supabase } from "./supabase";
 
 export type Vocabularies = {
