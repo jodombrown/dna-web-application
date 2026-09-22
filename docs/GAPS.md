@@ -4163,3 +4163,14 @@ tree with nothing in it, so a failed vocabulary read leaves an empty `h2` on the
 accessibility checkers flag as an empty heading and a screen reader announces as a heading with
 no name. The fix is to render no heading element at all when the label is absent, and to assert
 that in `tests/vocabulary.cjs`'s failed pass beside the existing check that no literal stands in.
+
+## G65. The Home facet's rungs are not drawn and not built
+
+**Severity: medium, invite-boundary gate (ruling 140). Opened 22 September 2026 during handoff 31-A,
+filed under ruling 597. The number is assigned by this entry (ruling 638).**
+
+The Home facet's rungs (rulings 927, 928) are not drawn in Brief 9's prototype and not built; the
+facet ships one option per home under 1042. `public.convene_discovery`'s `p_home` narrows to
+in-person and hybrid events whose physical delivery city matches the chosen home's city, and
+nothing wider. Owed: a Design correction drawing the rungs on FacetRail's home axis, and the
+projection's rung predicate against `member_homes.region` and the event's place, in a new migration.
