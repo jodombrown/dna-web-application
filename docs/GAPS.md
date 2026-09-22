@@ -4241,3 +4241,20 @@ not define; #59's own regeneration carries them. What remains open: a drift arm 
 project's catalog against the tree and not only its `schema_migrations` rows, so an object that
 reaches the project ahead of its row reads as drift rather than passing unseen for however long
 the recording takes.
+
+## G70. `live_arms` may mint a guest row on any published event, until the guest arms sit behind a fixture policy
+
+**Severity: low, invite-boundary gate. Opened 22 September 2026 during handoff 30-D, filed under
+ruling 597 from the finding `20260922160000_r382_live_arms_guest_functions.sql` names in its own
+header. The number is assigned by this entry (ruling 638). Prototype posture (ruling 140): the
+canonical project holds no real member data, so this blocks no merge.**
+
+`20260922160000` grants `live_arms` execute on `public.guest_link_request(text, text)` and
+`public.guest_rsvp(uuid, text, text)`, exactly the two signatures and nothing wider, so the two
+live-db guest arms can run instead of reading UNPROVEN (228). Both functions are SECURITY DEFINER
+and gate on the event's public page and on the throttle, not on the caller, so a holder of
+`LIVE_DB_URL`, CI's one secret for this role (382), may write a guest row on any published event
+whose post is to everyone. The arms roll their rows back inside their own transaction. What closes
+this: before the first real member invite, a fixture policy that admits the two ruling 218 test
+accounts' events and no other, the shape the attestations arms already take under ruling 435, with
+the grant narrowed to run through it.
