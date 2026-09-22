@@ -49,6 +49,9 @@ If, while working or testing, you find a pre-existing bug, a performance concern
 
 Neither is an exit criterion. Every exit criterion is checked on the deployed preview URL, because that is the only environment the founder tests in.
 
+Format with the repository's pinned prettier, `node_modules/.bin/prettier` (3.9.6), never `bunx prettier`,
+which resolves a newer version that `eslint-plugin-prettier` rejects.
+
 ## Editing
 
 Minimize tokens spent editing files. When it will not affect the result, surgically edit a file rather than rewrite it.
@@ -118,6 +121,10 @@ legitimate backfill is a check somebody disables, which is how a guardrail dies.
 are scanned: an applied migration is never amended (466), so flagging one would be a gate nobody can
 pass.
 
+A value added by `ALTER TYPE ... ADD VALUE` cannot be used in the transaction that adds it. A migration
+that adds enum values and uses them is two files, the values alone first, applied in two transactions
+(`20260921140000` and `20260921140100`).
+
 A migration reaches the canonical project by one of three paths, and never by the Supabase MCP's
 `apply_migration` (ruling 553, extending 269): SQL Editor paste on supabase.com, dispatch-only
 GitHub Actions with a required reviewer (ruling 562), or the Supabase MCP's `execute_sql`, which is
@@ -152,6 +159,12 @@ window any branch that does not carry the file goes red at step 8 for a reason t
 with it. So the ordering is not "apply then merge promptly" but: paste immediately before merging,
 and cut or push nothing else in between. The window should be minutes, and its cost falls on other
 people's branches rather than on the one being merged.
+
+The migration window has two halves (G58): red on the committing branch from commit to apply, red on
+every other branch from apply to merge. With a types regeneration the order is commit, apply,
+regenerate, enforcing run, merge promptly.
+
+After regenerating `src/lib/database.types.ts`, restore `export type Views`, which the generator drops.
 
 Never force push to `main` (ruling 541) `[absolute]`. Force-with-lease is permitted on a Claude
 working branch, and only after a rebase that was instructed, pinned to the exact prior head. Plain

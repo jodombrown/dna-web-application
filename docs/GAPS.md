@@ -3877,12 +3877,20 @@ nothing else, exactly as the `event_rsvp` edge restates the registration.
 once. Item 2 needs a ruling that says which of 1002 and 111 governs a set that is already rebuilt
 nightly, and that is the founder's, not a PR's.
 
+**Ruling 1017 (Session 30) answers item 2's question.** 111 decides what `second_degree` is, a
+materialized set refreshed incrementally on new connections and fully overnight, and 1002 decides how
+it is written: by the source's write path, in the same transaction, never by a trigger. The two do not
+compete. So the incremental refresh moves into `public.respond_to_request` when that path is next
+touched, the other two trigger rows (items 1 and 3) move the same way at the same time, and nothing
+changes now.
+
 ## G57. The RSVP drift arm cannot state the denominator its own PASS line is specified to carry
 
 **Severity: low. The agreement is measured whole either way; what is missing is the number standing
 behind it. Opened 21 September 2026 during handoff 29-B, filed under ruling 597. The number is
-assigned by this entry (ruling 638). Not fixed here: the fix is a grant, and it belongs in a
-migration file, which under rulings 466 and 225 has to come from the file's author.**
+assigned by this entry (ruling 638). Not fixed in 29-B: the fix belongs in a migration file, which
+under rulings 466 and 225 has to come from the file's author. Corrected and closed by ruling 1022 in
+handoff 30-A: see the closing paragraph, which replaces the grant this entry first proposed.**
 
 **The mechanism, read in the tree.** Handoff 29-B item 2 specifies the arm's passing outcome as "a
 `PASS` that states how many going member registrations it measured", and in the same paragraph
@@ -3904,11 +3912,23 @@ live `event_rsvp` edge and every live edge carries a going registration, which
 the denominator would be. The moment a later migration grants the select, the number appears with no
 edit to the arm.
 
-**What closing it needs.** One line in a future migration from the file's author:
-`grant select (event_id, member_id, status) on table public.event_registrations to live_arms;`, which
-is the narrowest grant that answers the count and stays inside ruling 382. Not this PR's to write:
-`20260921120100` is committed byte for byte under item 1 and is never amended (ruling 466), and a new
-file that changes what Chat is about to apply has to come from Chat.
+**What closing it needed, corrected (handoff 30-A).** This entry first proposed a column grant,
+`grant select (event_id, member_id, status) on table public.event_registrations to live_arms;`, as the
+narrowest fix. It would have read zero. `live_arms` does not bypass row security (ruling 382), and
+every policy on `public.event_registrations` is to `authenticated` or `service_role`, so under that
+grant the count succeeds and returns 0 whatever the table holds; and a policy admitting `live_arms`
+would show it real members' rows, which is what 382 exists to refuse. Ruling 1022 closes it the other
+way: `private.rsvp_going_member_count()` in `20260921140100_p2_event_parties.sql`, SECURITY DEFINER,
+returning the number of going member registrations and nothing else, with EXECUTE granted to
+`service_role` and `live_arms`. `tests/rsvp-drift.cjs` calls it in place of the direct count and names
+its two failures apart: `42883`, the function not on the project, is the state between commit and
+apply and the PASS says the count function is not applied yet; `42501`, the function present and not
+executable by this role, is drift of the kind the arm already calls a FAIL for `rsvp_edge_drift()`,
+because the same file grants it. After the apply the PASS line states the number, zero included.
+
+**Closed** on the enforcing run whose `live` job prints the number. That run follows Chat's apply of
+both files and the types regeneration (handoff 30-A item 7); its number is written into this
+paragraph when it exists, and until then the entry reads as corrected and not yet closed.
 
 ## G58. Ruling 225's ordering turns the drift arm red on the branch that obeys it, and the doctrine records only the other direction
 
@@ -4006,3 +4026,88 @@ or changing the wait to key on the settled state the composer reaches after the 
 than on a fixed 5 s. The second is **G34's shape exactly** — a fixed wait standing in for the thing
 actually being waited on — and if G34 is ever closed by teaching `matrix.cjs` to wait on states
 rather than clocks, this wait belongs in the same pass.
+
+## G60. Brief 7 draws no accepted-role state, and Brief 10's invitation sheet promises one
+
+**Severity: moderate. Opened 21 September 2026 during handoff 30-A, filed under ruling 597. The
+number is assigned by this entry (ruling 638). Not fixed here: the line belongs to Brief 10's build
+handoff and the state belongs to a Brief 7 revision, and neither is this PR's.**
+
+**The disagreement, read across the briefs.** Brief 10 section 6 assigns the accepted role on a
+profile to Brief 7, and Brief 10's SPEC puts `Your profile lists the role once you accept (Brief 7).`
+in the invitation sheet. Brief 7 Revision 1 defers Connect to Convene and draws no such state: there
+is no profile element for a role a member has accepted on an event, on any tier, in any theme.
+
+**What the tree holds.** `public.event_parties` (`20260921140100_p2_event_parties.sql`) stores the
+acceptance under ruling 1018: one row per member per role per event, with a status of `invited`,
+`accepted` or `declined`, and `event_parties_named_member_select` lets the member read their own rows
+in every status. No surface reads it on a profile. `profile_view` does not join it, and nothing in
+Brief 7's extraction has a place for it to land. So when Brief 10 ships, the sentence in its
+invitation sheet describes a state the profile does not have, and a member who accepts on that promise
+opens their profile and finds nothing.
+
+**What closing it needs.** Two decisions, in two places. Brief 10's build handoff decides the line:
+either the sentence comes out of the sheet, or it is rewritten to promise only what the event page
+shows, which is the accepted name and image on every projection of that event (678). A Brief 7
+revision draws the state: where an accepted role sits on the profile, what it reads, and whether it
+carries the event's link. The second is a Claude Design pass under ruling 62 and cannot be
+reconstructed from the SPEC's one sentence (ruling 90). Until the revision lands, nothing reads
+`event_parties` on a profile and the sheet line is the only thing that says otherwise.
+
+## G61. Older tables carry grants the newer files revoke, because Supabase's default privileges hand them out and only six files take them back
+
+**Severity: low, an invite-boundary gate under prototype posture (ruling 140). Opened 21 September
+2026 during handoff 30-A, filed under ruling 597. The number is assigned by this entry (ruling 638).
+Not fixed here: a fix is a new migration under ruling 466, from Chat.**
+
+**The mechanism, read live on the canonical project on 21 September 2026.** `pg_default_acl` carries
+one row for tables in `public` owned by `postgres`: `anon=Dxtm`, `authenticated=Dxtm` and
+`service_role=Dxtm`, which is TRUNCATE, REFERENCES, TRIGGER and MAINTAIN handed to every table at
+creation before any file says a word about it. No migration in the tree alters default privileges.
+Six files run `revoke all on table ... from anon, authenticated` before granting what they mean
+(`20260921120100` and `20260921140100` among them), and those tables carry only what the file
+grants; every other file granted on top of the default and left the four in place. Row security does
+not govern TRUNCATE, and neither TRUNCATE, REFERENCES, TRIGGER nor MAINTAIN is reachable through
+PostgREST today, which is why the severity is low: the grants are real and nothing can use them yet.
+
+**Every table in `public` that carries them, from `information_schema.role_table_grants`.** The view
+does not report MAINTAIN, so each row below reads as TRUNCATE, REFERENCES, TRIGGER and, by the default
+ACL, MAINTAIN. Only `public.event_registrations` carries none of them: `authenticated` holds SELECT
+alone.
+
+For `authenticated`, every table but `event_registrations`: `attestations`, `connection_requests`,
+`corridors`, `countries`, `dismissed_suggestions`, `edges`, `event_delivery`, `event_host_settings`,
+`events`, `feed`, `focus_areas`, `industries`, `intents`, `interests`, `languages`, `media`,
+`member_about`, `member_blocks`, `member_connections`, `member_corridors`, `member_embeddings`,
+`member_focus_areas`, `member_follows`, `member_homes`, `member_industries`, `member_intent`,
+`member_intents`, `member_interests`, `member_languages`, `member_links`, `member_origin`,
+`member_regional_expertise`, `member_skills`, `member_stance_details`, `member_stances`,
+`member_visibility`, `members`, `notifications`, `opportunities`, `post_dia`, `post_drafts`,
+`post_links`, `post_media`, `post_reactions`, `post_saves`, `posts`, `regional_expertise`,
+`second_degree`, `skills`, `space_roles`, `spaces`, `stories`, `world_countries`.
+
+For `anon`: `attestations`, `countries`, `event_delivery`, `event_host_settings`, `focus_areas`,
+`industries`, `intents`, `interests`, `languages`, `media`, `member_about`, `member_focus_areas`,
+`member_follows`, `member_homes`, `member_industries`, `member_intent`, `member_intents`,
+`member_interests`, `member_languages`, `member_links`, `member_origin`,
+`member_regional_expertise`, `member_skills`, `member_stance_details`, `member_visibility`,
+`members`, `regional_expertise`, `skills`, `world_countries`. The tables the handoff named from its
+own read, `member_stances`, `focus_areas`, `notifications` and `event_delivery`, are four of these;
+`20260907010622_b2_notifications.sql:49` revoked from `anon` only, which is why `notifications` is
+absent from the `anon` list and present in the `authenticated` one.
+
+**The second write path, in the same read.** `authenticated` holds INSERT, UPDATE and DELETE on
+`public.event_delivery`, admitted by `event_delivery_host_all`
+(`20260916120100_p1_convene_place_columns.sql:116`), beside `publish_post`'s write of the same rows.
+`public.event_host_settings` carries the same shape under `event_host_settings_host_all` (`:121`).
+Under the one-write-path absolute those are a second door each, held shut today only by the host
+predicate in the policy.
+
+**What closing it needs.** One migration from Chat, under 466: `revoke truncate, references, trigger,
+maintain on all tables in schema public from anon, authenticated`, and `alter default privileges for
+role postgres in schema public revoke truncate, references, trigger, maintain on tables from anon,
+authenticated` so the next table starts clean without its file remembering to say so; then a
+decision, not a revoke, on `event_delivery` and `event_host_settings`, because dropping the direct
+grants there removes a path a Convene surface may already use. A harness arm that reads
+`role_table_grants` and fails on any of the four for `anon` or `authenticated` would keep it closed,
+in `tests/migration-drift.cjs`'s shape.
