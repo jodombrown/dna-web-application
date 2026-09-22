@@ -43,8 +43,15 @@ import { useTheme } from "@/lib/tier";
 
 export const Route = createFileRoute("/sign-in")({
   // ?join=1 opens the form in its sign-up state (the public profile's "Join DNA", Brief 3).
-  validateSearch: (search: Record<string, unknown>): { join?: boolean } =>
-    search["join"] === true || search["join"] === "1" || search["join"] === 1 ? { join: true } : {},
+  // ?email= prefills the address (handoff 30-D item 8.5: the guest's "Create an account" arrives
+  // here, on the one sign-up path, with the address the link named).
+  validateSearch: (search: Record<string, unknown>): { join?: boolean; email?: string } => {
+    const out: { join?: boolean; email?: string } = {};
+    if (search["join"] === true || search["join"] === "1" || search["join"] === 1) out.join = true;
+    const email = typeof search["email"] === "string" ? search["email"].trim() : "";
+    if (email && email.length <= 254 && email.includes("@")) out.email = email;
+    return out;
+  },
   component: SignIn,
 });
 
@@ -53,10 +60,10 @@ type Flag = "email" | "password" | "both" | null;
 function SignIn() {
   const { ready, member } = useAuth();
   const navigate = useNavigate();
-  const { join } = Route.useSearch();
+  const { join, email: prefill } = Route.useSearch();
   useTheme();
   const [mode, setMode] = useState<"in" | "up">(join ? "up" : "in");
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(prefill ?? "");
   const [password, setPassword] = useState("");
   const [alert, setAlert] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);

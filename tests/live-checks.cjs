@@ -1346,12 +1346,83 @@ async function get(url, headers = {}) {
         "og:title " + (meta("property", "og:title") || [])[1],
       );
       record(
-        "Brief 10 (680): the served page carries no attendee row, no going line and no RSVP control",
+        "Brief 10 (680): the served page carries no attendee row, no going line and no member RSVP control",
         !served.text.includes("data-going-row") &&
           !served.text.includes("data-event-going") &&
           !/are going, and others/.test(served.text) &&
           !served.text.includes("data-event-rsvp") &&
           !served.text.includes('data-testid="rsvp-going"'),
+      );
+      // Handoff 30-D item 8.1: the guest path's entry renders only for a free event that is neither
+      // cancelled nor over, and the served markup says which this one is.
+      const guestable =
+        pub.event &&
+        pub.event.ticket_kind === "free" &&
+        pub.event.cancelled !== true &&
+        pub.event.past !== true;
+      record(
+        "Handoff 30-D (item 8.1): the served page carries the guest affordance exactly when the event is free and not over",
+        guestable
+          ? served.text.includes("data-guest-rsvp") &&
+              served.text.includes('data-testid="guest-going"') &&
+              served.text.includes("You will be asked for an email so the door can reach you")
+          : !served.text.includes("data-guest-rsvp") &&
+              !served.text.includes('data-testid="guest-going"'),
+        "ticket_kind " +
+          (pub.event && pub.event.ticket_kind) +
+          " past " +
+          (pub.event && pub.event.past) +
+          " cancelled " +
+          (pub.event && pub.event.cancelled),
+      );
+      record(
+        "Handoff 30-D (item 8.4): /e/{slug} answers Referrer-Policy no-referrer",
+        (served.headers.get("referrer-policy") || "") === "no-referrer",
+        served.headers.get("referrer-policy") || "no header",
+      );
+      // Handoff 30-D item 14.2: the two functions, on paths that send nothing. A tampered token is
+      // 410 before any database call; a bad address is the database's own sentence at 400 with no
+      // row recorded and no mail; event-mail refuses a call without a token at the gateway.
+      const tampered = await fetch(SUPABASE_URL + "/functions/v1/guest-rsvp", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "open", token: "not-a-link-anyone-minted.AAAA" }),
+      });
+      let tamperedBody = null;
+      try {
+        tamperedBody = await tampered.json();
+      } catch {}
+      record(
+        "Handoff 30-D (1026): guest-rsvp answers 410 { expired: true } to a tampered token",
+        tampered.status === 410 && !!tamperedBody && tamperedBody.expired === true,
+        "status " + tampered.status + " " + JSON.stringify(tamperedBody).slice(0, 60),
+      );
+      const badAddress = await fetch(SUPABASE_URL + "/functions/v1/guest-rsvp", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "request", slug: PUBLIC_EVENT, email: "not-an-address" }),
+      });
+      let badBody = null;
+      try {
+        badBody = await badAddress.json();
+      } catch {}
+      record(
+        "Handoff 30-D (1026): guest-rsvp answers 400 with the database's own sentence to a bad address",
+        badAddress.status === 400 && !!badBody && badBody.error === "That is not an email address.",
+        "status " + badAddress.status + " " + JSON.stringify(badBody).slice(0, 80),
+      );
+      const noToken = await fetch(SUPABASE_URL + "/functions/v1/event-mail", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ event_id: "00000000-0000-4000-8000-000000000000" }),
+      });
+      try {
+        await noToken.text();
+      } catch {}
+      record(
+        "Handoff 30-D (1035): event-mail refuses a call without a token",
+        noToken.status === 401,
+        "status " + noToken.status,
       );
       const media = Array.isArray(pub.media) ? pub.media : [];
       const mediaUrl =

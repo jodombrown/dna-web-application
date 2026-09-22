@@ -76,9 +76,9 @@ function securityTxtResponse(): Response {
 // the minting does not sit in a functions/_middleware.ts: a _worker.js makes Pages ignore the
 // functions directory entirely, so a middleware layer there would never run. This entry is the
 // outermost layer the deployment has.
-function withSecurityHeaders(response: Response, nonce: string): Response {
+function withSecurityHeaders(response: Response, nonce: string, pathname: string): Response {
   const headers = new Headers(response.headers);
-  for (const [name, value] of securityHeaders(nonce)) headers.set(name, value);
+  for (const [name, value] of securityHeaders(nonce, pathname)) headers.set(name, value);
   return new Response(response.body, {
     status: response.status,
     statusText: response.statusText,
@@ -89,15 +89,16 @@ function withSecurityHeaders(response: Response, nonce: string): Response {
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
     const nonce = mintNonce();
-    if (new URL(request.url).pathname === SECURITY_TXT_PATH)
-      return withSecurityHeaders(securityTxtResponse(), nonce);
+    const pathname = new URL(request.url).pathname;
+    if (pathname === SECURITY_TXT_PATH)
+      return withSecurityHeaders(securityTxtResponse(), nonce, pathname);
     try {
       const handler = await getServerEntry();
       // The incoming request is passed through exactly as it arrived: ruling 542, rebuilding it to
       // carry the nonce forward is what broke `vite dev`. The nonce travels in request scope instead,
       // opened here and read by the router when it is created for this request.
       const response = await withCspNonce(nonce, () => handler.fetch(request, env, ctx));
-      return withSecurityHeaders(await normalizeCatastrophicSsrResponse(response), nonce);
+      return withSecurityHeaders(await normalizeCatastrophicSsrResponse(response), nonce, pathname);
     } catch (error) {
       console.error(error);
       return withSecurityHeaders(
@@ -106,6 +107,7 @@ export default {
           headers: { "content-type": "text/html; charset=utf-8" },
         }),
         nonce,
+        pathname,
       );
     }
   },

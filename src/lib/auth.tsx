@@ -5,12 +5,34 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
-import type { Session, User } from "@supabase/supabase-js";
+import type { Session, SupabaseClient, User } from "@supabase/supabase-js";
+import type { Database } from "./database.types";
 import { getSupabase } from "./supabase";
 import { markRecoveryPending } from "./recovery";
+
+/**
+ * Handoff 30-D item 9 (ruling 1033): once a session exists, the member takes any guest rows for
+ * their confirmed address, with their edges, through `public.claim_guest_registrations`. Called
+ * once per signed-in account per page load, from the initial session read or from SIGNED_IN,
+ * whichever comes first; never from `handle_new_user`, which is a trigger and fires before the
+ * address is confirmed. It is idempotent and a zero result is normal. It never blocks the shell,
+ * and a failure is logged by its code and never by the address.
+ */
+async function claimGuestRegistrations(sb: SupabaseClient<Database>): Promise<void> {
+  try {
+    const { error } = await sb.rpc("claim_guest_registrations");
+    if (error)
+      console.warn(
+        JSON.stringify({ event: "claim_guest_registrations_failed", code: error.code ?? null }),
+      );
+  } catch {
+    console.warn(JSON.stringify({ event: "claim_guest_registrations_failed", code: null }));
+  }
+}
 
 export type Member = {
   id: string;
@@ -63,11 +85,21 @@ type AuthCore = Omit<AuthState, "refreshMember">;
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AuthCore>({ ready: false, session: null, member: null });
+  // The account the claim has run for on this page load; a sign-out clears it so the next sign-in
+  // claims again. Keyed by user rather than by token, because a refresh is not a new sign-in.
+  const claimedFor = useRef<string | null>(null);
   useEffect(() => {
     const sb = getSupabase();
     if (!sb) return;
     let active = true;
+    const claimOnce = (session: Session | null) => {
+      const uid = session?.user.id ?? null;
+      if (!uid || claimedFor.current === uid) return;
+      claimedFor.current = uid;
+      void claimGuestRegistrations(sb);
+    };
     void sb.auth.getSession().then(async ({ data }) => {
+      if (active) claimOnce(data.session);
       const member = await withProfile(data.session);
       if (!active) return;
       setState({ ready: true, session: data.session, member });
@@ -77,6 +109,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Ruling 240: the second reading of a recovery, for the case where the fragment was consumed
       // before this app's own capture could see it. The gate in the root route acts on the flag.
       if (event === "PASSWORD_RECOVERY") markRecoveryPending();
+      if (event === "SIGNED_OUT") claimedFor.current = null;
+      if (event === "SIGNED_IN") claimOnce(session);
       setState({ ready: true, session, member: memberFromUser(session?.user) });
       void withProfile(session).then((member) => {
         if (active) setState((s) => (s.session === session ? { ...s, member } : s));

@@ -20,13 +20,18 @@ import {
   RsvpError,
   SCOPES,
   scopeOf,
+  sendGoingEmail,
   type Audience,
   type EventPage,
   type RegistrationStatus,
 } from "@/lib/event-page";
 
+// Handoff 30-D item 10 (ruling 1035): a going answer asks event-mail for the confirmation, so the
+// SPEC's toast is true and stays. When the send fails the answer stands and the toast says only what
+// is true: the door is on the page.
 export const RSVP_TOASTS = {
   going: "You are going. The door is on the page and in your email.",
+  goingNoMail: "You are going. The door is on the page.",
   not_going: "Saved. You are not going.",
   withdrawn: "Withdrawn. Your name is off the list.",
 } as const;
@@ -104,7 +109,10 @@ export function RsvpSheet({ open, onClose, page, compact, initial, onSaved }: Rs
       const audience: Audience | null =
         next === "going" ? (first ? scope : override ? scope : null) : null;
       await rsvpEvent(page.event.id, next, audience);
-      onSaved(toast);
+      if (next === "going") {
+        const sent = await sendGoingEmail(page.event.id);
+        onSaved(sent ? RSVP_TOASTS.going : RSVP_TOASTS.goingNoMail);
+      } else onSaved(toast);
     } catch (e) {
       if (e instanceof RsvpError && e.full) setMode("full");
       else setError(RSVP_ERROR);
