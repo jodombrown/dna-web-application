@@ -29,6 +29,8 @@ export type Vocabularies = {
    * projection derives, because unlike the other three enums this one's values are not display text.
    */
   instrument: { value: string; label: string }[];
+  /** Rulings 1018 and 678: the roles a host can name on an event, and the verb its invitation reads. */
+  event_roles: { value: string; label: string; verb: string }[];
 };
 
 export async function loadVocabularies(): Promise<Vocabularies | null> {

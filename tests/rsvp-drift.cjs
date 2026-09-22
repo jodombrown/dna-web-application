@@ -3,7 +3,8 @@
 // write path, private.rsvp_write, in the same transaction and never by a trigger. A derivation that
 // nothing enforces is a derivation that drifts, so private.rsvp_edge_drift() names every place the
 // two disagree and this arm reads it, through LIVE_DB_URL as live_arms (ruling 382: the role holds
-// USAGE on private and EXECUTE on that one function, and nothing else).
+// USAGE on private and EXECUTE on that function and on private.rsvp_going_member_count(), and
+// nothing else).
 // Usage: LIVE_DB_URL=postgres://... node tests/rsvp-drift.cjs
 //
 // Three outcomes, stated by name, in tests/migration-drift.cjs's shape:
@@ -20,12 +21,18 @@
 // file that creates the function makes both grants, so the project disagreeing with the file about
 // them is drift of exactly the kind ruling 444 exists to name.
 //
-// The denominator is read separately and is not always reachable. The PASS line says how many going
-// member registrations stand behind it when the connecting role can count them, and says why it
-// cannot when it cannot: 20260921120100 grants live_arms nothing on public.event_registrations, so
-// on the canonical project the count is refused and the PASS states the agreement without it. The
-// agreement itself is measured either way, because private.rsvp_edge_drift() is SECURITY DEFINER and
-// scans both sides whole. Recorded as gap G57.
+// The denominator comes from private.rsvp_going_member_count() (ruling 1022, G57), which
+// 20260921140100 creates and grants live_arms EXECUTE on. It returns the number of going member
+// registrations and nothing else: live_arms still holds no select on public.event_registrations,
+// because it does not bypass row security (ruling 382) and a policy admitting it would show it real
+// members' rows. Once the function is on the project the PASS line states the number, zero included.
+// Its two named failures mean two different things. 42883, the function not on the project, is the
+// state between 20260921140100 landing in the tree and Chat applying it: the PASS states the
+// agreement and says the count function is not applied yet. 42501, the function present and not
+// executable by this role, is the same drift the paragraph above names for rsvp_edge_drift(),
+// because the file that creates the function grants it, and it is a FAIL. Anything else keeps the
+// count unread and the PASS says so. The agreement itself is measured either way, because
+// private.rsvp_edge_drift() is SECURITY DEFINER and scans both sides whole.
 const { clientConfig } = require("./live-db.cjs");
 
 const unproven = (why) => {
@@ -90,16 +97,22 @@ const unproven = (why) => {
 
     let measured = null;
     let refused = "";
+    let countDrift = false;
     try {
-      const c = await client.query(
-        "select count(*)::int as n from public.event_registrations where member_id is not null and status = 'going'",
-      );
+      const c = await client.query("select private.rsvp_going_member_count() as n");
       measured = c.rows[0].n;
     } catch (e) {
-      refused =
-        e.code === "42501"
-          ? "the connecting role holds no select on public.event_registrations (G57)"
-          : "the count could not be read: " + (e.message || e);
+      if (e.code === "42501") {
+        console.log(
+          "FAIL rsvp edge drift (ruling 1022): private.rsvp_going_member_count() exists and this role cannot execute it. 20260921140100 grants live_arms EXECUTE on the function; the project does not hold it.",
+        );
+        countDrift = true;
+      } else {
+        refused =
+          e.code === "42883"
+            ? "private.rsvp_going_member_count() is not on the project yet; 20260921140100 is committed under ruling 225 and not applied"
+            : "the count could not be read: " + (e.message || e);
+      }
     }
 
     if (rows.length) {
@@ -113,10 +126,15 @@ const unproven = (why) => {
       return;
     }
 
+    if (countDrift) {
+      code = 1;
+      return;
+    }
+
     const behind =
       measured === null
         ? `the count of going member registrations behind it is not readable here (${refused})`
-        : `${measured} going member registration(s) measured`;
+        : `${measured} going member registration(s) measured by private.rsvp_going_member_count()`;
     console.log(
       `PASS rsvp edge drift (ruling 1002)  every going member registration carries one live event_rsvp edge and every live event_rsvp edge carries a going registration; ${behind}`,
     );
