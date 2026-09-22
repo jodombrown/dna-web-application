@@ -444,6 +444,22 @@ export async function loadPost(member: Member, id: string): Promise<PostView | n
   return view ?? null;
 }
 
+/**
+ * Posts by id, under the caller's posts RLS, hydrated through the same path as the Feed so a card has
+ * one read (660). Returned in the order of `ids`; an id the view did not return is dropped.
+ */
+export async function loadPostsByIds(member: Member, ids: string[]): Promise<PostView[]> {
+  const sb = getSupabase();
+  const unique = [...new Set(ids)];
+  if (!sb || unique.length === 0) return [];
+  const { data, error } = await sb.from("feed").select("*").in("id", unique);
+  if (error) throw error;
+  const posts = (data ?? []).map(asPost).filter((p): p is FeedPost => p !== null);
+  const views = await hydratePosts(sb, member, posts);
+  const byId = new Map(views.map((v) => [v.id, v]));
+  return unique.map((id) => byId.get(id)).filter((v): v is PostView => v !== undefined);
+}
+
 /** The member's own save and react state for a set of posts: existence only, never a count. */
 export async function loadMarks(
   memberId: string,
