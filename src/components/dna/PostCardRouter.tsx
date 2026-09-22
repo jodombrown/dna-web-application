@@ -3,10 +3,63 @@
 // renderer (rulings 52, 105).
 import type { MouseEvent, ReactNode } from "react";
 import { AUDIENCE_LABEL } from "@/components/strand/AudienceSelect";
+import { Avatar } from "@/components/strand/Avatar";
 import { Button } from "@/components/strand/Button";
 import { PostCard, type PostCardProps } from "@/components/strand/PostCard";
 import { CARD_SCHEMA, fieldRows, UNTYPED } from "@/components/strand/verb-schema";
-import type { PostView } from "@/lib/post-view";
+import { memberEventPath } from "@/lib/event-page";
+import type { EventSpeakerView, PostView } from "@/lib/post-view";
+
+/**
+ * Brief 10 (679, B10-SPEC 3.9): the card's speakers row at every tier. Avatar 32, the name, the
+ * role label, horizontally scrollable; accepted only, and absent below one. Drawn as a field row
+ * whose value is a node, the same shape as the Space hook (Canon 6, 642), so the card chassis
+ * gains no new slot. Pills stop the card's own tap so a scroll of the strip is not a navigation.
+ */
+function speakersRow(speakers: EventSpeakerView[]): ReactNode {
+  return (
+    <span
+      data-card-speakers
+      onClick={(e) => e.stopPropagation()}
+      style={{
+        display: "flex",
+        gap: 8,
+        overflowX: "auto",
+        scrollbarWidth: "none",
+        paddingBottom: 2,
+        margin: "2px 0",
+        // The strip never widens the card: its intrinsic inline size is contained, so a long row
+        // of pills scrolls inside the column instead of pushing the grid past it (ruling 344).
+        minWidth: 0,
+        contain: "inline-size",
+      }}
+    >
+      {speakers.map((s) => (
+        <span
+          key={s.party_id}
+          data-speaker="accepted"
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 8,
+            flex: "none",
+            padding: "3px 10px 3px 3px",
+            borderRadius: "var(--radius-pill)",
+            border: "1px solid var(--line)",
+            background: "var(--surface)",
+            whiteSpace: "nowrap",
+          }}
+        >
+          <Avatar name={s.name} src={s.avatar} size={32} />
+          <span style={{ display: "flex", flexDirection: "column" }}>
+            <span style={{ fontSize: 15, fontWeight: 500, color: "var(--ink)" }}>{s.name}</span>
+            <span style={{ fontSize: 13, color: "var(--ink-3)" }}>{s.label}</span>
+          </span>
+        </span>
+      ))}
+    </span>
+  );
+}
 
 export type RouterOptions = {
   preview?: boolean | undefined;
@@ -68,31 +121,56 @@ export function postCardProps(view: PostView, opts: RouterOptions = {}): PostCar
         titleWords
       )
     ) : undefined;
-  const hookRows: PostCardProps["fields"] =
-    ev && !cancelled && opts.expanded && ev.space
-      ? [
-          {
-            label: "Space",
-            icon: "hash",
-            value: (
-              <a
-                href="/collaborate"
-                data-hook="space"
-                onClick={(e) => e.stopPropagation()}
-                style={{
-                  color: "var(--c-collaborate-text)",
-                  fontWeight: 500,
-                  textDecoration: "underline",
-                  textDecorationColor: "var(--line-strong)",
-                  textUnderlineOffset: 2,
-                }}
-              >
-                {ev.space.name}
-              </a>
-            ),
-          },
-        ]
-      : [];
+  const hookRows: PostCardProps["fields"] = [];
+  // Brief 10 (679): the speakers row, at every tier, above the hooks; absent below one.
+  if (ev && !cancelled && ev.speakers.length > 0)
+    hookRows.push({ label: "Speakers", icon: "mic", value: speakersRow(ev.speakers) });
+  if (ev && !cancelled && opts.expanded) {
+    // Brief 10 (1023): the expanded card's hook into the event page, in Convene's colour, the
+    // way the Space hook below reads in Collaborate's. This is the Feed's entry into the page,
+    // which is why the page's Back row names Feed.
+    hookRows.push({
+      label: "Event",
+      icon: "calendar",
+      value: (
+        <a
+          href={memberEventPath(ev.id)}
+          data-hook="event"
+          onClick={(e) => e.stopPropagation()}
+          style={{
+            color: "var(--c-convene-text)",
+            fontWeight: 500,
+            textDecoration: "underline",
+            textDecorationColor: "var(--line-strong)",
+            textUnderlineOffset: 2,
+          }}
+        >
+          Open the event page
+        </a>
+      ),
+    });
+    if (ev.space)
+      hookRows.push({
+        label: "Space",
+        icon: "hash",
+        value: (
+          <a
+            href="/collaborate"
+            data-hook="space"
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              color: "var(--c-collaborate-text)",
+              fontWeight: 500,
+              textDecoration: "underline",
+              textDecorationColor: "var(--line-strong)",
+              textUnderlineOffset: 2,
+            }}
+          >
+            {ev.space.name}
+          </a>
+        ),
+      });
+  }
   // The post's own act in its C (rule 3). In the Feed it goes to that C's route; in the composer
   // preview it is inert.
   const actions =

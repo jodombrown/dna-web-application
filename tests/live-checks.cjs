@@ -1291,6 +1291,134 @@ async function get(url, headers = {}) {
     }
   }
   // -----------------------------------------------------------------------------------------
+  // Brief 10 (handoff 30-C item 13; rulings 662, 680, 1028, 1029): the public page for an event
+  // whose post is to everyone, as a crawler reads it. PUBLIC_EVENT names the slug; the projection
+  // answering null for it reports the arm unproven rather than failing a deployment for a fixture
+  // that moved. The event-media function is called signed out, the way the page and a crawler do.
+  // -----------------------------------------------------------------------------------------
+  if (process.env.SKIP_REST) {
+    console.log("Brief 10 public page checks skipped (SKIP_REST)");
+  } else if (!SUPABASE_URL || !KEY) {
+    skip("Brief 10: the public page arm", "set SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY");
+  } else {
+    const PUBLIC_EVENT = process.env.PUBLIC_EVENT || "africa-sme-assembly-2026-cb6543";
+    const H = { apikey: KEY, Authorization: "Bearer " + KEY, "content-type": "application/json" };
+    const rpcRes = await fetch(SUPABASE_URL + "/rest/v1/rpc/event_public_page", {
+      method: "POST",
+      headers: H,
+      body: JSON.stringify({ p_slug: PUBLIC_EVENT }),
+    });
+    let pub = null;
+    try {
+      pub = await rpcRes.json();
+    } catch {}
+    if (rpcRes.status !== 200 || !pub || typeof pub !== "object") {
+      skip(
+        "Brief 10: the public page arm",
+        "event_public_page answered " +
+          rpcRes.status +
+          " " +
+          JSON.stringify(pub).slice(0, 80) +
+          " for PUBLIC_EVENT=" +
+          PUBLIC_EVENT,
+      );
+    } else {
+      const served = await get(BASE + "/e/" + PUBLIC_EVENT);
+      const meta = (attr, name) =>
+        new RegExp("<meta[^>]+" + attr + '="' + name + '"[^>]+content="([^"]*)"').exec(
+          served.text,
+        ) ||
+        new RegExp('<meta[^>]+content="([^"]*)"[^>]+' + attr + '="' + name + '"').exec(served.text);
+      record(
+        "Brief 10 (662): the public page serves 200 signed out with its own render",
+        served.status === 200 && served.text.includes('data-public-event="' + PUBLIC_EVENT + '"'),
+        "status " + served.status,
+      );
+      record(
+        "Brief 10 (item 10.6): the served markup carries og:title, og:description, og:url and twitter:card, and noindex",
+        !!meta("property", "og:title") &&
+          !!meta("property", "og:description") &&
+          !!meta("property", "og:url") &&
+          !!meta("name", "twitter:card") &&
+          /name="robots"[^>]+content="noindex"|content="noindex"[^>]+name="robots"/.test(
+            served.text,
+          ),
+        "og:title " + (meta("property", "og:title") || [])[1],
+      );
+      record(
+        "Brief 10 (680): the served page carries no attendee row, no going line and no RSVP control",
+        !served.text.includes("data-going-row") &&
+          !served.text.includes("data-event-going") &&
+          !/are going, and others/.test(served.text) &&
+          !served.text.includes("data-event-rsvp") &&
+          !served.text.includes('data-testid="rsvp-going"'),
+      );
+      const media = Array.isArray(pub.media) ? pub.media : [];
+      const mediaUrl =
+        SUPABASE_URL +
+        "/functions/v1/event-media?e=" +
+        PUBLIC_EVENT +
+        "&m=" +
+        (media[0] ? media[0].position : 0);
+      if (media.length === 0) {
+        skip(
+          "Brief 10 (1029): the cover loads through event-media",
+          "the event named by PUBLIC_EVENT carries no image",
+        );
+      } else {
+        const cover = await fetch(mediaUrl);
+        const ct = cover.headers.get("content-type") || "";
+        const cc = cover.headers.get("cache-control") || "";
+        try {
+          await cover.arrayBuffer();
+        } catch {}
+        record(
+          "Brief 10 (1029): the cover loads through event-media as an image with a day's public cache, and the page references it",
+          cover.status === 200 &&
+            ct.startsWith("image/") &&
+            /public/.test(cc) &&
+            /max-age=86400/.test(cc) &&
+            served.text.includes("/functions/v1/event-media?e=" + PUBLIC_EVENT),
+          "status " + cover.status + " " + ct + " " + cc,
+        );
+      }
+      const noParty = await fetch(
+        SUPABASE_URL +
+          "/functions/v1/event-media?e=" +
+          PUBLIC_EVENT +
+          "&p=00000000-0000-4000-8000-000000000000",
+      );
+      const wrongMethod = await fetch(
+        SUPABASE_URL + "/functions/v1/event-media?e=" + PUBLIC_EVENT + "&m=0",
+        {
+          method: "POST",
+        },
+      );
+      record(
+        "Brief 10 (1029): event-media answers 404 for a made-up party id and 405 for a POST",
+        noParty.status === 404 && wrongMethod.status === 405,
+        "party " + noParty.status + " post " + wrongMethod.status,
+      );
+      const missing = await get(BASE + "/e/this-slug-does-not-exist-000000");
+      record(
+        "Brief 10 (1028): a slug with no public page serves 404",
+        missing.status === 404,
+        "status " + missing.status,
+      );
+      const anonPage = await fetch(SUPABASE_URL + "/rest/v1/rpc/event_page", {
+        method: "POST",
+        headers: H,
+        body: JSON.stringify({ p_event: "00000000-0000-4000-8000-000000000000" }),
+      });
+      record(
+        "Brief 10 (1023): signed out cannot call event_page at the API",
+        anonPage.status === 401 || anonPage.status === 403,
+        "status " + anonPage.status,
+      );
+    }
+  }
+
+  // -----------------------------------------------------------------------------------------
   // Ruling 438 (F19): the six security headers on the deployment, read on the Feed route. The
   // Content-Security-Policy is per response because the shell's SSR inline scripts carry a nonce
   // (TanStack Start's ssr.nonce); script-src never widens to 'unsafe-inline'. The static-asset copy

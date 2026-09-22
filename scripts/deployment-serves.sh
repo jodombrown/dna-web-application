@@ -42,6 +42,8 @@ serves /password
 serves /welcome
 serves /where
 serves /relationship
+# Brief 10's member event page, opened by tests/event.cjs; the shell serves it signed out too.
+serves /convene/events/00000000-0000-4000-8000-000000000000
 serves /strand/adinkra/mate-masie.svg
 # Ruling 184's asset contract: every path in the table serves, so the redesign stays a file
 # overwrite. favicon.ico is absent by the founder's 9 September edit and is deliberately not here.

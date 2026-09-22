@@ -1,6 +1,6 @@
 // Generated from the canonical Supabase project (dgspjevjoblujcoljvkn) with the Supabase MCP
-// generate_typescript_types tool, after handoff 30-A's two migrations were applied and recorded
-// (20260921140000_r1021_role_notice_kinds, 20260921140100_p2_event_parties).
+// generate_typescript_types tool, after handoff 30-C's two migrations were applied and recorded
+// (20260921160000_p2_event_slug, 20260921160100_p2_event_page).
 //
 // Nothing here is hand-written except this header and the `Views` helper at the end, which the
 // generator drops and every regeneration restores (`src/lib/feed.ts` reads it). The regeneration
@@ -9,15 +9,16 @@
 // removes what the window is holding. Both versions are recorded on the project, their md5s match the
 // files byte for byte, and `tests/migration-drift.cjs` reads them, so the generator returns them.
 //
-// What 30-A adds here: `event_role_kinds`, the runtime vocabulary of the roles a host can name on an
-// event (ruling 1018); `event_parties`, one member in one role on one event with its
-// `event_party_status` of invited, accepted or declined; `notification_kind` gaining
-// `role_invitation` and `role_accepted` and `anchor_kind` gaining `event_party` (ruling 1021); and
-// the three write paths `invite_event_party`, `respond_to_event_role` and `remove_event_party`.
+// What 30-C adds here: `events.slug`, the public page's address (ruling 1024), and the four public
+// functions of Brief 10's event page: `event_page`, the member page's one read projection (1023);
+// `event_public_page`, the signed-out page's (662, 1028); `event_speakers`, the card's accepted
+// speakers (679); and `event_media_object`, the event-media Edge Function's lookup, executable by the
+// service role alone (1029).
 //
-// `private.is_event_party` and `private.rsvp_going_member_count()` are absent by design: the private
-// schema is not exposed by PostgREST, so the generator does not see it and no surface may reach it.
-// The count is read by `tests/rsvp-drift.cjs` as `live_arms`, not from the app.
+// `private.member_display`, `private.event_post_facts`, `private.event_meeting_link`,
+// `private.event_is_full` and `private.new_event_slug` are absent by design: the private schema is not
+// exposed by PostgREST, so the generator does not see it and no surface may reach it.
+
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
 
 export type Database = {
@@ -464,6 +465,7 @@ export type Database = {
           host_member_id: string;
           id: string;
           mode: Database["public"]["Enums"]["event_mode"];
+          slug: string;
           space_id: string | null;
           starts_at: string | null;
           status: Database["public"]["Enums"]["event_status"];
@@ -488,6 +490,7 @@ export type Database = {
           host_member_id: string;
           id?: string;
           mode?: Database["public"]["Enums"]["event_mode"];
+          slug: string;
           space_id?: string | null;
           starts_at?: string | null;
           status?: Database["public"]["Enums"]["event_status"];
@@ -512,6 +515,7 @@ export type Database = {
           host_member_id?: string;
           id?: string;
           mode?: Database["public"]["Enums"]["event_mode"];
+          slug?: string;
           space_id?: string | null;
           starts_at?: string | null;
           status?: Database["public"]["Enums"]["event_status"];
@@ -1989,6 +1993,28 @@ export type Database = {
         }[];
       };
       dismiss_suggestion: { Args: { p_target: string }; Returns: undefined };
+      event_media_object: {
+        Args: { p_key: string; p_kind: string; p_slug: string };
+        Returns: {
+          bucket: string;
+          path: string;
+        }[];
+      };
+      event_page: { Args: { p_event: string }; Returns: Json };
+      event_public_page: { Args: { p_slug: string }; Returns: Json };
+      event_speakers: {
+        Args: { p_events: string[] };
+        Returns: {
+          avatar_path: string;
+          event_id: string;
+          handle: string;
+          label: string;
+          member_id: string;
+          name: string;
+          party_id: string;
+          role: string;
+        }[];
+      };
       invite_event_party: {
         Args: { p_event: string; p_member: string; p_role: string };
         Returns: Json;

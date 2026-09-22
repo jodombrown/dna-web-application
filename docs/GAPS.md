@@ -1154,15 +1154,15 @@ Run [284](https://github.com/jodombrown/dna-web-application/actions/runs/3558179
 to lose two web processes**, which is the one fact that makes it worth an entry rather than a tally
 mark.
 
-| Fact | Value |
-| --- | --- |
-| Arms | `webkit-1280x800-light profile visitor stranger` **and** `webkit-1280x800-light-auth flows` |
-| Tier | expanded, both; 74 of 76 expanded arms clean, compact and medium clean at 78 and 55 |
+| Fact                | Value                                                                                                                                                                                            |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Arms                | `webkit-1280x800-light profile visitor stranger` **and** `webkit-1280x800-light-auth flows`                                                                                                      |
+| Tier                | expanded, both; 74 of 76 expanded arms clean, compact and medium clean at 78 and 55                                                                                                              |
 | Playwright's errors | `page.goto: Page crashed` navigating to `/m/thandiwe-dube`, with `state unavailable: page.evaluate: Target crashed`; and `page.waitForSelector: Target page, context or browser has been closed` |
-| Classification | `5 behind a web-process crash (G5) \| 0 an aborted fetch \| 0 unclassified` |
-| Emitted | 5038 of 5038 passed, with both arms `UNPROVEN` and excluded from the count (228) |
-| **Core extraction** | **`frames extracted; core not retained (171M)`** — gdb ran, per-thread walk printed |
-| Job outcome | **red.** `ruling 832 does NOT cover this run: 2 arms lost a web process` |
+| Classification      | `5 behind a web-process crash (G5) \| 0 an aborted fetch \| 0 unclassified`                                                                                                                      |
+| Emitted             | 5038 of 5038 passed, with both arms `UNPROVEN` and excluded from the count (228)                                                                                                                 |
+| **Core extraction** | **`frames extracted; core not retained (171M)`** — gdb ran, per-thread walk printed                                                                                                              |
+| Job outcome         | **red.** `ruling 832 does NOT cover this run: 2 arms lost a web process`                                                                                                                         |
 
 **What the twentieth settles, and what it does not.** Ruling 830's capture worked on the PR path for
 the **second** time, so the nineteenth's result was not a one-off: the frames name
@@ -1202,8 +1202,8 @@ The head's one re-run stays unspent.
 [287](https://github.com/jodombrown/dna-web-application/actions/runs/35585047043) on `63982f6`, the
 head that superseded 284, lost **one** web process: `webkit-1024x1366-dark`, waiting for the Compose
 dialog to detach, `4 x locator resolved to visible`. One arm, so ruling 832 stood the job down and it
-exits 0 — with the tail refusing to let that read as a pass: *"STOOD DOWN ON ONE CRASHED ARM. THIS IS
-NOT A CLEAN RUN … Do not read this green as the arm above having run."* The arm emitted **33 against
+exits 0 — with the tail refusing to let that read as a pass: _"STOOD DOWN ON ONE CRASHED ARM. THIS IS
+NOT A CLEAN RUN … Do not read this green as the arm above having run."_ The arm emitted **33 against
 a declared 32**, over rather than short, the flow catch-all on the error path again.
 
 That is the fact worth keeping: **the over-count shape was new at the twentieth and recurred at the
@@ -3613,17 +3613,17 @@ and one further `matrix.yml` dispatch, run
 on the same head and the same `base_url`, 596 of 596. The two agree **line for line at every width on
 both engines: mode, track and probe.**
 
-| width | track | chromium probe | webkit probe | mode, runs 282 and 57 |
-| ----- | ----- | -------------- | ------------ | --------------------- |
-| 360 | 328 | `a17 i17 a43 i43 a72 i72 a31 i31 a36 i36` | `a17 i16 a44 i43 a73 i72 a31 i30 a36 i35` | icon-first |
-| 390 | 358 | same | same | icon-first |
-| 430 | 398 | same | same | icon-first |
-| 744 | 616 | same | same | icon-first |
-| 820 | 616 | same | same | icon-first |
-| 1024 | 616 | same | same | icon-first |
-| 1366 | 760 | no probe | no probe | labels |
-| 1280 | 760 | no probe | no probe | labels |
-| 1536 | 748 | no probe | no probe | labels |
+| width | track | chromium probe                            | webkit probe                              | mode, runs 282 and 57 |
+| ----- | ----- | ----------------------------------------- | ----------------------------------------- | --------------------- |
+| 360   | 328   | `a17 i17 a43 i43 a72 i72 a31 i31 a36 i36` | `a17 i16 a44 i43 a73 i72 a31 i30 a36 i35` | icon-first            |
+| 390   | 358   | same                                      | same                                      | icon-first            |
+| 430   | 398   | same                                      | same                                      | icon-first            |
+| 744   | 616   | same                                      | same                                      | icon-first            |
+| 820   | 616   | same                                      | same                                      | icon-first            |
+| 1024  | 616   | same                                      | same                                      | icon-first            |
+| 1366  | 760   | no probe                                  | no probe                                  | labels                |
+| 1280  | 760   | no probe                                  | no probe                                  | labels                |
+| 1536  | 748   | no probe                                  | no probe                                  | labels                |
 
 The three expanded lines carry no probe because `FeedSurface` passes `labels={expandedTier}`, so
 `canSwitch` is false and the bar never measures — the same shape run 56 recorded on `main`.
@@ -3649,14 +3649,14 @@ and `fill` is what all three call sites name.
 
 **(c) Against run 56's `main` baseline (975), with the arithmetic for every line that changed.**
 
-| | run 56 (`f36df8b9`) | runs 282 and 57 (`496c4cb`) |
-| --- | --- | --- |
-| chromium probe | `a63 i63 a89 i89 a118 i118 a77 i77 a82 i82` | `a17 i17 a43 i43 a72 i72 a31 i31 a36 i36` |
-| webkit probe | `a63 i62 a90 i89 a119 i118 a77 i76 a82 i81` | `a17 i16 a44 i43 a73 i72 a31 i30 a36 i35` |
-| chromium medium | icon-first, icon-first, icon-first — price said **labels** | icon-first ×3 — price says icon-first |
-| webkit medium | icon-first, **labels**, **labels** — price said labels ×3 | icon-first ×3 — price says icon-first |
-| compact, both engines | icon-first ×6, priced icon-first | icon-first ×6, priced icon-first |
-| expanded, both engines | labels ×6, no probe | labels ×6, no probe |
+|                        | run 56 (`f36df8b9`)                                        | runs 282 and 57 (`496c4cb`)               |
+| ---------------------- | ---------------------------------------------------------- | ----------------------------------------- |
+| chromium probe         | `a63 i63 a89 i89 a118 i118 a77 i77 a82 i82`                | `a17 i17 a43 i43 a72 i72 a31 i31 a36 i36` |
+| webkit probe           | `a63 i62 a90 i89 a119 i118 a77 i76 a82 i81`                | `a17 i16 a44 i43 a73 i72 a31 i30 a36 i35` |
+| chromium medium        | icon-first, icon-first, icon-first — price said **labels** | icon-first ×3 — price says icon-first     |
+| webkit medium          | icon-first, **labels**, **labels** — price said labels ×3  | icon-first ×3 — price says icon-first     |
+| compact, both engines  | icon-first ×6, priced icon-first                           | icon-first ×6, priced icon-first          |
+| expanded, both engines | labels ×6, no probe                                        | labels ×6, no probe                       |
 
 **Every one of the twenty probe readings moved by exactly −46**, on both engines and in both the
 active and the inactive shape. That is the whole of the change and it is arithmetic, not measurement:
@@ -3706,19 +3706,18 @@ is where it starts, reopened rather than rewritten.
 medium as a contract, because ruling 62 makes SPEC.md the visual contract and a contract that
 disagrees with the build is read as the build being wrong. Opened 21 September 2026 during handoff
 29-A's Strand re-sync, filed under ruling 597. The number is assigned by this entry (ruling 638). Not
-fixed here: 29-A's scope is the re-sync, and a SPEC is Design's document under rulings 62, 663 and
-129.**
+fixed here: 29-A's scope is the re-sync, and a SPEC is Design's document under rulings 62, 663 and 129.**
 
 **What moved.** The re-sync to compile `v1789885868097915` took the geometry from the compile, under
 ruling 844 carrying 618's lesson. Four lines of `docs/shell/LENS_BAR_SPEC.md` no longer describe
 `src/components/strand/LensBar.tsx`:
 
-| LENS_BAR_SPEC says | the build now does | why |
-| --- | --- | --- |
-| Track "44 tall at every breakpoint" | 52, composed 4 + 44 + 4 | ruling 918, change-list item 35 |
-| Seats "min 44 wide, 36 tall" | 44 wide and 44 tall | ruling 918, items 35 and 54a |
-| Compact variant "inactive lenses min `--target-min`" | 44, in every mode | rulings 905 and 498, items 50 and 54a |
-| "Active content: icon 20 plus label ... at every breakpoint except the compact-tier header slot" | in icon-first every seat is one 44px glyph, the active one included | R1, ruling 936, item 40 |
+| LENS_BAR_SPEC says                                                                               | the build now does                                                  | why                                   |
+| ------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------- | ------------------------------------- |
+| Track "44 tall at every breakpoint"                                                              | 52, composed 4 + 44 + 4                                             | ruling 918, change-list item 35       |
+| Seats "min 44 wide, 36 tall"                                                                     | 44 wide and 44 tall                                                 | ruling 918, items 35 and 54a          |
+| Compact variant "inactive lenses min `--target-min`"                                             | 44, in every mode                                                   | rulings 905 and 498, items 50 and 54a |
+| "Active content: icon 20 plus label ... at every breakpoint except the compact-tier header slot" | in icon-first every seat is one 44px glyph, the active one included | R1, ruling 936, item 40               |
 
 `docs/shell/SPEC.md` line 15 is stale on the same control for an older reason: it still describes the
 header slot as `dense` with "the active lens shows its name in place of its icon" and seats at "36
@@ -3797,7 +3796,7 @@ So an icon that failed to ship would be invisible to CI and visible only to a pe
 page.
 
 **What closing it needs.** One decision and one line. The decision is scope: ruling 184's block is an
-asset *contract*, a named table, and forty-four icons are not that — so either the two or three glyphs
+asset _contract_, a named table, and forty-four icons are not that — so either the two or three glyphs
 a rail collapse control will bind get named alongside the contract, or the check learns to walk
 `public/strand/icons/` and poll what it finds. The second is the honest one and it is the one that
 cannot rot, because a glyph added later is covered without anyone remembering. Either is a line in
@@ -3960,8 +3959,8 @@ be applied from one that was applied and then lost its row.
 `recorded on the project, no file in the tree` in detail — that the FAIL is latent on `main` because
 no workflow here carries a `schedule` and the merge is itself the triggering push, that **the
 exposure is every other branch**, and that the remedy is to paste immediately before merging and cut
-nothing in between. Every word of that is about the direction that opens *after* the apply. The
-direction that opens *before* it, on the PR branch itself, is not written down anywhere, and it is
+nothing in between. Every word of that is about the direction that opens _after_ the apply. The
+direction that opens _before_ it, on the PR branch itself, is not written down anywhere, and it is
 the longer of the two whenever a handoff puts a relay between the commit and the apply, as 29-B does:
 PR #52 had to merge, then the founder relays, then Chat applies.
 
@@ -3972,7 +3971,7 @@ step 7 read `120/120` and step 9 read its intended UNPROVEN, so the red was step
 had to be read out of the log rather than off the job.
 
 **What closing it needs, and the two shapes it could take.** Either a fourth outcome in the arm —
-a version in the tree with no row on the project, and no row for any *later* version either, is
+a version in the tree with no row on the project, and no row for any _later_ version either, is
 `PENDING` rather than `FAIL`, which distinguishes a migration waiting to be applied from one whose
 row was lost, since a lost row would sit behind versions that did apply — or a line in `CLAUDE.md`
 stating plainly that a migration PR's own `live` job is red between commit and apply, so the next
@@ -4014,8 +4013,7 @@ to mount the group after the failing vocabulary request settles.
 - `matrix (chromium)` passed on the **same head**, `1e63c04`.
 - `matrix (webkit)` was green on `main` at `1a71ee8`.
 - The re-run of the same job, same head, same deployment, passed.
-- Within the failing job, compact was 77 of 78 clean and medium and expanded were 55 of 55 and 76 of
-  76. Ruling 554's tell: a real defect in that radiogroup would fail the arm at every viewport, in
+- Within the failing job, compact was 77 of 78 clean and medium and expanded were 55 of 55 and 76 of 76. Ruling 554's tell: a real defect in that radiogroup would fail the arm at every viewport, in
   both themes and on both engines.
 
 **Why it landed `unclassified`, correctly.** Ruling 357's class matches the WebKit wording for an
@@ -4134,9 +4132,10 @@ editable.
 
 ## G63. The "Who sees what" rail row still falls back to the literal `Stance` when `stance_label` is absent
 
-**Severity: low. Opened 22 September 2026 during handoff 30-B, filed under ruling 597. The number
-is assigned by this entry (ruling 638). Not fixed here: the handoff's scope is the stance section's
-title, and this row is a rail one surface over.**
+**Closed 22 September 2026 under ruling 1031 (handoff 30-C item 12): the row keeps the section's
+name. It is navigation, not a stance label read out of a row, so it is not a ruling 194 case and
+no change is made. Opened 22 September 2026 during handoff 30-B, filed under ruling 597; severity
+was low.**
 
 Handoff 30-B removed the stance section title's literal fallback under ruling 194: the title reads
 `public.member_stances` through `vocabularies()` and renders no text when that read fails. The
@@ -4150,3 +4149,17 @@ label when a stance is set and the word Stance only for an owner with no stance,
 never stands in for a failed vocabulary read the way the title's did. Whether the row should read
 the vocabulary and render empty like the title, or is a section name and stays, is a ruling to ask
 for rather than a fix to make; no test asserts either behaviour today.
+
+## G64. The stance section renders an empty `h2` when the vocabulary fails
+
+**Severity: low. Opened 22 September 2026 during handoff 30-C, filed under ruling 597. The number
+is assigned by this entry (ruling 638). Not fixed here: the handoff names it as a register entry,
+and the stance section is Brief 3's surface, one handoff over.**
+
+Handoff 30-B (#56) made the stance section's title read `public.member_stances` through
+`vocabularies()` under ruling 194 and render no text when that read fails: the title is
+`stanceLabel ?? ""` in `src/components/dna/ProfileSurface.tsx`. The heading element stays in the
+tree with nothing in it, so a failed vocabulary read leaves an empty `h2` on the profile, which
+accessibility checkers flag as an empty heading and a screen reader announces as a heading with
+no name. The fix is to render no heading element at all when the label is absent, and to assert
+that in `tests/vocabulary.cjs`'s failed pass beside the existing check that no literal stands in.

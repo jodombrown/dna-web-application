@@ -73,7 +73,11 @@ export function NotificationPanel({
    * (Convene is Brief 6, Collaborate and Contribute follow). Grounded-or-empty applies to a route as
    * much as to a count.
    */
-  const go = (n: { kind: string; actorHandle?: string | undefined }) => {
+  const go = (n: {
+    kind: string;
+    actorHandle?: string | undefined;
+    eventId?: string | undefined;
+  }) => {
     if (n.kind === "connection_accepted" && n.actorHandle) {
       setOpen(false);
       void navigate({ to: "/m/$handle", params: { handle: n.actorHandle }, search: {} });
@@ -82,12 +86,19 @@ export function NotificationPanel({
     if (n.kind === "connection_request") {
       setOpen(false);
       void navigate({ to: "/$c", params: { c: "connect" }, search: { lens: "network" } });
+      return;
+    }
+    // Brief 10 (736, 1027): the invitation opens the event page, where the same notice renders at
+    // the top with its Respond act into the accept-or-decline sheet (B10-SPEC 3.1).
+    if (n.kind === "role_invitation" && n.eventId) {
+      setOpen(false);
+      void navigate({ to: "/convene/events/$id", params: { id: n.eventId } });
     }
   };
   const onRow = async (
     id: string,
     read: boolean,
-    n: { kind: string; actorHandle?: string | undefined },
+    n: { kind: string; actorHandle?: string | undefined; eventId?: string | undefined },
   ) => {
     go(n);
     if (read) return;
@@ -135,6 +146,11 @@ export function NotificationPanel({
             time={timeLabel(n.created_at)}
             unread={n.read_at === null}
             onClick={() => void onRow(n.id, n.read_at !== null, n)}
+            onRespond={
+              n.kind === "role_invitation"
+                ? () => void onRow(n.id, n.read_at !== null, n)
+                : undefined
+            }
           />
         ))
       ) : list.isPending ? (
