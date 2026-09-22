@@ -977,8 +977,11 @@ async function runLiveDbArms({ record, skip }) {
         "this-slug-has-no-public-page-000000",
         normalized,
       ]);
+      // pg_attribute rather than information_schema.columns: the view shows a column only to a
+      // role with some privilege on its table, and live_arms holds none on guest_link_requests by
+      // design (no client role reads or writes it), so the view answered nothing on a8fc5b0.
       const columns = await client.query(
-        "select array_agg(column_name::text order by column_name) as cols from information_schema.columns where table_schema = 'public' and table_name = 'guest_link_requests'",
+        "select array_agg(a.attname::text order by a.attname) as cols from pg_catalog.pg_attribute a where a.attrelid = 'public.guest_link_requests'::regclass and a.attnum > 0 and not a.attisdropped",
       );
       const constraint = await client.query(
         "select pg_get_constraintdef(oid) as def from pg_constraint where conname = 'guest_link_requests_hash_check'",
@@ -1073,24 +1076,32 @@ async function runLiveDbArms({ record, skip }) {
           (drift1.ok ? drift1.rows.length : drift1.code + " " + drift1.message),
       );
 
-      // The claim: the member's confirmed address, read from auth.users as the arm's own role.
-      const who = await attempt(
-        client,
-        "select lower(btrim(u.email)) as email, u.email_confirmed_at is not null as confirmed from auth.users u where u.id = $1",
-        [member.id],
-      );
-      const memberEmail = who.ok && who.rows[0] ? who.rows[0].email : null;
-      if (!memberEmail || !who.rows[0].confirmed) {
+      // The claim: the member test account's address. MEMBER_EMAIL is what the ruling 218
+      // sign-in arm in tests/live-checks.cjs signs that account in with, so it is the address
+      // auth.users holds and the one the claim reads; auth.users itself is not readable by the
+      // arm's role (42501 on a8fc5b0), and is tried only when the variable is absent. The claim
+      // function checks the confirmation itself: a zero claim against a seeded row is the failure.
+      let memberEmail = (process.env.MEMBER_EMAIL || "").trim().toLowerCase() || null;
+      let whoNote = "MEMBER_EMAIL";
+      if (!memberEmail) {
+        const who = await attempt(
+          client,
+          "select lower(btrim(u.email)) as email from auth.users u where u.id = $1 and u.email_confirmed_at is not null",
+          [member.id],
+        );
+        memberEmail = who.ok && who.rows[0] ? who.rows[0].email : null;
+        whoNote = who.ok ? "auth.users" : "auth.users refused " + who.code;
+      }
+      if (!memberEmail) {
         skip(
           names.claim,
-          who.ok
-            ? "the member test account carries no confirmed address in auth.users"
-            : "the arm's role may not read auth.users (" +
-                who.code +
-                "), so no guest row can be written for the member's own address",
+          "no address for the member test account: MEMBER_EMAIL is not set and " +
+            whoNote +
+            ", so no guest row can be written for the member's own address",
         );
         return;
       }
+
       const seeded = await attempt(client, "select public.guest_rsvp($1::uuid, $2, 'going') as r", [
         eventId,
         memberEmail,
@@ -1118,7 +1129,9 @@ async function runLiveDbArms({ record, skip }) {
           c2.kept === 0 &&
           drift2.ok &&
           drift2.rows.length === 0,
-        "seed " +
+        "address from " +
+          whoNote +
+          " seed " +
           (seeded.ok ? "ok" : seeded.code + " " + seeded.message) +
           " claim " +
           (claim1.ok ? JSON.stringify(c1) : claim1.code + " " + claim1.message) +
