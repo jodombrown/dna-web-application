@@ -4406,3 +4406,16 @@ touches neither the function nor the arm; `main`'s run 318 on `1463b5c` passed t
 arm is asserting on Mapbox Search Box's live answer for one name near one city, which is not the
 function's behaviour to own. Owed: the arm reads an empty side as unproven with its reason (228),
 the way it already reads two `none` answers, or proves 633 on a query whose answers are stable.
+
+## G81. The notification Respond arm reads the read mark before the write can land
+
+**Severity: low. Opened 23 September 2026 during handoff 31-D, on a local Chromium run of `8bf1bbd`,
+filed under ruling 597. The number is assigned by this entry (ruling 638).**
+
+`NotificationPanel`'s `onRow` navigates to the destination first and then awaits `markRead`, so the
+`read_at` write goes out after the URL has changed. `tests/event.cjs`'s `notification: Respond opens
+the event page and marks the row read` records `db.reads.includes("n-role")` as soon as
+`waitForURL` resolves, so it passes or fails on which of the two lands first: it failed once at 390
+dark and passed at 390 light and both 1280 arms of the same run, and in every arm of the run before
+it. Neither file is touched by 31-D. Owed: the arm waits for the write (as the Feed's own mark-read
+arm does for its dot) before it reads, or the panel marks read before it navigates.
