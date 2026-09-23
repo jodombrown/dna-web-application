@@ -4392,3 +4392,17 @@ Below expanded nothing is rebuilt in place: the event page is its own route and 
 column and each lane through the router's element restoration (1065). Owed: Strand's Pane open state
 under 1064 (Design brief 31-E), which gives the list one place in the tree whether the pane is open or
 not.
+
+## G80. place-resolve's ordering arm reads Mapbox's live answer, so an empty side fails it
+
+**Severity: low. Opened 23 September 2026 during handoff 31-D, on run 319 (35850287842), filed under
+ruling 597. The number is assigned by this entry (ruling 638).**
+
+`tests/live-checks.cjs` proves 633 by asking `place-resolve` for `Front Room` in the United States
+with two proximities, Portland and Los Angeles, and passing when the first suggestions differ. It
+skips only when both calls answer `none`. On run 319 Portland answered a place and Los Angeles
+answered with no first suggestion, so the arm failed with `los angeles` empty, on a head whose diff
+touches neither the function nor the arm; `main`'s run 318 on `1463b5c` passed the same check. The
+arm is asserting on Mapbox Search Box's live answer for one name near one city, which is not the
+function's behaviour to own. Owed: the arm reads an empty side as unproven with its reason (228),
+the way it already reads two `none` answers, or proves 633 on a query whose answers are stable.
