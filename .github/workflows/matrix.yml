@@ -157,7 +157,9 @@ jobs:
   matrix:
     if: ${{ inputs.onboard == '' && inputs.dia_latency != '1' && inputs.special != 'dia-latency' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    # 60, not 45 (handoff 31-B): Brief 9's Discovery arm adds twenty arms per engine, about six
+    # minutes, and run 316 put Chromium's whole matrix past 45 at +2682s with no check failed.
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
