@@ -171,6 +171,13 @@ export function EventSurface({
         margin: "0 auto",
         boxSizing: "border-box",
         padding: compact ? "8px 0 130px" : "16px 0 96px",
+        // G78: inside Discovery's Pane the pane's close control sits absolutely at its top right, a
+        // --target-primary button inset by --space-2, with no row of its own (700). The page reserves
+        // that row, so its first block (the invitation notice, else the kicker) starts below the
+        // control instead of under it. The page, not Strand's Pane, carries the fix.
+        ...(inPane
+          ? { paddingTop: "calc(var(--space-2) + var(--target-primary) + var(--space-2))" }
+          : null),
       }}
     >
       {!inPane && <BackRow label={back.label} onClick={goBack} />}

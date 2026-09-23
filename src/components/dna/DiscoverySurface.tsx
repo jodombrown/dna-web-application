@@ -554,7 +554,8 @@ export function DiscoverySurface({
     }))
     .sort((a, b) => (order.get(a.section) ?? 99) - (order.get(b.section) ?? 99));
 
-  // 650, 1046: DIA's one sentence for a member who follows no host.
+  // 650, 1046: DIA's one sentence for a member who follows no host, in plain text with the host's
+  // name unlinked (1053).
   const suggest = data?.suggest ?? null;
   const sentence =
     suggest && suggest.host.name && (lens === "all" || lens === "follow")

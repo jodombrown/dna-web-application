@@ -4300,6 +4300,11 @@ their events start here.` link to `/m/{handle}`. Strand's `DiaLine` takes `text?
 it in a plain span, so the sentence renders in full as words with the name unlinked. Owed: a Strand
 correction letting DiaLine carry a link, after which Discovery passes it.
 
+**Closed 23 September 2026 by handoff 31-D's PR, under ruling 1053.** 1053 rules the sentence plain
+text: the host's name is not linked, so DiaLine's string is the whole answer and no Strand correction
+is owed. `DiscoverySurface` already rendered it that way; the comment names 1053 and the below density
+arm now asserts that the sentence carries no link.
+
 ## G74. On Discovery a card's React and Save render and do nothing
 
 **Severity: medium. Opened 23 September 2026 during handoff 31-B item 3, filed under ruling 597. The
@@ -4364,6 +4369,14 @@ reserved for it (700). Brief 10's page starts with its invitation notice when th
 at 1280 the close control sits over that notice's top right corner. Nothing is unreachable. Owed: a
 Strand correction reserving the close control's row, or a Design call on the page's first block
 inside a pane.
+
+**Closed 23 September 2026 by handoff 31-D's PR, on the page and not in Strand's Pane.** With
+`inPane`, `EventSurface` raises its top padding to `calc(var(--space-2) + var(--target-primary) +
+var(--space-2))`, the close control's inset, its height and the same gap again, so the page's first
+block starts below the control. `Pane.tsx` is unchanged (732, 950). The Discovery pane arm measures
+the first block's top against the control's bottom at every expanded width. Design brief 31-E yields
+to this fix; if Strand later gives the Pane a reserved close row, the page's padding comes out with
+that port.
 
 ## G79. At expanded the lanes lose their horizontal position when the pane opens and closes
 

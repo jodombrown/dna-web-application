@@ -640,6 +640,22 @@ async function runDiscovery(browserType, bname, [w, h], theme) {
           pane.expand,
         JSON.stringify(pane),
       );
+      // G78: the page reserves the pane's close row, so its first block starts below the control.
+      const g78 = await page.evaluate(() => {
+        const close = document.querySelector('button[aria-label="Back to Discovery"]');
+        const first = document.querySelector("[data-event-page]")?.firstElementChild;
+        if (!close || !first) return null;
+        return {
+          close: Math.round(close.getBoundingClientRect().bottom),
+          first: Math.round(first.getBoundingClientRect().top),
+          invitation: first.hasAttribute("data-event-invitation"),
+        };
+      });
+      record(
+        tag + " pane: the page's first block starts below the pane's close control (G78)",
+        !!g78 && g78.first >= g78.close,
+        JSON.stringify(g78),
+      );
       // 719: Escape fires only while focus is within the pane, so focus goes there first.
       await page.getByRole("button", { name: "Back to Discovery", exact: true }).focus();
       await page.keyboard.press("Escape");
@@ -685,7 +701,9 @@ async function runDiscovery(browserType, bname, [w, h], theme) {
         sentence[0].startsWith(
           "You follow no host yet. Kwame Mensah hosts Corridor Suppers in Accra; follow them and their events start here.",
         ) &&
-        (await firstLane.locator("[data-discovery-item]").count()) === 0,
+        (await firstLane.locator("[data-discovery-item]").count()) === 0 &&
+        // 1053: plain text, the host's name unlinked.
+        (await firstLane.locator('[data-dia="done"] a').count()) === 0,
       below.join(",") + " | " + sentence.join(" / "),
     );
     await shot(page, `${tag}-02-below`);
