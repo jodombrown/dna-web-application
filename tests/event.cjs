@@ -326,6 +326,20 @@ async function open(page, kind, want) {
   await page.waitForSelector(`[data-event-page][data-event-state="${want}"]`, { timeout: 15000 });
 }
 
+/**
+ * Handoff 31-B item 12 (1047, 1023): at expanded the page is the content of Discovery's Pane, whose
+ * own `Back to Discovery` is the way back, so the page carries no Back row; below expanded it is its
+ * own route with a Back row naming Feed. True when the page is in the form its tier owes.
+ */
+async function pageForm(page, w) {
+  if (w > 1024)
+    return (
+      (await page.locator('[data-discovery][data-pane-open="1"] [data-event-page]').count()) ===
+        1 && (await page.locator("[data-back-row]").count()) === 0
+    );
+  return (await page.locator("[data-back-row]").textContent()).trim() === "Feed";
+}
+
 /** Guardrail 1: the page's text outside the date, time and door rows carries no digit. */
 async function digitsOutsideFacts(page) {
   return page.evaluate(() => {
@@ -370,8 +384,9 @@ async function runEvent(browserType, bname, [w, h], theme) {
       order.join(","),
     );
     record(
-      tag + " loaded: the Back row names Feed, the kicker reads Event",
-      (await page.locator("[data-back-row]").textContent()).trim() === "Feed" &&
+      tag +
+        " loaded: the pane on Discovery at expanded, the Back row naming Feed below it; the kicker reads Event",
+      (await pageForm(page, w)) &&
         (await page.locator("[data-event-kicker]").textContent()).trim() === "Event",
     );
     const facts = page.locator("[data-event-facts]");
@@ -561,10 +576,10 @@ async function runEventFlows(browserType, bname, [w, h], theme) {
       );
     record(
       tag +
-        " card: the expanded card's Event hook targets the page, which opens with a Back row naming Feed",
+        " card: the expanded card's Event hook targets the page, in its tier's form (1047, 1023)",
       hookHref === "/convene/events/" + EV.loaded &&
         page.url().includes("/convene/events/" + EV.loaded) &&
-        (await page.locator("[data-back-row]").textContent()).trim() === "Feed",
+        (await pageForm(page, w)),
       "via " + via,
     );
 

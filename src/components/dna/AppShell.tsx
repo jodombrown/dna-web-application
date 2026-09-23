@@ -25,8 +25,8 @@ import { NotificationPanel } from "@/components/dna/NotificationPanel";
 import type { Member } from "@/lib/auth";
 import { openComposer, useComposerState } from "@/lib/composer-store";
 import type { FeedView } from "@/lib/feed-view";
-import { LENSES, type LensId } from "@/lib/lens";
-import { useColumnPad, useLeftRail, useRightRail } from "@/lib/rail-store";
+import { useHeaderLens } from "@/lib/header-lens-store";
+import { useColumnPad, useLeftRail, useRightRail, useShellLayout } from "@/lib/rail-store";
 import { ShellScrollProvider, useScrollState } from "@/lib/shell-scroll";
 import { getSupabase } from "@/lib/supabase";
 import { useTheme, useTier, useWide } from "@/lib/tier";
@@ -58,8 +58,6 @@ export function AppShell({
   active,
   homeActive,
   feedView,
-  lens,
-  onLens,
   closeKey,
   children,
 }: {
@@ -69,8 +67,6 @@ export function AppShell({
   homeActive: boolean;
   /** What the Feed column shows; null on a C route. */
   feedView: FeedView | null;
-  lens: LensId;
-  onLens: (lens: LensId) => void;
   /** Changes on route change or composer open; open panels close (prototype behaviour). */
   closeKey: string;
   children: ReactNode;
@@ -91,6 +87,12 @@ export function AppShell({
   const inset = useColumnPad() === "inset";
   const expanded = tier === "expanded";
   const compact = tier === "compact";
+  // Handoff 31-B item 4: a surface's named layout mode. `lanes` replaces the Feed's centred track
+  // with a full-width top row over independent columns at medium and expanded; compact is one
+  // column in every mode, so the mode does not reach the grid there.
+  const layout = useShellLayout();
+  const lanes = !!layout && !compact;
+  const registeredLens = useHeaderLens();
   const scrollerRef = useRef<HTMLElement | null>(null);
   // A stable ref callback: an inline one is detached (null) during every commit and re-attached
   // after the children's layout effects, which would leave the Feed's placement effect without
@@ -113,9 +115,11 @@ export function AppShell({
   // navigation still restores its saved position, because the router's restore runs after this.
   //
   // Feed and /posts/:id are one surface (ruling 105): expanding a card in place keeps the column's
-  // position, and a lens change keeps the same pathname, so neither resets.
+  // position, and a lens change keeps the same pathname, so neither resets. A surface in a named
+  // layout carries its own key (handoff 31-B): Discovery's pane opening over its lanes changes the
+  // pathname and keeps the key, so the lanes stay where the member left them (688).
   const pathname = useLocation({ select: (l) => l.pathname });
-  const surface = feedView ? "feed" : pathname;
+  const surface = feedView ? "feed" : layout ? "layout:" + layout.key : pathname;
   useLayoutEffect(() => {
     scrollToTop();
   }, [surface, scrollToTop]);
@@ -179,14 +183,10 @@ export function AppShell({
     drag.current = null;
   };
 
-  const headerLens =
-    !expanded && scrolled && onFeed
-      ? {
-          lenses: LENSES,
-          value: lens,
-          onChange: (id: string) => onLens(id as LensId),
-        }
-      : null;
+  // Rulings 107 and 947: below expanded, past 72px of the shell's scroller, the header takes the
+  // lens bar of whichever surface registered one (src/lib/header-lens-store.ts). The Feed and
+  // Discovery register; every other surface keeps the composer entry.
+  const headerLens = !expanded && scrolled ? registeredLens : null;
   const bottomPad = compact
     ? "calc(112px + env(safe-area-inset-bottom))"
     : "calc(96px + env(safe-area-inset-bottom))";
@@ -255,7 +255,109 @@ export function AppShell({
             closeKey={closeKey}
           />
         </AppHeader>
-        {expanded ? (
+        {lanes && layout ? (
+          <div
+            data-canvas
+            data-layout={layout.mode}
+            data-rail={layout.rail}
+            style={{
+              flex: 1,
+              minHeight: 0,
+              width: "100%",
+              maxWidth: 1440,
+              margin: "0 auto",
+              boxSizing: "border-box",
+              display: "grid",
+              // SPEC section 0: 240 at medium and 260 at expanded, 64 collapsed (687, 725); the
+              // lanes take the rest; the 320 right column only at 1440 and only while the surface
+              // gives it content, so the pane (612) removes the column rather than blanking it.
+              gridTemplateColumns:
+                (layout.rail === "collapsed" ? "64px" : expanded ? "260px" : "240px") +
+                " minmax(0, 1fr)" +
+                (wide && rightRail ? " 320px" : ""),
+              gridTemplateRows: "auto minmax(0, 1fr)",
+              columnGap: 24,
+              padding: "0 32px",
+              overflow: "hidden",
+            }}
+          >
+            {/* Ruling 946: the lens bar is its own full-width row above the columns. It precedes
+                main in the DOM, as the bar precedes the list on every lens surface, and it takes
+                the first child slot the other grids leave empty, so main is the second child of
+                the root in every grid and the route beneath it is never remounted by a switch. */}
+            <div
+              data-layout-top
+              style={{ gridColumn: "1 / -1", gridRow: 1, minWidth: 0, padding: "24px 0 16px" }}
+            >
+              {layout.top}
+            </div>
+            <main
+              ref={attachScroller}
+              data-scroller="feed"
+              onScroll={onScroll}
+              style={{
+                ...column,
+                gridColumn: 2,
+                gridRow: 2,
+                display: "flex",
+                flexDirection: "column",
+                padding: "0 0 " + (expanded ? "48px" : bottomPad),
+              }}
+            >
+              {children}
+            </main>
+            {/* Ruling 945: the rail scrolls on its own. In this mode a slot with no label renders
+                its content with no landmark of its own, because the content names itself (the
+                FacetRail is nav[aria-label=Browse]) and a second landmark of the same name would
+                be announced twice. */}
+            {leftRail?.label ? (
+              <aside
+                aria-label={leftRail.label}
+                data-scroller="left"
+                style={{
+                  ...column,
+                  gridColumn: 1,
+                  gridRow: 2,
+                  padding: "0 0 " + (expanded ? "48px" : bottomPad),
+                }}
+              >
+                {leftRail.node}
+              </aside>
+            ) : (
+              // Block, not flex: a rail part sized for a row (FacetRail's `alignSelf: flex-start`)
+              // takes the column's width here rather than shrinking to its own content.
+              <div
+                data-scroller="left"
+                style={{
+                  ...column,
+                  gridColumn: 1,
+                  gridRow: 2,
+                  padding: "0 0 " + (expanded ? "48px" : bottomPad),
+                }}
+              >
+                {leftRail?.node}
+              </div>
+            )}
+            {wide && rightRail && (
+              <div
+                data-scroller="right"
+                role={rightRail.label ? "complementary" : undefined}
+                aria-label={rightRail.label ?? undefined}
+                style={{
+                  ...column,
+                  gridColumn: 3,
+                  gridRow: 2,
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 24,
+                  padding: "0 0 48px",
+                }}
+              >
+                {rightRail.node}
+              </div>
+            )}
+          </div>
+        ) : expanded ? (
           <div
             data-canvas
             style={{
@@ -276,6 +378,10 @@ export function AppShell({
               overflow: "hidden",
             }}
           >
+            {/* The `lanes` grid's top row holds this slot (handoff 31-B). Every grid keeps main as
+                the second child of the same root element, so a surface that switches the shell
+                into or out of a named layout is reconciled in place and never remounted. */}
+            {null}
             {/* main precedes both rails in the DOM (ruling 174); grid placement puts the rails in
                 columns 1 and 3, so keyboard order reaches the content before any rail control. */}
             <main
@@ -349,6 +455,8 @@ export function AppShell({
               WebkitOverflowScrolling: "touch",
             }}
           >
+            {/* The `lanes` grid's top row slot: main stays the second child in every grid. */}
+            {null}
             <main
               style={{
                 display: "flex",

@@ -317,6 +317,10 @@ Stance has one source (rulings 187, 300): `public.members.stance` (enum `public.
 `public.member_stance_details` holds the per-variant fields. Brief 5 dropped `members.segment` and
 renamed the tables. No component keeps a stance label map.
 
+## Discovery (Brief 9, handoff 31-B)
+
+Discovery is `/convene`; `/convene/events/{id}` at expanded is Brief 10's page in a Pane on Discovery whatever the origin (1047), and below expanded its own route (1023).
+
 ## Convene's guest path and emails (handoff 30-D, rulings 1002, 1026, 1029, 1033, 1035)
 
 Guest writes go through the `guest-rsvp` Edge Function to `guest_link_request` and `guest_rsvp`

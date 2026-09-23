@@ -4273,3 +4273,87 @@ facet ships one option per home under 1042. `public.convene_discovery`'s `p_home
 in-person and hybrid events whose physical delivery city matches the chosen home's city, and
 nothing wider. Owed: a Design correction drawing the rungs on FacetRail's home axis, and the
 projection's rung predicate against `member_homes.region` and the event's place, in a new migration.
+
+## G72. FacetRail has no control on its own Browse line, so ruling 944's collapse control is not rendered
+
+**Severity: low. Opened 23 September 2026 during handoff 31-B item 4, filed under ruling 597 and
+reported under 732 rather than worked around at the page. The number is assigned by this entry
+(ruling 638).**
+
+Ruling 944 puts an icon control with the accessible name `Collapse browse` and no visible word on the
+rail's `Browse` line, collapsing the rail to its 64 icon strip while the lanes take the width. Strand's
+`FacetRail` (`src/components/strand/FacetRail.tsx`, compile `v1789885868097915`) renders its
+expanded heading as a bare `h2` with no action slot, so there is nowhere on that line for a caller's
+control; placing one over the heading from Discovery is the page-level workaround 732 forbids. The
+shell's `lanes` mode already carries the collapsed width (`rail: "collapsed"`, the 64 column), which
+the pane uses under 688, so the control lands as one prop once Strand gives the heading a slot. The
+extraction's own note also stands: the icon set had no collapse glyph at the time; `panel-left-close`
+is in `public/strand/icons/` now. Owed: a Strand correction adding an action to FacetRail's heading.
+
+## G73. DiaLine's text is a string, so the first section's sentence cannot link the host's name
+
+**Severity: low. Opened 23 September 2026 during handoff 31-B item 7, filed under ruling 597 and
+reported under 732. The number is assigned by this entry (ruling 638).**
+
+Ruling 1046 has `{name}` in `You follow no host yet. {name} hosts {title} in {city}; follow them and
+their events start here.` link to `/m/{handle}`. Strand's `DiaLine` takes `text?: string` and renders
+it in a plain span, so the sentence renders in full as words with the name unlinked. Owed: a Strand
+correction letting DiaLine carry a link, after which Discovery passes it.
+
+## G74. On Discovery a card's React and Save render and do nothing
+
+**Severity: medium. Opened 23 September 2026 during handoff 31-B item 3, filed under ruling 597. The
+number is assigned by this entry (ruling 638).**
+
+Handoff 31-B's surface reads only through `loadDiscovery` and writes only through
+`dismissDiscoveryItem`, and the card is Pass 1's at rest byte for byte (660), so the card's four
+actions render. Share needs no write and is wired; `Ask the host` and the card's own tap open the
+event page. React and Save have no write path on this surface and are inert. Owed: a ruling on
+whether Discovery takes the Feed's two existence toggles (`setSaved`, `setReacted` and the `loadMarks`
+read beside them) as a second write path, or the card at rest on Discovery hides them.
+
+## G75. A FacetRail option never wraps, and the longest category family is wider than the medium rail
+
+**Severity: low. Opened 23 September 2026 during handoff 31-B item 4, filed under ruling 597 and
+reported under 732. The number is assigned by this entry (ruling 638).**
+
+SPEC section 0 sets the medium rail at 240. FacetRail's option chips are `white-space: nowrap`, and
+the vocabulary's `Cultural, heritage and religious` chip is wider than the 198 the nav's padding
+leaves at that width, so it runs into the nav's right padding (measured at 820: the nav's content
+reaches 258 against its 240 box). It stays inside the column, so nothing pans. At expanded's 260 it
+fits. The prototype drew stand-in family labels (Revision 1, conflict 3), which is why its frames
+never showed it. Owed: a Strand correction letting an option wrap, or a Design ruling on the rail's
+width.
+
+## G76. FacetRail has no per-axis single select, so When and Home toggle rather than choose
+
+**Severity: low. Opened 23 September 2026 during handoff 31-B item 9, filed under ruling 597 and
+reported under 732. The number is assigned by this entry (ruling 638).**
+
+Handoff 31-B makes When and Home single-select inside a multi-select rail. FacetRail's `single` mode
+is one selection across the whole rail, so the two axes render as the rail's toggle buttons
+(`aria-pressed`) and Discovery keeps only the newest choice in each when it writes the query. The
+behaviour is single-select; the semantics a screen reader hears are a toggle group rather than a
+radio group. Owed: a Strand correction for a per-axis `select="single"`.
+
+## G77. Below expanded the event page's Back row names Feed when the member came from Discovery
+
+**Severity: low. Opened 23 September 2026 during handoff 31-B item 12, filed under ruling 597. The
+number is assigned by this entry (ruling 638).**
+
+B9-SPEC section 0 draws the compact route with `the Back row naming Discovery`. Handoff 31-B item 12
+keeps `/convene/events/{id}` below expanded as 1023's own page, unchanged, and gives `EventSurface`
+one prop only (the pane's), so the Back row still reads `Feed` and returns to the Feed whatever the
+member came from. Owed: a ruling on the Back row's origin below expanded, and then the route state
+that carries it.
+
+## G78. The Pane's close control floats over the top of its content
+
+**Severity: low. Opened 23 September 2026 during handoff 31-B item 12, filed under ruling 597 and
+reported under 732. The number is assigned by this entry (ruling 638).**
+
+Strand's `Pane` places its `closeLabel` control absolutely at the pane's top right with no space
+reserved for it (700). Brief 10's page starts with its invitation notice when the member has one, and
+at 1280 the close control sits over that notice's top right corner. Nothing is unreachable. Owed: a
+Strand correction reserving the close control's row, or a Design call on the page's first block
+inside a pane.

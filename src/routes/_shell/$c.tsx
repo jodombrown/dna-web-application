@@ -1,6 +1,6 @@
-// One stub per C (/connect, /convene, /collaborate, /contribute, /convey) until its engine brief
-// ships: EmptyState in the C with "Back to Feed" (SPEC section 1). Renders inside the shell, never
-// its own chrome (ruling 69).
+// One stub per C until its engine brief ships (/collaborate, /contribute, /convey; /connect and
+// /convene are their own routes and take precedence over this one): EmptyState in the C with "Back
+// to Feed" (SPEC section 1). Renders inside the shell, never its own chrome (ruling 69).
 //
 // Design pass 01, B10 item 6 with STRAND-CHANGES section 7 (W38, W48): a stub page's empty
 // treatment is EmptyState, never a placeholder card, and it fills the space the sticky bars leave

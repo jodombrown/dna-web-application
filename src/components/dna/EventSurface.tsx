@@ -10,8 +10,9 @@
 // `This event has happened.` and no attestation block.
 //
 // At every tier this is SPEC's medium layout: one column at --content-max inside the shell's own
-// scroller, and a Back row that names the page the member arrived from, Feed today. The pane on
-// Brief 9's canvas waits for Brief 9 (1023).
+// scroller, and a Back row that names the page the member arrived from, Feed today. At expanded the
+// page is the content of Brief 9's Pane on Discovery (1047, handoff 31-B), where the pane's own
+// `Back to Discovery` replaces the Back row.
 //
 // Guardrail 1: no number renders. The going names arrive only at five or more rows, chosen by the
 // projection; nothing here counts anything for display.
@@ -90,7 +91,20 @@ async function resolveImages(page: EventPage): Promise<Images> {
   return { cover, avatars };
 }
 
-export function EventSurface({ member, id }: { member: Member; id: string }) {
+export function EventSurface({
+  member,
+  id,
+  inPane,
+}: {
+  member: Member;
+  id: string;
+  /**
+   * Handoff 31-B item 12: rendered as the content of Discovery's Pane at expanded (688, 1047), where
+   * the pane's own close control (`Back to Discovery`, 700) is the way back, so the page's Back row
+   * is omitted. Nothing else about the page changes inside the pane.
+   */
+  inPane?: boolean | undefined;
+}) {
   const qc = useQueryClient();
   const navigate = useNavigate();
   const tier = useTier();
@@ -147,7 +161,7 @@ export function EventSurface({ member, id }: { member: Member; id: string }) {
         padding: compact ? "8px 0 130px" : "16px 0 96px",
       }}
     >
-      <BackRow label="Feed" onClick={goFeed} />
+      {!inPane && <BackRow label="Feed" onClick={goFeed} />}
       {children}
       {toast && (
         <div style={toastStyle(tier)}>
