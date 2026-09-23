@@ -329,7 +329,9 @@ async function open(page, kind, want) {
 /**
  * Handoff 31-B item 12 (1047, 1023): at expanded the page is the content of Discovery's Pane, whose
  * own `Back to Discovery` is the way back, so the page carries no Back row; below expanded it is its
- * own route with a Back row naming Feed. True when the page is in the form its tier owes.
+ * own route with a Back row. Every arrival here is a document load, which carries no origin in
+ * history state, so the row names Discovery (handoff 31-D, 1065). True when the page is in the form
+ * its tier owes.
  */
 async function pageForm(page, w) {
   if (w > 1024)
@@ -337,7 +339,7 @@ async function pageForm(page, w) {
       (await page.locator('[data-discovery][data-pane-open="1"] [data-event-page]').count()) ===
         1 && (await page.locator("[data-back-row]").count()) === 0
     );
-  return (await page.locator("[data-back-row]").textContent()).trim() === "Feed";
+  return (await page.locator("[data-back-row]").textContent()).trim() === "Discovery";
 }
 
 /** Guardrail 1: the page's text outside the date, time and door rows carries no digit. */
@@ -385,10 +387,22 @@ async function runEvent(browserType, bname, [w, h], theme) {
     );
     record(
       tag +
-        " loaded: the pane on Discovery at expanded, the Back row naming Feed below it; the kicker reads Event",
+        " loaded: the pane on Discovery at expanded, the Back row naming Discovery below it; the kicker reads Event",
       (await pageForm(page, w)) &&
         (await page.locator("[data-event-kicker]").textContent()).trim() === "Event",
     );
+    // Handoff 31-D (1065): a cold arrival's Back row names Discovery and navigates to /convene.
+    if (w === 390) {
+      await page.locator("[data-event-page] [data-back-row]").click();
+      await page.waitForURL((u) => u.pathname === "/convene", { timeout: 10000 }).catch(() => {});
+      record(
+        tag + " cold: the Back row reads Discovery and navigates to /convene (1065)",
+        new URL(page.url()).pathname === "/convene" &&
+          (await page.locator("[data-discovery]").count()) === 1,
+        page.url(),
+      );
+      await open(page, "loaded", "loaded");
+    }
     const facts = page.locator("[data-event-facts]");
     record(
       tag +
@@ -494,8 +508,12 @@ async function runEvent(browserType, bname, [w, h], theme) {
     // Not found: null from the projection is the EmptyState.
     await open(page, "missing", "not-found");
     record(
-      tag + " not found: EmptyState with a way back to Feed",
+      tag + " not found: EmptyState with a way back to Discovery (1065)",
       (await page.locator("[data-event-page] [data-empty-state]").count()) === 1 &&
+        (await page
+          .locator("[data-event-page] [data-empty-state]")
+          .getByRole("button", { name: "Back to Discovery", exact: true })
+          .count()) === 1 &&
         /This event is not available\./.test(await page.locator("[data-event-page]").textContent()),
     );
 

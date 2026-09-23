@@ -6,9 +6,14 @@
 // mounted as its list (688, 1047), whatever the member came from; below expanded the event page is
 // its own route and Discovery steps aside (1023). The tier is the shell's own source.
 //
+// The lens behind the pane (1063): the path's `$lens` when there is one; else, with an event open,
+// the lens of the origin Discovery set in history state when it opened the event (src/lib/origin.ts);
+// else All. The query key is therefore the one the member opened from and the list does not reload.
+// A shared link or a new tab carries no history state and opens behind All, which 1063 accepted.
+//
 // Signed-in only (662): the shell layout redirects an anonymous visitor to sign in before this
 // renders. noindex, as every member surface is until indexability is ruled.
-import { createFileRoute, Outlet, useParams } from "@tanstack/react-router";
+import { createFileRoute, Outlet, useLocation, useParams } from "@tanstack/react-router";
 import { DiscoverySurface } from "@/components/dna/DiscoverySurface";
 import { useAuth } from "@/lib/auth";
 import { isSectionId, validateDiscoverySearch } from "@/lib/discovery-search";
@@ -24,13 +29,19 @@ function ConveneRoute() {
   const { member } = useAuth();
   const search = Route.useSearch();
   const params = useParams({ strict: false }) as { lens?: string; id?: string };
+  const originLens = useLocation({ select: (l) => l.state.origin?.params.lens });
   const tier = useTier();
   if (!member) return null;
   if (params.id && tier !== "expanded") return <Outlet />;
+  const lens = isSectionId(params.lens)
+    ? params.lens
+    : params.id && isSectionId(originLens)
+      ? originLens
+      : "all";
   return (
     <DiscoverySurface
       member={member}
-      lens={isSectionId(params.lens) ? params.lens : "all"}
+      lens={lens}
       search={search}
       paneId={params.id ?? null}
       pane={params.id ? <Outlet /> : null}

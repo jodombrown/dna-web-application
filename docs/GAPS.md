@@ -4357,3 +4357,18 @@ reserved for it (700). Brief 10's page starts with its invitation notice when th
 at 1280 the close control sits over that notice's top right corner. Nothing is unreachable. Owed: a
 Strand correction reserving the close control's row, or a Design call on the page's first block
 inside a pane.
+
+## G79. At expanded the lanes lose their horizontal position when the pane opens and closes
+
+**Severity: low. Opened 23 September 2026 during handoff 31-D item 6, filed under ruling 597. The
+number is assigned by this entry (ruling 638).**
+
+`DiscoverySurface` returns a different element tree with the pane open (the lanes inside Strand's
+`Pane` as its list) from the one it returns with the pane closed (the lanes in the surface's own
+column). React rebuilds the lanes on each switch, so every lane's horizontal scroll resets to its
+first card when the pane opens and again when it closes. The column keeps its place, because the
+shell's layout key is the lens and does not change (688), and the lens and the facets survive (1063).
+Below expanded nothing is rebuilt in place: the event page is its own route and Back restores the
+column and each lane through the router's element restoration (1065). Owed: Strand's Pane open state
+under 1064 (Design brief 31-E), which gives the list one place in the tree whether the pane is open or
+not.

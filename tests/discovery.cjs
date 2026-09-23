@@ -16,6 +16,16 @@
 //   no homes       the homes line and the Home axis are absent (1050).
 //   error          the one alert, and Try again re-reads.
 //   /collaborate   still the C stub (item 2).
+//   open link      every card's open control is an a[href] to the member event path (1067).
+//
+// Handoff 31-D (1063, 1065, 1067, 1068), in `runDiscoveryPlace` on its own viewports:
+//
+//   lens kept      at 1280 and 1440, from a lens with a facet, the pane keeps that lens behind it
+//                  with no second Discovery read, and closing returns to the lens with the facet.
+//   place kept     at 390 and 820, Back from an event opened out of a scrolled column and a
+//                  sideways lane names Discovery and restores both within 2px.
+//   intent         at 1280 with a pointer, hover intent reads the event page before any click; at
+//                  390 with touch it does not.
 //
 // Usage: BASE=https://<preview>.dna-web-application.pages.dev SPECIAL=discovery node tests/matrix.cjs
 const M = require("./matrix.cjs");
@@ -553,6 +563,25 @@ async function runDiscovery(browserType, bname, [w, h], theme) {
         );
       }
     }
+    // 1067: every card's open is a real link to the member event path, one per card.
+    const opens = await page.$$eval("[data-discovery-item]", (els) =>
+      els.map((e) => {
+        const a = e.querySelector("[data-read-more]");
+        return {
+          id: e.getAttribute("data-discovery-item"),
+          tag: a ? a.tagName : null,
+          href: a ? a.getAttribute("href") : null,
+        };
+      }),
+    );
+    const badOpen = opens.filter(
+      (o) => o.tag !== "A" || o.href !== "/convene/events/" + encodeURIComponent(o.id),
+    );
+    record(
+      tag + " full: every card's open control is an a[href] to the member event path (1067)",
+      opens.length > 0 && badOpen.length === 0,
+      JSON.stringify(badOpen.slice(0, 2)),
+    );
     await noOverflow(page, tag + " full");
     await shot(page, `${tag}-01-full`);
 
@@ -711,8 +740,152 @@ async function runDiscovery(browserType, bname, [w, h], theme) {
   }
 }
 
+/**
+ * Handoff 31-D's viewports: the two expanded widths the lens is kept at behind the pane, and the two
+ * widths below expanded where Back restores the column and the lane. One theme each, alternating,
+ * because nothing here reads a colour; the full density arm above covers both themes at every width.
+ */
+const PLACE_VIEWPORTS = [
+  [[390, 844], "light"],
+  [[820, 1180], "dark"],
+  [[1280, 800], "light"],
+  [[1440, 900], "dark"],
+];
+
+/** The Feed's hover-intent hold is 80ms (PostCard, ruling 84); the arm waits well past it. */
+const INTENT_WAIT_MS = 600;
+
+async function runDiscoveryPlace(browserType, bname, [w, h], theme) {
+  const tag = `${bname}-${w}x${h}-${theme}-discovery-place`;
+  M.armStart(tag);
+  const tier = w < 640 ? "compact" : w > 1024 ? "expanded" : "medium";
+  const db = makeMockDb();
+  seedPosts(db, 1);
+  const E = seedCorpus(db);
+  setAnswer(db, fullDensity(E));
+  // Every card opens a loaded page here, so the arm reads the place and never the not-found state.
+  const loaded = db.attend.pages[LOADED];
+  for (const e of Object.values(E))
+    if (!db.attend.pages[e.event_id])
+      db.attend.pages[e.event_id] = {
+        ...loaded,
+        event: { ...loaded.event, id: e.event_id, slug: "discovery-" + e.event_id },
+      };
+  const { browser, page, errors } = await context(browserType, [w, h], theme, db);
+  try {
+    await signIn(page);
+
+    // Intent (1067): at expanded with a pointer the event page is read on hover, before any click;
+    // at compact on touch it is not. The hover is a real mouse move onto the card's open link.
+    if (w === 1280 || w === 390) {
+      await openDiscovery(page);
+      const link = page
+        .locator(`[data-discovery-item="${LOADED}"][data-section="curated"] [data-read-more]`)
+        .first();
+      await link.scrollIntoViewIfNeeded();
+      const before = db.attend.reads.length;
+      await link.hover();
+      await page.waitForTimeout(INTENT_WAIT_MS);
+      const read = db.attend.reads.slice(before).includes(LOADED);
+      record(
+        tag +
+          (tier === "expanded"
+            ? " intent: hovering a card at expanded with a pointer reads the event page before any click (1067)"
+            : " intent: no hover read at compact on touch (1067)"),
+        tier === "expanded" ? read : !read,
+        JSON.stringify(db.attend.reads.slice(before)),
+      );
+    }
+
+    if (tier === "expanded") {
+      // Lens kept (1063): from a lens with one facet set, the pane opens over that lens with no second
+      // Discovery read, and the pane's close returns to the lens with the facet in the query.
+      await openDiscovery(page, "/convene/online?format=hybrid");
+      await page.waitForSelector('[data-discovery][data-lens="online"] [data-discovery-item]', {
+        timeout: 20000,
+      });
+      await page.waitForTimeout(300);
+      const reads = db.discovery.calls.length;
+      await page.locator("[data-discovery-item] [data-read-more]").first().click();
+      await page.waitForURL((u) => u.pathname.startsWith("/convene/events/"), { timeout: 10000 });
+      await page.waitForSelector('[data-discovery][data-pane-open="1"] [data-event-page]', {
+        timeout: 20000,
+      });
+      await page.waitForTimeout(600);
+      const behind = await page.locator("[data-discovery]").getAttribute("data-lens");
+      record(
+        tag + " lens: the pane keeps the lens it opened from behind it, no second read (1063)",
+        behind === "online" && db.discovery.calls.length === reads,
+        `lens ${behind} reads ${reads} -> ${db.discovery.calls.length}`,
+      );
+      await page.locator('button[aria-label="Back to Discovery"]').click();
+      await page.waitForURL((u) => !u.pathname.startsWith("/convene/events/"), { timeout: 10000 });
+      const back = new URL(page.url());
+      record(
+        tag + " lens: closing the pane returns to that lens with the facet in the query (1063)",
+        back.pathname === "/convene/online" &&
+          back.searchParams.get("format") === "hybrid" &&
+          (await page.locator('[data-discovery][data-lens="online"]').count()) === 1 &&
+          (await page.locator('[data-discovery][data-pane-open="1"]').count()) === 0,
+        back.pathname + back.search,
+      );
+    } else {
+      // Place kept (1065): scroll the column, scroll one lane sideways, open an event from it; Back
+      // names Discovery and restores both.
+      await openDiscovery(page);
+      const lane = '[data-lane="online"] [data-lane-row]';
+      await page.evaluate((sel) => {
+        const row = document.querySelector(sel);
+        row.scrollIntoView({ block: "center" });
+        row.scrollLeft = row.firstElementChild.getBoundingClientRect().width + 12;
+      }, lane);
+      await page.waitForTimeout(500);
+      const measure = (sel) =>
+        page.evaluate((sel) => {
+          const col = document.querySelector('[data-scroller="feed"]');
+          const row = document.querySelector(sel);
+          return { col: col ? col.scrollTop : null, lane: row ? row.scrollLeft : null };
+        }, sel);
+      const was = await measure(lane);
+      const second = page.locator(`${lane} > [data-discovery-item]`).nth(1);
+      await second.locator("[data-read-more]").click();
+      await page.waitForURL((u) => u.pathname.startsWith("/convene/events/"), { timeout: 10000 });
+      await page.waitForSelector('[data-event-page][data-event-state="loaded"] [data-back-row]', {
+        timeout: 20000,
+      });
+      const label = (await page.locator("[data-event-page] [data-back-row]").innerText()).trim();
+      record(
+        tag + " place: the event page's Back row reads Discovery (1065)",
+        label === "Discovery",
+        label,
+      );
+      await page.locator("[data-event-page] [data-back-row]").click();
+      await page.waitForURL((u) => u.pathname === "/convene", { timeout: 10000 });
+      await page.waitForSelector(lane, { timeout: 20000 });
+      await page.waitForTimeout(600);
+      const now = await measure(lane);
+      record(
+        tag + " place: Back restores the column's scroll and the lane's position within 2px (1065)",
+        was.col > 0 &&
+          was.lane > 0 &&
+          Math.abs(now.col - was.col) <= 2 &&
+          Math.abs(now.lane - was.lane) <= 2,
+        JSON.stringify({ was, now }),
+      );
+    }
+
+    record(tag + " no page errors", errors.length === 0, errors.join(" | ").slice(0, 300));
+  } catch (e) {
+    record(tag + " flow", false, String(e).slice(0, 400));
+  } finally {
+    await browser.close();
+  }
+}
+
 module.exports = {
   runDiscovery,
+  runDiscoveryPlace,
+  PLACE_VIEWPORTS,
   DISCOVERY_VIEWPORTS,
   __seedCorpus: seedCorpus,
   __full: fullDensity,

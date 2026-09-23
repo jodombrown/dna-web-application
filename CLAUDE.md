@@ -321,6 +321,8 @@ renamed the tables. No component keeps a stance label map.
 
 Discovery is `/convene`; `/convene/events/{id}` at expanded is Brief 10's page in a Pane on Discovery whatever the origin (1047), and below expanded its own route (1023).
 
+An item opened from a list carries its origin in router history state (1063, 1065); the pane closes and the Back row returns to that origin, and cards open through real links that preload on hover intent at expanded (1067).
+
 ## Convene's guest path and emails (handoff 30-D, rulings 1002, 1026, 1029, 1033, 1035)
 
 Guest writes go through the `guest-rsvp` Edge Function to `guest_link_request` and `guest_rsvp`
