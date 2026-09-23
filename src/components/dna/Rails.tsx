@@ -23,7 +23,26 @@ export function LeftRail({ member }: { member: Member }) {
     <>
       <RailWidget title="Coming up" empty="Nothing coming up. Events you join appear here.">
         {data?.events.map((e) => (
-          <div key={e.id} style={{ ...row, display: "flex", flexDirection: "column", gap: 2 }}>
+          // Handoff 30-D item 11.2: each event opens its page, in the rail's own row style.
+          <button
+            key={e.id}
+            type="button"
+            data-rail="event"
+            onClick={() =>
+              void navigate({ to: "/convene/events/$id", params: { id: e.id }, search: {} })
+            }
+            style={{
+              all: "unset",
+              cursor: "pointer",
+              display: "flex",
+              flexDirection: "column",
+              gap: 2,
+              ...row,
+              textAlign: "left",
+              width: "100%",
+              boxSizing: "border-box",
+            }}
+          >
             <span style={{ fontSize: 15, fontWeight: 500, lineHeight: 1.35 }}>{e.title}</span>
             {/* P4-SPEC section 2: the host's words as they wrote them, then the instant they were
                 stored as, in the event's own zone. The echo is never rewritten into the line
@@ -38,7 +57,7 @@ export function LeftRail({ member }: { member: Member }) {
                 {e.stored}
               </span>
             )}
-          </div>
+          </button>
         ))}
       </RailWidget>
       <RailWidget title="Your Spaces" empty="No Spaces yet. Start one or join one.">

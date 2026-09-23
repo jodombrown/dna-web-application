@@ -1,28 +1,34 @@
 // Generated from the canonical Supabase project (dgspjevjoblujcoljvkn) with the Supabase MCP
-// generate_typescript_types tool, after handoff 31-A's two migrations were applied and recorded
-// (20260922150000_p2_discovery_schema, 20260922150100_p2_discovery_projection).
+// generate_typescript_types tool on the merge of #58 into handoff 31-A's branch, after both
+// handoffs' migrations were applied and recorded: 30-D's 20260922120000_p2_guest_path and
+// 20260922160000_r382_live_arms_guest_functions, and 31-A's 20260922150000_p2_discovery_schema and
+// 20260922150100_p2_discovery_projection.
 //
 // Nothing here is hand-written except this header and the `Views` helper at the end, which the
 // generator drops and every regeneration restores (`src/lib/feed.ts` reads it). The regeneration
 // waits for the apply for the reason the earlier headers give: ruling 225 commits a migration before
 // it is applied, so a regeneration taken inside that window reads the project as it was and silently
-// removes what the window is holding. Both versions are recorded on the project, their md5s match the
-// files byte for byte, and `tests/migration-drift.cjs` reads them, so the generator returns them.
+// removes what the window is holding. Every version is recorded on the project, its md5 matches its
+// file byte for byte, and `tests/migration-drift.cjs` reads it, so the generator returns it. Every
+// object the generator returns is explained by a migration in this tree, so nothing is left out.
+//
+// What 30-D adds here: `event_registrations.conversion_offered_at`, the once-only on-return offer
+// (1034); the table `guest_link_requests`, a hash of each requesting address with the event and the
+// time, which no client role reads or writes; and three functions: `guest_link_request` and
+// `guest_rsvp`, the guest's one write path, executable by the service role alone and called only by
+// the guest-rsvp Edge Function (1026); and `claim_guest_registrations`, which a signed-in member with
+// a confirmed address calls after sign-in to take their guest rows with their edges (1033).
+// 20260922160000 is a grant to `live_arms` and changes no type.
 //
 // What 31-A adds here: `events.family` (1037); the tables `convene_families`, `convene_lenses`,
 // `member_subscriptions`, `editors`, `convene_picks` and `discovery_dismissals`; and the functions
 // `convene_discovery`, Discovery's one read projection, and `set_subscription` and
 // `dismiss_discovery_item`, its two member write paths (1039, 1044).
 //
-// The project also carries handoff 30-D's 20260922120000_p2_guest_path, applied before this
-// regeneration while #58 was still open, so the generator returns its objects too:
-// `event_registrations.conversion_offered_at`, `guest_link_requests`, `claim_guest_registrations`,
-// `guest_link_request` and `guest_rsvp`. They are the project as it is, and #58's own regeneration
-// reads the same project, so both generations carry both sets.
-//
-// `private.viewer_local_tz`, `private.convene_threshold`, `private.is_editor` and
-// `private.convene_thresholds` are absent by design: the private schema is not exposed by PostgREST,
-// so the generator does not see it and no surface may reach it.
+// The private helpers of both handoffs (`private.guest_event`, `private.guest_mail_facts`,
+// `private.viewer_local_tz`, `private.convene_threshold`, `private.is_editor` and the table
+// `private.convene_thresholds`) are absent by design: the private schema is not exposed by
+// PostgREST, so the generator does not see it and no surface may reach it.
 
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
 

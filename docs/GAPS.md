@@ -4164,7 +4164,102 @@ accessibility checkers flag as an empty heading and a screen reader announces as
 no name. The fix is to render no heading element at all when the label is absent, and to assert
 that in `tests/vocabulary.cjs`'s failed pass beside the existing check that no literal stands in.
 
-## G65. The Home facet's rungs are not drawn and not built
+## G65. Guest emails have no stated lawful basis, and the Terms and Privacy Policy are not in this tree
+
+**Severity: invite-boundary gate. Opened 22 September 2026 during handoff 30-D, filed under ruling 597. The number is assigned by this entry (ruling 638). Prototype posture (ruling 140): the
+canonical project holds no real member data, so this blocks no merge and closes before the first
+real member invite.**
+
+Ruling 532 requires the lawful basis for holding a guest's email address to be stated in the Terms
+and the Privacy Policy, and puts guest emails under ruling 479's erasure work. Neither document is
+in this tree, so nothing here can cite them and no surface links to the paragraph that would
+govern the address a guest types on `/e/{slug}`. The address is held in `event_registrations`
+`guest_email` on a going or not-going row, and as a hash only in `guest_link_requests` for a day.
+What closes this: the two documents, the paragraph in each, and the erasure path under 479 that
+removes a guest's rows on request.
+
+## G66. Nothing sends a reminder to anyone, so the guest line holds the reminder out
+
+**Severity: low. Opened 22 September 2026 during handoff 30-D, filed under ruling 597. The number
+is assigned by this entry (ruling 638).**
+
+B10-SPEC section 4's Guest sheet reads `One email address, so the door and the reminder can reach
+you.` The door reaches the guest: the going confirmation carries it (1035). The reminder does not
+exist. Ruling 571 names reminders and nothing in this tree sends one to a guest or a member; there
+is no scheduler, no reminder text and no row that says one was sent. Under grounded-or-empty the
+field line in `src/components/dna/GuestSheet.tsx` reads `One email address, so the door can reach
+you. Nothing else is asked.` until something sends a reminder, and the SPEC's line returns with it.
+What closes this: a scheduled send (a Supabase cron or a dispatch-only workflow), its text through
+`_shared/mail.ts`, and a record of the send.
+
+## G67. Brief 11 is titled "Convene Pass 4", and ruling 622's fourth pass is pay and admit, which has no brief
+
+**Severity: low. Opened 22 September 2026 during handoff 30-D, filed under ruling 597. The number
+is assigned by this entry (ruling 638).**
+
+Two things carry the name. Brief 11 is titled "Convene Pass 4". Ruling 622's fourth pass of
+Convene is pay and admit: paid events, tickets and the door for them, which is the work this
+handoff holds out of the guest path (`This event takes tickets, and tickets are not open yet.`)
+and which has no brief. A reader who follows "Pass 4" from the guest path's refusal lands on a
+brief about something else. What closes this: a ruling that retitles one of the two, and the
+brief for pay and admit when it is written.
+
+## G68. A link request is recorded before its email is sent, so a failed send is throttled into a silent "Check your email" for ten minutes
+
+**Severity: low. Opened 22 September 2026 during handoff 30-D, filed under ruling 597. The number
+is assigned by this entry (ruling 638). Not fixed here: the throttle is `20260922120000`'s and an
+applied migration is never amended (466).**
+
+`public.guest_link_request` inserts the `guest_link_requests` row and answers `send: true` before
+the guest-rsvp Edge Function has asked Resend for anything. When Resend refuses, the function
+answers 502 and the sheet shows the failure under the field, which is right; but the row is already
+recorded, so the guest's retry inside ten minutes is answered `send: false` and the function says
+202, which the sheet renders as `Check your email` for a mail that never left. What closes this: a
+new migration that records the ask only once the send succeeded (a second function the Edge
+Function calls after Resend answers), or that lets the function delete its own row on a failed
+send, with `tests/live-db.cjs`'s guest arm extended to the failure case.
+
+## G69. The canonical project carried Handoff 31-A's schema before its migrations reached `main`, and the types regeneration returned it
+
+**Severity: low. Opened 22 September 2026 during handoff 30-D item 7, filed under ruling 597. The
+number is assigned by this entry (ruling 638). Amended the same day: first written as unrecorded
+schema, which was true at the regeneration and not an hour later.**
+
+The types regeneration taken after `20260922120000` was applied returned, beside the migration's
+five additions, objects that exist on the project and nowhere in `supabase/migrations` on this
+branch: the tables `convene_families`, `convene_lenses`, `convene_picks`, `discovery_dismissals`,
+`editors` and `member_subscriptions`; the functions `convene_discovery`, `dismiss_discovery_item`
+and `set_subscription`; and the column `events.family` with a foreign key to `convene_families`.
+At the regeneration `tests/migration-drift.cjs` read PASS, so no `schema_migrations` row named
+them; by the enforcing run on `3805792` the same arm read FAIL for `20260922150000
+p2_discovery_schema` and `20260922150100 p2_discovery_projection`, recorded on the project with no
+file in this tree. They are Handoff 31-A's (#59), applied by Chat ahead of that PR's merge: the
+regeneration landed inside the moment between the objects' creation and their rows' recording,
+and this branch then sat in G58's second half. They are left out of `src/lib/database.types.ts`
+(its header says so), because a type here is a licence for a surface to reach what this tree does
+not define; #59's own regeneration carries them. What remains open: a drift arm that compares the
+project's catalog against the tree and not only its `schema_migrations` rows, so an object that
+reaches the project ahead of its row reads as drift rather than passing unseen for however long
+the recording takes.
+
+## G70. `live_arms` may mint a guest row on any published event, until the guest arms sit behind a fixture policy
+
+**Severity: low, invite-boundary gate. Opened 22 September 2026 during handoff 30-D, filed under
+ruling 597 from the finding `20260922160000_r382_live_arms_guest_functions.sql` names in its own
+header. The number is assigned by this entry (ruling 638). Prototype posture (ruling 140): the
+canonical project holds no real member data, so this blocks no merge.**
+
+`20260922160000` grants `live_arms` execute on `public.guest_link_request(text, text)` and
+`public.guest_rsvp(uuid, text, text)`, exactly the two signatures and nothing wider, so the two
+live-db guest arms can run instead of reading UNPROVEN (228). Both functions are SECURITY DEFINER
+and gate on the event's public page and on the throttle, not on the caller, so a holder of
+`LIVE_DB_URL`, CI's one secret for this role (382), may write a guest row on any published event
+whose post is to everyone. The arms roll their rows back inside their own transaction. What closes
+this: before the first real member invite, a fixture policy that admits the two ruling 218 test
+accounts' events and no other, the shape the attestations arms already take under ruling 435, with
+the grant narrowed to run through it.
+
+## G71. The Home facet's rungs are not drawn and not built
 
 **Severity: medium, invite-boundary gate (ruling 140). Opened 22 September 2026 during handoff 31-A,
 filed under ruling 597. The number is assigned by this entry (ruling 638).**
@@ -4175,24 +4270,17 @@ in-person and hybrid events whose physical delivery city matches the chosen home
 nothing wider. Owed: a Design correction drawing the rungs on FacetRail's home axis, and the
 projection's rung predicate against `member_homes.region` and the event's place, in a new migration.
 
-## G66. The event arms' page-error checks do not filter ruling 357's aborted-fetch class
+## G72. The event arms' page-error checks did not filter ruling 357's aborted-fetch class
 
-**Severity: low. Opened 22 September 2026 during handoff 31-A, filed under ruling 597. The number
-is assigned by this entry (ruling 638). Not fixed here: the arm is Brief 10's (30-C), and this PR
-changes no event surface and no test in `tests/event.cjs`.**
+**Closed 23 September 2026: fixed by #58's commit `9d77c8e`, which gives `tests/event.cjs` the
+`CANCELLED_MOCK_FETCH` filter `tests/profile.cjs` and `tests/connect.cjs` already carry. Opened 22
+September 2026 during handoff 31-A, filed under ruling 597; severity was low.**
 
-`tests/event.cjs` records `<tag> no page errors` over every `pageerror` the page raised
-(`runEvent` and `runEventFlows`, around lines 460 and 746) with no filter. WebKit words a fetch the
-navigation cancelled on the mocked REST origin as an access-control denial, `Fetch API cannot load
-<SB>/rest/v1/... due to access control checks.`, which is ruling 357's known class
-(`ABORTED_MOCK_FETCH` in `tests/matrix.cjs`). Every request to that origin is fulfilled in-process,
-so the line is neither the app nor a crash. `tests/connect.cjs` and `tests/profile.cjs` already
-drop it from their own page-error checks through `CANCELLED_MOCK_FETCH`; the event arms were
-written after them and do not.
-
-Two sightings, both WebKit at 1280x800 and never on Chromium: run 303 on `main` at `5c49c6b`,
-`webkit-1280x800-dark-event` on `post_saves` (5457 of 5458); run 306 on #59 at `fca818a`,
-`webkit-1280x800-{light,dark}-event-flows` on `post_media` and `post_links` (5456 of 5458). Run
-304 on #58 at `c5c63c3` was green on the same arms, so it is intermittent. Owed: the same
-`CANCELLED_MOCK_FETCH` filter applied to the event arms' `errors` before the check records, with the
-filtered lines still printed so the class stays visible, as the connect and profile arms do.
+`tests/event.cjs` recorded `<tag> no page errors` over every `pageerror` the page raised, with no
+filter. WebKit words a fetch the navigation cancelled on the mocked REST origin as an access-control
+denial, `Fetch API cannot load <SB>/rest/v1/... due to access control checks.`, which is ruling
+357's known class (`ABORTED_MOCK_FETCH` in `tests/matrix.cjs`). Every request to that origin is
+fulfilled in-process, so the line is neither the app nor a crash. Sightings before the fix, all
+WebKit and never Chromium: run 303 on `main` at `5c49c6b` (`post_saves`), and on #59 run 306 at
+`fca818a` (`post_media`, `post_links`) and both attempts of run 307 at `b36f2b4` (`post_saves`),
+each in different cells. Filed here while #59 was open; #58 carried the fix before either merged.

@@ -11,13 +11,48 @@
 //                  event only, add to calendar once going, the invitation notice and sheet without
 //                  the profile line (1027), the card's speakers row and its hook into the page, and
 //                  the notification row's destination.
+//   runGuest       the two representative layouts (handoff 30-D item 14.3): the public page's guest
+//                  path against the mock's guest-rsvp. The affordance only for a free event that is
+//                  neither cancelled nor over, the Guest sheet's six states in the SPEC's words, the
+//                  link arrival with the address replaced, no attendee anywhere (626), and Create an
+//                  account landing on the one sign-up flow with the address prefilled.
 //
 // Usage: BASE=https://<preview>.dna-web-application.pages.dev SPECIAL=event node tests/matrix.cjs
 const fs = require("fs");
 const M = require("./matrix.cjs");
 
-const { launch, makeMockDb, seedPosts, mockSupabase, signIn, record, shot, noOverflow, BASE, UID } =
-  M;
+const {
+  launch,
+  makeMockDb,
+  seedPosts,
+  mockSupabase,
+  signIn,
+  record,
+  unproven,
+  eventId,
+  shot,
+  noOverflow,
+  BASE,
+  UID,
+  SB,
+} = M;
+
+/**
+ * Ruling 357, as tests/profile.cjs and tests/connect.cjs already apply it: WebKit words a fetch the
+ * navigation cancelled as an access-control denial ("… due to access control checks."), and
+ * Playwright delivers it as a page error. Every request to the mocked Supabase origin is fulfilled
+ * in-process with access-control-allow-origin: *, so a real denial cannot happen there. Only this
+ * wording, and only for that origin, is ignored; any other page error still fails the check. Seen
+ * on run 35792037361 in two event arms whose flows navigate away from the Feed while its card
+ * hydration is still in flight.
+ */
+const SB_RE = SB.replace(/\./g, "\\.");
+const CANCELLED_MOCK_FETCH = new RegExp(
+  `(?:^|[\\s/])${SB_RE}\\S*\\s+due to access control checks\\.?$`,
+);
+
+/** The mocked events' ids: UUIDs, because the page's read refuses anything else (item 11.1). */
+const EV = { loaded: eventId("loaded"), private: eventId("private") };
 
 const HOST = "00000000-0000-4000-8000-0000000000f2";
 const SLUG = "corridor-suppers-accra-3f2a1b";
@@ -35,7 +70,7 @@ function attendPage(kind) {
   starts.setUTCHours(19, 0, 0, 0);
   const ends = new Date(starts.getTime() + 3 * 3600e3);
   const doors = new Date(starts.getTime() - 30 * 60e3);
-  const id = "e-" + kind;
+  const id = eventId(kind);
   const going = [
     {
       ...person("m-adaeze", "Adaeze Nwosu", "adaeze-nwosu"),
@@ -185,10 +220,10 @@ function attendPage(kind) {
 
 function seedAttend(db) {
   for (const kind of ["loaded", "past", "cancelled", "full", "private"])
-    db.attend.pages["e-" + kind] = attendPage(kind);
+    db.attend.pages[eventId(kind)] = attendPage(kind);
   db.attend.parties.push({
     id: "party-1",
-    event_id: "e-loaded",
+    event_id: EV.loaded,
     role: "moderator",
     status: "invited",
   });
@@ -196,7 +231,7 @@ function seedAttend(db) {
 
 /** A Convene card in the Feed for the loaded event, so the card's row and hook can be read. */
 function seedAttendCard(db) {
-  const pg = db.attend.pages["e-loaded"];
+  const pg = db.attend.pages[EV.loaded];
   db.posts.unshift({
     id: "post-e-loaded",
     author_kind: "member",
@@ -210,14 +245,14 @@ function seedAttendCard(db) {
     anchor_kind: null,
     anchor_id: null,
     created_object_kind: "event",
-    created_object_id: "e-loaded",
+    created_object_id: EV.loaded,
     audience: "everyone",
     status: "published",
     published_at: pg.post.published_at,
     created_at: pg.post.published_at,
   });
   db.events.push({
-    id: "e-loaded",
+    id: EV.loaded,
     host_member_id: HOST,
     title: TITLE,
     starts_at: pg.event.starts_at,
@@ -242,7 +277,7 @@ function seedAttendCard(db) {
   });
   db.event_delivery.push({
     id: "d-e-loaded",
-    event_id: "e-loaded",
+    event_id: EV.loaded,
     kind: "physical",
     position: 0,
     place_id: "dXJuOm1ieHBvaTpmcm9udC1yb29t",
@@ -251,7 +286,7 @@ function seedAttendCard(db) {
     city: "Accra",
     country: "Ghana",
   });
-  for (const sp of pg.speakers) db.attend.speakers.push({ event_id: "e-loaded", ...sp });
+  for (const sp of pg.speakers) db.attend.speakers.push({ event_id: EV.loaded, ...sp });
 }
 
 async function context(browserType, [w, h], theme, db) {
@@ -276,11 +311,14 @@ async function context(browserType, [w, h], theme, db) {
   );
   await mockSupabase(page, db);
   const errors = [];
-  page.on("pageerror", (e) => errors.push(String(e)));
+  page.on("pageerror", (e) => {
+    const text = String(e);
+    if (!CANCELLED_MOCK_FETCH.test(text)) errors.push(text);
+  });
   return { browser, page, errors };
 }
 
-const eventPath = (kind) => BASE + "/convene/events/e-" + kind;
+const eventPath = (kind) => BASE + "/convene/events/" + eventId(kind);
 const state = (page) => page.locator("[data-event-page]").getAttribute("data-event-state");
 
 async function open(page, kind, want) {
@@ -505,17 +543,27 @@ async function runEventFlows(browserType, bname, [w, h], theme) {
     let via = "click";
     await hook.click();
     try {
-      await page.waitForURL("**/convene/events/e-loaded**", { timeout: 8000 });
+      await page.waitForURL("**/convene/events/" + EV.loaded + "**", { timeout: 8000 });
     } catch {
       via = "href";
       await page.goto(BASE + hookHref, { waitUntil: "networkidle" });
     }
     await page.waitForSelector('[data-event-page][data-event-state="loaded"]', { timeout: 15000 });
+    // Handoff 30-D item 11.3 (ruling 1036): when the tap did not navigate and the href was followed,
+    // the tap is UNPROVEN with that reason, never PASS; the founder checks it once on a real iPhone.
+    // The href assertion beneath stands on its own either way.
+    if (via === "click")
+      record(tag + " card: the expanded card's Event hook tap navigates to the page", true);
+    else
+      unproven(
+        tag + " card: the expanded card's Event hook tap navigates to the page",
+        "the tap did not move the URL within 8s and the anchor's href was followed instead (ruling 1036)",
+      );
     record(
       tag +
         " card: the expanded card's Event hook targets the page, which opens with a Back row naming Feed",
-      hookHref === "/convene/events/e-loaded" &&
-        page.url().includes("/convene/events/e-loaded") &&
+      hookHref === "/convene/events/" + EV.loaded &&
+        page.url().includes("/convene/events/" + EV.loaded) &&
         (await page.locator("[data-back-row]").textContent()).trim() === "Feed",
       "via " + via,
     );
@@ -545,8 +593,8 @@ async function runEventFlows(browserType, bname, [w, h], theme) {
       first &&
         first.p_status === "going" &&
         first.p_audience_override === "everyone" &&
-        db.attend.pages["e-loaded"].viewer.has_default === true &&
-        db.attend.pages["e-loaded"].viewer.registration.audience_override === null &&
+        db.attend.pages[EV.loaded].viewer.has_default === true &&
+        db.attend.pages[EV.loaded].viewer.registration.audience_override === null &&
         (await page.locator("[data-rsvp-pill]").textContent()).includes("You are going") &&
         (await page.locator('[data-testid="event-calendar"]').count()) === 1,
       JSON.stringify(first),
@@ -563,7 +611,7 @@ async function runEventFlows(browserType, bname, [w, h], theme) {
       tag + " calendar: a .ics named for the slug, with the UID, a UTC start and the location",
       download.suggestedFilename() === SLUG + ".ics" &&
         ics.includes("BEGIN:VCALENDAR") &&
-        ics.includes("UID:e-loaded") &&
+        ics.includes("UID:" + EV.loaded) &&
         /DTSTART:\d{8}T\d{6}Z/.test(ics) &&
         ics.includes("LOCATION:Front Room\\, Accra\\, Ghana"),
       download.suggestedFilename() + " " + ics.slice(0, 80).replace(/\r?\n/g, " "),
@@ -663,7 +711,7 @@ async function runEventFlows(browserType, bname, [w, h], theme) {
     record(
       tag + " share: a connections event carries the member link and no code",
       (await share.locator("[data-share-url]").textContent()).includes(
-        origin + "/convene/events/e-private",
+        origin + "/convene/events/" + EV.private,
       ) && (await share.locator("[data-share-code]").count()) === 0,
     );
     await share.getByRole("button", { name: "Done" }).click();
@@ -709,7 +757,7 @@ async function runEventFlows(browserType, bname, [w, h], theme) {
 
     // The notification row: its destination in words, and Respond opening the event page.
     db.attend.parties = [
-      { id: "party-2", event_id: "e-loaded", role: "moderator", status: "invited" },
+      { id: "party-2", event_id: EV.loaded, role: "moderator", status: "invited" },
     ];
     db.notifications.push({
       id: "n-role",
@@ -737,10 +785,10 @@ async function runEventFlows(browserType, bname, [w, h], theme) {
         (await row.locator('[data-testid="notification-respond"]').count()) === 1,
     );
     await row.locator('[data-testid="notification-respond"]').click();
-    await page.waitForURL("**/convene/events/e-loaded**", { timeout: 10000 });
+    await page.waitForURL("**/convene/events/" + EV.loaded + "**", { timeout: 10000 });
     record(
       tag + " notification: Respond opens the event page and marks the row read",
-      page.url().includes("/convene/events/e-loaded") && db.reads.includes("n-role"),
+      page.url().includes("/convene/events/" + EV.loaded) && db.reads.includes("n-role"),
     );
 
     record(tag + " no page errors", errors.length === 0, errors.join(" | ").slice(0, 300));
@@ -751,4 +799,298 @@ async function runEventFlows(browserType, bname, [w, h], theme) {
   }
 }
 
-module.exports = { runEvent, runEventFlows, attendPage, seedAttend, seedAttendCard };
+// ---------------------------------------------------------------------------------------------
+// Handoff 30-D: the public page's guest path (B10-SPEC sections 3.7 and 4; rulings 532, 626, 1026,
+// 1034), against the mock's guest-rsvp and event_public_page.
+// ---------------------------------------------------------------------------------------------
+
+const PAID_SLUG = "corridor-suppers-paid-7d8e9f";
+const PAST_SLUG = "corridor-suppers-past-1a2b3c";
+const GUEST_TOKEN = "guest-link-token-one";
+const GUEST_TOKEN_2 = "guest-link-token-two";
+const GUEST_EMAIL = "guest@example.com";
+const GUEST_EMAIL_2 = "second.guest@example.com";
+const GUEST_FREE_LINE = "Free. You will be asked for an email so the door can reach you.";
+const GUEST_FIELD_LINE = "One email address, so the door can reach you. Nothing else is asked.";
+
+/** The public projection's answer for a slug, in the shape src/lib/event-public.ts reads (1028). */
+function publicPage(kind, overrides = {}) {
+  const pg = attendPage(kind);
+  const { id: _id, status: _status, full: _full, public: _public, ...event } = pg.event;
+  return {
+    event: { ...event, ...overrides },
+    body: pg.post.body,
+    presented_by: { kind: pg.presented_by.kind, name: pg.presented_by.name },
+    host: { name: pg.host.name },
+    media: [],
+    place: {
+      place_name: pg.place.place_name,
+      place_text: pg.place.place_text,
+      city: pg.place.city,
+      region: pg.place.region,
+      country: pg.place.country,
+    },
+    speakers: pg.speakers.map((sp) => ({
+      party_id: sp.party_id,
+      name: sp.name,
+      role: sp.role,
+      label: sp.label,
+      has_photo: false,
+    })),
+    pending_roles: [],
+    partners: [],
+  };
+}
+
+function seedGuest(db) {
+  db.attend.publicPages[SLUG] = publicPage("loaded");
+  db.attend.publicPages[PAID_SLUG] = publicPage("loaded", { slug: PAID_SLUG, ticket_kind: "paid" });
+  db.attend.publicPages[PAST_SLUG] = publicPage("past", { slug: PAST_SLUG });
+  db.attend.guest.tokens[GUEST_TOKEN] = GUEST_EMAIL;
+  db.attend.guest.tokens[GUEST_TOKEN_2] = GUEST_EMAIL_2;
+}
+
+/**
+ * A client-side navigation to a public page. The route's loader runs in the browser on a client
+ * navigation and reads event_public_page through the mock; a document request would render on the
+ * server against the project, which the mock cannot reach. The router listens to popstate.
+ */
+async function clientGo(page, path) {
+  await page.evaluate((p) => {
+    window.history.pushState({}, "", p);
+    window.dispatchEvent(new PopStateEvent("popstate", { state: {} }));
+  }, path);
+}
+
+/**
+ * The names the member page's going list carries and the public projection does not; none may
+ * reach the guest's page (626). Thandiwe Dube and Ngozi Eze are accepted speakers as well, which
+ * the public page shows by design (678), so they are not in this list.
+ */
+const ATTENDEE_NAMES = ["Adaeze Nwosu", "Sefa Owusu", "Folake Adeyemi", "Wanjiru Kamau"];
+
+async function runGuest(browserType, bname, [w, h], theme) {
+  const tag = `${bname}-${w}x${h}-${theme}-guest`;
+  M.armStart(tag);
+  const db = makeMockDb();
+  seedPosts(db, 1);
+  seedAttend(db);
+  seedGuest(db);
+  const { browser, page, errors } = await context(browserType, [w, h], theme, db);
+  const dialog = (label) => page.locator(`section[role="dialog"][aria-label="${label}"]`);
+  const rsvp = () => page.locator("[data-guest-rsvp]");
+  const rsvpState = () => rsvp().getAttribute("data-rsvp-state");
+  const openPublic = async (slug, query = "") => {
+    await clientGo(page, "/e/" + slug + query);
+    await page.waitForSelector(`[data-public-event="${slug}"]`, { timeout: 15000 });
+  };
+  const g = db.attend.guest;
+  try {
+    // Signed out, on a page of the deployment, so the router is live for a client navigation.
+    await page.goto(BASE + "/sign-in", { waitUntil: "networkidle" });
+
+    // 1. The affordance, only where item 8.1 says: free, neither cancelled nor over.
+    await openPublic(SLUG);
+    await rsvp().waitFor({ timeout: 10000 });
+    record(
+      tag + " affordance: I am going with the Free line for a free upcoming event",
+      (await rsvpState()) === "open" &&
+        (await page.locator('[data-testid="guest-going"]').textContent()).trim() === "I am going" &&
+        (await rsvp().textContent()).includes(GUEST_FREE_LINE),
+    );
+    await openPublic(PAID_SLUG);
+    record(
+      tag + " affordance: absent on a paid event (Pass 4's)",
+      (await rsvp().count()) === 0 &&
+        (await page.locator('[data-testid="guest-going"]').count()) === 0,
+    );
+    await openPublic(PAST_SLUG);
+    record(
+      tag + " affordance: absent on an event that has happened",
+      (await rsvp().count()) === 0 &&
+        (await page.locator('[data-testid="guest-going"]').count()) === 0,
+    );
+
+    // 2. Email: one Input, the field line, Send me a link.
+    await openPublic(SLUG);
+    await page.click('[data-testid="guest-going"]');
+    let dlg = dialog("I am going");
+    await dlg.waitFor({ timeout: 8000 });
+    record(
+      tag + " email: I am going, one email Input, the field line and Send me a link",
+      (await dlg.locator('input[type="email"]').count()) === 1 &&
+        (await dlg.textContent()).includes(GUEST_FIELD_LINE) &&
+        (await dlg.locator('[data-testid="guest-send"]').textContent()).trim() === "Send me a link",
+    );
+    await noOverflow(page, tag + " email sheet");
+    await shot(page, tag + "-email");
+    await dlg.locator('input[type="email"]').fill("nope");
+    await dlg.locator('[data-testid="guest-send"]').click();
+    await dlg.locator("text=That is not an email address.").waitFor({ timeout: 8000 });
+    record(
+      tag + " email: the database's own sentence renders under the field and the state stands",
+      (await page.locator('[data-guest-sheet="email"]').count()) === 1,
+    );
+    await dlg.locator('input[type="email"]').fill(GUEST_EMAIL);
+    await dlg.locator('[data-testid="guest-send"]').click();
+    dlg = dialog("Check your email");
+    await dlg.waitFor({ timeout: 8000 });
+    const sentText = await dlg.textContent();
+    record(
+      tag + " sent: Check your email, the address, it signs you in for this event only, Done",
+      sentText.includes(GUEST_EMAIL) &&
+        sentText.includes("it signs you in for this event only") &&
+        (await dlg.locator('[data-testid="guest-done"]').count()) === 1 &&
+        g.requests.length === 2 &&
+        g.requests[1].slug === SLUG &&
+        g.requests[1].email === GUEST_EMAIL,
+      "requests " + JSON.stringify(g.requests.map((r) => r.email)),
+    );
+    await dlg.locator('[data-testid="guest-done"]').click();
+    await dlg.waitFor({ state: "hidden", timeout: 8000 });
+    record(
+      tag + " sent: Done closes the sheet and the affordance stands",
+      (await rsvpState()) === "open",
+    );
+
+    // 3. Arriving with ?g=: opened once from the browser, the address replaced, Returned.
+    await openPublic(SLUG, "?g=" + GUEST_TOKEN);
+    dlg = dialog("You are going");
+    await dlg.waitFor({ timeout: 10000 });
+    record(
+      tag + " link: the address is replaced with the clean /e/{slug} and open was called once",
+      page.url().endsWith("/e/" + SLUG) &&
+        !page.url().includes("g=") &&
+        g.answers.filter((a) => a.action === "open").length === 1,
+      page.url(),
+    );
+    record(
+      tag + " returned: You are going and Continue",
+      (await dlg.locator('[data-testid="guest-continue"]').textContent()).trim() === "Continue",
+    );
+    await shot(page, tag + "-returned");
+    await dlg.locator('[data-testid="guest-continue"]').click();
+    dlg = dialog("Keep this with an account?");
+    await dlg.waitFor({ timeout: 8000 });
+    record(
+      tag + " conversion: the once-only offer with Continue as a guest and Create an account",
+      (await dlg.locator('[data-testid="guest-stay"]').textContent()).trim() ===
+        "Continue as a guest" &&
+        (await dlg.locator('[data-testid="guest-create-account"]').textContent()).trim() ===
+          "Create an account",
+    );
+    await dlg.locator('[data-testid="guest-stay"]').click();
+    await dlg.waitFor({ state: "hidden", timeout: 8000 });
+    record(
+      tag + " page: You are going. and Change once the guest has answered",
+      (await rsvpState()) === "going" &&
+        (await rsvp().textContent()).includes("You are going.") &&
+        (await page.locator('[data-testid="guest-change"]').count()) === 1,
+    );
+    const pageText = await page.locator("[data-public-event]").textContent();
+    record(
+      tag + " page: no attendee anywhere on the guest's page (626)",
+      ATTENDEE_NAMES.every((n) => !pageText.includes(n)) &&
+        (await page.locator("[data-going-row], [data-event-going]").count()) === 0,
+    );
+
+    // 4. Existing: Change, Keep it | Withdraw, and I am going again.
+    await page.click('[data-testid="guest-change"]');
+    dlg = dialog("You already said you are going");
+    await dlg.waitFor({ timeout: 8000 });
+    record(
+      tag + " existing: You already said you are going with Keep it and Withdraw",
+      (await dlg.locator('[data-testid="guest-keep"]').count()) === 1 &&
+        (await dlg.locator('[data-testid="guest-withdraw"][data-destructive]').count()) === 1,
+    );
+    await dlg.locator('[data-testid="guest-withdraw"]').click();
+    dlg = dialog("You are not going");
+    await dlg.waitFor({ timeout: 8000 });
+    record(
+      tag + " existing: Withdraw sends not_going and the sheet offers I am going again",
+      g.answers[g.answers.length - 1].action === "not_going" &&
+        (await dlg.locator('[data-testid="guest-going-again"]').textContent()).trim() ===
+          "I am going",
+    );
+    await dlg.locator('[data-testid="guest-going-again"]').click();
+    await dlg.waitFor({ state: "hidden", timeout: 8000 });
+    record(
+      tag +
+        " existing: I am going again sends going and, the offer spent, closes on You are going.",
+      g.answers[g.answers.length - 1].action === "going" &&
+        (await rsvpState()) === "going" &&
+        (await rsvp().textContent()).includes("You are going."),
+    );
+    await openPublic(SLUG, "?g=" + GUEST_TOKEN);
+    dlg = dialog("You already said you are going");
+    await dlg.waitFor({ timeout: 10000 });
+    record(
+      tag + " link: a second open reports the row as existing and makes no second offer",
+      g.answers.filter((a) => a.action === "open").length === 2,
+    );
+    await dlg.locator('[data-testid="guest-keep"]').click();
+    await dlg.waitFor({ state: "hidden", timeout: 8000 });
+
+    // 5. Expired: a tampered link.
+    await openPublic(SLUG, "?g=not-a-link-anyone-minted");
+    dlg = dialog("This link has expired");
+    await dlg.waitFor({ timeout: 10000 });
+    record(
+      tag + " expired: This link has expired, the email field and Send a new link",
+      (await dlg.locator('input[type="email"]').count()) === 1 &&
+        (await dlg.locator('[data-testid="guest-send"]').textContent()).trim() ===
+          "Send a new link",
+    );
+    await dlg.locator('input[type="email"]').fill(GUEST_EMAIL);
+    await dlg.locator('[data-testid="guest-send"]').click();
+    dlg = dialog("Check your email");
+    await dlg.waitFor({ timeout: 8000 });
+    record(
+      tag + " expired: Send a new link asks for one and lands on Sent",
+      g.requests[g.requests.length - 1].email === GUEST_EMAIL,
+    );
+    await dlg.locator('[data-testid="guest-done"]').click();
+    await dlg.waitFor({ state: "hidden", timeout: 8000 });
+
+    // 6. Create an account: the one sign-up flow, the address prefilled (item 8.5).
+    g.row = null;
+    g.offered = false;
+    await openPublic(SLUG, "?g=" + GUEST_TOKEN_2);
+    dlg = dialog("You are going");
+    await dlg.waitFor({ timeout: 10000 });
+    await dlg.locator('[data-testid="guest-continue"]').click();
+    dlg = dialog("Keep this with an account?");
+    await dlg.waitFor({ timeout: 8000 });
+    await dlg.locator('[data-testid="guest-create-account"]').click();
+    await page.waitForURL("**/sign-in?**", { timeout: 15000 });
+    await page.waitForSelector('input[type="email"]', { timeout: 15000 });
+    const url = new URL(page.url());
+    record(
+      tag + " create an account: the existing sign-up flow opens with the address prefilled",
+      url.pathname === "/sign-in" &&
+        // The route's validateSearch reads join=1 as true and the router re-serialises it.
+        ["1", "true"].includes(url.searchParams.get("join")) &&
+        url.searchParams.get("email") === GUEST_EMAIL_2 &&
+        (await page.locator('input[type="email"]').inputValue()) === GUEST_EMAIL_2 &&
+        (await page.locator("h1").first().textContent()).trim() === "Create your account",
+      page.url(),
+    );
+
+    record(tag + " no page errors", errors.length === 0, errors.join(" | ").slice(0, 300));
+  } catch (e) {
+    record(tag + " flow", false, String(e).slice(0, 400));
+  } finally {
+    await browser.close();
+  }
+}
+
+module.exports = {
+  runEvent,
+  runEventFlows,
+  runGuest,
+  attendPage,
+  seedAttend,
+  seedAttendCard,
+  seedGuest,
+  publicPage,
+};
