@@ -70,7 +70,7 @@ import {
 } from "@/lib/discovery-search";
 import { loadEventPage, memberEventPath } from "@/lib/event-page";
 import { setHeaderLens } from "@/lib/header-lens-store";
-import type { Origin } from "@/lib/origin";
+import { useBackToOrigin, type Origin } from "@/lib/origin";
 import { setLeftRail, setRightRail, setShellLayout } from "@/lib/rail-store";
 import { useShellScroll } from "@/lib/shell-scroll";
 import { useMode, useTier, useWide } from "@/lib/tier";
@@ -278,11 +278,16 @@ export function DiscoverySurface({
       state: (prev) => ({ ...prev, origin }),
     });
   // The pane closes to the lens it was opened from, with its facets (1063, 719). `lens` is the
-  // origin's while the pane is open (convene.tsx), so this is the origin's route and search.
-  const closePane = () =>
+  // origin's while the pane is open (convene.tsx), so this is the origin's route and search. An event
+  // opened from outside Discovery (the Feed's Event hook) closes to that origin by 1065's rule, as the
+  // Back row does; the collapsed rail's expand control still opens Discovery.
+  const toOrigin = useBackToOrigin();
+  const closeToDiscovery = () =>
     void (lens === "all"
       ? navigate({ to: "/convene", search, resetScroll: false })
       : navigate({ to: "/convene/$lens", params: { lens }, search, resetScroll: false }));
+  const fromElsewhere = !!toOrigin.arrivedFrom && toOrigin.arrivedFrom.to === "/feed";
+  const closePane = fromElsewhere ? toOrigin.go : closeToDiscovery;
   // 1067: hover intent at expanded with a pointer warms the event route and the page's one read
   // under EventSurface's key, so the pane opens with data. Never at compact or medium, never on touch.
   const warmEvent = (eventId: string) => {
@@ -450,7 +455,7 @@ export function DiscoverySurface({
           value={railValue}
           label="Browse"
           expandLabel="Back to Discovery and show browse"
-          onExpand={closePane}
+          onExpand={closeToDiscovery}
         />
       ) : (
         <FacetRail
@@ -780,7 +785,12 @@ export function DiscoverySurface({
     return (
       <div data-discovery data-lens={lens} data-pane-open="1" style={{ paddingTop: 4 }}>
         {laneStyle}
-        <Pane tier="expanded" list={body} onClose={closePane} closeLabel="Back to Discovery">
+        <Pane
+          tier="expanded"
+          list={body}
+          onClose={closePane}
+          closeLabel={"Back to " + (fromElsewhere ? toOrigin.origin.label : "Discovery")}
+        >
           {pane}
         </Pane>
         {toasts}

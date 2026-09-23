@@ -333,13 +333,13 @@ async function open(page, kind, want) {
  * history state, so the row names Discovery (handoff 31-D, 1065). True when the page is in the form
  * its tier owes.
  */
-async function pageForm(page, w) {
+async function pageForm(page, w, label = "Discovery") {
   if (w > 1024)
     return (
       (await page.locator('[data-discovery][data-pane-open="1"] [data-event-page]').count()) ===
         1 && (await page.locator("[data-back-row]").count()) === 0
     );
-  return (await page.locator("[data-back-row]").textContent()).trim() === "Discovery";
+  return (await page.locator("[data-back-row]").textContent()).trim() === label;
 }
 
 /** Guardrail 1: the page's text outside the date, time and door rows carries no digit. */
@@ -597,9 +597,35 @@ async function runEventFlows(browserType, bname, [w, h], theme) {
         " card: the expanded card's Event hook targets the page, in its tier's form (1047, 1023)",
       hookHref === "/convene/events/" + EV.loaded &&
         page.url().includes("/convene/events/" + EV.loaded) &&
-        (await pageForm(page, w)),
+        // A tap carries the Feed as its origin (1065, 1067); a followed href is a document load.
+        (await pageForm(page, w, via === "click" ? "Feed" : "Discovery")),
       "via " + via,
     );
+    // 1065: from the Feed, the way back names Feed and returns to the expanded card, then forward.
+    if (via === "click") {
+      const back =
+        w > 1024
+          ? page.locator('button[aria-label="Back to Feed"]')
+          : page.locator("[data-event-page] [data-back-row]");
+      await back.click();
+      await page
+        .waitForURL((u) => u.pathname === "/posts/post-e-loaded", { timeout: 10000 })
+        .catch(() => {});
+      record(
+        tag + " card: from the Feed the way back names Feed and returns to its card (1065)",
+        new URL(page.url()).pathname === "/posts/post-e-loaded" &&
+          (await page.locator('[data-post-id="post-e-loaded"] [data-hook="event"]').count()) === 1,
+        page.url(),
+      );
+      await page.goForward();
+      await page.waitForSelector('[data-event-page][data-event-state="loaded"]', {
+        timeout: 15000,
+      });
+    } else
+      unproven(
+        tag + " card: from the Feed the way back names Feed and returns to its card (1065)",
+        "the tap did not navigate and the href was followed, which carries no origin (ruling 1036)",
+      );
 
     // First RSVP (1030): two radiogroups, My connections preselected, the default written.
     await page.click('[data-testid="rsvp-going"]');

@@ -21,7 +21,7 @@
 // Guardrail 1: no number renders. The going names arrive only at five or more rows, chosen by the
 // projection; nothing here counts anything for display.
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCanGoBack, useLocation, useNavigate, useRouter } from "@tanstack/react-router";
+import { useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { Avatar } from "@/components/strand/Avatar";
 import { BackRow } from "@/components/strand/BackRow";
@@ -44,7 +44,7 @@ import {
   type RegistrationStatus,
 } from "@/lib/event-page";
 import { deliverImageUrl } from "@/lib/media";
-import { DISCOVERY_ORIGIN } from "@/lib/origin";
+import { useBackToOrigin } from "@/lib/origin";
 import { useTier } from "@/lib/tier";
 import { browserZone } from "@/lib/when";
 import {
@@ -112,9 +112,6 @@ export function EventSurface({
 }) {
   const qc = useQueryClient();
   const navigate = useNavigate();
-  const router = useRouter();
-  const arrivedFrom = useLocation({ select: (l) => l.state.origin });
-  const canGoBack = useCanGoBack();
   const tier = useTier();
   const compact = tier === "compact";
   const [toast, setToast] = useState<string | null>(null);
@@ -152,11 +149,7 @@ export function EventSurface({
     window.setTimeout(() => setToast(null), 2600);
   };
   const reread = () => qc.invalidateQueries({ queryKey: [EVENT_PAGE_KEY, member.id, id] });
-  const back = arrivedFrom ?? DISCOVERY_ORIGIN;
-  const goBack = () => {
-    if (arrivedFrom && canGoBack) router.history.back();
-    else void navigate({ to: back.to, params: back.params, search: back.search });
-  };
+  const { origin: back, go: goBack } = useBackToOrigin();
 
   const frame = (state: string, children: React.ReactNode) => (
     <div
