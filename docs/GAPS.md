@@ -4347,6 +4347,13 @@ one prop only (the pane's), so the Back row still reads `Feed` and returns to th
 member came from. Owed: a ruling on the Back row's origin below expanded, and then the route state
 that carries it.
 
+**Closed 23 September 2026 by `d0c1f52`, handoff 31-D, under ruling 1065.** Discovery sets an origin
+record in router history state when it opens an event (`src/lib/origin.ts`), and the page's Back row
+reads it: its label is the origin's, and it goes back when the member arrived from that origin in this
+history, else navigates to the origin's route and search. With no origin, a cold arrival or a document
+load, the row names Discovery and goes to `/convene`, because the page lives under Discovery's route
+(1047). The not-found state's button follows the same rule and reads `Back to {label}`.
+
 ## G78. The Pane's close control floats over the top of its content
 
 **Severity: low. Opened 23 September 2026 during handoff 31-B item 12, filed under ruling 597 and
