@@ -138,6 +138,8 @@ async function runLiveDbArms({ record, skip }) {
       "Handoff 30-D (1026, 1034): a link request is normalized and throttled, the address is stored as a hash only, and guest_rsvp opens once, withdraws and goes again with no edge on a guest row (1002)",
     claim:
       "Handoff 30-D (1033): a confirmed member claims their guest row with its edge, the drift function stays at zero, and a second claim does nothing",
+    discovery:
+      "Brief 9 (631): the owner's answer carries the follow, online, curated and network sections",
   };
   if (process.env.SKIP_REST) {
     for (const n of Object.values(names)) skip(n, "SKIP_REST");
@@ -1141,6 +1143,216 @@ async function runLiveDbArms({ record, skip }) {
           (claim2.ok ? JSON.stringify(c2) : claim2.code) +
           " drift " +
           (drift2.ok ? drift2.rows.length : drift2.code + " " + drift2.message),
+      );
+    });
+    // ------------------------------------------------------------------------------------------
+    // Brief 9 (handoff 31-A; rulings 581, 631, 632, 650, 658, 693, 1037 to 1045). Chat's behaviour
+    // proof, replayed as the owner on the project's stand-in data (every event carries a family, the
+    // owner is an editor with one live pick, the owner's homes are Los Angeles then Accra). The owner
+    // subscribes to culture_arts and dismisses the picked event from curated inside this transaction;
+    // both roll back. The refusals are read at the grant (42501) and at the projection's own checks
+    // (22023), and signed out is refused the projection outright (662).
+    // ------------------------------------------------------------------------------------------
+    await inTransaction(client, async () => {
+      await actAsSelf(client);
+      const present = await client.query(
+        "select to_regprocedure('public.convene_discovery(text, text[], text[], text, text[], uuid)') is not null as ok",
+      );
+      if (!present.rows[0] || present.rows[0].ok !== true) {
+        skip(
+          names.discovery,
+          "20260922150100_p2_discovery_projection.sql is not on the project yet",
+        );
+        return;
+      }
+      const ask = async (sql, values) => {
+        const r = await attempt(client, sql, values);
+        return r.ok ? { ok: true, d: r.rows[0] && r.rows[0].d } : r;
+      };
+      const failed = (r) => r.code + " " + r.message;
+      const section = (d, id) => ((d && d.sections) || []).find((s) => s.section === id) || null;
+      const sectionIds = (d) => ((d && d.sections) || []).map((s) => s.section);
+
+      await actAs(client, owner.id);
+      const all = await ask("select public.convene_discovery('all') as d");
+      const ids = all.ok ? sectionIds(all.d) : [];
+      record(
+        names.discovery,
+        all.ok && ["follow", "online", "curated", "network"].every((s) => ids.includes(s)),
+        all.ok ? "sections " + JSON.stringify(ids) : failed(all),
+      );
+
+      const curatedItem =
+        all.ok && section(all.d, "curated") ? section(all.d, "curated").items[0] : null;
+      const pick = curatedItem && curatedItem.reason;
+      record(
+        "Brief 9 (1040): a pick renders as the editor's name and line",
+        !!pick &&
+          pick.kind === "curated" &&
+          !!pick.editor &&
+          pick.editor.id === owner.id &&
+          pick.editor.name === owner.name &&
+          typeof pick.line === "string" &&
+          pick.line.trim() !== "",
+        pick ? JSON.stringify(pick) : "no curated item in the owner's answer",
+      );
+
+      const noCount = [];
+      const walk = (v, at) => {
+        if (Array.isArray(v)) v.forEach((x, i) => walk(x, at + "[" + i + "]"));
+        else if (v && typeof v === "object")
+          for (const [k, x] of Object.entries(v)) {
+            if (/(^|_)(count|counts|total|n)$/i.test(k)) noCount.push(at + "." + k);
+            walk(x, at + "." + k);
+          }
+      };
+      if (all.ok) walk(all.d, "answer");
+      record(
+        "Brief 9 (581, 632): the answer carries no count key",
+        all.ok && noCount.length === 0,
+        all.ok ? (noCount.length ? "keys " + noCount.join(",") : "none") : failed(all),
+      );
+
+      const sub = await attempt(client, "select public.set_subscription('culture_arts', true)");
+      const taste = sub.ok ? await ask("select public.convene_discovery('taste') as d") : sub;
+      const tasteItems =
+        taste.ok && section(taste.d, "taste") ? section(taste.d, "taste").items : [];
+      record(
+        "Brief 9 (658, 1039): after set_subscription('culture_arts'), the taste lens carries that family",
+        taste.ok &&
+          tasteItems.length > 0 &&
+          tasteItems.every((i) => i.reason && i.reason.family === "culture_arts"),
+        taste.ok
+          ? "families " + JSON.stringify([...new Set(tasteItems.map((i) => i.reason.family))])
+          : failed(taste),
+      );
+
+      if (curatedItem) {
+        const eventId = curatedItem.event_id;
+        const dismissed = await attempt(
+          client,
+          "select public.dismiss_discovery_item($1::uuid, 'curated')",
+          [eventId],
+        );
+        const curated = dismissed.ok
+          ? await ask("select public.convene_discovery('curated') as d")
+          : dismissed;
+        const online = await ask("select public.convene_discovery('online') as d");
+        const curatedSection = curated.ok ? section(curated.d, "curated") : null;
+        const onlineSection = online.ok ? section(online.d, "online") : null;
+        record(
+          "Brief 9 (1044): a dismissal in curated empties that lens's section and leaves the event in online",
+          !!curatedSection &&
+            curatedSection.items.length === 0 &&
+            !!onlineSection &&
+            onlineSection.items.some((i) => i.event_id === eventId),
+          (curated.ok ? "curated " + JSON.stringify(curated.d.sections) : failed(curated)) +
+            " online carries it " +
+            (online.ok
+              ? String(!!onlineSection && onlineSection.items.some((i) => i.event_id === eventId))
+              : failed(online)),
+        );
+      } else {
+        record(
+          "Brief 9 (1044): a dismissal in curated empties that lens's section and leaves the event in online",
+          false,
+          "no curated item to dismiss",
+        );
+      }
+
+      const inPerson = await ask("select public.convene_discovery('all', array['in_person']) as d");
+      const inPersonIds = inPerson.ok ? sectionIds(inPerson.d) : [];
+      record(
+        "Brief 9 (586, 693): an in-person facet drops the online and curated lanes",
+        inPerson.ok && !inPersonIds.includes("online") && !inPersonIds.includes("curated"),
+        inPerson.ok ? "sections " + JSON.stringify(inPersonIds) : failed(inPerson),
+      );
+
+      const insert = await attempt(
+        client,
+        "insert into public.member_subscriptions (member_id, kind, family) values ($1, 'family', 'sport_wellness')",
+        [owner.id],
+      );
+      record(
+        "Brief 9 (1039): a direct insert into member_subscriptions is refused",
+        !insert.ok && insert.code === "42501",
+        insert.ok ? "inserted" : failed(insert),
+      );
+      const floors = await attempt(client, "select * from private.convene_thresholds");
+      record(
+        "Brief 9 (1045): a member cannot read private.convene_thresholds",
+        !floors.ok && floors.code === "42501",
+        floors.ok ? "read " + floors.rows.length + " row(s)" : failed(floors),
+      );
+      const editors = await attempt(client, "select * from public.editors");
+      record(
+        "Brief 9 (1040): a member cannot read public.editors",
+        !editors.ok && editors.code === "42501",
+        editors.ok ? "read " + editors.rows.length + " row(s)" : failed(editors),
+      );
+
+      const badLens = await attempt(client, "select public.convene_discovery('events')");
+      record(
+        "Brief 9 (1041): lens events is refused with 22023",
+        !badLens.ok && badLens.code === "22023",
+        badLens.ok ? "answered" : failed(badLens),
+      );
+      const badSection = await attempt(
+        client,
+        "select public.dismiss_discovery_item($1::uuid, 'all')",
+        [curatedItem ? curatedItem.event_id : "00000000-0000-0000-0000-000000000000"],
+      );
+      record(
+        "Brief 9 (1044): a dismissal in all is refused with 22023",
+        !badSection.ok && badSection.code === "22023",
+        badSection.ok ? "accepted" : failed(badSection),
+      );
+      const ownerHome = all.ok && all.d.homes && all.d.homes[0] ? all.d.homes[0].id : null;
+      if (ownerHome) {
+        await actAs(client, member.id);
+        const foreign = await attempt(
+          client,
+          "select public.convene_discovery('all', null, null, null, null, $1::uuid)",
+          [ownerHome],
+        );
+        record(
+          "Brief 9 (1042): another member's home is refused as a facet with 22023",
+          !foreign.ok && foreign.code === "22023",
+          foreign.ok ? "answered" : failed(foreign),
+        );
+      } else {
+        record(
+          "Brief 9 (1042): another member's home is refused as a facet with 22023",
+          false,
+          "the owner's answer carries no home to offer another member",
+        );
+      }
+
+      const vocab = await ask("select public.vocabularies() as d");
+      const families =
+        vocab.ok && Array.isArray(vocab.d.convene_families) ? vocab.d.convene_families : [];
+      const lenses =
+        vocab.ok && Array.isArray(vocab.d.convene_lenses) ? vocab.d.convene_lenses : [];
+      record(
+        "Brief 9 (1037, 1041): vocabularies() serves the nine families and the eight lenses with their short words",
+        families.length === 9 &&
+          lenses.length === 8 &&
+          lenses.every((l) => typeof l.short === "string" && l.short.trim() !== ""),
+        vocab.ok
+          ? "families " +
+              JSON.stringify(families.map((f) => f.value)) +
+              " shorts " +
+              JSON.stringify(lenses.map((l) => l.short))
+          : failed(vocab),
+      );
+
+      await client.query("set local role anon");
+      await client.query("select set_config('request.jwt.claims', '', true)");
+      const anon = await attempt(client, "select public.convene_discovery('all')");
+      record(
+        "Brief 9 (662): signed out cannot call convene_discovery",
+        !anon.ok && anon.code === "42501",
+        anon.ok ? "answered" : failed(anon),
       );
     });
   } finally {

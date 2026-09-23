@@ -4223,7 +4223,11 @@ send, with `tests/live-db.cjs`'s guest arm extended to the failure case.
 
 **Severity: low. Opened 22 September 2026 during handoff 30-D item 7, filed under ruling 597. The
 number is assigned by this entry (ruling 638). Amended the same day: first written as unrecorded
-schema, which was true at the regeneration and not an hour later.**
+schema, which was true at the regeneration and not an hour later. Amended 23 September 2026:
+#59 merged `main` into Handoff 31-A's branch and regenerated `src/lib/database.types.ts` on the
+merged head, and that file now carries these objects, recorded under `20260922150000
+p2_discovery_schema` and `20260922150100 p2_discovery_projection`, which are in the tree with it.
+The catalog-comparing drift arm below stays open.**
 
 The types regeneration taken after `20260922120000` was applied returned, beside the migration's
 five additions, objects that exist on the project and nowhere in `supabase/migrations` on this
@@ -4258,3 +4262,14 @@ whose post is to everyone. The arms roll their rows back inside their own transa
 this: before the first real member invite, a fixture policy that admits the two ruling 218 test
 accounts' events and no other, the shape the attestations arms already take under ruling 435, with
 the grant narrowed to run through it.
+
+## G71. The Home facet's rungs are not drawn and not built
+
+**Severity: medium, invite-boundary gate (ruling 140). Opened 22 September 2026 during handoff 31-A,
+filed under ruling 597. The number is assigned by this entry (ruling 638).**
+
+The Home facet's rungs (rulings 927, 928) are not drawn in Brief 9's prototype and not built; the
+facet ships one option per home under 1042. `public.convene_discovery`'s `p_home` narrows to
+in-person and hybrid events whose physical delivery city matches the chosen home's city, and
+nothing wider. Owed: a Design correction drawing the rungs on FacetRail's home axis, and the
+projection's rung predicate against `member_homes.region` and the event's place, in a new migration.

@@ -6,6 +6,7 @@
 // Named for the projection, not for a surface: Profile (Brief 3), the Composer (Brief 1) and the
 // Feed (Brief 2) all read this one path.
 import type { Stance } from "@/components/strand/StanceBlock";
+import type { ConveneLensId } from "./discovery";
 import { getSupabase, type Supabase } from "./supabase";
 
 export type Vocabularies = {
@@ -31,6 +32,19 @@ export type Vocabularies = {
   instrument: { value: string; label: string }[];
   /** Rulings 1018 and 678: the roles a host can name on an event, and the verb its invitation reads. */
   event_roles: { value: string; label: string; verb: string }[];
+  /** Rulings 657, 1037 and 1038: Convene's category families, in the discovery report's order. */
+  convene_families: { value: string; label: string; schema_org: string[] }[];
+  /**
+   * Rulings 693, 925, 729 and 1041: Convene's lens set, All then 631's seven sections in 631's order.
+   * The id is structural; every word a surface shows comes from here.
+   */
+  convene_lenses: {
+    value: ConveneLensId;
+    name: string;
+    short: string;
+    icon: string;
+    scope: string;
+  }[];
 };
 
 export async function loadVocabularies(): Promise<Vocabularies | null> {

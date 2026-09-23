@@ -1,13 +1,16 @@
 // Generated from the canonical Supabase project (dgspjevjoblujcoljvkn) with the Supabase MCP
-// generate_typescript_types tool, after handoff 30-D's migration was applied and recorded
-// (20260922120000_p2_guest_path).
+// generate_typescript_types tool on the merge of #58 into handoff 31-A's branch, after both
+// handoffs' migrations were applied and recorded: 30-D's 20260922120000_p2_guest_path and
+// 20260922160000_r382_live_arms_guest_functions, and 31-A's 20260922150000_p2_discovery_schema and
+// 20260922150100_p2_discovery_projection.
 //
 // Nothing here is hand-written except this header and the `Views` helper at the end, which the
 // generator drops and every regeneration restores (`src/lib/feed.ts` reads it). The regeneration
 // waits for the apply for the reason the earlier headers give: ruling 225 commits a migration before
 // it is applied, so a regeneration taken inside that window reads the project as it was and silently
-// removes what the window is holding. The version is recorded on the project, its md5 matches the
-// file byte for byte, and `tests/migration-drift.cjs` reads it, so the generator returns it.
+// removes what the window is holding. Every version is recorded on the project, its md5 matches its
+// file byte for byte, and `tests/migration-drift.cjs` reads it, so the generator returns it. Every
+// object the generator returns is explained by a migration in this tree, so nothing is left out.
 //
 // What 30-D adds here: `event_registrations.conversion_offered_at`, the once-only on-return offer
 // (1034); the table `guest_link_requests`, a hash of each requesting address with the event and the
@@ -15,19 +18,17 @@
 // `guest_rsvp`, the guest's one write path, executable by the service role alone and called only by
 // the guest-rsvp Edge Function (1026); and `claim_guest_registrations`, which a signed-in member with
 // a confirmed address calls after sign-in to take their guest rows with their edges (1033).
+// 20260922160000 is a grant to `live_arms` and changes no type.
 //
-// One exception to "nothing hand-written", recorded in docs/GAPS.md: the regeneration taken on
-// 22 September also returned objects that no migration in this tree defines and that no
-// `supabase_migrations.schema_migrations` row records (`tests/migration-drift.cjs` reads PASS).
-// They are left out of this file until a migration in the tree explains them, because a type here
-// is a licence for a surface to reach it: the tables `convene_families`, `convene_lenses`,
-// `convene_picks`, `discovery_dismissals`, `editors` and `member_subscriptions`; the functions
-// `convene_discovery`, `dismiss_discovery_item` and `set_subscription`; and the column
-// `events.family` with its foreign key to `convene_families`.
+// What 31-A adds here: `events.family` (1037); the tables `convene_families`, `convene_lenses`,
+// `member_subscriptions`, `editors`, `convene_picks` and `discovery_dismissals`; and the functions
+// `convene_discovery`, Discovery's one read projection, and `set_subscription` and
+// `dismiss_discovery_item`, its two member write paths (1039, 1044).
 //
-// `private.guest_event` and `private.guest_mail_facts`, like the earlier private helpers, are absent
-// by design: the private schema is not exposed by PostgREST, so the generator does not see it and no
-// surface may reach it.
+// The private helpers of both handoffs (`private.guest_event`, `private.guest_mail_facts`,
+// `private.viewer_local_tz`, `private.convene_threshold`, `private.is_editor` and the table
+// `private.convene_thresholds`) are absent by design: the private schema is not exposed by
+// PostgREST, so the generator does not see it and no surface may reach it.
 
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
 
@@ -132,6 +133,99 @@ export type Database = {
         };
         Relationships: [];
       };
+      convene_families: {
+        Row: {
+          created_at: string;
+          family: string;
+          label: string;
+          position: number;
+          schema_org: string[];
+        };
+        Insert: {
+          created_at?: string;
+          family: string;
+          label: string;
+          position: number;
+          schema_org?: string[];
+        };
+        Update: {
+          created_at?: string;
+          family?: string;
+          label?: string;
+          position?: number;
+          schema_org?: string[];
+        };
+        Relationships: [];
+      };
+      convene_lenses: {
+        Row: {
+          icon: string;
+          lens: string;
+          name: string;
+          position: number;
+          scope: string;
+          short: string;
+        };
+        Insert: {
+          icon: string;
+          lens: string;
+          name: string;
+          position: number;
+          scope: string;
+          short: string;
+        };
+        Update: {
+          icon?: string;
+          lens?: string;
+          name?: string;
+          position?: number;
+          scope?: string;
+          short?: string;
+        };
+        Relationships: [];
+      };
+      convene_picks: {
+        Row: {
+          event_id: string;
+          id: string;
+          line: string;
+          picked_at: string;
+          picked_by: string;
+          withdrawn_at: string | null;
+        };
+        Insert: {
+          event_id: string;
+          id?: string;
+          line: string;
+          picked_at?: string;
+          picked_by: string;
+          withdrawn_at?: string | null;
+        };
+        Update: {
+          event_id?: string;
+          id?: string;
+          line?: string;
+          picked_at?: string;
+          picked_by?: string;
+          withdrawn_at?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "convene_picks_event_id_fkey";
+            columns: ["event_id"];
+            isOneToOne: false;
+            referencedRelation: "events";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "convene_picks_picked_by_fkey";
+            columns: ["picked_by"];
+            isOneToOne: false;
+            referencedRelation: "editors";
+            referencedColumns: ["member_id"];
+          },
+        ];
+      };
       corridors: {
         Row: {
           continental_place: string;
@@ -173,6 +267,49 @@ export type Database = {
           position?: number;
         };
         Relationships: [];
+      };
+      discovery_dismissals: {
+        Row: {
+          created_at: string;
+          event_id: string;
+          member_id: string;
+          section: string;
+        };
+        Insert: {
+          created_at?: string;
+          event_id: string;
+          member_id: string;
+          section: string;
+        };
+        Update: {
+          created_at?: string;
+          event_id?: string;
+          member_id?: string;
+          section?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "discovery_dismissals_event_id_fkey";
+            columns: ["event_id"];
+            isOneToOne: false;
+            referencedRelation: "events";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "discovery_dismissals_member_id_fkey";
+            columns: ["member_id"];
+            isOneToOne: false;
+            referencedRelation: "members";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "discovery_dismissals_section_fkey";
+            columns: ["section"];
+            isOneToOne: false;
+            referencedRelation: "convene_lenses";
+            referencedColumns: ["lens"];
+          },
+        ];
       };
       dismissed_suggestions: {
         Row: {
@@ -237,6 +374,29 @@ export type Database = {
             foreignKeyName: "edges_from_id_fkey";
             columns: ["from_id"];
             isOneToOne: false;
+            referencedRelation: "members";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      editors: {
+        Row: {
+          granted_at: string;
+          member_id: string;
+        };
+        Insert: {
+          granted_at?: string;
+          member_id: string;
+        };
+        Update: {
+          granted_at?: string;
+          member_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "editors_member_id_fkey";
+            columns: ["member_id"];
+            isOneToOne: true;
             referencedRelation: "members";
             referencedColumns: ["id"];
           },
@@ -475,6 +635,7 @@ export type Database = {
           ends_at: string | null;
           expected_window_end: string | null;
           expected_window_start: string | null;
+          family: string | null;
           host_member_id: string;
           id: string;
           mode: Database["public"]["Enums"]["event_mode"];
@@ -500,6 +661,7 @@ export type Database = {
           ends_at?: string | null;
           expected_window_end?: string | null;
           expected_window_start?: string | null;
+          family?: string | null;
           host_member_id: string;
           id?: string;
           mode?: Database["public"]["Enums"]["event_mode"];
@@ -525,6 +687,7 @@ export type Database = {
           ends_at?: string | null;
           expected_window_end?: string | null;
           expected_window_start?: string | null;
+          family?: string | null;
           host_member_id?: string;
           id?: string;
           mode?: Database["public"]["Enums"]["event_mode"];
@@ -540,6 +703,13 @@ export type Database = {
           window_basis?: string | null;
         };
         Relationships: [
+          {
+            foreignKeyName: "events_family_fkey";
+            columns: ["family"];
+            isOneToOne: false;
+            referencedRelation: "convene_families";
+            referencedColumns: ["family"];
+          },
           {
             foreignKeyName: "events_space_id_fkey";
             columns: ["space_id"];
@@ -1306,6 +1476,55 @@ export type Database = {
         };
         Relationships: [];
       };
+      member_subscriptions: {
+        Row: {
+          created_at: string;
+          family: string | null;
+          home_id: string | null;
+          id: string;
+          kind: string;
+          member_id: string;
+        };
+        Insert: {
+          created_at?: string;
+          family?: string | null;
+          home_id?: string | null;
+          id?: string;
+          kind: string;
+          member_id: string;
+        };
+        Update: {
+          created_at?: string;
+          family?: string | null;
+          home_id?: string | null;
+          id?: string;
+          kind?: string;
+          member_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "member_subscriptions_family_fkey";
+            columns: ["family"];
+            isOneToOne: false;
+            referencedRelation: "convene_families";
+            referencedColumns: ["family"];
+          },
+          {
+            foreignKeyName: "member_subscriptions_home_id_fkey";
+            columns: ["home_id"];
+            isOneToOne: false;
+            referencedRelation: "member_homes";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "member_subscriptions_member_id_fkey";
+            columns: ["member_id"];
+            isOneToOne: false;
+            referencedRelation: "members";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       member_visibility: {
         Row: {
           audience: Database["public"]["Enums"]["audience"];
@@ -2035,6 +2254,21 @@ export type Database = {
           why: string;
         }[];
       };
+      convene_discovery: {
+        Args: {
+          p_families?: string[];
+          p_format?: string[];
+          p_home?: string;
+          p_lens?: string;
+          p_price?: string[];
+          p_when?: string;
+        };
+        Returns: Json;
+      };
+      dismiss_discovery_item: {
+        Args: { p_event: string; p_section: string };
+        Returns: undefined;
+      };
       dismiss_suggestion: { Args: { p_target: string }; Returns: undefined };
       event_media_object: {
         Args: { p_key: string; p_kind: string; p_slug: string };
@@ -2121,6 +2355,10 @@ export type Database = {
       };
       set_follow: {
         Args: { p_on: boolean; p_target: string };
+        Returns: undefined;
+      };
+      set_subscription: {
+        Args: { p_family: string; p_on: boolean };
         Returns: undefined;
       };
       vocabularies: { Args: never; Returns: Json };
