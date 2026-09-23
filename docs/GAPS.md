@@ -4223,7 +4223,11 @@ send, with `tests/live-db.cjs`'s guest arm extended to the failure case.
 
 **Severity: low. Opened 22 September 2026 during handoff 30-D item 7, filed under ruling 597. The
 number is assigned by this entry (ruling 638). Amended the same day: first written as unrecorded
-schema, which was true at the regeneration and not an hour later.**
+schema, which was true at the regeneration and not an hour later. Amended 23 September 2026:
+#59 merged `main` into Handoff 31-A's branch and regenerated `src/lib/database.types.ts` on the
+merged head, and that file now carries these objects, recorded under `20260922150000
+p2_discovery_schema` and `20260922150100 p2_discovery_projection`, which are in the tree with it.
+The catalog-comparing drift arm below stays open.**
 
 The types regeneration taken after `20260922120000` was applied returned, beside the migration's
 five additions, objects that exist on the project and nowhere in `supabase/migrations` on this
@@ -4269,18 +4273,3 @@ facet ships one option per home under 1042. `public.convene_discovery`'s `p_home
 in-person and hybrid events whose physical delivery city matches the chosen home's city, and
 nothing wider. Owed: a Design correction drawing the rungs on FacetRail's home axis, and the
 projection's rung predicate against `member_homes.region` and the event's place, in a new migration.
-
-## G72. The event arms' page-error checks did not filter ruling 357's aborted-fetch class
-
-**Closed 23 September 2026: fixed by #58's commit `9d77c8e`, which gives `tests/event.cjs` the
-`CANCELLED_MOCK_FETCH` filter `tests/profile.cjs` and `tests/connect.cjs` already carry. Opened 22
-September 2026 during handoff 31-A, filed under ruling 597; severity was low.**
-
-`tests/event.cjs` recorded `<tag> no page errors` over every `pageerror` the page raised, with no
-filter. WebKit words a fetch the navigation cancelled on the mocked REST origin as an access-control
-denial, `Fetch API cannot load <SB>/rest/v1/... due to access control checks.`, which is ruling
-357's known class (`ABORTED_MOCK_FETCH` in `tests/matrix.cjs`). Every request to that origin is
-fulfilled in-process, so the line is neither the app nor a crash. Sightings before the fix, all
-WebKit and never Chromium: run 303 on `main` at `5c49c6b` (`post_saves`), and on #59 run 306 at
-`fca818a` (`post_media`, `post_links`) and both attempts of run 307 at `b36f2b4` (`post_saves`),
-each in different cells. Filed here while #59 was open; #58 carried the fix before either merged.
