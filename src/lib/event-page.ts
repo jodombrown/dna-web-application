@@ -12,7 +12,7 @@
 // only at five or more rows, decided by the projection (508, 645), and the calendar file carries
 // dates and times, never a count.
 import type { Database } from "./database.types";
-import { functionsUrl, getSupabase } from "./supabase";
+import { SUPABASE_PUBLISHABLE_KEY, functionsUrl, getSupabase } from "./supabase";
 
 export type Audience = Database["public"]["Enums"]["audience"];
 export type RegistrationStatus = Database["public"]["Enums"]["registration_status"];
@@ -132,8 +132,15 @@ export type EventPage = {
   calendar: EventCalendar;
 };
 
-/** The member page's one read (1023). Null is the not-found state. */
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * The member page's one read (1023). Null is the not-found state, and an address that is not a UUID
+ * is not found before any call (handoff 30-D item 11.1): the error state stays for a read that
+ * failed, never for an id that could not have loaded.
+ */
 export async function loadEventPage(id: string): Promise<EventPage | null> {
+  if (!UUID.test(id)) return null;
   const sb = getSupabase();
   if (!sb) return null;
   const { data, error } = await sb.rpc("event_page", { p_event: id });
@@ -203,6 +210,41 @@ export async function rsvpEvent(
   });
   if (error) throw new RsvpError(error.message, error.message.includes(RSVP_FULL_MESSAGE));
   return data as unknown as RsvpResult;
+}
+
+/**
+ * The member's going email (handoff 30-D item 10; ruling 1035): after a going answer, ask the
+ * event-mail Edge Function to send the confirmation with the door and the calendar file to the
+ * member's own confirmed address. It reads the page as the member, so the door in the mail is the
+ * door on the page. True when it sent; false for anything else, and the answer stands either way.
+ */
+export async function sendGoingEmail(eventId: string): Promise<boolean> {
+  const sb = getSupabase();
+  if (!sb) return false;
+  try {
+    const { data } = await sb.auth.getSession();
+    const access = data.session?.access_token;
+    if (!access) return false;
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => controller.abort(), 15000);
+    try {
+      const res = await fetch(functionsUrl("event-mail"), {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer " + access,
+          apikey: SUPABASE_PUBLISHABLE_KEY,
+        },
+        body: JSON.stringify({ event_id: eventId }),
+        signal: controller.signal,
+      });
+      return res.status === 202;
+    } finally {
+      window.clearTimeout(timer);
+    }
+  } catch {
+    return false;
+  }
 }
 
 /** 1027: the named member answers an invitation through the one write path. */

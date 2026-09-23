@@ -316,6 +316,20 @@ Stance has one source (rulings 187, 300): `public.members.stance` (enum `public.
 `public.member_stance_details` holds the per-variant fields. Brief 5 dropped `members.segment` and
 renamed the tables. No component keeps a stance label map.
 
+## Convene's guest path and emails (handoff 30-D, rulings 1002, 1026, 1029, 1033, 1035)
+
+Guest writes go through the `guest-rsvp` Edge Function to `guest_link_request` and `guest_rsvp`
+only. A guest row carries no edge until `claim_guest_registrations` converts it for a confirmed
+address. The app calls the claim after sign-in, in `src/lib/auth.tsx`, never from `handle_new_user`
+(1002, 1026, 1033).
+
+Edge Functions that serve signed-out callers (`event-media`, `guest-rsvp`) deploy with JWT
+verification off. What they may return is decided in the database, never in the function (1026,
+1029).
+
+Convene's emails are plain text from approved copy until Design draws a template, sent from
+`NOTIFICATION_SENDER` through `supabase/functions/_shared/mail.ts` (387, 1035).
+
 ## Brand assets (ruling 184)
 
 A brand or logo change is its own change with its own ruling and never rides in another brief's PR.

@@ -1,23 +1,33 @@
 // Generated from the canonical Supabase project (dgspjevjoblujcoljvkn) with the Supabase MCP
-// generate_typescript_types tool, after handoff 30-C's two migrations were applied and recorded
-// (20260921160000_p2_event_slug, 20260921160100_p2_event_page).
+// generate_typescript_types tool, after handoff 30-D's migration was applied and recorded
+// (20260922120000_p2_guest_path).
 //
 // Nothing here is hand-written except this header and the `Views` helper at the end, which the
 // generator drops and every regeneration restores (`src/lib/feed.ts` reads it). The regeneration
 // waits for the apply for the reason the earlier headers give: ruling 225 commits a migration before
 // it is applied, so a regeneration taken inside that window reads the project as it was and silently
-// removes what the window is holding. Both versions are recorded on the project, their md5s match the
-// files byte for byte, and `tests/migration-drift.cjs` reads them, so the generator returns them.
+// removes what the window is holding. The version is recorded on the project, its md5 matches the
+// file byte for byte, and `tests/migration-drift.cjs` reads it, so the generator returns it.
 //
-// What 30-C adds here: `events.slug`, the public page's address (ruling 1024), and the four public
-// functions of Brief 10's event page: `event_page`, the member page's one read projection (1023);
-// `event_public_page`, the signed-out page's (662, 1028); `event_speakers`, the card's accepted
-// speakers (679); and `event_media_object`, the event-media Edge Function's lookup, executable by the
-// service role alone (1029).
+// What 30-D adds here: `event_registrations.conversion_offered_at`, the once-only on-return offer
+// (1034); the table `guest_link_requests`, a hash of each requesting address with the event and the
+// time, which no client role reads or writes; and three functions: `guest_link_request` and
+// `guest_rsvp`, the guest's one write path, executable by the service role alone and called only by
+// the guest-rsvp Edge Function (1026); and `claim_guest_registrations`, which a signed-in member with
+// a confirmed address calls after sign-in to take their guest rows with their edges (1033).
 //
-// `private.member_display`, `private.event_post_facts`, `private.event_meeting_link`,
-// `private.event_is_full` and `private.new_event_slug` are absent by design: the private schema is not
-// exposed by PostgREST, so the generator does not see it and no surface may reach it.
+// One exception to "nothing hand-written", recorded in docs/GAPS.md: the regeneration taken on
+// 22 September also returned objects that no migration in this tree defines and that no
+// `supabase_migrations.schema_migrations` row records (`tests/migration-drift.cjs` reads PASS).
+// They are left out of this file until a migration in the tree explains them, because a type here
+// is a licence for a surface to reach it: the tables `convene_families`, `convene_lenses`,
+// `convene_picks`, `discovery_dismissals`, `editors` and `member_subscriptions`; the functions
+// `convene_discovery`, `dismiss_discovery_item` and `set_subscription`; and the column
+// `events.family` with its foreign key to `convene_families`.
+//
+// `private.guest_event` and `private.guest_mail_facts`, like the earlier private helpers, are absent
+// by design: the private schema is not exposed by PostgREST, so the generator does not see it and no
+// surface may reach it.
 
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
 
@@ -382,6 +392,7 @@ export type Database = {
         Row: {
           audience_override: Database["public"]["Enums"]["audience"] | null;
           contact_consent: boolean;
+          conversion_offered_at: string | null;
           created_at: string;
           event_id: string;
           guest_email: string | null;
@@ -393,6 +404,7 @@ export type Database = {
         Insert: {
           audience_override?: Database["public"]["Enums"]["audience"] | null;
           contact_consent?: boolean;
+          conversion_offered_at?: string | null;
           created_at?: string;
           event_id: string;
           guest_email?: string | null;
@@ -404,6 +416,7 @@ export type Database = {
         Update: {
           audience_override?: Database["public"]["Enums"]["audience"] | null;
           contact_consent?: boolean;
+          conversion_offered_at?: string | null;
           created_at?: string;
           event_id?: string;
           guest_email?: string | null;
@@ -550,6 +563,35 @@ export type Database = {
           position?: number;
         };
         Relationships: [];
+      };
+      guest_link_requests: {
+        Row: {
+          email_hash: string;
+          event_id: string;
+          id: string;
+          requested_at: string;
+        };
+        Insert: {
+          email_hash: string;
+          event_id: string;
+          id?: string;
+          requested_at?: string;
+        };
+        Update: {
+          email_hash?: string;
+          event_id?: string;
+          id?: string;
+          requested_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "guest_link_requests_event_id_fkey";
+            columns: ["event_id"];
+            isOneToOne: false;
+            referencedRelation: "events";
+            referencedColumns: ["id"];
+          },
+        ];
       };
       industries: {
         Row: {
@@ -1969,6 +2011,7 @@ export type Database = {
       };
     };
     Functions: {
+      claim_guest_registrations: { Args: never; Returns: Json };
       connect_cards: {
         Args: {
           p_cursor?: string;
@@ -2014,6 +2057,14 @@ export type Database = {
           party_id: string;
           role: string;
         }[];
+      };
+      guest_link_request: {
+        Args: { p_email: string; p_slug: string };
+        Returns: Json;
+      };
+      guest_rsvp: {
+        Args: { p_action: string; p_email: string; p_event: string };
+        Returns: Json;
       };
       invite_event_party: {
         Args: { p_event: string; p_member: string; p_role: string };

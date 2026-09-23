@@ -134,6 +134,10 @@ async function runLiveDbArms({ record, skip }) {
       "Convene Pass 1 (521, 623): a second member reads the physical delivery row and neither the meeting link nor the host settings",
     attend:
       "Brief 10 (1030): a first going answer writes the convene default with no override, and a later answer writes an override only",
+    guest:
+      "Handoff 30-D (1026, 1034): a link request is normalized and throttled, the address is stored as a hash only, and guest_rsvp opens once, withdraws and goes again with no edge on a guest row (1002)",
+    claim:
+      "Handoff 30-D (1033): a confirmed member claims their guest row with its edge, the drift function stays at zero, and a second claim does nothing",
   };
   if (process.env.SKIP_REST) {
     for (const n of Object.values(names)) skip(n, "SKIP_REST");
@@ -866,6 +870,277 @@ async function runLiveDbArms({ record, skip }) {
         "Brief 10 (1029): a client role may not call event_media_object",
         !media.ok && media.code === "42501",
         media.ok ? "answered " + media.rows.length + " row(s)" : media.code + " " + media.message,
+      );
+    });
+    // ------------------------------------------------------------------------------------------
+    // Handoff 30-D (rulings 1002, 1026, 1033, 1034; item 14.1). The owner publishes a free public
+    // event; then, as the arm's own role, the two service-role functions are driven the way the
+    // guest-rsvp Edge Function drives them: a link request is normalized and answered send once
+    // and throttled on the second ask, a bad address and a slug with no public page are refused in
+    // the database's own words, and the table that records the ask has no column for the address
+    // at all, only a 64-hex hash. guest_rsvp's open writes going once with the offer made once,
+    // reports the row after, withdraws and goes again, and the drift function counts no guest row
+    // (a guest row carries no edge). Then the member, whose address auth.users holds confirmed,
+    // has a guest row written for that address, claims it with its edge, and a second claim does
+    // nothing. Everything rolls back. The functions are executable by service_role alone (1026),
+    // so the arm reports itself unproven, never passing, when the arm's role holds no execute on
+    // them (ruling 228): the grant is a migration of Chat's under 382.
+    // ------------------------------------------------------------------------------------------
+    await inTransaction(client, async () => {
+      await actAsSelf(client);
+      const present = await client.query(
+        "select (to_regprocedure('public.guest_link_request(text,text)') is not null and to_regprocedure('public.guest_rsvp(uuid,text,text)') is not null and to_regprocedure('public.claim_guest_registrations()') is not null) as ok",
+      );
+      if (!present.rows[0] || present.rows[0].ok !== true) {
+        skip(names.guest, "20260922120000_p2_guest_path.sql is not on the project yet");
+        skip(names.claim, "20260922120000_p2_guest_path.sql is not on the project yet");
+        return;
+      }
+      const may = await client.query(
+        "select has_function_privilege(current_user, 'public.guest_link_request(text,text)', 'execute') as link, has_function_privilege(current_user, 'public.guest_rsvp(uuid,text,text)', 'execute') as rsvp, current_user as who",
+      );
+      if (!may.rows[0] || !may.rows[0].link || !may.rows[0].rsvp) {
+        const why =
+          (may.rows[0] ? may.rows[0].who : "the arm's role") +
+          " holds no execute on guest_link_request and guest_rsvp, which are service_role's alone (1026); the arm runs once a migration grants them to live_arms (382)";
+        skip(names.guest, why);
+        skip(names.claim, why);
+        return;
+      }
+      await actAs(client, owner.id);
+      const starts = new Date(Date.now() + 28 * 86400e3);
+      starts.setUTCHours(18, 30, 0, 0);
+      const published = await attempt(client, "select public.publish_post($1::jsonb) as id", [
+        JSON.stringify({
+          verb: "convene",
+          body: "Handoff 30-D guest arm. Rolled back by the same run.",
+          author_kind: "member",
+          author_id: owner.id,
+          audience: "everyone",
+          host_context: "live-checks",
+          fields: {
+            "convene.title": "Guest arm supper",
+            "convene.format": "in_person",
+            "convene.when": "in four weeks at 18:30",
+            "convene.starts_at": starts.toISOString(),
+            "convene.timezone": "Africa/Accra",
+            "convene.place_id": "live-arms-place",
+            "convene.place_name": "Front Room",
+            "convene.city": "Accra",
+            "convene.country": "Ghana",
+            "convene.lng": "-0.1747",
+            "convene.lat": "5.5559",
+            "convene.price_nature": "free",
+            "convene.delivery_intent": "In the room, at a long table.",
+          },
+        }),
+      ]);
+      if (!published.ok) {
+        record(
+          names.guest,
+          false,
+          "publish_post refused: " + published.code + " " + published.message,
+        );
+        skip(names.claim, "no event to claim against");
+        return;
+      }
+      const ev = await attempt(
+        client,
+        "select e.id, e.slug from public.posts p join public.events e on e.id = p.created_object_id where p.id = $1",
+        [published.rows[0].id],
+      );
+      const eventId = ev.ok && ev.rows[0] ? ev.rows[0].id : null;
+      const slug = ev.ok && ev.rows[0] ? ev.rows[0].slug : null;
+      if (!eventId || !slug) {
+        record(names.guest, false, "the published post carries no event with a slug");
+        skip(names.claim, "no event to claim against");
+        return;
+      }
+
+      // The link request, as the function calls it (the arm's own role, not a client role).
+      await actAsSelf(client);
+      const typed = "  Guest.Arm@Example.Invalid ";
+      const normalized = "guest.arm@example.invalid";
+      const first = await attempt(client, "select public.guest_link_request($1, $2) as r", [
+        slug,
+        typed,
+      ]);
+      const second = await attempt(client, "select public.guest_link_request($1, $2) as r", [
+        slug,
+        normalized,
+      ]);
+      const badAddress = await attempt(client, "select public.guest_link_request($1, $2) as r", [
+        slug,
+        "not-an-address",
+      ]);
+      const noPage = await attempt(client, "select public.guest_link_request($1, $2) as r", [
+        "this-slug-has-no-public-page-000000",
+        normalized,
+      ]);
+      // pg_attribute rather than information_schema.columns: the view shows a column only to a
+      // role with some privilege on its table, and live_arms holds none on guest_link_requests by
+      // design (no client role reads or writes it), so the view answered nothing on a8fc5b0.
+      const columns = await client.query(
+        "select array_agg(a.attname::text order by a.attname) as cols from pg_catalog.pg_attribute a where a.attrelid = 'public.guest_link_requests'::regclass and a.attnum > 0 and not a.attisdropped",
+      );
+      const constraint = await client.query(
+        "select pg_get_constraintdef(oid) as def from pg_constraint where conname = 'guest_link_requests_hash_check'",
+      );
+      const cols = (columns.rows[0] && columns.rows[0].cols) || [];
+      const r1 = first.ok ? first.rows[0].r : null;
+      const r2 = second.ok ? second.rows[0].r : null;
+      const linkOk =
+        !!r1 &&
+        r1.send === true &&
+        r1.email === normalized &&
+        !!r1.facts &&
+        r1.facts.slug === slug &&
+        !("meeting_url" in r1.facts && r1.facts.meeting_url) &&
+        !!r2 &&
+        r2.send === false &&
+        !badAddress.ok &&
+        badAddress.code === "22023" &&
+        !noPage.ok &&
+        noPage.code === "22023" &&
+        cols.join(",") === "email_hash,event_id,id,requested_at" &&
+        !!constraint.rows[0] &&
+        /\[0-9a-f\]\{64\}/.test(constraint.rows[0].def);
+
+      // The guest's answers: open once, reported after, withdraw, go again; no edge on a guest row.
+      const open1 = await attempt(client, "select public.guest_rsvp($1::uuid, $2, 'open') as r", [
+        eventId,
+        normalized,
+      ]);
+      const open2 = await attempt(client, "select public.guest_rsvp($1::uuid, $2, 'open') as r", [
+        eventId,
+        normalized,
+      ]);
+      const withdraw = await attempt(
+        client,
+        "select public.guest_rsvp($1::uuid, $2, 'not_going') as r",
+        [eventId, normalized],
+      );
+      const again = await attempt(client, "select public.guest_rsvp($1::uuid, $2, 'going') as r", [
+        eventId,
+        normalized,
+      ]);
+      const drift1 = await attempt(client, "select * from private.rsvp_edge_drift()", []);
+      const o1 = open1.ok ? open1.rows[0].r : null;
+      const o2 = open2.ok ? open2.rows[0].r : null;
+      const w = withdraw.ok ? withdraw.rows[0].r : null;
+      const a = again.ok ? again.rows[0].r : null;
+      const rsvpOk =
+        !!o1 &&
+        o1.state === "returned" &&
+        o1.status === "going" &&
+        o1.offer_conversion === true &&
+        !!o2 &&
+        o2.state === "existing" &&
+        o2.status === "going" &&
+        o2.offer_conversion === false &&
+        !!w &&
+        w.state === "answered" &&
+        w.status === "not_going" &&
+        !!a &&
+        a.state === "answered" &&
+        a.status === "going" &&
+        a.offer_conversion === false &&
+        drift1.ok &&
+        drift1.rows.length === 0;
+      record(
+        names.guest,
+        linkOk && rsvpOk,
+        "link first " +
+          (first.ok
+            ? JSON.stringify({ send: r1.send, email: r1.email })
+            : first.code + " " + first.message) +
+          " second " +
+          (second.ok ? JSON.stringify(r2.send) : second.code + " " + second.message) +
+          " bad " +
+          (badAddress.ok ? "answered" : badAddress.code) +
+          " noPage " +
+          (noPage.ok ? "answered" : noPage.code) +
+          " cols " +
+          cols.join(",") +
+          " | open " +
+          (open1.ok
+            ? JSON.stringify([o1.state, o1.status, o1.offer_conversion])
+            : open1.code + " " + open1.message) +
+          " again " +
+          (open2.ok ? JSON.stringify([o2.state, o2.offer_conversion]) : open2.code) +
+          " withdraw " +
+          (withdraw.ok ? w.status : withdraw.code) +
+          " going " +
+          (again.ok ? JSON.stringify([a.status, a.offer_conversion]) : again.code) +
+          " drift " +
+          (drift1.ok ? drift1.rows.length : drift1.code + " " + drift1.message),
+      );
+
+      // The claim: the member test account's address. MEMBER_EMAIL is what the ruling 218
+      // sign-in arm in tests/live-checks.cjs signs that account in with, so it is the address
+      // auth.users holds and the one the claim reads; auth.users itself is not readable by the
+      // arm's role (42501 on a8fc5b0), and is tried only when the variable is absent. The claim
+      // function checks the confirmation itself: a zero claim against a seeded row is the failure.
+      let memberEmail = (process.env.MEMBER_EMAIL || "").trim().toLowerCase() || null;
+      let whoNote = "MEMBER_EMAIL";
+      if (!memberEmail) {
+        const who = await attempt(
+          client,
+          "select lower(btrim(u.email)) as email from auth.users u where u.id = $1 and u.email_confirmed_at is not null",
+          [member.id],
+        );
+        memberEmail = who.ok && who.rows[0] ? who.rows[0].email : null;
+        whoNote = who.ok ? "auth.users" : "auth.users refused " + who.code;
+      }
+      if (!memberEmail) {
+        skip(
+          names.claim,
+          "no address for the member test account: MEMBER_EMAIL is not set and " +
+            whoNote +
+            ", so no guest row can be written for the member's own address",
+        );
+        return;
+      }
+
+      const seeded = await attempt(client, "select public.guest_rsvp($1::uuid, $2, 'going') as r", [
+        eventId,
+        memberEmail,
+      ]);
+      await actAs(client, member.id);
+      const claim1 = await attempt(client, "select public.claim_guest_registrations() as r", []);
+      const mine = await attempt(client, "select public.event_page($1::uuid) as p", [eventId]);
+      const claim2 = await attempt(client, "select public.claim_guest_registrations() as r", []);
+      await actAsSelf(client);
+      const drift2 = await attempt(client, "select * from private.rsvp_edge_drift()", []);
+      const c1 = claim1.ok ? claim1.rows[0].r : null;
+      const c2 = claim2.ok ? claim2.rows[0].r : null;
+      const pg = mine.ok ? mine.rows[0].p : null;
+      record(
+        names.claim,
+        seeded.ok &&
+          !!c1 &&
+          c1.claimed === 1 &&
+          !!pg &&
+          pg.viewer &&
+          pg.viewer.registration &&
+          pg.viewer.registration.status === "going" &&
+          !!c2 &&
+          c2.claimed === 0 &&
+          c2.kept === 0 &&
+          drift2.ok &&
+          drift2.rows.length === 0,
+        "address from " +
+          whoNote +
+          " seed " +
+          (seeded.ok ? "ok" : seeded.code + " " + seeded.message) +
+          " claim " +
+          (claim1.ok ? JSON.stringify(c1) : claim1.code + " " + claim1.message) +
+          " page " +
+          (mine.ok ? JSON.stringify(pg && pg.viewer && pg.viewer.registration) : mine.code) +
+          " again " +
+          (claim2.ok ? JSON.stringify(c2) : claim2.code) +
+          " drift " +
+          (drift2.ok ? drift2.rows.length : drift2.code + " " + drift2.message),
       );
     });
   } finally {

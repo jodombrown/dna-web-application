@@ -760,6 +760,14 @@ function makeMockDb() {
       responses: [],
       rsvpFail: null,
       fail: false,
+      // Handoff 30-D: what event_public_page answers per slug (undefined is not found), the
+      // guest-rsvp function's state (the tokens it accepts and the address each names, the one
+      // guest row, whether the conversion offer was made, every request and answer it took), and
+      // every event-mail call. mailFail makes event-mail answer 502.
+      publicPages: {},
+      guest: { tokens: {}, row: null, offered: false, requests: [], answers: [], refuse: null },
+      mail: [],
+      mailFail: false,
     },
     // Brief 4: Connect's projection state and the writes the surface made.
     connect: {
@@ -1367,6 +1375,59 @@ async function mockSupabase(page, db, opts = {}) {
     }
     // Ruling 193: one vocabulary path, read by Profile, the Composer and the Feed. FAIL_VOCAB
     // forces the read to fail, which is how the empty-control behaviour of ruling 194 is checked.
+    // Handoff 30-D (1026, 1028): the public page's one read, and the guest's one write path. The
+    // function's answers follow supabase/functions/guest-rsvp/index.ts and 20260922120000: a request
+    // is 202 whether sent or throttled, a bad address is the database's own sentence at 400, a
+    // bad or unknown token is 410, `open` writes going once and reports the row after, going and
+    // not_going write the answer, and the conversion offer is made once per row (1034).
+    if (p === "/rest/v1/rpc/event_public_page") {
+      const b = req.postDataJSON() || {};
+      await new Promise((r) => setTimeout(r, 120));
+      const pg = db.attend.publicPages[b.p_slug];
+      return json(pg === undefined ? null : pg);
+    }
+    if (p === "/functions/v1/guest-rsvp") {
+      const b = req.postDataJSON() || {};
+      const g = db.attend.guest;
+      await new Promise((r) => setTimeout(r, 150));
+      if (b.action === "request") {
+        g.requests.push(b);
+        if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(String(b.email || "")))
+          return json({ error: "That is not an email address." }, 400);
+        if (g.refuse) return json({ error: g.refuse }, 400);
+        return json({ ok: true }, 202);
+      }
+      const email = typeof b.token === "string" ? g.tokens[b.token] : undefined;
+      if (!email) return json({ expired: true }, 410);
+      g.answers.push(b);
+      const offer = () => {
+        const first = !g.offered;
+        g.offered = true;
+        return first;
+      };
+      if (b.action === "open") {
+        if (g.row)
+          return json({ state: "existing", status: g.row.status, offer_conversion: false, email });
+        g.row = { status: "going", email };
+        return json({ state: "returned", status: "going", offer_conversion: offer(), email });
+      }
+      if (b.action === "going") {
+        g.row = { status: "going", email };
+        return json({ state: "answered", status: "going", offer_conversion: offer(), email });
+      }
+      if (b.action === "not_going") {
+        g.row = { status: "not_going", email };
+        return json({ state: "answered", status: "not_going", offer_conversion: false, email });
+      }
+      return json({ error: "That is not a request this takes." }, 400);
+    }
+    // Handoff 30-D (1035): the member's going email. 202 sent, 502 when the send failed.
+    if (p === "/functions/v1/event-mail") {
+      const b = req.postDataJSON() || {};
+      db.attend.mail.push({ ...b, auth: req.headers()["authorization"] || "" });
+      await new Promise((r) => setTimeout(r, 120));
+      return db.attend.mailFail ? json({ sent: false }, 502) : json({ sent: true }, 202);
+    }
     // Brief 10 (handoff 30-C): the event page's one read, the card's speakers, and the two writes.
     if (p === "/rest/v1/rpc/event_page") {
       const b = req.postDataJSON() || {};
@@ -1818,6 +1879,19 @@ function armCrashed() {
   return !!(openArm && openArm.crashed);
 }
 
+/**
+ * Ruling 228, per check: a check the run could not prove is reported as UNPROVEN, never as PASS,
+ * and is counted apart from the passing count. `ok` is null so nothing reads it as a failure and
+ * nothing folds it into a pass; the arm still emits it, so ruling 292's declaration is unchanged.
+ * Handoff 30-D item 11.3 (ruling 1036) is the first caller: the Event hook's tap that did not
+ * navigate and was followed by its href.
+ */
+function unproven(name, why, arm = openArm ? openArm.arm : null) {
+  results.push({ name, ok: null, detail: why, arm, crashed: armCrashed(), unproven: true });
+  console.log("UNPROVEN", name, why);
+  if (process.env.DUMP_LABELS) console.log("LABEL", openArm ? openArm.arm : "-", "::", name);
+}
+
 function record(name, ok, detail = "", crashed = armCrashed(), arm = openArm ? openArm.arm : null) {
   // `arm` is explicit only for ruling 292's own per-arm accounting, which runs after the last arm
   // has closed and so has no open arm to read. Ruling 832 needs those records attributed, because a
@@ -1916,7 +1990,7 @@ function accountForArms({ full, engines }) {
     // 2 reported on a plain fifteen-second timeout with no crash anywhere in the job. So the cause
     // is the catch-all and not the crash handler, and the discriminator is a failing check inside
     // the arm: a declaration that is genuinely stale drifts upward with every check still passing.
-    const threw = results.some((r) => r.arm === arm && !r.ok);
+    const threw = results.some((r) => r.arm === arm && r.ok === false);
     const label = `ruling 292 | ${arm}: emitted every check it declares`;
     if (want === undefined) {
       record(
@@ -2018,7 +2092,8 @@ const KNOWN_CLASSES = [
  */
 function finish({ full = false, engines = [] } = {}) {
   accountForArms({ full, engines });
-  const fails = results.filter((r) => !r.ok);
+  const fails = results.filter((r) => r.ok === false);
+  const unprovenChecks = results.filter((r) => r.unproven);
   fs.writeFileSync(path.join(OUT, "results.json"), JSON.stringify(results, null, 2));
   fs.writeFileSync(
     path.join(OUT, "arms.json"),
@@ -2089,8 +2164,8 @@ function finish({ full = false, engines = [] } = {}) {
   // are: that part is ruling 228 and is not the exemption. What ruling 832 grants is narrower than
   // that and sits in `standDown` alone, one arm wide.
   const unproven = [...new Set(armLog.filter((a) => a.crashed).map((a) => a.arm))];
-  const counted = results.filter((r) => !unproven.includes(r.arm));
-  const countedFails = counted.filter((r) => !r.ok);
+  const counted = results.filter((r) => !unproven.includes(r.arm) && !r.unproven);
+  const countedFails = counted.filter((r) => r.ok === false);
   const standDown = unproven.length === 1 && countedFails.length === 0;
   const declared = loadExpected() || {};
 
@@ -2105,6 +2180,11 @@ function finish({ full = false, engines = [] } = {}) {
         : ""),
   );
   fails.forEach((f) => console.log("FAIL", f.crashed ? "[CRASH]" : "[no crash]", f.name, f.detail));
+  // Ruling 228: a check the run could not prove is listed apart, never inside the passing count.
+  if (unprovenChecks.length) {
+    console.log(`${unprovenChecks.length} check(s) UNPROVEN, not passing:`);
+    for (const u of unprovenChecks) console.log(`  - ${u.name}: ${u.detail}`);
+  }
   if (standDown) {
     console.log(
       "\n=== ruling 832: STOOD DOWN ON ONE CRASHED ARM. THIS IS NOT A CLEAN RUN. ===\n" +
@@ -2692,9 +2772,27 @@ async function runViewport(browserType, bname, [w, h], theme) {
 // declared for: the form on Strand's Composer (664 to 673), place resolution in its three states
 // (PR 2's mock), the moment parsed and windowed (520, 634), the door by format (521, 621), publish
 // in flight and failed (665, 666), the published card and a seeded cancelled card (SPEC 2).
+/**
+ * The mocked event ids, one UUID per kind. Handoff 30-D item 11.1 makes the member page's read
+ * return not found before any call for an id that is not a UUID, so a fixture id like `e-loaded`
+ * could never load; these are UUIDs that read as their kind in the last group.
+ */
+const EVENT_IDS = {
+  loaded: "00000000-0000-4000-8000-0000000e10ad",
+  past: "00000000-0000-4000-8000-0000000e0a57",
+  cancelled: "00000000-0000-4000-8000-0000000eca9c",
+  full: "00000000-0000-4000-8000-0000000ef011",
+  private: "00000000-0000-4000-8000-0000000e9b1a",
+};
+function eventId(kind) {
+  if (EVENT_IDS[kind]) return EVENT_IDS[kind];
+  const hex = require("crypto").createHash("md5").update(String(kind)).digest("hex").slice(0, 12);
+  return "00000000-0000-4000-8000-" + hex;
+}
+
 function seedEvent(db, kind) {
   const id = "seed-event-" + kind;
-  const oid = "e-" + kind;
+  const oid = eventId(kind);
   const past = kind === "past";
   const starts = new Date(Date.now() + (past ? -3 : 20) * 86400e3);
   starts.setUTCHours(19, 0, 0, 0);
@@ -5480,6 +5578,8 @@ module.exports = {
   mockSupabase,
   signIn,
   record,
+  unproven,
+  eventId,
   results,
   armStart,
   armCrashed,
@@ -5616,7 +5716,7 @@ if (require.main === module)
         // Brief 10 (handoff 30-C item 13): the member's event page at every cell, its flows on the
         // two representative layouts.
         if (process.env.SPECIAL.includes("event")) {
-          const { runEvent, runEventFlows } = require("./event.cjs");
+          const { runEvent, runEventFlows, runGuest } = require("./event.cjs");
           for (const vp of process.env.ONLY ? [JSON.parse(process.env.ONLY)] : VIEWPORTS)
             for (const theme of process.env.THEME ? [process.env.THEME] : THEMES)
               await runEvent(bt, bname, vp, theme);
@@ -5628,6 +5728,15 @@ if (require.main === module)
               ])
             for (const theme of process.env.THEME ? [process.env.THEME] : THEMES)
               await runEventFlows(bt, bname, vp, theme);
+          // Handoff 30-D item 14.3: the public page's guest path on the two representative layouts.
+          for (const vp of process.env.ONLY
+            ? [JSON.parse(process.env.ONLY)]
+            : [
+                [390, 844],
+                [1280, 800],
+              ])
+            for (const theme of process.env.THEME ? [process.env.THEME] : THEMES)
+              await runGuest(bt, bname, vp, theme);
         }
         if (process.env.SPECIAL.includes("connect")) {
           const { runConnect } = require("./connect.cjs");
@@ -5688,13 +5797,19 @@ if (require.main === module)
         for (const theme of THEMES) await runConnect(bt, bname, vp, theme);
       // Brief 10 (handoff 30-C item 13): the member's event page at every cell, its flows on the
       // two representative layouts.
-      const { runEvent, runEventFlows } = require("./event.cjs");
+      const { runEvent, runEventFlows, runGuest } = require("./event.cjs");
       for (const vp of VIEWPORTS) for (const theme of THEMES) await runEvent(bt, bname, vp, theme);
       for (const vp of [
         [390, 844],
         [1280, 800],
       ])
         for (const theme of THEMES) await runEventFlows(bt, bname, vp, theme);
+      // Handoff 30-D item 14.3: the public page's guest path on the two representative layouts.
+      for (const vp of [
+        [390, 844],
+        [1280, 800],
+      ])
+        for (const theme of THEMES) await runGuest(bt, bname, vp, theme);
       // Rulings 193, 194: the vocabulary read served and then failing, on both layouts.
       const { runVocabulary } = require("./vocabulary.cjs");
       for (const vp of [

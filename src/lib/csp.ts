@@ -62,12 +62,23 @@ export function contentSecurityPolicy(nonce: string | undefined): string {
   ].join("; ");
 }
 
+/**
+ * Handoff 30-D item 8.4: a guest's link lands on `/e/{slug}?g={token}`, and the page replaces the
+ * address the moment it has read the token; until then, and on every request under `/e/`, nothing
+ * this page links to may learn the URL it came from. Every other path keeps ruling 438's value.
+ */
+export function referrerPolicy(pathname: string): string {
+  return pathname === "/e" || pathname.startsWith("/e/")
+    ? "no-referrer"
+    : "strict-origin-when-cross-origin";
+}
+
 /** The six headers of ruling 438, as name and value pairs, for one response. */
-export function securityHeaders(nonce: string | undefined): [string, string][] {
+export function securityHeaders(nonce: string | undefined, pathname = "/"): [string, string][] {
   return [
     ["Content-Security-Policy", contentSecurityPolicy(nonce)],
     ["X-Frame-Options", "DENY"],
-    ["Referrer-Policy", "strict-origin-when-cross-origin"],
+    ["Referrer-Policy", referrerPolicy(pathname)],
     ["Strict-Transport-Security", "max-age=31536000; includeSubDomains"],
     ["X-Content-Type-Options", "nosniff"],
     ["Permissions-Policy", "camera=(self), geolocation=(), microphone=()"],
