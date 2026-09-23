@@ -42,6 +42,9 @@ serves /password
 serves /welcome
 serves /where
 serves /relationship
+# Brief 9's Discovery and the C stub beside it, opened by tests/discovery.cjs (handoff 31-B).
+serves /convene
+serves /collaborate
 # Brief 10's member event page, opened by tests/event.cjs; the shell serves it signed out too.
 serves /convene/events/00000000-0000-4000-8000-000000000000
 serves /strand/adinkra/mate-masie.svg

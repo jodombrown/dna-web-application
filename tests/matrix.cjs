@@ -4,7 +4,7 @@
 // layer, so the real client code paths run against a deterministic backend. Backend behaviour
 // (RLS, the feed view) is verified separately in SQL against the live project.
 // Usage: BASE=https://b2-shell-feed.dna-web-application.pages.dev WEBKIT=1 node tests/matrix.cjs
-// Env: ONLY='[390,844]' runs one viewport; SPECIAL=publish,guards,keyboard,silence,shell,width,targeted,profile,connect,event,vocab,block,auth,onboarding runs flows only.
+// Env: ONLY='[390,844]' runs one viewport; SPECIAL=publish,guards,keyboard,silence,shell,width,targeted,profile,connect,event,discovery,vocab,block,auth,onboarding runs flows only.
 // Brief 3 profile flows live in tests/profile.cjs and Brief 4 Connect flows in tests/connect.cjs; both share this mock.
 const { chromium, webkit } = require("playwright");
 const fs = require("fs");
@@ -276,7 +276,80 @@ const VOCAB = {
     { value: "skills", label: "Skills" },
     { value: "in_kind", label: "In-kind" },
   ],
+  // Brief 9 (1037, 1041): Convene's families and lenses, the rows 20260922150000 inserts, in order.
+  convene_families: [
+    { value: "small_social", label: "Small social gatherings", schema_org: ["SocialEvent"] },
+    { value: "learning_dialogue", label: "Learning and dialogue", schema_org: ["EducationEvent"] },
+    { value: "professional_economic", label: "Professional and economic", schema_org: [] },
+    { value: "culture_arts", label: "Culture and arts", schema_org: ["MusicEvent"] },
+    { value: "heritage_religious", label: "Cultural, heritage and religious", schema_org: [] },
+    { value: "civic_community", label: "Civic and community", schema_org: [] },
+    { value: "giving_cause", label: "Giving and cause", schema_org: [] },
+    { value: "sport_wellness", label: "Sport and wellness", schema_org: ["SportsEvent"] },
+    { value: "family_kids", label: "Family and kids", schema_org: ["ChildrensEvent"] },
+  ],
+  convene_lenses: [
+    {
+      value: "all",
+      name: "All",
+      short: "All",
+      icon: "circle-dot",
+      scope: "Everything happening, as lanes.",
+    },
+    {
+      value: "follow",
+      name: "From communities you follow",
+      short: "Communities",
+      icon: "users",
+      scope: "Events whose host you follow.",
+    },
+    {
+      value: "taste",
+      name: "Because of what you follow",
+      short: "Categories",
+      icon: "heart",
+      scope: "Events in the category families you subscribe to.",
+    },
+    {
+      value: "soon",
+      name: "Happening soon",
+      short: "Soon",
+      icon: "clock",
+      scope: "The next two weeks, across every home you hold.",
+    },
+    {
+      value: "online",
+      name: "Online from anywhere",
+      short: "Online",
+      icon: "globe",
+      scope: "Online and hybrid events, any place.",
+    },
+    {
+      value: "curated",
+      name: "Curated by Convene",
+      short: "Curated",
+      icon: "bookmark",
+      scope: "Picks chosen by an editor and named as theirs.",
+    },
+    {
+      value: "near",
+      name: "Near your homes",
+      short: "My homes",
+      icon: "map-pin",
+      scope: "In-person and hybrid events in your homes, in order.",
+    },
+    {
+      value: "network",
+      name: "Connected to your network",
+      short: "My network",
+      icon: "user-plus",
+      scope: "A connection hosting, or connections going.",
+    },
+  ],
 };
+
+/** Brief 9: the projection's seven sections, in convene_lenses order (631). */
+const DISCOVERY_SECTIONS = ["follow", "taste", "soon", "online", "curated", "near", "network"];
 const ATTESTATIONS = {
   convene: [
     {
@@ -768,6 +841,21 @@ function makeMockDb() {
       guest: { tokens: {}, row: null, offered: false, requests: [], answers: [], refuse: null },
       mail: [],
       mailFail: false,
+    },
+    // Brief 9 (handoff 31-B item 15): what convene_discovery answers. `sections` maps a section id
+    // to its items ({ event_id, post_id, reason }); the mock returns, under lens all, every section
+    // with an item left after this member's dismissals, and under a lens that one section, empty or
+    // not, as the projection does. Homes default to the member's own; `calls` is every argument set
+    // the surface sent and `dismissals` every write.
+    discovery: {
+      sections: {},
+      homes: null,
+      follows: [],
+      subscriptions: [],
+      suggest: null,
+      dismissals: [],
+      calls: [],
+      fail: false,
     },
     // Brief 4: Connect's projection state and the writes the surface made.
     connect: {
@@ -1492,6 +1580,66 @@ async function mockSupabase(page, db, opts = {}) {
       );
       return json({ id: b.p_party, status: b.p_accept ? "accepted" : "declined" });
     }
+    // Brief 9: the Discovery projection and its dismissal, with the projection's own refusals
+    // (22023) for a lens, a format, a family or a home it does not know.
+    if (p === "/rest/v1/rpc/convene_discovery") {
+      const b = req.postDataJSON() || {};
+      const d = db.discovery;
+      d.calls.push(b);
+      const refuse = (message) => json({ code: "22023", message, details: null, hint: null }, 400);
+      if (d.fail)
+        return json(
+          { code: "PGRST", message: "forced discovery failure", details: null, hint: null },
+          500,
+        );
+      const lens = b.p_lens || "all";
+      const homes =
+        d.homes ??
+        db.homes.map((h) => ({
+          id: h.id,
+          city: h.city,
+          place_name: h.place_name,
+          region: null,
+          country: h.country,
+        }));
+      if (lens !== "all" && !DISCOVERY_SECTIONS.includes(lens)) return refuse("unknown lens");
+      if (b.p_home && !homes.some((h) => h.id === b.p_home)) return refuse("not your home");
+      const families = VOCAB.convene_families.map((f) => f.value);
+      if (b.p_families && b.p_families.some((f) => !families.includes(f)))
+        return refuse("unknown family");
+      if (b.p_format && b.p_format.some((f) => !["in_person", "online", "hybrid"].includes(f)))
+        return refuse("unknown format");
+      // An in-person-only facet drops the online and curated lanes, as the live arm reads it.
+      const inPersonOnly =
+        Array.isArray(b.p_format) &&
+        b.p_format.length &&
+        !b.p_format.some((f) => f !== "in_person");
+      const sections = [];
+      for (const id of DISCOVERY_SECTIONS) {
+        if (lens !== "all" && lens !== id) continue;
+        let items = (d.sections[id] || []).filter(
+          (i) => !d.dismissals.some((x) => x.p_section === id && x.p_event === i.event_id),
+        );
+        if (inPersonOnly && (id === "online" || id === "curated")) items = [];
+        if (lens === "all" && items.length === 0) continue;
+        sections.push({ section: id, items });
+      }
+      return json({
+        lens,
+        homes,
+        follows: d.follows,
+        subscriptions: d.subscriptions,
+        suggest: lens === "all" || lens === "follow" ? d.suggest : null,
+        sections,
+      });
+    }
+    if (p === "/rest/v1/rpc/dismiss_discovery_item") {
+      const b = req.postDataJSON() || {};
+      if (!DISCOVERY_SECTIONS.includes(b.p_section))
+        return json({ code: "22023", message: "unknown section", details: null, hint: null }, 400);
+      db.discovery.dismissals.push(b);
+      return json(null, 204);
+    }
     if (p === "/rest/v1/rpc/vocabularies")
       return db.failVocab
         ? json(
@@ -1562,7 +1710,9 @@ async function mockSupabase(page, db, opts = {}) {
         let rows = db.posts.filter((p) => p.status === "published");
         const ids = inIds("id");
         if (ids) rows = rows.filter((p) => ids.includes(p.id));
-        const id = eqOf("id");
+        // Only an `eq.` filter is one id: `loadPostsByIds` (Brief 9's hydration) sends `in.(...)`,
+        // which eqOf would otherwise hand back whole and match against no row.
+        const id = ids ? null : eqOf("id");
         if (id) rows = rows.filter((p) => p.id === id);
         const or = url.searchParams.get("or") || "";
         if (or.includes("created_by")) rows = rows.filter((p) => p.author_id === UID);
@@ -4474,18 +4624,21 @@ async function runShell(browserType, bname, [w, h]) {
     await page.waitForURL((u) => u.pathname === "/feed");
     await page.locator("[data-feed] article[data-c]").first().waitFor({ timeout: 10000 });
     record(tag + " Back to Feed from the direct view lands on Feed", true);
-    // The four remaining C stubs render inside the same shell (Connect is a real surface since
-    // Brief 4, covered by tests/connect.cjs); Home returns to Feed; no remount.
+    // The three remaining C stubs render inside the same shell (Connect is a real surface since
+    // Brief 4, covered by tests/connect.cjs, and Convene since Brief 9, covered by
+    // tests/discovery.cjs); Home returns to Feed; no remount.
     const stampBefore = await page.getAttribute("html", "data-shell");
-    await page.locator('nav[aria-label="Pulse"] button', { hasText: "Convene" }).click();
-    await page.waitForURL("**/convene");
-    await page.locator('[data-testid="c-stub"][data-c="convene"]').waitFor({ timeout: 10000 });
+    await page.locator('nav[aria-label="Pulse"] button', { hasText: "Collaborate" }).click();
+    await page.waitForURL("**/collaborate");
+    await page.locator('[data-testid="c-stub"][data-c="collaborate"]').waitFor({ timeout: 10000 });
     record(
-      tag + " /convene: stub inside the shell, Convene active, no remount",
-      (await page.locator('[data-testid="c-stub"]').textContent()).includes("Convene is next") &&
+      tag + " /collaborate: stub inside the shell, Collaborate active, no remount",
+      (await page.locator('[data-testid="c-stub"]').textContent()).includes(
+        "Collaborate is next",
+      ) &&
         (
           await page.locator('nav[aria-label="Pulse"] [aria-current="page"]').textContent()
-        ).includes("Convene") &&
+        ).includes("Collaborate") &&
         (await page.getAttribute("html", "data-shell")) === stampBefore &&
         (await page.locator("[data-app-header]").count()) === 1,
     );
@@ -5600,6 +5753,8 @@ module.exports = {
   CONNECT_MEMBERS,
   CONNECT_SUGGESTED,
   CONNECT_WHERE,
+  VOCAB,
+  DISCOVERY_SECTIONS,
 };
 
 /**
@@ -5738,6 +5893,12 @@ if (require.main === module)
             for (const theme of process.env.THEME ? [process.env.THEME] : THEMES)
               await runGuest(bt, bname, vp, theme);
         }
+        if (process.env.SPECIAL.includes("discovery")) {
+          const { runDiscovery, DISCOVERY_VIEWPORTS } = require("./discovery.cjs");
+          for (const vp of only ? [only] : DISCOVERY_VIEWPORTS)
+            for (const theme of process.env.THEME ? [process.env.THEME] : THEMES)
+              await runDiscovery(bt, bname, vp, theme);
+        }
         if (process.env.SPECIAL.includes("connect")) {
           const { runConnect } = require("./connect.cjs");
           for (const vp of process.env.ONLY ? [JSON.parse(process.env.ONLY)] : VIEWPORTS)
@@ -5804,6 +5965,10 @@ if (require.main === module)
         [1280, 800],
       ])
         for (const theme of THEMES) await runEventFlows(bt, bname, vp, theme);
+      // Brief 9 (handoff 31-B item 15): Discovery at every width plus 1440, both themes.
+      const { runDiscovery, DISCOVERY_VIEWPORTS } = require("./discovery.cjs");
+      for (const vp of DISCOVERY_VIEWPORTS)
+        for (const theme of THEMES) await runDiscovery(bt, bname, vp, theme);
       // Handoff 30-D item 14.3: the public page's guest path on the two representative layouts.
       for (const vp of [
         [390, 844],

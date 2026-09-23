@@ -6,7 +6,6 @@ import { useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Outlet, useLocation, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { feedViewOf } from "@/lib/feed-view";
-import { lensSearch, parseLens, type LensId } from "@/lib/lens";
 import { AppShell, COMPOSER_HOST } from "@/components/dna/AppShell";
 import { ComposerShell, PUBLISHED_EVENT } from "@/components/dna/ComposerShell";
 import { FeedSurface, toastStyle } from "@/components/dna/FeedSurface";
@@ -38,13 +37,12 @@ function ShellLayout() {
   const pathname = useLocation({ select: (l) => l.pathname });
   const fromFeed = useLocation({ select: (l) => !!l.state.fromFeed });
   const reveal = useLocation({ select: (l) => !!l.state.reveal });
-  const search = useSearch({ strict: false }) as { lens?: string; as?: string };
+  const search = useSearch({ strict: false }) as { as?: string };
   // /m/:handle (Brief 3) is the one route a signed-out visitor may open: the public profile renders
   // its own signed-out chrome, as does the owner's "View as public" (?as=public), so the shell steps
   // aside for both instead of redirecting to sign-in.
   const profilePath = pathname.startsWith("/m/");
   const bare = profilePath && (!member || search.as === "public");
-  const lens = parseLens(search.lens);
   const tier = useTier();
   const { seed } = useComposerState();
   const [toast, setToast] = useState<string | null>(null);
@@ -105,8 +103,6 @@ function ShellLayout() {
 
   const active = activeC(pathname);
   const feedView = feedViewOf(pathname, { fromFeed, reveal, __TSR_index: 0 });
-  const setLens = (id: LensId) =>
-    void navigate({ to: "/feed", search: lensSearch(id), resetScroll: false });
 
   return (
     <>
@@ -115,8 +111,6 @@ function ShellLayout() {
         active={active}
         homeActive={feedView?.kind === "feed" || feedView?.kind === "expanded"}
         feedView={feedView}
-        lens={lens}
-        onLens={setLens}
         closeKey={pathname + ":" + seed}
       >
         {feedView && <FeedSurface member={member} view={feedView} />}

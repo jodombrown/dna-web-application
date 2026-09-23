@@ -16,14 +16,30 @@
 // surface. The padding half is Connect's own layout and outlives 181, so the axis is named for
 // what is left of it rather than deleted with the colour (ruling 555: the mechanism is what the
 // tree holds, not what a name remembers).
+//
+// A surface may also name a layout mode the shell's grid carries (handoff 31-B item 4). `lanes` is
+// Discovery's (Brief 9 SPEC section 0 with rulings 944 to 947): at medium and expanded, a full-width
+// `top` row above the columns (the LensBar, 946), then the rail and the lanes as independent scroll
+// columns (945), the lanes column taking every pixel the rail leaves instead of the Feed's 680 to 760
+// track. `rail` is the left column's width state: `open` is the FacetRail at 240 (medium) or 260
+// (expanded), `collapsed` its 64 icon strip (687, 688, 725). `key` names the surface's own view, so a
+// navigation inside it that keeps the key (the pane opening over the lanes, 688) leaves the lanes'
+// scroll position where it was, and one that changes the key (a lens) resets it like any surface
+// change. Null is the shell's ordinary grid. Compact is one column in either mode.
 import { useSyncExternalStore, type ReactNode } from "react";
 
 export type RailSlot = { label: string | null; node: ReactNode } | null;
 export type ColumnPad = "inset" | null;
+export type ShellLayout = {
+  mode: "lanes";
+  rail: "open" | "collapsed";
+  top: ReactNode;
+  key: string;
+} | null;
 
-type State = { left: RailSlot; right: RailSlot; pad: ColumnPad };
+type State = { left: RailSlot; right: RailSlot; pad: ColumnPad; layout: ShellLayout };
 
-let state: State = { left: null, right: null, pad: null };
+let state: State = { left: null, right: null, pad: null, layout: null };
 const listeners = new Set<() => void>();
 
 function emit() {
@@ -48,6 +64,11 @@ export function setRightRail(slot: RailSlot) {
 
 export function setColumnPad(pad: ColumnPad) {
   state = { ...state, pad };
+  emit();
+}
+
+export function setShellLayout(layout: ShellLayout) {
+  state = { ...state, layout };
   emit();
 }
 
@@ -76,6 +97,14 @@ export function useColumnPad(): ColumnPad {
   return useSyncExternalStore(
     subscribe,
     () => state.pad,
+    () => null,
+  );
+}
+
+export function useShellLayout(): ShellLayout {
+  return useSyncExternalStore(
+    subscribe,
+    () => state.layout,
     () => null,
   );
 }

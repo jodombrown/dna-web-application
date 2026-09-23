@@ -9,6 +9,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useRouter, useSearch } from "@tanstack/react-router";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Ghosts } from "@/components/dna/Ghosts";
 import { PostCardRouter } from "@/components/dna/PostCardRouter";
 import { Button } from "@/components/strand/Button";
 import { CardFade } from "@/components/strand/CardFade";
@@ -22,6 +23,7 @@ import type { Member } from "@/lib/auth";
 import { openComposer } from "@/lib/composer-store";
 import { loadFeed, loadMarks, loadPost, setReacted, setSaved } from "@/lib/feed";
 import type { FeedView } from "@/lib/feed-view";
+import { setHeaderLens } from "@/lib/header-lens-store";
 import { LENSES, lensSearch, parseLens, type LensId } from "@/lib/lens";
 import type { PostView } from "@/lib/post-view";
 import { useShellScroll } from "@/lib/shell-scroll";
@@ -63,48 +65,6 @@ export function toastStyle(tier: "compact" | "medium" | "expanded") {
     zIndex: 70,
     pointerEvents: "none" as const,
   };
-}
-
-function Ghosts() {
-  const block = (h: number, w: string) => (
-    <span style={{ height: h, width: w, borderRadius: 6, background: "var(--bg-sunken)" }} />
-  );
-  return (
-    <div
-      role="status"
-      aria-label="Loading Feed"
-      style={{ display: "flex", flexDirection: "column", gap: 12 }}
-    >
-      {[1, 2, 3].map((g) => (
-        <div
-          key={g}
-          aria-hidden="true"
-          style={{
-            background: "var(--surface)",
-            border: "1px solid var(--line)",
-            borderRadius: 14,
-            padding: 16,
-            display: "flex",
-            flexDirection: "column",
-            gap: 12,
-          }}
-        >
-          <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-            <span
-              style={{ width: 40, height: 40, borderRadius: 10, background: "var(--bg-sunken)" }}
-            />
-            <span style={{ flex: 1, display: "flex", flexDirection: "column", gap: 6 }}>
-              {block(12, "40%")}
-              {block(10, "60%")}
-            </span>
-          </div>
-          {block(18, "80%")}
-          {block(12, "100%")}
-          {block(12, "70%")}
-        </div>
-      ))}
-    </div>
-  );
 }
 
 function greetingFor(name: string, now: Date) {
@@ -250,6 +210,22 @@ export function FeedSurface({ member, view }: { member: Member; view: FeedView }
   const setLens = (id: LensId) => {
     void navigate({ to: "/feed", search: lensSearch(id), resetScroll: false });
   };
+  // Handoff 31-B item 4: the header's lens slot, which the shell read from the Feed's props until
+  // Discovery became a second surface with one. Registered while the list shows (Feed and the
+  // in-place expansion), never on the direct view, which is what the shell's `onFeed` meant.
+  useEffect(() => {
+    if (view.kind === "direct") {
+      setHeaderLens(null);
+      return;
+    }
+    setHeaderLens({
+      lenses: LENSES,
+      value: lens,
+      onChange: (id: string) =>
+        void navigate({ to: "/feed", search: lensSearch(id as LensId), resetScroll: false }),
+    });
+  }, [view.kind, lens, navigate]);
+  useEffect(() => () => setHeaderLens(null), []);
   const placeRef = useRef<{ lens: LensId; stuck: boolean; scrolled: boolean }>({
     lens,
     stuck,

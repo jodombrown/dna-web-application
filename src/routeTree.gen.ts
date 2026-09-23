@@ -18,10 +18,12 @@ import { Route as WelcomeRouteImport } from './routes/welcome'
 import { Route as WhereRouteImport } from './routes/where'
 import { Route as ShellCRouteImport } from './routes/_shell/$c'
 import { Route as ShellConnectRouteImport } from './routes/_shell/connect'
+import { Route as ShellConveneRouteImport } from './routes/_shell/convene'
 import { Route as ShellFeedRouteImport } from './routes/_shell/feed'
 import { Route as ShellPasswordRouteImport } from './routes/_shell/password'
 import { Route as ESlugRouteImport } from './routes/e.$slug'
 import { Route as ResetNewRouteImport } from './routes/reset_.new'
+import { Route as ShellConveneLensRouteImport } from './routes/_shell/convene.$lens'
 import { Route as ShellMHandleRouteImport } from './routes/_shell/m.$handle'
 import { Route as ShellPostsIdRouteImport } from './routes/_shell/posts.$id'
 import { Route as ShellConveneEventsIdRouteImport } from './routes/_shell/convene.events.$id'
@@ -70,6 +72,11 @@ const ShellConnectRoute = ShellConnectRouteImport.update({
   path: '/connect',
   getParentRoute: () => ShellRoute,
 } as any)
+const ShellConveneRoute = ShellConveneRouteImport.update({
+  id: '/convene',
+  path: '/convene',
+  getParentRoute: () => ShellRoute,
+} as any)
 const ShellFeedRoute = ShellFeedRouteImport.update({
   id: '/feed',
   path: '/feed',
@@ -90,6 +97,11 @@ const ResetNewRoute = ResetNewRouteImport.update({
   path: '/reset/new',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ShellConveneLensRoute = ShellConveneLensRouteImport.update({
+  id: '/$lens',
+  path: '/$lens',
+  getParentRoute: () => ShellConveneRoute,
+} as any)
 const ShellMHandleRoute = ShellMHandleRouteImport.update({
   id: '/m/$handle',
   path: '/m/$handle',
@@ -101,9 +113,9 @@ const ShellPostsIdRoute = ShellPostsIdRouteImport.update({
   getParentRoute: () => ShellRoute,
 } as any)
 const ShellConveneEventsIdRoute = ShellConveneEventsIdRouteImport.update({
-  id: '/convene/events/$id',
-  path: '/convene/events/$id',
-  getParentRoute: () => ShellRoute,
+  id: '/events/$id',
+  path: '/events/$id',
+  getParentRoute: () => ShellConveneRoute,
 } as any)
 
 export interface FileRoutesByFullPath {
@@ -115,10 +127,12 @@ export interface FileRoutesByFullPath {
   '/where': typeof WhereRoute
   '/$c': typeof ShellCRoute
   '/connect': typeof ShellConnectRoute
+  '/convene': typeof ShellConveneRouteWithChildren
   '/feed': typeof ShellFeedRoute
   '/password': typeof ShellPasswordRoute
   '/e/$slug': typeof ESlugRoute
   '/reset/new': typeof ResetNewRoute
+  '/convene/$lens': typeof ShellConveneLensRoute
   '/m/$handle': typeof ShellMHandleRoute
   '/posts/$id': typeof ShellPostsIdRoute
   '/convene/events/$id': typeof ShellConveneEventsIdRoute
@@ -132,10 +146,12 @@ export interface FileRoutesByTo {
   '/where': typeof WhereRoute
   '/$c': typeof ShellCRoute
   '/connect': typeof ShellConnectRoute
+  '/convene': typeof ShellConveneRouteWithChildren
   '/feed': typeof ShellFeedRoute
   '/password': typeof ShellPasswordRoute
   '/e/$slug': typeof ESlugRoute
   '/reset/new': typeof ResetNewRoute
+  '/convene/$lens': typeof ShellConveneLensRoute
   '/m/$handle': typeof ShellMHandleRoute
   '/posts/$id': typeof ShellPostsIdRoute
   '/convene/events/$id': typeof ShellConveneEventsIdRoute
@@ -151,10 +167,12 @@ export interface FileRoutesById {
   '/where': typeof WhereRoute
   '/_shell/$c': typeof ShellCRoute
   '/_shell/connect': typeof ShellConnectRoute
+  '/_shell/convene': typeof ShellConveneRouteWithChildren
   '/_shell/feed': typeof ShellFeedRoute
   '/_shell/password': typeof ShellPasswordRoute
   '/e/$slug': typeof ESlugRoute
   '/reset_/new': typeof ResetNewRoute
+  '/_shell/convene/$lens': typeof ShellConveneLensRoute
   '/_shell/m/$handle': typeof ShellMHandleRoute
   '/_shell/posts/$id': typeof ShellPostsIdRoute
   '/_shell/convene/events/$id': typeof ShellConveneEventsIdRoute
@@ -170,10 +188,12 @@ export interface FileRouteTypes {
     | '/where'
     | '/$c'
     | '/connect'
+    | '/convene'
     | '/feed'
     | '/password'
     | '/e/$slug'
     | '/reset/new'
+    | '/convene/$lens'
     | '/m/$handle'
     | '/posts/$id'
     | '/convene/events/$id'
@@ -187,10 +207,12 @@ export interface FileRouteTypes {
     | '/where'
     | '/$c'
     | '/connect'
+    | '/convene'
     | '/feed'
     | '/password'
     | '/e/$slug'
     | '/reset/new'
+    | '/convene/$lens'
     | '/m/$handle'
     | '/posts/$id'
     | '/convene/events/$id'
@@ -205,10 +227,12 @@ export interface FileRouteTypes {
     | '/where'
     | '/_shell/$c'
     | '/_shell/connect'
+    | '/_shell/convene'
     | '/_shell/feed'
     | '/_shell/password'
     | '/e/$slug'
     | '/reset_/new'
+    | '/_shell/convene/$lens'
     | '/_shell/m/$handle'
     | '/_shell/posts/$id'
     | '/_shell/convene/events/$id'
@@ -291,6 +315,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ShellConnectRouteImport
       parentRoute: typeof ShellRoute
     }
+    '/_shell/convene': {
+      id: '/_shell/convene'
+      path: '/convene'
+      fullPath: '/convene'
+      preLoaderRoute: typeof ShellConveneRouteImport
+      parentRoute: typeof ShellRoute
+    }
     '/_shell/feed': {
       id: '/_shell/feed'
       path: '/feed'
@@ -319,6 +350,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ResetNewRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_shell/convene/$lens': {
+      id: '/_shell/convene/$lens'
+      path: '/$lens'
+      fullPath: '/convene/$lens'
+      preLoaderRoute: typeof ShellConveneLensRouteImport
+      parentRoute: typeof ShellConveneRoute
+    }
     '/_shell/m/$handle': {
       id: '/_shell/m/$handle'
       path: '/m/$handle'
@@ -335,32 +373,46 @@ declare module '@tanstack/react-router' {
     }
     '/_shell/convene/events/$id': {
       id: '/_shell/convene/events/$id'
-      path: '/convene/events/$id'
+      path: '/events/$id'
       fullPath: '/convene/events/$id'
       preLoaderRoute: typeof ShellConveneEventsIdRouteImport
-      parentRoute: typeof ShellRoute
+      parentRoute: typeof ShellConveneRoute
     }
   }
 }
 
+interface ShellConveneRouteChildren {
+  ShellConveneLensRoute: typeof ShellConveneLensRoute
+  ShellConveneEventsIdRoute: typeof ShellConveneEventsIdRoute
+}
+
+const ShellConveneRouteChildren: ShellConveneRouteChildren = {
+  ShellConveneLensRoute: ShellConveneLensRoute,
+  ShellConveneEventsIdRoute: ShellConveneEventsIdRoute,
+}
+
+const ShellConveneRouteWithChildren = ShellConveneRoute._addFileChildren(
+  ShellConveneRouteChildren,
+)
+
 interface ShellRouteChildren {
   ShellCRoute: typeof ShellCRoute
   ShellConnectRoute: typeof ShellConnectRoute
+  ShellConveneRoute: typeof ShellConveneRouteWithChildren
   ShellFeedRoute: typeof ShellFeedRoute
   ShellPasswordRoute: typeof ShellPasswordRoute
   ShellMHandleRoute: typeof ShellMHandleRoute
   ShellPostsIdRoute: typeof ShellPostsIdRoute
-  ShellConveneEventsIdRoute: typeof ShellConveneEventsIdRoute
 }
 
 const ShellRouteChildren: ShellRouteChildren = {
   ShellCRoute: ShellCRoute,
   ShellConnectRoute: ShellConnectRoute,
+  ShellConveneRoute: ShellConveneRouteWithChildren,
   ShellFeedRoute: ShellFeedRoute,
   ShellPasswordRoute: ShellPasswordRoute,
   ShellMHandleRoute: ShellMHandleRoute,
   ShellPostsIdRoute: ShellPostsIdRoute,
-  ShellConveneEventsIdRoute: ShellConveneEventsIdRoute,
 }
 
 const ShellRouteWithChildren = ShellRoute._addFileChildren(ShellRouteChildren)

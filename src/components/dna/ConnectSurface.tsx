@@ -42,6 +42,7 @@ import { Sheet } from "@/components/strand/Sheet";
 import { Toast } from "@/components/strand/Toast";
 import { toastStyle } from "@/components/dna/FeedSurface";
 import { IntroSheet } from "@/components/dna/IntroSheet";
+import { LoadError } from "@/components/dna/LoadError";
 import type { Member } from "@/lib/auth";
 import { useShellScroll } from "@/lib/shell-scroll";
 import {
@@ -72,6 +73,12 @@ import { useMode, useTier, useWide } from "@/lib/tier";
 
 const TOAST_MS = 2400;
 const SWIPE_PX = 60;
+
+/** The one alert Connect shows when a read fails, in its own words (src/components/dna/LoadError.tsx). */
+const CONNECT_ERROR = {
+  title: "Connect could not load.",
+  body: "Check your connection and try again. Nothing you did was lost.",
+} as const;
 
 const DIA_EMPTY =
   "DIA has nothing to suggest yet. It suggests someone when you share an event, a Space, a corridor, or a connection with them.";
@@ -163,32 +170,6 @@ function FilterControls({
           />
         );
       })}
-    </div>
-  );
-}
-
-function ErrorCard({ onRetry }: { onRetry: () => void }) {
-  return (
-    <div
-      role="alert"
-      style={{
-        background: "var(--surface)",
-        borderRadius: 14,
-        border: "1px solid var(--error)",
-        padding: 20,
-        display: "flex",
-        flexDirection: "column",
-        gap: 8,
-        alignItems: "flex-start",
-      }}
-    >
-      <span style={{ fontSize: 17, fontWeight: 700 }}>Connect could not load.</span>
-      <span style={{ fontSize: 15, color: "var(--ink-2)" }}>
-        Check your connection and try again. Nothing you did was lost.
-      </span>
-      <Button variant="secondary" size="sm" onClick={onRetry}>
-        Try again
-      </Button>
     </div>
   );
 }
@@ -617,7 +598,7 @@ export function ConnectSurface({ member, search }: { member: Member; search: Con
           {members.isPending ? (
             <Ghosts compact={compact} label="Loading Connect" />
           ) : members.isError ? (
-            <ErrorCard onRetry={() => void members.refetch()} />
+            <LoadError {...CONNECT_ERROR} onRetry={() => void members.refetch()} />
           ) : items.length === 0 ? (
             filtered ? (
               <EmptyState
@@ -685,7 +666,7 @@ export function ConnectSurface({ member, search }: { member: Member; search: Con
         {suggested.isPending ? (
           <Ghosts compact={compact} label="Loading Connect" />
         ) : suggested.isError ? (
-          <ErrorCard onRetry={() => void suggested.refetch()} />
+          <LoadError {...CONNECT_ERROR} onRetry={() => void suggested.refetch()} />
         ) : items.length === 0 ? (
           <EmptyState
             c="connect"
@@ -714,7 +695,7 @@ export function ConnectSurface({ member, search }: { member: Member; search: Con
     body = network.isPending ? (
       <Ghosts compact={compact} label="Loading Connect" />
     ) : network.isError ? (
-      <ErrorCard onRetry={() => void network.refetch()} />
+      <LoadError {...CONNECT_ERROR} onRetry={() => void network.refetch()} />
     ) : allEmpty ? (
       <EmptyState
         c="connect"
@@ -793,7 +774,7 @@ export function ConnectSurface({ member, search }: { member: Member; search: Con
         ))}
       </div>
     ) : where.isError ? (
-      <ErrorCard onRetry={() => void where.refetch()} />
+      <LoadError {...CONNECT_ERROR} onRetry={() => void where.refetch()} />
     ) : !d || (d.continent.length === 0 && d.diaspora.length === 0) ? (
       <EmptyState
         c="connect"
