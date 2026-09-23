@@ -10,9 +10,13 @@
 // `This event has happened.` and no attestation block.
 //
 // At every tier this is SPEC's medium layout: one column at --content-max inside the shell's own
-// scroller, and a Back row that names the page the member arrived from, Feed today. At expanded the
-// page is the content of Brief 9's Pane on Discovery (1047, handoff 31-B), where the pane's own
-// `Back to Discovery` replaces the Back row.
+// scroller, and a Back row that names the page the member arrived from (1065, handoff 31-D): the
+// origin record in history state (src/lib/origin.ts), and Discovery when there is none, because the
+// page lives under Discovery's route (1047) and Discovery is Convene's front door (628). Arrived from
+// that origin in this history, the row goes back, so the router restores the column and the lanes;
+// otherwise it navigates to the origin's route and search. At expanded the page is the content of
+// Brief 9's Pane on Discovery (1047, handoff 31-B), where the pane's own `Back to Discovery` replaces
+// the Back row.
 //
 // Guardrail 1: no number renders. The going names arrive only at five or more rows, chosen by the
 // projection; nothing here counts anything for display.
@@ -40,6 +44,7 @@ import {
   type RegistrationStatus,
 } from "@/lib/event-page";
 import { deliverImageUrl } from "@/lib/media";
+import { useBackToOrigin } from "@/lib/origin";
 import { useTier } from "@/lib/tier";
 import { browserZone } from "@/lib/when";
 import {
@@ -144,7 +149,7 @@ export function EventSurface({
     window.setTimeout(() => setToast(null), 2600);
   };
   const reread = () => qc.invalidateQueries({ queryKey: [EVENT_PAGE_KEY, member.id, id] });
-  const goFeed = () => void navigate({ to: "/feed", search: {} });
+  const { origin: back, go: goBack } = useBackToOrigin();
 
   const frame = (state: string, children: React.ReactNode) => (
     <div
@@ -159,9 +164,16 @@ export function EventSurface({
         margin: "0 auto",
         boxSizing: "border-box",
         padding: compact ? "8px 0 130px" : "16px 0 96px",
+        // G78: inside Discovery's Pane the pane's close control sits absolutely at its top right, a
+        // --target-primary button inset by --space-2, with no row of its own (700). The page reserves
+        // that row, so its first block (the invitation notice, else the kicker) starts below the
+        // control instead of under it. The page, not Strand's Pane, carries the fix.
+        ...(inPane
+          ? { paddingTop: "calc(var(--space-2) + var(--target-primary) + var(--space-2))" }
+          : null),
       }}
     >
-      {!inPane && <BackRow label="Feed" onClick={goFeed} />}
+      {!inPane && <BackRow label={back.label} onClick={goBack} />}
       {children}
       {toast && (
         <div style={toastStyle(tier)}>
@@ -200,8 +212,8 @@ export function EventSurface({
         title="This event is not available."
         body="It may have been removed, or it is not one you can see."
         action={
-          <Button variant="secondary" onClick={goFeed}>
-            Back to Feed
+          <Button variant="secondary" onClick={goBack}>
+            {"Back to " + back.label}
           </Button>
         }
       />,

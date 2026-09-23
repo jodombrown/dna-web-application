@@ -8,7 +8,7 @@
 // EmptyState per lens, Save and React as existence toggles (rulings 80 to 86).
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useRouter, useSearch } from "@tanstack/react-router";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from "react";
 import { Ghosts } from "@/components/dna/Ghosts";
 import { PostCardRouter } from "@/components/dna/PostCardRouter";
 import { Button } from "@/components/strand/Button";
@@ -25,6 +25,7 @@ import { loadFeed, loadMarks, loadPost, setReacted, setSaved } from "@/lib/feed"
 import type { FeedView } from "@/lib/feed-view";
 import { setHeaderLens } from "@/lib/header-lens-store";
 import { LENSES, lensSearch, parseLens, type LensId } from "@/lib/lens";
+import type { Origin } from "@/lib/origin";
 import type { PostView } from "@/lib/post-view";
 import { useShellScroll } from "@/lib/shell-scroll";
 import { useTier } from "@/lib/tier";
@@ -278,6 +279,21 @@ export function FeedSurface({ member, view }: { member: Member; view: FeedView }
     );
     card?.scrollIntoView({ block: "nearest" });
   }, [expandedId, view]);
+  // 1065, 1067: the expanded card's Event hook opens the event page with the Feed as its origin, so
+  // the page's Back row names Feed and goes back to this card. A modified or non-primary click is
+  // the browser's.
+  const openEvent = (e: MouseEvent<HTMLElement>, eventId: string) => {
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+    e.preventDefault();
+    const origin: Origin = { label: "Feed", to: "/feed", params: {}, search: lensSearch(lens) };
+    void navigate({
+      to: "/convene/events/$id",
+      params: { id: eventId },
+      search: {},
+      resetScroll: false,
+      state: { origin },
+    });
+  };
   const warmPost = (p: PostView) => {
     if (!expandedTier || !p.id) return;
     const id = p.id;
@@ -369,6 +385,7 @@ export function FeedSurface({ member, view }: { member: Member; view: FeedView }
               : undefined
           }
           onReadMoreIntent={opts.inPlace ? () => warmPost(p) : undefined}
+          onOpenEvent={openEvent}
           expanded={opts.expanded}
           onCollapse={opts.inPlace && opts.expanded ? collapse : undefined}
         />

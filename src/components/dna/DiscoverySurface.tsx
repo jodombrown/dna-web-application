@@ -18,11 +18,20 @@
 //             (730). A card opens the event page as Strand's Pane over the lanes (688, 1047): the rail
 //             collapses to its strip, the right column goes, and no DIA line renders (612).
 //
+// The pane canvas keeps the member's place (handoff 31-D; 1063, 1065, 1067, 1068). A card's open is
+// its `Read more` anchor to the member event path: a plain primary click navigates with the origin
+// record (src/lib/origin.ts) and without a scroll reset, and a modified or middle click is the
+// browser's. At expanded with a pointer, hover intent preloads the event route and prefetches the
+// page's read under the key EventSurface reads. The pane closes to the origin. Each lane keeps its
+// horizontal position through the router's own element restoration, keyed on its section. The read
+// refetches on window focus and never live: no Realtime subscription here.
+//
 // No digit renders except in a date. The only dates are DIA's own, from src/lib/when.ts's `dateLine`,
 // which is the event page's date helper; the cards carry their own meta as the Feed renders it.
-import { useQuery } from "@tanstack/react-query";
-import { Link, useNavigate } from "@tanstack/react-router";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link, useNavigate, useRouter } from "@tanstack/react-router";
 import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
+import { EVENT_PAGE_KEY } from "@/components/dna/EventSurface";
 import { Ghosts } from "@/components/dna/Ghosts";
 import { LoadError } from "@/components/dna/LoadError";
 import { PostCardRouter } from "@/components/dna/PostCardRouter";
@@ -59,8 +68,9 @@ import {
   type DiscoverySearch,
   type FacetLists,
 } from "@/lib/discovery-search";
-import { memberEventPath } from "@/lib/event-page";
+import { loadEventPage, memberEventPath } from "@/lib/event-page";
 import { setHeaderLens } from "@/lib/header-lens-store";
+import { useBackToOrigin, type Origin } from "@/lib/origin";
 import { setLeftRail, setRightRail, setShellLayout } from "@/lib/rail-store";
 import { useShellScroll } from "@/lib/shell-scroll";
 import { useMode, useTier, useWide } from "@/lib/tier";
@@ -175,6 +185,8 @@ export function DiscoverySurface({
   pane: ReactNode;
 }) {
   const navigate = useNavigate();
+  const router = useRouter();
+  const qc = useQueryClient();
   const tier = useTier();
   const wide = useWide();
   const touch = useMode() === "touch";
@@ -209,6 +221,9 @@ export function DiscoverySurface({
     // change does not, because the previous lens's sections are not this lens's.
     placeholderData: (prev: Discovery | null | undefined) =>
       prev && prev.lens === lens ? prev : undefined,
+    // 1068: the lanes re-read when the member comes back to the window, never live, whatever the
+    // client's default is.
+    refetchOnWindowFocus: true,
   });
   const data = read.data ?? null;
   useEffect(() => {
@@ -247,15 +262,42 @@ export function DiscoverySurface({
           resetScroll: false,
         }));
   // At expanded the event opens as the pane over the lanes, which stay where they are (688); below
-  // it the event page is its own route (1023). Either way it is one navigation.
+  // it the event page is its own route (1023). Either way it is one navigation, and it carries the
+  // origin (1063, 1065): this lens and these facets, so the list behind the pane stays this lens
+  // and the page's Back row names Discovery and returns here.
+  const origin: Origin =
+    lens === "all"
+      ? { label: "Discovery", to: "/convene", params: {}, search }
+      : { label: "Discovery", to: "/convene/$lens", params: { lens }, search };
   const openEvent = (eventId: string) =>
     void navigate({
       to: "/convene/events/$id",
       params: { id: eventId },
       search,
       resetScroll: false,
+      state: (prev) => ({ ...prev, origin }),
     });
-  const closePane = () => void navigate({ to: "/convene", search, resetScroll: false });
+  // The pane closes to the lens it was opened from, with its facets (1063, 719). `lens` is the
+  // origin's while the pane is open (convene.tsx), so this is the origin's route and search. An event
+  // opened from outside Discovery (the Feed's Event hook) closes to that origin by 1065's rule, as the
+  // Back row does; the collapsed rail's expand control still opens Discovery.
+  const toOrigin = useBackToOrigin();
+  const closeToDiscovery = () =>
+    void (lens === "all"
+      ? navigate({ to: "/convene", search, resetScroll: false })
+      : navigate({ to: "/convene/$lens", params: { lens }, search, resetScroll: false }));
+  const fromElsewhere = !!toOrigin.arrivedFrom && toOrigin.arrivedFrom.to === "/feed";
+  const closePane = fromElsewhere ? toOrigin.go : closeToDiscovery;
+  // 1067: hover intent at expanded with a pointer warms the event route and the page's one read
+  // under EventSurface's key, so the pane opens with data. Never at compact or medium, never on touch.
+  const warmEvent = (eventId: string) => {
+    void router.preloadRoute({ to: "/convene/events/$id", params: { id: eventId }, search });
+    void qc.prefetchQuery({
+      queryKey: [EVENT_PAGE_KEY, member.id, eventId],
+      queryFn: () => loadEventPage(eventId),
+      staleTime: 30_000,
+    });
+  };
 
   const dismiss = async (item: DiscoveryItem, section: DiscoverySectionId) => {
     const key = section + ":" + item.event_id;
@@ -413,7 +455,7 @@ export function DiscoverySurface({
           value={railValue}
           label="Browse"
           expandLabel="Back to Discovery and show browse"
-          onExpand={closePane}
+          onExpand={closeToDiscovery}
         />
       ) : (
         <FacetRail
@@ -517,7 +559,8 @@ export function DiscoverySurface({
     }))
     .sort((a, b) => (order.get(a.section) ?? 99) - (order.get(b.section) ?? 99));
 
-  // 650, 1046: DIA's one sentence for a member who follows no host.
+  // 650, 1046: DIA's one sentence for a member who follows no host, in plain text with the host's
+  // name unlinked (1053).
   const suggest = data?.suggest ?? null;
   const sentence =
     suggest && suggest.host.name && (lens === "all" || lens === "follow")
@@ -557,11 +600,12 @@ export function DiscoverySurface({
           onShare={() => item.post.id && void share(item.post.id)}
           readMoreHref={memberEventPath(item.event_id)}
           onReadMore={(e) => {
-            const me = e as unknown as { metaKey?: boolean; ctrlKey?: boolean; shiftKey?: boolean };
-            if (me.metaKey || me.ctrlKey || me.shiftKey) return;
+            // A modified or non-primary click is the browser's: new tab, new window, download.
+            if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
             e.preventDefault();
             open();
           }}
+          onReadMoreIntent={expanded && !touch ? () => warmEvent(item.event_id) : undefined}
         />
       </div>
     );
@@ -630,10 +674,13 @@ export function DiscoverySurface({
     );
   };
 
-  const laneRow = (children: ReactNode) => (
+  // 1065: the router's element restoration keys each lane on its section, so Back returns every lane
+  // to where the member left it. The shell's scrollToTopSelectors name the columns only, never a lane.
+  const laneRow = (id: DiscoverySectionId, children: ReactNode) => (
     <div
       className="dna-lane"
       data-lane-row
+      data-scroll-restoration-id={"discovery-lane-" + id}
       style={{
         display: "flex",
         gap: 12,
@@ -663,7 +710,10 @@ export function DiscoverySurface({
         lane(
           s.section,
           i === 0 && !sentenceFirst,
-          laneRow(s.items.map((it) => card(it, s.section, true))),
+          laneRow(
+            s.section,
+            s.items.map((it) => card(it, s.section, true)),
+          ),
           true,
         ),
       )}
@@ -735,7 +785,12 @@ export function DiscoverySurface({
     return (
       <div data-discovery data-lens={lens} data-pane-open="1" style={{ paddingTop: 4 }}>
         {laneStyle}
-        <Pane tier="expanded" list={body} onClose={closePane} closeLabel="Back to Discovery">
+        <Pane
+          tier="expanded"
+          list={body}
+          onClose={closePane}
+          closeLabel={"Back to " + (fromElsewhere ? toOrigin.origin.label : "Discovery")}
+        >
           {pane}
         </Pane>
         {toasts}

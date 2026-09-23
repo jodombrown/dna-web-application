@@ -825,8 +825,10 @@ function makeMockDb() {
     // Brief 10 (handoff 30-C): what event_page answers per event id (undefined is not found, null
     // is the projection's own null), the card's speakers, the member's own event_parties rows, and
     // every write the page made. rsvpFail is the server's refusal sentence for the next rsvp_event.
+    // `reads` is every event id event_page was asked for, in order (handoff 31-D's intent arm).
     attend: {
       pages: {},
+      reads: [],
       speakers: [],
       parties: [],
       rsvps: [],
@@ -1520,6 +1522,7 @@ async function mockSupabase(page, db, opts = {}) {
     if (p === "/rest/v1/rpc/event_page") {
       const b = req.postDataJSON() || {};
       const a = db.attend;
+      a.reads.push(b.p_event);
       await new Promise((r) => setTimeout(r, 120));
       if (a.fail) return json({ code: "PGRST", message: "forced event_page failure" }, 500);
       const pg = a.pages[b.p_event];
@@ -5894,10 +5897,19 @@ if (require.main === module)
               await runGuest(bt, bname, vp, theme);
         }
         if (process.env.SPECIAL.includes("discovery")) {
-          const { runDiscovery, DISCOVERY_VIEWPORTS } = require("./discovery.cjs");
+          const {
+            runDiscovery,
+            runDiscoveryPlace,
+            DISCOVERY_VIEWPORTS,
+            PLACE_VIEWPORTS,
+          } = require("./discovery.cjs");
           for (const vp of only ? [only] : DISCOVERY_VIEWPORTS)
             for (const theme of process.env.THEME ? [process.env.THEME] : THEMES)
               await runDiscovery(bt, bname, vp, theme);
+          // Handoff 31-D item 7: the lens, the place and the intent, on their own viewports.
+          for (const [vp, theme] of PLACE_VIEWPORTS)
+            if (!only || (vp[0] === only[0] && vp[1] === only[1]))
+              await runDiscoveryPlace(bt, bname, vp, theme);
         }
         if (process.env.SPECIAL.includes("connect")) {
           const { runConnect } = require("./connect.cjs");
@@ -5966,9 +5978,16 @@ if (require.main === module)
       ])
         for (const theme of THEMES) await runEventFlows(bt, bname, vp, theme);
       // Brief 9 (handoff 31-B item 15): Discovery at every width plus 1440, both themes.
-      const { runDiscovery, DISCOVERY_VIEWPORTS } = require("./discovery.cjs");
+      const {
+        runDiscovery,
+        runDiscoveryPlace,
+        DISCOVERY_VIEWPORTS,
+        PLACE_VIEWPORTS,
+      } = require("./discovery.cjs");
       for (const vp of DISCOVERY_VIEWPORTS)
         for (const theme of THEMES) await runDiscovery(bt, bname, vp, theme);
+      // Handoff 31-D item 7 (1063, 1065, 1067): the lens, the place and the intent.
+      for (const [vp, theme] of PLACE_VIEWPORTS) await runDiscoveryPlace(bt, bname, vp, theme);
       // Handoff 30-D item 14.3: the public page's guest path on the two representative layouts.
       for (const vp of [
         [390, 844],

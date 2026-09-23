@@ -4300,6 +4300,11 @@ their events start here.` link to `/m/{handle}`. Strand's `DiaLine` takes `text?
 it in a plain span, so the sentence renders in full as words with the name unlinked. Owed: a Strand
 correction letting DiaLine carry a link, after which Discovery passes it.
 
+**Closed 23 September 2026 by handoff 31-D's PR, under ruling 1053.** 1053 rules the sentence plain
+text: the host's name is not linked, so DiaLine's string is the whole answer and no Strand correction
+is owed. `DiscoverySurface` already rendered it that way; the comment names 1053 and the below density
+arm now asserts that the sentence carries no link.
+
 ## G74. On Discovery a card's React and Save render and do nothing
 
 **Severity: medium. Opened 23 September 2026 during handoff 31-B item 3, filed under ruling 597. The
@@ -4347,6 +4352,13 @@ one prop only (the pane's), so the Back row still reads `Feed` and returns to th
 member came from. Owed: a ruling on the Back row's origin below expanded, and then the route state
 that carries it.
 
+**Closed 23 September 2026 by `d0c1f52`, handoff 31-D, under ruling 1065.** Discovery sets an origin
+record in router history state when it opens an event (`src/lib/origin.ts`), and the page's Back row
+reads it: its label is the origin's, and it goes back when the member arrived from that origin in this
+history, else navigates to the origin's route and search. With no origin, a cold arrival or a document
+load, the row names Discovery and goes to `/convene`, because the page lives under Discovery's route
+(1047). The not-found state's button follows the same rule and reads `Back to {label}`.
+
 ## G78. The Pane's close control floats over the top of its content
 
 **Severity: low. Opened 23 September 2026 during handoff 31-B item 12, filed under ruling 597 and
@@ -4357,3 +4369,53 @@ reserved for it (700). Brief 10's page starts with its invitation notice when th
 at 1280 the close control sits over that notice's top right corner. Nothing is unreachable. Owed: a
 Strand correction reserving the close control's row, or a Design call on the page's first block
 inside a pane.
+
+**Closed 23 September 2026 by handoff 31-D's PR, on the page and not in Strand's Pane.** With
+`inPane`, `EventSurface` raises its top padding to `calc(var(--space-2) + var(--target-primary) +
+var(--space-2))`, the close control's inset, its height and the same gap again, so the page's first
+block starts below the control. `Pane.tsx` is unchanged (732, 950). The Discovery pane arm measures
+the first block's top against the control's bottom at every expanded width. Design brief 31-E yields
+to this fix; if Strand later gives the Pane a reserved close row, the page's padding comes out with
+that port.
+
+## G79. At expanded the lanes lose their horizontal position when the pane opens and closes
+
+**Severity: low. Opened 23 September 2026 during handoff 31-D item 6, filed under ruling 597. The
+number is assigned by this entry (ruling 638).**
+
+`DiscoverySurface` returns a different element tree with the pane open (the lanes inside Strand's
+`Pane` as its list) from the one it returns with the pane closed (the lanes in the surface's own
+column). React rebuilds the lanes on each switch, so every lane's horizontal scroll resets to its
+first card when the pane opens and again when it closes. The column keeps its place, because the
+shell's layout key is the lens and does not change (688), and the lens and the facets survive (1063).
+Below expanded nothing is rebuilt in place: the event page is its own route and Back restores the
+column and each lane through the router's element restoration (1065). Owed: Strand's Pane open state
+under 1064 (Design brief 31-E), which gives the list one place in the tree whether the pane is open or
+not.
+
+## G80. place-resolve's ordering arm reads Mapbox's live answer, so an empty side fails it
+
+**Severity: low. Opened 23 September 2026 during handoff 31-D, on run 319 (35850287842), filed under
+ruling 597. The number is assigned by this entry (ruling 638).**
+
+`tests/live-checks.cjs` proves 633 by asking `place-resolve` for `Front Room` in the United States
+with two proximities, Portland and Los Angeles, and passing when the first suggestions differ. It
+skips only when both calls answer `none`. On run 319 Portland answered a place and Los Angeles
+answered with no first suggestion, so the arm failed with `los angeles` empty, on a head whose diff
+touches neither the function nor the arm; `main`'s run 318 on `1463b5c` passed the same check. The
+arm is asserting on Mapbox Search Box's live answer for one name near one city, which is not the
+function's behaviour to own. Owed: the arm reads an empty side as unproven with its reason (228),
+the way it already reads two `none` answers, or proves 633 on a query whose answers are stable.
+
+## G81. The notification Respond arm reads the read mark before the write can land
+
+**Severity: low. Opened 23 September 2026 during handoff 31-D, on a local Chromium run of `8bf1bbd`,
+filed under ruling 597. The number is assigned by this entry (ruling 638).**
+
+`NotificationPanel`'s `onRow` navigates to the destination first and then awaits `markRead`, so the
+`read_at` write goes out after the URL has changed. `tests/event.cjs`'s `notification: Respond opens
+the event page and marks the row read` records `db.reads.includes("n-role")` as soon as
+`waitForURL` resolves, so it passes or fails on which of the two lands first: it failed once at 390
+dark and passed at 390 light and both 1280 arms of the same run, and in every arm of the run before
+it. Neither file is touched by 31-D. Owed: the arm waits for the write (as the Feed's own mark-read
+arm does for its dot) before it reads, or the panel marks read before it navigates.

@@ -77,6 +77,12 @@ export type RouterOptions = {
   readMoreHref?: string | undefined;
   onReadMore?: ((e: MouseEvent<HTMLElement>) => void) | undefined;
   onReadMoreIntent?: (() => void) | undefined;
+  /**
+   * 1065, 1067: the expanded card's Event hook stays a real link to the member event path; the host
+   * intercepts a plain click here to navigate with its origin, on the Read more pattern. Absent, the
+   * link is a document navigation.
+   */
+  onOpenEvent?: ((e: MouseEvent<HTMLElement>, eventId: string) => void) | undefined;
   expanded?: boolean | undefined;
   onCollapse?: (() => void) | undefined;
   actions?: ReactNode;
@@ -127,8 +133,8 @@ export function postCardProps(view: PostView, opts: RouterOptions = {}): PostCar
     hookRows.push({ label: "Speakers", icon: "mic", value: speakersRow(ev.speakers) });
   if (ev && !cancelled && opts.expanded) {
     // Brief 10 (1023): the expanded card's hook into the event page, in Convene's colour, the
-    // way the Space hook below reads in Collaborate's. This is the Feed's entry into the page,
-    // which is why the page's Back row names Feed.
+    // way the Space hook below reads in Collaborate's. This is the Feed's entry into the page; the
+    // Feed's onOpenEvent carries its origin so the page's Back row names Feed (1065).
     hookRows.push({
       label: "Event",
       icon: "calendar",
@@ -136,7 +142,10 @@ export function postCardProps(view: PostView, opts: RouterOptions = {}): PostCar
         <a
           href={memberEventPath(ev.id)}
           data-hook="event"
-          onClick={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation();
+            opts.onOpenEvent?.(e, ev.id);
+          }}
           style={{
             color: "var(--c-convene-text)",
             fontWeight: 500,
