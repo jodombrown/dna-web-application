@@ -1,90 +1,112 @@
-// Brief 9, Convene Pass 2: the Discovery Dashboard (B9-SPEC section 0, sections 2 to 7; handoff 31-B
-// items 3 to 14; rulings 581, 586, 631, 632, 650, 660, 661, 685 to 690, 693, 700, 719, 723 to 731, 944
-// to 948, 1039 to 1050).
+// Brief 9, Convene Pass 2: the Discovery Dashboard, rebuilt to the ruled set (handoff 32-B items 1 to
+// 7 with Addenda 1 to 3; rulings 581, 632, 650, 688, 1044, 1063 to 1068, 1076 to 1079, 1082, 1083,
+// 1087, 1092 to 1097, 1099, 1105 to 1107, 1110 to 1112), on the parts handoff 32-A ported and changes
+// none of: PostCard's discovery face, Menu, FacetRail's displays and ladders, Input's combobox and
+// Pane's stepping.
 //
-// One read projection and one write path (CLAUDE.md): everything this surface shows comes through
-// `loadDiscovery` (the cards are the Feed's own views, hydrated by post id inside it, 660), and the one
-// thing it writes is DIA's `Not this?` through `dismissDiscoveryItem` (1044). Nothing here filters,
-// ranks or counts: the projection chose every section and every item under row policy, and a section
-// it did not return is absent with no heading and no placeholder (632). The one vocabulary read
-// supplies every word a lens, a lane or a family shows (194, 1041).
+// One read projection and one write path per surface (CLAUDE.md): everything this surface shows comes
+// through `loadDiscovery` (the cards are the Feed's own views, hydrated by post id inside it, 660) and
+// Place's options through `convene_places()` (1095). Every menu act is an existing write path (item
+// 6): Save is the Feed's `setSaved`, Add to calendar the event page's `.ics`, Follow is `set_follow`,
+// Subscribe `set_subscription` and Not this `dismiss_discovery_item`. The rail's open or collapsed
+// state is the member's own row in `member_rail_state` (1111). Nothing here filters, ranks or counts:
+// the projection chose every lane and every item under row policy, and a lane it did not return is
+// absent with no heading and no placeholder (632).
 //
-// Layout, per tier, in the shell's `lanes` mode (src/lib/rail-store.ts):
-//   compact   the LensBar (into the header past 72px, 947), the Browse pill and applied Chips, the
-//             homes line, then the lanes, bleeding 16 into the gutters.
-//   medium    the LensBar as its own row (946); the FacetRail in the left column and the lanes, each
-//             scrolling on its own (945).
-//   expanded  the same with `labels="always"` (946) and, at 1440, the right column's two RailWidgets
-//             (730). A card opens the event page as Strand's Pane over the lanes (688, 1047): the rail
-//             collapses to its strip, the right column goes, and no DIA line renders (612).
+// Two vocabularies, never one (1093, 1105): the five lenses switch who the events come from, the nine
+// lanes are sections of the page. Every lens word comes from `convene_lenses` and every lane name from
+// `convene_lanes`; the ids alone live in code.
 //
-// The pane canvas keeps the member's place (handoff 31-D; 1063, 1065, 1067, 1068). A card's open is
-// its `Read more` anchor to the member event path: a plain primary click navigates with the origin
-// record (src/lib/origin.ts) and without a scroll reset, and a modified or middle click is the
-// browser's. At expanded with a pointer, hover intent preloads the event route and prefetches the
-// page's read under the key EventSurface reads. The pane closes to the origin. Each lane keeps its
-// horizontal position through the router's own element restoration, keyed on its section. The read
-// refetches on window focus and never live: no Realtime subscription here.
+// Layout (1082 as amended by 1094; item 7). The LensBar shows the five lenses with labels always and
+// icons at every tier and no trailing seat. The FacetRail is collapsed by default at every width: a
+// Sheet behind the Browse pill at compact, and the 64 strip at medium and expanded, opened and
+// collapsed by the member and remembered per member per width band. There is no right column. At
+// expanded a card opens the event page as Strand's Pane over the lanes (688, 1047): the rail collapses
+// to its strip, the card the pane shows is ringed (1083), and Previous and Next step through the lane
+// the card was opened from, in its visible order, past what the member dismissed (1044).
 //
-// No digit renders except in a date. The only dates are DIA's own, from src/lib/when.ts's `dateLine`,
-// which is the event page's date helper; the cards carry their own meta as the Feed renders it.
+// A card opens through its title and its face (the discovery face has no link to open; a gap names
+// it). At expanded with a pointer, the face's preload warms the event route and the page's read
+// under the key EventSurface reads (1067). The read refetches on window focus and never live.
+//
+// No digit renders except in a card's when line: the reason row is words (1096), the where line is a
+// format word and places, and there is no count anywhere.
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link, useNavigate, useRouter } from "@tanstack/react-router";
+import { useLocation, useNavigate, useRouter } from "@tanstack/react-router";
 import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import { EVENT_PAGE_KEY } from "@/components/dna/EventSurface";
 import { Ghosts } from "@/components/dna/Ghosts";
 import { LoadError } from "@/components/dna/LoadError";
-import { PostCardRouter } from "@/components/dna/PostCardRouter";
 import { Button } from "@/components/strand/Button";
 import { Chip } from "@/components/strand/Chip";
 import { DiaLine } from "@/components/strand/DiaLine";
 import { EmptyState } from "@/components/strand/EmptyState";
-import { FacetRail, type FacetAxis, type FacetValue } from "@/components/strand/FacetRail";
+import {
+  FacetRail,
+  type FacetAxis,
+  type FacetLadder,
+  type FacetValue,
+} from "@/components/strand/FacetRail";
 import { Icon } from "@/components/strand/Icon";
+import { IconButton } from "@/components/strand/IconButton";
 import { LensBar, type Lens } from "@/components/strand/LensBar";
+import type { MenuProps } from "@/components/strand/Menu";
 import { Pane } from "@/components/strand/Pane";
-import { RailWidget } from "@/components/strand/RailWidget";
+import { PostCard } from "@/components/strand/PostCard";
 import { Toast } from "@/components/strand/Toast";
 import type { Member } from "@/lib/auth";
 import {
   dismissDiscoveryItem,
+  loadConvenePlaces,
   loadDiscovery,
+  setSubscription,
   type ConveneLensId,
+  type ConvenePlace,
   type Discovery,
   type DiscoveryFormat,
   type DiscoveryHome,
+  type DiscoveryHomeRung,
   type DiscoveryItem,
+  type DiscoveryLaneId,
   type DiscoveryPrice,
   type DiscoveryReason,
   type DiscoverySection,
-  type DiscoverySectionId,
   type DiscoveryWhen,
 } from "@/lib/discovery";
 import {
   discoveryFacets,
   droppedUnknown,
   facetLists,
+  NO_FACETS,
   searchOf,
   type DiscoverySearch,
   type FacetLists,
 } from "@/lib/discovery-search";
-import { loadEventPage, memberEventPath } from "@/lib/event-page";
+import { downloadIcs, loadEventPage, setFollow } from "@/lib/event-page";
+import { setSaved } from "@/lib/feed";
 import { setHeaderLens } from "@/lib/header-lens-store";
 import { useBackToOrigin, type Origin } from "@/lib/origin";
+import type { EventView } from "@/lib/post-view";
+import { readRailCollapsed, railBand, writeRailCollapsed, type RailBand } from "@/lib/rail-memory";
 import { setLeftRail, setRightRail, setShellLayout } from "@/lib/rail-store";
 import { useShellScroll } from "@/lib/shell-scroll";
 import { useMode, useTier, useWide } from "@/lib/tier";
 import { loadVocabularies } from "@/lib/vocabularies";
-import { browserZone, dateLine } from "@/lib/when";
 import { toastStyle, useShare } from "./FeedSurface";
 
+declare module "@tanstack/history" {
+  interface HistoryState {
+    /** Handoff 32-B item 7 (1083, 1044): the lane a Discovery card was opened from, for stepping. */
+    discoveryLane?: string;
+  }
+}
+
 const TOAST_MS = 2600;
+const RAIL_SURFACE = "discovery";
 
 /**
- * The three structural axes' words, as SPEC section 4 and the extraction name them. The values are
- * the projection's own facet branches (`p_format`, `p_price`, `p_when`), in the shape the Convene
- * form already keeps its format and price words (ConveneForm.tsx's `seg`). The two runtime axes,
- * category family and home, read their options from the vocabulary and the member's homes.
+ * The three structural axes' words (item 2, 1095), in the projection's own facet values. These are
+ * words in code rather than a vocabulary table; a gap names it (item 11). Donation is gone.
  */
 const FORMAT_OPTIONS: { id: DiscoveryFormat; label: string }[] = [
   { id: "in_person", label: "In person" },
@@ -94,13 +116,19 @@ const FORMAT_OPTIONS: { id: DiscoveryFormat; label: string }[] = [
 const PRICE_OPTIONS: { id: DiscoveryPrice; label: string }[] = [
   { id: "free", label: "Free" },
   { id: "paid", label: "Paid" },
-  { id: "donation", label: "Donation" },
 ];
 const WHEN_OPTIONS: { id: DiscoveryWhen; label: string }[] = [
   { id: "two_weeks", label: "Next two weeks" },
   { id: "this_month", label: "This month" },
   { id: "later", label: "Later" },
 ];
+
+/** Place's kind words (1095): each option names what it is. */
+const PLACE_KIND: Record<ConvenePlace["kind"], string> = {
+  city: "City",
+  region: "Region",
+  country: "Country",
+};
 
 /** `Accra`, `Accra and Nairobi`, `Accra, Nairobi and Lagos`. */
 function joinWords(words: string[]): string {
@@ -112,50 +140,50 @@ function lowerFirst(s: string): string {
   return s.charAt(0).toLowerCase() + s.slice(1);
 }
 
+/** The four lanes whose reason row speaks (1096); every other lane holds the row empty. */
+const REASON_LANES: ReadonlySet<DiscoveryLaneId> = new Set([
+  "follow",
+  "taste",
+  "curated",
+  "network",
+]);
+
 /**
- * DIA's line above a card (581, 1049), composed only from the item's reason, in words. Null renders
- * no line: a reason with a null name has nothing to say (grounded-or-empty).
+ * The reason row (1096), composed only from the item's reason, in words. Undefined renders the row
+ * empty with its height held: a reason with a null name has nothing to say (grounded-or-empty).
  */
-function diaLineFor(reason: DiscoveryReason, zone: string): string | null {
-  const date = (iso: string | null) => {
-    if (!iso) return null;
-    const d = new Date(iso);
-    return Number.isNaN(d.getTime()) ? null : dateLine(d, zone);
-  };
+function reasonFor(lane: DiscoveryLaneId, reason: DiscoveryReason): string | undefined {
+  if (!REASON_LANES.has(lane)) return undefined;
   switch (reason.kind) {
     case "follow":
-      return reason.host.name ? "Because you follow " + reason.host.name + "." : null;
+      return reason.host.name ? "Because you follow " + reason.host.name + "." : undefined;
     case "taste":
-      return reason.label ? "Because you follow " + lowerFirst(reason.label) + "." : null;
-    case "soon": {
-      const d = date(reason.starts_at);
-      if (!d) return null;
-      return reason.mode === "in_person" ? d + "." : d + ", online.";
-    }
-    case "online": {
-      if (!reason.starts_at) return "Online.";
-      const d = date(reason.starts_at);
-      return d ? "Online, " + d + "." : null;
-    }
+      return reason.label ? "Because you follow " + lowerFirst(reason.label) + "." : undefined;
     case "curated":
-      return reason.editor.name && reason.line
-        ? reason.editor.name + " picked this: " + reason.line
-        : null;
-    case "near":
-      return reason.home.city ? "Near " + reason.home.city + "." : null;
+      return reason.editor.name ? "Curated by " + reason.editor.name + "." : undefined;
     case "network": {
       if ("host" in reason)
-        return reason.host.name ? reason.host.name + ", a connection, is hosting." : null;
+        return reason.host.name ? reason.host.name + ", a connection, is hosting." : undefined;
       const names = reason.going.map((p) => p.name);
-      if (names.length === 0 || names.some((n) => !n)) return null;
+      if (names.length === 0 || names.some((n) => !n)) return undefined;
       return names.length === 1
         ? names[0] + " is going."
         : joinWords(names as string[]) + " are going.";
     }
+    default:
+      return undefined;
   }
 }
 
-/** The member's homes as the homes line and the Home facet name them: the city, else the place. */
+/** Where (item 4): "In person · Accra", "Online", "Hybrid · Accra and London". */
+function whereFor(ev: EventView): string {
+  if (ev.mode === "virtual") return "Online";
+  const word = ev.mode === "hybrid" ? "Hybrid" : "In person";
+  const places = joinWords(ev.places);
+  return places ? word + " · " + places : word;
+}
+
+/** A home as the ladder names it: its city, else its place. */
 function homeWord(h: DiscoveryHome): string | null {
   return h.city ?? h.place_name ?? null;
 }
@@ -168,6 +196,8 @@ const H2: CSSProperties = {
   fontWeight: 400,
   color: "var(--ink)",
 };
+
+type SeeAll = { to: "/convene"; search: DiscoverySearch } | { lens: ConveneLensId };
 
 export function DiscoverySurface({
   member,
@@ -193,36 +223,52 @@ export function DiscoverySurface({
   const compact = tier === "compact";
   const expanded = tier === "expanded";
   const paneOpen = expanded && !!paneId;
+  const openLane = useLocation({ select: (l) => l.state.discoveryLane });
   const { scrolled } = useShellScroll();
-  const { share, toast: shareToast } = useShare();
+  const { share, copy, toast: shareToast } = useShare();
   const [toast, setToast] = useState<string | null>(null);
   const [browseOpen, setBrowseOpen] = useState(false);
   const [dismissed, setDismissed] = useState<ReadonlySet<string>>(new Set());
   const [homes, setHomes] = useState<DiscoveryHome[] | null>(null);
-  const zone = useMemo(() => browserZone(), []);
+  // The member's own acts on a card, held until the next read says the same (optimistic, item 6).
+  const [savedNow, setSavedNow] = useState<Record<string, boolean>>({});
+  const [followNow, setFollowNow] = useState<Record<string, boolean>>({});
+  const [subscribedNow, setSubscribedNow] = useState<Record<string, boolean>>({});
+  const [railNow, setRailNow] = useState<Partial<Record<RailBand, boolean>>>({});
 
   const vocab = useQuery({ queryKey: ["vocabularies"], queryFn: loadVocabularies });
   const lensRows = useMemo(() => vocab.data?.convene_lenses ?? [], [vocab.data]);
+  const laneRows = useMemo(() => vocab.data?.convene_lanes ?? [], [vocab.data]);
   const familyRows = useMemo(() => vocab.data?.convene_families ?? [], [vocab.data]);
   const knownFamilies = useMemo(
     () => (vocab.data ? (vocab.data.convene_families ?? []).map((f) => f.value) : null),
     [vocab.data],
   );
+  const placesRead = useQuery({
+    queryKey: ["convene-places", member.id],
+    queryFn: loadConvenePlaces,
+    staleTime: 60_000,
+  });
+  const places = useMemo(() => placesRead.data ?? [], [placesRead.data]);
+  const knownPlaces = useMemo(
+    () => (placesRead.data ? placesRead.data.map((p) => p.id) : null),
+    [placesRead.data],
+  );
 
   const lists = useMemo(() => facetLists(search), [search]);
-  const facets = useMemo(
-    () => ({ lens, ...discoveryFacets(lists, { families: knownFamilies, homes }) }),
-    [lens, lists, knownFamilies, homes],
+  const known = useMemo(
+    () => ({ families: knownFamilies, homes, places: knownPlaces }),
+    [knownFamilies, homes, knownPlaces],
   );
+  const facets = useMemo(() => ({ lens, ...discoveryFacets(lists, known) }), [lens, lists, known]);
   const read = useQuery({
     queryKey: ["discovery", member.id, facets],
     queryFn: () => loadDiscovery(member, facets),
     // A facet change keeps the lens's previous answer on screen until the narrowed one lands; a lens
-    // change does not, because the previous lens's sections are not this lens's.
+    // change does not, because the previous lens's lanes are not this lens's.
     placeholderData: (prev: Discovery | null | undefined) =>
       prev && prev.lens === lens ? prev : undefined,
-    // 1068: the lanes re-read when the member comes back to the window, never live, whatever the
-    // client's default is.
+    // 1068: the lanes re-read when the member comes back to the window, never live.
     refetchOnWindowFocus: true,
   });
   const data = read.data ?? null;
@@ -232,7 +278,7 @@ export function DiscoverySurface({
 
   // An unknown facet value leaves the query once a read has shown it to be unknown (item 2).
   useEffect(() => {
-    const next = droppedUnknown(lists, { families: knownFamilies, homes });
+    const next = droppedUnknown(lists, known);
     if (!next) return;
     void navigate({
       to: ".",
@@ -240,11 +286,32 @@ export function DiscoverySurface({
       replace: true,
       resetScroll: false,
     });
-  }, [lists, knownFamilies, homes, navigate]);
+  }, [lists, known, navigate]);
 
   const say = (text: string) => {
     setToast(text);
     window.setTimeout(() => setToast(null), TOAST_MS);
+  };
+
+  // The rail's memory (1111): the member's row for this band, else collapsed; never written on load.
+  const band = railBand(tier, wide);
+  const railRead = useQuery({
+    queryKey: ["rail-state", member.id, RAIL_SURFACE, band],
+    queryFn: () => readRailCollapsed(member.id, RAIL_SURFACE, band as RailBand),
+    enabled: !!band,
+    staleTime: Infinity,
+  });
+  const railCollapsed = band ? (railNow[band] ?? railRead.data ?? true) : true;
+  const setRailCollapsed = (collapsed: boolean) => {
+    if (!band) return;
+    setRailNow((r) => ({ ...r, [band]: collapsed }));
+    writeRailCollapsed(member.id, RAIL_SURFACE, band, collapsed).then(
+      () => qc.setQueryData(["rail-state", member.id, RAIL_SURFACE, band], collapsed),
+      () => {
+        setRailNow((r) => ({ ...r, [band]: !collapsed }));
+        say("That did not go through. Try again.");
+      },
+    );
   };
 
   // Navigation. The lens is the path, the facets the query; a lens change keeps the facets (693).
@@ -261,26 +328,24 @@ export function DiscoverySurface({
           search: searchOf(next),
           resetScroll: false,
         }));
-  // At expanded the event opens as the pane over the lanes, which stay where they are (688); below
-  // it the event page is its own route (1023). Either way it is one navigation, and it carries the
-  // origin (1063, 1065): this lens and these facets, so the list behind the pane stays this lens
-  // and the page's Back row names Discovery and returns here.
+  // At expanded the event opens as the pane over the lanes, which stay where they are (688); below it
+  // the event page is its own route (1023). Either way it is one navigation, and it carries the origin
+  // (1063, 1065) and the lane it was opened from, which Previous and Next step through (1083).
   const origin: Origin =
     lens === "all"
       ? { label: "Discovery", to: "/convene", params: {}, search }
       : { label: "Discovery", to: "/convene/$lens", params: { lens }, search };
-  const openEvent = (eventId: string) =>
+  const openEvent = (eventId: string, lane: DiscoveryLaneId, replace = false) =>
     void navigate({
       to: "/convene/events/$id",
       params: { id: eventId },
       search,
       resetScroll: false,
-      state: (prev) => ({ ...prev, origin }),
+      replace,
+      state: (prev) => ({ ...prev, origin, discoveryLane: lane }),
     });
-  // The pane closes to the lens it was opened from, with its facets (1063, 719). `lens` is the
-  // origin's while the pane is open (convene.tsx), so this is the origin's route and search. An event
-  // opened from outside Discovery (the Feed's Event hook) closes to that origin by 1065's rule, as the
-  // Back row does; the collapsed rail's expand control still opens Discovery.
+  // The pane closes to the lens it was opened from, with its facets (1063, 719). An event opened from
+  // outside Discovery (the Feed's Event hook) closes to that origin by 1065's rule.
   const toOrigin = useBackToOrigin();
   const closeToDiscovery = () =>
     void (lens === "all"
@@ -288,8 +353,8 @@ export function DiscoverySurface({
       : navigate({ to: "/convene/$lens", params: { lens }, search, resetScroll: false }));
   const fromElsewhere = !!toOrigin.arrivedFrom && toOrigin.arrivedFrom.to === "/feed";
   const closePane = fromElsewhere ? toOrigin.go : closeToDiscovery;
-  // 1067: hover intent at expanded with a pointer warms the event route and the page's one read
-  // under EventSurface's key, so the pane opens with data. Never at compact or medium, never on touch.
+  // 1067: preload at expanded with a pointer warms the event route and the page's one read under
+  // EventSurface's key, so the pane opens with data. Never at compact or medium, never on touch.
   const warmEvent = (eventId: string) => {
     void router.preloadRoute({ to: "/convene/events/$id", params: { id: eventId }, search });
     void qc.prefetchQuery({
@@ -299,11 +364,12 @@ export function DiscoverySurface({
     });
   };
 
-  const dismiss = async (item: DiscoveryItem, section: DiscoverySectionId) => {
-    const key = section + ":" + item.event_id;
+  const dismiss = async (item: DiscoveryItem, lane: DiscoveryLaneId) => {
+    const key = lane + ":" + item.event_id;
     setDismissed((s) => new Set(s).add(key));
+    say("Fewer like this in your lanes.");
     try {
-      await dismissDiscoveryItem(item.event_id, section);
+      await dismissDiscoveryItem(item.event_id, lane);
     } catch {
       setDismissed((s) => {
         const n = new Set(s);
@@ -314,44 +380,103 @@ export function DiscoverySurface({
     }
   };
 
-  // The lens set (693, 948): every word from the vocabulary; the seat reads `short`.
+  // The lens set (693, 1093): every word from the vocabulary; the seat reads `short`.
   const lenses: Lens<ConveneLensId>[] = useMemo(
     () => lensRows.map((l) => ({ id: l.value, label: l.short, icon: l.icon, scope: l.scope })),
     [lensRows],
   );
   const lensScope = lensRows.find((l) => l.value === lens)?.scope;
-  const nameOf = (id: DiscoverySectionId) => lensRows.find((l) => l.value === id)?.name ?? null;
+  const laneOrder = useMemo(
+    () => new Map<string, number>(laneRows.map((l, i) => [l.value, i])),
+    [laneRows],
+  );
+  const familyLabel = (family: string | null) =>
+    family ? (familyRows.find((f) => f.value === family)?.label ?? null) : null;
 
-  // Browse (586, 661, 1042, 1050): five axes, Home absent with no homes, no count anywhere.
-  const homeOptions = (homes ?? []).flatMap((h) => {
+  // Place (1095): the first chosen city names the Near lane "While you are in {city}".
+  const placeName = (id: string) => places.find((p) => p.id === id)?.name ?? null;
+  const chosenCity = lists.place.find((p) => p.startsWith("city|"));
+  const nearCity = chosenCity ? placeName(chosenCity) : null;
+  const laneName = (id: DiscoveryLaneId) =>
+    id === "near" && nearCity
+      ? "While you are in " + nearCity
+      : (laneRows.find((l) => l.value === id)?.name ?? null);
+
+  // Browse (item 2, 1095, 1110): Format, Price, When, Topics, Home, Place, in that order; no count.
+  const ladders: FacetLadder[] = (homes ?? []).flatMap((h) => {
     const w = homeWord(h);
-    return w ? [{ id: h.id, label: w }] : [];
+    if (!w) return [];
+    const rungs = [
+      { id: h.id + ":in", label: "In " + w },
+      { id: h.id + ":around", label: "Around " + w },
+      ...(h.region ? [{ id: h.id + ":region", label: h.region }] : []),
+      ...(h.country ? [{ id: h.id + ":country", label: h.country }] : []),
+      { id: "anywhere", label: "Anywhere" },
+    ];
+    return [{ id: h.id, label: w, rungs }];
   });
   const axes: FacetAxis[] = [
-    { id: "format", label: "Format", icon: "map-pin", options: FORMAT_OPTIONS },
-    { id: "price", label: "Price", icon: "ticket", options: PRICE_OPTIONS },
-    { id: "when", label: "When", icon: "clock", options: WHEN_OPTIONS },
+    {
+      id: "format",
+      label: "Format",
+      icon: "map-pin",
+      select: "single",
+      display: "segment",
+      anyLabel: "Any",
+      options: FORMAT_OPTIONS,
+    },
+    {
+      id: "price",
+      label: "Price",
+      icon: "ticket",
+      select: "single",
+      display: "segment",
+      anyLabel: "Any",
+      options: PRICE_OPTIONS,
+    },
+    {
+      id: "when",
+      label: "When",
+      icon: "clock",
+      select: "single",
+      display: "segment",
+      anyLabel: "Any",
+      options: WHEN_OPTIONS,
+    },
     {
       id: "family",
-      label: "Category family",
+      label: "Topics",
       icon: "hash",
+      display: "checklist",
       options: familyRows.map((f) => ({ id: f.value, label: f.label })),
     },
-    ...(homeOptions.length
-      ? [{ id: "home", label: "Home", icon: "house", options: homeOptions }]
+    ...(ladders.length
+      ? [{ id: "home", label: "Home", icon: "house", select: "single" as const, ladders }]
       : []),
+    {
+      id: "place",
+      label: "Place",
+      icon: "globe",
+      display: "combobox",
+      placeholder: "Anywhere in the world",
+      removeLabel: "Remove",
+      options: places.map((p) => ({
+        id: p.id,
+        label: p.name,
+        detail:
+          p.kind === "country" || !p.country
+            ? PLACE_KIND[p.kind]
+            : PLACE_KIND[p.kind] + ", " + p.country,
+      })),
+    },
   ];
   const railValue: FacetValue = {};
-  for (const k of ["format", "price", "when", "family", "home"] as const)
+  for (const k of ["format", "price", "when", "family", "place"] as const)
     if (lists[k].length) railValue[k] = [...lists[k]];
-  // When and Home are single-select (item 9): the rail toggles, so the newest choice replaces the old.
+  if (lists.home[0]) railValue["home"] = [lists.home[0] + ":" + (lists.rung[0] ?? "in")];
   const onRail = (next: FacetValue) => {
-    const pickOne = (axis: "when" | "home") => {
-      const was: string[] = lists[axis];
-      const now = next[axis] ?? [];
-      const added = now.filter((v) => !was.includes(v));
-      return added.length ? added.slice(-1) : now.slice(0, 1);
-    };
+    const rung = (next["home"] ?? [])[0];
+    const [homeId, step] = rung && rung !== "anywhere" ? rung.split(":") : [];
     setFacets({
       format: (next["format"] ?? []).filter((v): v is DiscoveryFormat =>
         FORMAT_OPTIONS.some((o) => o.id === v),
@@ -359,19 +484,34 @@ export function DiscoverySurface({
       price: (next["price"] ?? []).filter((v): v is DiscoveryPrice =>
         PRICE_OPTIONS.some((o) => o.id === v),
       ),
-      when: pickOne("when").filter((v): v is DiscoveryWhen => WHEN_OPTIONS.some((o) => o.id === v)),
+      when: (next["when"] ?? [])
+        .slice(0, 1)
+        .filter((v): v is DiscoveryWhen => WHEN_OPTIONS.some((o) => o.id === v)),
       family: next["family"] ?? [],
-      home: pickOne("home"),
+      home: homeId ? [homeId] : [],
+      rung: homeId && step && step !== "in" ? [step as DiscoveryHomeRung] : [],
+      place: next["place"] ?? [],
     });
   };
-  const clearFacets = () => setFacets({ format: [], price: [], when: [], family: [], home: [] });
+  const clearFacets = () => setFacets(NO_FACETS);
 
-  // Applied facets as removable Chips (SPEC section 4), each by its own word; a value no read has
-  // named yet shows no chip.
+  // Applied facets as removable Chips at compact (SPEC section 4), each by its own word; a value no
+  // read has named yet shows no chip.
   const chips: { key: string; label: string; remove: () => void }[] = [];
   const without = (axis: keyof FacetLists, v: string) =>
     setFacets({ ...lists, [axis]: (lists[axis] as string[]).filter((x) => x !== v) } as FacetLists);
-  for (const a of axes)
+  for (const a of axes) {
+    if (a.id === "home") {
+      const v = railValue["home"]?.[0];
+      const label = v && ladders.flatMap((l) => l.rungs).find((r) => r.id === v)?.label;
+      if (label)
+        chips.push({
+          key: "home:" + v,
+          label,
+          remove: () => setFacets({ ...lists, home: [], rung: [] }),
+        });
+      continue;
+    }
     for (const v of lists[a.id as keyof FacetLists] ?? []) {
       const label = a.options?.find((o) => o.id === v)?.label;
       if (label)
@@ -381,6 +521,7 @@ export function DiscoverySurface({
           remove: () => without(a.id as keyof FacetLists, v),
         });
     }
+  }
   const chipRow = chips.length ? (
     <div data-applied-facets style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
       {chips.map((c) => (
@@ -421,26 +562,27 @@ export function DiscoverySurface({
         c="convene"
         label="Convene lens"
         width="fill"
-        labels={expanded ? "always" : undefined}
-        icons={expanded}
+        labels="always"
+        icons
         collapsed={inContent ? scrolled : undefined}
       />
     ) : null;
 
   // The shell's `lanes` mode, the rails and the header lens, each set while mounted and cleared on
   // unmount (rail-store.ts, header-lens-store.ts). The key is the lens, so the pane opening over the
-  // lanes keeps their scroll and a lens change resets it.
+  // lanes keeps their scroll and a lens change resets it. There is no right column (item 7).
   const lensKey = lenses.map((l) => l.id + l.label).join("|");
+  const railShut = paneOpen || railCollapsed;
   useEffect(() => {
     setShellLayout({
       mode: "lanes",
-      rail: paneOpen ? "collapsed" : "open",
+      rail: railShut ? "collapsed" : "open",
       key: lens,
       top: compact ? null : lensBar(false),
     });
     // lensBar reads the lens set, the lens, its scope and the search; listing those is enough.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [compact, expanded, paneOpen, lens, lensKey, lensScope, search]);
+  }, [compact, railShut, lens, lensKey, lensScope, search]);
   useEffect(() => {
     if (compact) {
       setLeftRail(null);
@@ -448,14 +590,14 @@ export function DiscoverySurface({
     }
     setLeftRail({
       label: null,
-      node: paneOpen ? (
+      node: railShut ? (
         <FacetRail
           mode="collapsed"
           axes={axes}
           value={railValue}
           label="Browse"
-          expandLabel="Back to Discovery and show browse"
-          onExpand={closeToDiscovery}
+          expandLabel={paneOpen ? "Back to Discovery and show browse" : "Show browse"}
+          onExpand={paneOpen ? closeToDiscovery : () => setRailCollapsed(false)}
         />
       ) : (
         <FacetRail
@@ -465,68 +607,23 @@ export function DiscoverySurface({
           onChange={onRail}
           onClear={clearFacets}
           label="Browse"
+          headingAction={
+            <IconButton
+              name="panel-left-close"
+              label="Collapse browse"
+              size={touch ? 44 : 36}
+              onClick={() => setRailCollapsed(true)}
+            />
+          }
         />
       ),
     });
     // The rail reads the axes' sources and the current facets; listing those is enough.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [compact, paneOpen, lists, familyRows, homes, lens, search]);
-  const follows = data?.follows ?? [];
-  const subscriptions = data?.subscriptions ?? [];
+  }, [compact, railShut, paneOpen, band, touch, lists, familyRows, homes, places, lens, search]);
   useEffect(() => {
-    if (!wide || paneOpen || !data) {
-      setRightRail(null);
-      return;
-    }
-    setRightRail({
-      label: null,
-      node: (
-        <>
-          <RailWidget
-            title="You follow"
-            empty="You follow no host yet. Follow one from an event and their events start your dashboard."
-          >
-            {follows.flatMap((f) =>
-              f.name
-                ? [
-                    f.handle ? (
-                      <Link
-                        key={f.id}
-                        to="/m/$handle"
-                        params={{ handle: f.handle }}
-                        search={{}}
-                        data-follow={f.id}
-                        style={{
-                          fontSize: 15,
-                          lineHeight: 1.45,
-                          color: "var(--ink)",
-                          textDecoration: "none",
-                        }}
-                      >
-                        {f.name}
-                      </Link>
-                    ) : (
-                      <span key={f.id} style={{ fontSize: 15, lineHeight: 1.45 }}>
-                        {f.name}
-                      </span>
-                    ),
-                  ]
-                : [],
-            )}
-          </RailWidget>
-          {/* 1039: the second sentence of the empty line waits for the Subscribe control. */}
-          <RailWidget title="You subscribe to" empty="No category family yet.">
-            {subscriptions.map((s) => (
-              <span key={s.family} style={{ fontSize: 15, lineHeight: 1.45 }}>
-                {s.label}
-              </span>
-            ))}
-          </RailWidget>
-        </>
-      ),
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [wide, paneOpen, data]);
+    setRightRail(null);
+  }, []);
   useEffect(() => {
     if (!compact || lenses.length === 0) {
       setHeaderLens(null);
@@ -549,18 +646,17 @@ export function DiscoverySurface({
     [],
   );
 
-  // The sections as this member may see them now: the projection's, in the vocabulary's order, less
-  // what they dismissed here.
-  const order = new Map(lensRows.map((l, i) => [l.value as string, i]));
+  // The lanes as this member may see them now: the projection's, in the lanes' order, less what they
+  // dismissed here.
   const sections: DiscoverySection[] = (data?.sections ?? [])
     .map((s) => ({
       ...s,
       items: s.items.filter((i) => !dismissed.has(s.section + ":" + i.event_id)),
     }))
-    .sort((a, b) => (order.get(a.section) ?? 99) - (order.get(b.section) ?? 99));
+    .sort((a, b) => (laneOrder.get(a.section) ?? 99) - (laneOrder.get(b.section) ?? 99));
 
-  // 650, 1046: DIA's one sentence for a member who follows no host, in plain text with the host's
-  // name unlinked (1053).
+  // 650, 1046: DIA's one sentence for a member who follows no host, in plain text with the host's name
+  // unlinked (1053).
   const suggest = data?.suggest ?? null;
   const sentence =
     suggest && suggest.host.name && (lens === "all" || lens === "follow")
@@ -572,40 +668,139 @@ export function DiscoverySurface({
         "; follow them and their events start here."
       : null;
 
-  const withDia = !paneOpen;
-  const card = (item: DiscoveryItem, section: DiscoverySectionId, inLane: boolean) => {
-    const line = withDia ? diaLineFor(item.reason, zone) : null;
-    const open = () => openEvent(item.event_id);
+  const followedIds = new Set((data?.follows ?? []).map((f) => f.id));
+  const subscribedFamilies = new Set((data?.subscriptions ?? []).map((s) => s.family));
+
+  /** The menu (1097): items in the ruled order; an item that does not apply is absent. */
+  const menuFor = (item: DiscoveryItem, lane: DiscoveryLaneId): MenuProps["items"] => {
+    const post = item.post;
+    const ev = post.event;
+    const postId = post.id ?? "";
+    const saved = postId ? (savedNow[postId] ?? !!data?.saved.has(postId)) : false;
+    const going = !!data?.going.has(item.event_id);
+    const hostId = ev?.hostId ?? "";
+    const presenter = post.author_name;
+    const canFollow =
+      post.author_kind === "member" && !!hostId && hostId !== member.id && !!presenter;
+    const following = hostId ? (followNow[hostId] ?? followedIds.has(hostId)) : false;
+    const family = ev?.family ?? "";
+    const topic = familyLabel(family);
+    const subscribed = family ? (subscribedNow[family] ?? subscribedFamilies.has(family)) : false;
+    return [
+      !!postId && {
+        id: "share",
+        label: "Share",
+        icon: "share",
+        onSelect: () => void share(postId),
+      },
+      !!postId && {
+        id: "copy",
+        label: "Copy link",
+        icon: "link",
+        onSelect: () => void copy(postId),
+      },
+      !!postId && {
+        id: "save",
+        label: saved ? "Saved" : "Save",
+        icon: "bookmark",
+        onSelect: () => {
+          setSavedNow((s) => ({ ...s, [postId]: !saved }));
+          setSaved(member.id, postId, !saved).catch(() => {
+            setSavedNow((s) => ({ ...s, [postId]: saved }));
+            say("That did not go through. Try again.");
+          });
+        },
+      },
+      going && {
+        id: "calendar",
+        label: "Add to calendar",
+        icon: "calendar",
+        onSelect: () => {
+          void qc
+            .fetchQuery({
+              queryKey: [EVENT_PAGE_KEY, member.id, item.event_id],
+              queryFn: () => loadEventPage(item.event_id),
+              staleTime: 30_000,
+            })
+            .then(
+              (page) => {
+                if (!page || !downloadIcs(page.calendar, page.event.slug))
+                  say("The calendar file could not be made.");
+              },
+              () => say("The calendar file could not be made."),
+            );
+        },
+      },
+      { rule: true },
+      canFollow && {
+        id: "follow",
+        label: (following ? "Following " : "Follow ") + presenter,
+        icon: "user-plus",
+        onSelect: () => {
+          setFollowNow((f) => ({ ...f, [hostId]: !following }));
+          setFollow(hostId, !following).catch(() => {
+            setFollowNow((f) => ({ ...f, [hostId]: following }));
+            say("That did not go through. Try again.");
+          });
+        },
+      },
+      !!family &&
+        !!topic && {
+          id: "subscribe",
+          label: (subscribed ? "Subscribed to " : "Subscribe to ") + topic,
+          icon: "bell",
+          onSelect: () => {
+            setSubscribedNow((s) => ({ ...s, [family]: !subscribed }));
+            setSubscription(family, !subscribed).catch(() => {
+              setSubscribedNow((s) => ({ ...s, [family]: subscribed }));
+              say("That did not go through. Try again.");
+            });
+          },
+        },
+      { rule: true },
+      { id: "not", label: "Not this", icon: "x", onSelect: () => void dismiss(item, lane) },
+    ];
+  };
+
+  const card = (item: DiscoveryItem, lane: DiscoveryLaneId) => {
+    const post = item.post;
+    const ev = post.event;
+    const title = post.fields["title"]?.value;
+    const topic = familyLabel(ev?.family ?? null);
+    const family = ev?.family ?? null;
     return (
       <div
-        key={section + ":" + item.event_id}
+        key={lane + ":" + item.event_id}
         data-discovery-item={item.event_id}
-        data-section={section}
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          gap: 8,
-          ...(inLane
-            ? { flex: "none", width: "var(--lane-card-width)", scrollSnapAlign: "start" }
-            : null),
-        }}
+        data-section={lane}
+        style={{ flex: "none", scrollSnapAlign: "start" }}
       >
-        {line && <DiaLine state="done" text={line} onNotThis={() => void dismiss(item, section)} />}
-        <PostCardRouter
-          view={item.post}
-          feed
-          onClick={open}
-          onRespond={open}
-          onAct={open}
-          onShare={() => item.post.id && void share(item.post.id)}
-          readMoreHref={memberEventPath(item.event_id)}
-          onReadMore={(e) => {
-            // A modified or non-primary click is the browser's: new tab, new window, download.
-            if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
-            e.preventDefault();
-            open();
-          }}
-          onReadMoreIntent={expanded && !touch ? () => warmEvent(item.event_id) : undefined}
+        <PostCard
+          presentation="discovery"
+          c="convene"
+          title={typeof title === "string" ? title : undefined}
+          when={ev?.when || undefined}
+          where={ev ? whereFor(ev) : undefined}
+          presenter={post.author_name || undefined}
+          presenterSrc={post.author_avatar}
+          topic={topic ?? undefined}
+          reason={reasonFor(lane, item.reason)}
+          media={post.media[0]}
+          menu={menuFor(item, lane)}
+          selected={paneOpen && paneId === item.event_id && (openLane ?? lane) === lane}
+          onOpen={() => openEvent(item.event_id, lane)}
+          onPreload={expanded && !touch ? () => warmEvent(item.event_id) : undefined}
+          onPresenter={
+            post.author_handle
+              ? () =>
+                  void navigate({ to: "/m/$handle", params: { handle: post.author_handle ?? "" } })
+              : undefined
+          }
+          onTopic={
+            family && !lists.family.includes(family)
+              ? () => setFacets({ ...lists, family: [...lists.family, family] })
+              : undefined
+          }
         />
       </div>
     );
@@ -615,9 +810,52 @@ export function DiscoverySurface({
     <DiaLine state="done" text={sentence ?? undefined} style={{ alignItems: "flex-start" }} />
   );
 
-  const lane = (id: DiscoverySectionId, first: boolean, body: ReactNode, seeAll: boolean) => {
-    const name = nameOf(id);
+  // See all (item 3; 1092, 1112): Happening soon applies the two weeks and Join from anywhere online
+  // and hybrid, the four relationship lanes switch to their lens, and This weekend, New this week and
+  // Near your homes carry none.
+  const seeAllOf = (id: DiscoveryLaneId): SeeAll | null => {
+    if (id === "soon") return { to: "/convene", search: { ...search, when: "two_weeks" } };
+    if (id === "online") return { to: "/convene", search: { ...search, format: "online,hybrid" } };
+    if (id === "curated" || id === "follow" || id === "taste" || id === "network")
+      return { lens: id };
+    return null;
+  };
+  const seeAllLink = (id: DiscoveryLaneId, to: SeeAll) => (
+    <a
+      href={
+        "lens" in to
+          ? router.buildLocation({ to: "/convene/$lens", params: { lens: to.lens }, search }).href
+          : router.buildLocation({ to: "/convene", search: to.search }).href
+      }
+      data-see-all={id}
+      onClick={(e) => {
+        if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+        e.preventDefault();
+        if ("lens" in to) setLens(to.lens);
+        else void navigate({ to: "/convene", search: to.search, resetScroll: false });
+      }}
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        flex: "none",
+        minHeight: touch ? "var(--target-primary)" : 36,
+        fontFamily: "var(--font-sans)",
+        fontSize: 15,
+        fontWeight: 500,
+        color: "var(--c-convene-text)",
+        textDecoration: "underline",
+        textDecorationColor: "var(--line-strong)",
+        textUnderlineOffset: 2,
+      }}
+    >
+      See all
+    </a>
+  );
+
+  const lane = (id: DiscoveryLaneId, first: boolean, body: ReactNode, withSeeAll: boolean) => {
+    const name = laneName(id);
     const hid = "lane-" + id;
+    const to = withSeeAll ? seeAllOf(id) : null;
     return (
       <section
         key={id}
@@ -644,39 +882,16 @@ export function DiscoverySurface({
               {name}
             </h2>
           )}
-          {seeAll && (
-            <Link
-              to="/convene/$lens"
-              params={{ lens: id }}
-              search={search}
-              resetScroll={false}
-              data-see-all={id}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                flex: "none",
-                minHeight: touch ? "var(--target-primary)" : 36,
-                fontFamily: "var(--font-sans)",
-                fontSize: 15,
-                fontWeight: 500,
-                color: "var(--c-convene-text)",
-                textDecoration: "underline",
-                textDecorationColor: "var(--line-strong)",
-                textUnderlineOffset: 2,
-              }}
-            >
-              See all
-            </Link>
-          )}
+          {to && seeAllLink(id, to)}
         </div>
         {body}
       </section>
     );
   };
 
-  // 1065: the router's element restoration keys each lane on its section, so Back returns every lane
-  // to where the member left it. The shell's scrollToTopSelectors name the columns only, never a lane.
-  const laneRow = (id: DiscoverySectionId, children: ReactNode) => (
+  // 1065: the router's element restoration keys each lane on its id, so Back returns every lane to
+  // where the member left it. The shell's scrollToTopSelectors name the columns only, never a lane.
+  const laneRow = (id: DiscoveryLaneId, children: ReactNode) => (
     <div
       className="dna-lane"
       data-lane-row
@@ -689,8 +904,9 @@ export function DiscoverySurface({
         scrollSnapType: "x proximity",
         scrollbarWidth: "none",
         alignItems: "flex-start",
+        padding: "4px 0 8px",
         ...(compact
-          ? { margin: "0 -16px", padding: "0 16px", scrollPaddingInline: 16 }
+          ? { margin: "0 -16px", paddingLeft: 16, paddingRight: 16, scrollPaddingInline: 16 }
           : { minWidth: 0 }),
       }}
     >
@@ -698,10 +914,11 @@ export function DiscoverySurface({
     </div>
   );
 
-  // All (685): each section the projection returned, as a lane; the first as its sentence alone when
-  // the member follows no host.
+  // All (685, 1092): each lane the projection returned, in the lanes' order; the Communities lane as
+  // its sentence alone when the member follows no host.
   const followLane = sections.find((s) => s.section === "follow");
-  const sentenceFirst = !!sentence && (!followLane || followLane.items.length === 0);
+  const sentenceFirst =
+    lens === "all" && !!sentence && (!followLane || followLane.items.length === 0);
   const laneSections = sections.filter((s) => s.items.length > 0);
   const lanesView = (
     <div data-lanes style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
@@ -712,49 +929,51 @@ export function DiscoverySurface({
           i === 0 && !sentenceFirst,
           laneRow(
             s.section,
-            s.items.map((it) => card(it, s.section, true)),
+            s.items.map((it) => card(it, s.section)),
           ),
-          true,
+          lens === "all",
         ),
       )}
     </div>
   );
 
-  // A lens (693, 724): its one section as a vertical list in a 680 column, or the EmptyState.
-  const lensSection = lens === "all" ? null : sections.find((s) => s.section === lens);
-  const lensView =
-    lens === "all" ? null : (
-      <div
-        data-lens-list={lens}
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          gap: 16,
-          width: "100%",
-          maxWidth: 680,
-          margin: "0 auto",
-          minWidth: 0,
-        }}
-      >
-        {nameOf(lens) && <h2 style={H2}>{nameOf(lens)}</h2>}
-        {lens === "follow" && sentence && !lensSection?.items.length ? (
-          sentenceLine
-        ) : lensSection && lensSection.items.length > 0 ? (
-          lensSection.items.map((it) => card(it, lens, false))
-        ) : (
-          <EmptyState
-            c="convene"
-            title="Nothing in this lens yet."
-            body="Widen the lens or browse another way."
-            action={
-              <Button variant="secondary" onClick={() => setLens("all")}>
-                Back to All
-              </Button>
-            }
-          />
-        )}
-      </div>
-    );
+  // A lens (693, 1105): its one lane, the cards wrapping in rows, or the EmptyState.
+  const lensLane: DiscoveryLaneId | null = lens === "all" ? null : lens;
+  const lensSection = lensLane ? sections.find((s) => s.section === lensLane) : undefined;
+  const lensView = lensLane ? (
+    <div
+      data-lens-list={lensLane}
+      style={{ display: "flex", flexDirection: "column", gap: 16, width: "100%", minWidth: 0 }}
+    >
+      {laneName(lensLane) && <h2 style={H2}>{laneName(lensLane)}</h2>}
+      {lensLane === "follow" && sentence && !lensSection?.items.length ? (
+        sentenceLine
+      ) : lensSection && lensSection.items.length > 0 ? (
+        <div
+          data-lens-cards
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: 12,
+            justifyContent: compact ? "center" : "flex-start",
+          }}
+        >
+          {lensSection.items.map((it) => card(it, lensLane))}
+        </div>
+      ) : (
+        <EmptyState
+          c="convene"
+          title="Nothing in this lens yet."
+          body="Widen the lens or browse another way."
+          action={
+            <Button variant="secondary" onClick={() => setLens("all")}>
+              Back to All
+            </Button>
+          }
+        />
+      )}
+    </div>
+  ) : null;
 
   const body = read.isError ? (
     <LoadError
@@ -764,11 +983,35 @@ export function DiscoverySurface({
     />
   ) : !read.data && read.isPending ? (
     <Ghosts label="Loading Convene" lane={lens === "all"} />
-  ) : lens === "all" || paneOpen ? (
+  ) : lens === "all" ? (
     lanesView
   ) : (
     lensView
   );
+
+  // Pane stepping (1083, 1044): Previous and Next across the lane the open card came from, in its
+  // visible order, past the member's dismissals. An event opened from outside Discovery, or no longer
+  // in its lane, steps nowhere.
+  const stepLane = paneOpen && openLane ? sections.find((s) => s.section === openLane) : undefined;
+  const stepIds = stepLane ? stepLane.items.map((i) => i.event_id) : [];
+  const at = paneId ? stepIds.indexOf(paneId) : -1;
+  const stepping =
+    stepLane && at > -1
+      ? {
+          onPrevious: () => {
+            const prev = stepIds[at - 1];
+            if (prev) openEvent(prev, stepLane.section, true);
+          },
+          onNext: () => {
+            const next = stepIds[at + 1];
+            if (next) openEvent(next, stepLane.section, true);
+          },
+          hasPrevious: at > 0,
+          hasNext: at < stepIds.length - 1,
+          previousLabel: "Previous event",
+          nextLabel: "Next event",
+        }
+      : {};
 
   const toasts = (
     <>
@@ -790,6 +1033,8 @@ export function DiscoverySurface({
           list={body}
           onClose={closePane}
           closeLabel={"Back to " + (fromElsewhere ? toOrigin.origin.label : "Discovery")}
+          selectedKey={paneId ?? undefined}
+          {...stepping}
         >
           {pane}
         </Pane>

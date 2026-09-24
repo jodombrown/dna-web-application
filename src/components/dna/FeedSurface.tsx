@@ -47,7 +47,18 @@ export function useShare() {
     }
     window.setTimeout(() => setToast(null), 2600);
   };
-  return { share, toast };
+  /** Handoff 32-B (1097): Discovery's Copy link, the same link `share` hands over, to the clipboard. */
+  const copy = async (id: string) => {
+    const url = window.location.origin + "/posts/" + id;
+    try {
+      await navigator.clipboard.writeText(url);
+      setToast("Link copied.");
+    } catch {
+      setToast(url);
+    }
+    window.setTimeout(() => setToast(null), 2600);
+  };
+  return { share, copy, toast };
 }
 
 export function toastStyle(tier: "compact" | "medium" | "expanded") {

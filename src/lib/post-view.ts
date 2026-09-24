@@ -27,6 +27,18 @@ export type EventView = {
   space: { id: string; name: string } | null;
   /** Brief 10 (679): the accepted speakers, from `event_speakers`, for the card's row. */
   speakers: EventSpeakerView[];
+  /**
+   * Handoff 32-B (1076 to 1079, 1099): what Discovery's fixed-size face reads beside the meta line,
+   * from the same rows the meta line is built from. `when` is the meta line's own when, the viewer's
+   * zone first and the event's local time second; `places` is each physical row's city in position
+   * order (its place words where it names no city), empty for an online event; `family` is the
+   * convene_families value, whose label comes from the vocabulary.
+   */
+  mode: "in_person" | "virtual" | "hybrid";
+  family: string | null;
+  hostId: string;
+  when: string;
+  places: string[];
 };
 
 export type EventSpeakerView = {

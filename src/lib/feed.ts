@@ -298,6 +298,31 @@ export async function hydratePosts(
             label: sp.label,
             avatar: sp.avatar_path ? avatarUrls.get(sp.avatar_path) : undefined,
           })),
+          // Handoff 32-B: Discovery's face reads these beside the meta line, from the same rows.
+          mode: e.mode,
+          family: e.family,
+          hostId: e.host_member_id,
+          when,
+          places:
+            e.mode === "virtual"
+              ? []
+              : [
+                  ...new Set(
+                    rows
+                      .filter((r) => r.kind === "physical")
+                      .map(
+                        (r) =>
+                          r.city ??
+                          placeLine(
+                            r.place_text,
+                            r.place_name,
+                            r.city,
+                            !r.place_name && !r.city ? r.country : null,
+                          ),
+                      )
+                      .filter((w): w is string => !!w),
+                  ),
+                ],
         };
       }
     } else if (verb === "collaborate") {

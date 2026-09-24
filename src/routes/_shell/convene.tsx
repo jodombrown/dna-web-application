@@ -1,6 +1,6 @@
 // /convene (Brief 9, the Discovery Dashboard; handoff 31-B item 2): Discovery at lens All, and the
-// layout every route under /convene renders inside. `/convene/{section}` (convene.$lens.tsx) sets
-// one lens and `/convene/events/{id}` (convene.events.$id.tsx) is Brief 10's event page, so this
+// layout every route under /convene renders inside. `/convene/{lens}` (convene.$lens.tsx) sets
+// one of the four who-lenses (1093) and `/convene/events/{id}` (convene.events.$id.tsx) is Brief 10's event page, so this
 // route owns the facets in the query for all three (586, 1042) and keeps one Discovery mounted
 // across them: at expanded the event page is the content of Discovery's Pane with the lanes still
 // mounted as its list (688, 1047), whatever the member came from; below expanded the event page is
@@ -16,7 +16,7 @@
 import { createFileRoute, Outlet, useLocation, useParams } from "@tanstack/react-router";
 import { DiscoverySurface } from "@/components/dna/DiscoverySurface";
 import { useAuth } from "@/lib/auth";
-import { isSectionId, validateDiscoverySearch } from "@/lib/discovery-search";
+import { isLensId, validateDiscoverySearch } from "@/lib/discovery-search";
 import { useTier } from "@/lib/tier";
 
 export const Route = createFileRoute("/_shell/convene")({
@@ -33,9 +33,9 @@ function ConveneRoute() {
   const tier = useTier();
   if (!member) return null;
   if (params.id && tier !== "expanded") return <Outlet />;
-  const lens = isSectionId(params.lens)
+  const lens = isLensId(params.lens)
     ? params.lens
-    : params.id && isSectionId(originLens)
+    : params.id && isLensId(originLens)
       ? originLens
       : "all";
   return (
