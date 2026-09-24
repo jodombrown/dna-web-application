@@ -1476,6 +1476,73 @@ async function get(url, headers = {}) {
         missing.status === 404,
         "status " + missing.status,
       );
+      // Handoff 32-B item 9 (1080, 1081, 1100, 1109): the event's alias and its short code answer a
+      // permanent redirect to its slug on the worker, as a crawler reaches them, and an unknown code
+      // is a 404. The alias and the code are read from the event's own row, signed in as the owner;
+      // 000000 can never be a code (the column's check has no 0), so it is unknown by construction.
+      const LINK_ARMS = {
+        x: "Handoff 32-B item 9 (1081): /x/{code} answers 308 to /e/{slug}",
+        e: "Handoff 32-B item 9 (1080, 1100): /e/{alias} answers 308 to /e/{slug}",
+        unknown: "Handoff 32-B item 9 (1109): an unknown /x/ code answers 404",
+      };
+      let linkToken = null;
+      if (process.env.OWNER_EMAIL && process.env.OWNER_PASSWORD) {
+        const t = await fetch(SUPABASE_URL + "/auth/v1/token?grant_type=password", {
+          method: "POST",
+          headers: { apikey: KEY, "content-type": "application/json" },
+          body: JSON.stringify({
+            email: process.env.OWNER_EMAIL,
+            password: process.env.OWNER_PASSWORD,
+          }),
+        });
+        const body = await t.json().catch(() => null);
+        linkToken = body && body.access_token ? body.access_token : null;
+      }
+      const row = linkToken
+        ? await fetch(
+            SUPABASE_URL +
+              "/rest/v1/events?select=custom_slug,short_code&slug=eq." +
+              encodeURIComponent(PUBLIC_EVENT),
+            { headers: { apikey: KEY, Authorization: "Bearer " + linkToken } },
+          )
+        : null;
+      const rows = row ? await row.json().catch(() => null) : null;
+      const ev = Array.isArray(rows) && rows[0] ? rows[0] : null;
+      if (!linkToken) {
+        for (const n of Object.values(LINK_ARMS))
+          skip(n, "set OWNER_EMAIL and OWNER_PASSWORD to read the event's alias and code");
+      } else if (!ev || !ev.short_code || !ev.custom_slug) {
+        for (const n of Object.values(LINK_ARMS))
+          skip(
+            n,
+            "events.custom_slug and events.short_code did not answer (" +
+              (row ? row.status : "no read") +
+              "); 20260924110000 is not on the project yet",
+          );
+      } else {
+        const to = (r) => {
+          const loc = r.headers.get("location");
+          return loc ? new URL(loc, BASE).pathname : null;
+        };
+        const x = await get(BASE + "/x/" + ev.short_code);
+        record(
+          LINK_ARMS.x,
+          x.status === 308 && to(x) === "/e/" + PUBLIC_EVENT,
+          "status " + x.status + " to " + to(x),
+        );
+        if (ev.custom_slug === PUBLIC_EVENT)
+          skip(LINK_ARMS.e, "the event's alias is its slug, so /e/{alias} is the page itself");
+        else {
+          const e = await get(BASE + "/e/" + ev.custom_slug);
+          record(
+            LINK_ARMS.e,
+            e.status === 308 && to(e) === "/e/" + PUBLIC_EVENT,
+            "status " + e.status + " to " + to(e),
+          );
+        }
+        const unknown = await get(BASE + "/x/000000");
+        record(LINK_ARMS.unknown, unknown.status === 404, "status " + unknown.status);
+      }
       const anonPage = await fetch(SUPABASE_URL + "/rest/v1/rpc/event_page", {
         method: "POST",
         headers: H,

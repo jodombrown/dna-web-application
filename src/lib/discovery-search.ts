@@ -6,7 +6,7 @@
 // one with 22023.
 //
 // Three axes are the projection's own structural values (its `p_format`, `p_price` and `p_when`
-// branches) and are checked here; Donation is gone (1095). The rung is structural too (1110). A family
+// branches) and are checked here; Price is Free and Paid alone (1095). The rung is structural too (1110). A family
 // is a `convene_families` row (1037), a home one of the member's own `member_homes` (1042) and a place
 // one of `convene_places()`'s ids (1095): those are only knowable at runtime, so this module keeps a
 // well-formed token and the surface checks it against what the reads have answered before sending it.
@@ -217,9 +217,10 @@ export function discoveryFacets(f: FacetLists, known: Known): Omit<DiscoveryFace
     out.home = home;
     const rung = f.rung[0];
     const h = homes?.find((x) => x.id === home);
-    // A region rung for a home with no stored region matches nothing (1110), and the ladder draws
-    // none, so a URL that carries one falls back to the home's city.
-    if (rung && rung !== "in" && (rung !== "region" || !!h?.region)) out.homeRung = rung;
+    // A chosen rung is always sent, In included (1110); a home with no rung in the URL is In. A
+    // region rung for a home with no stored region matches nothing and the ladder draws none, so a
+    // URL that carries one falls back to the home's city.
+    out.homeRung = rung && (rung !== "region" || !!h?.region) ? rung : "in";
   }
   const pl = places ? f.place.filter((x) => places.includes(x)) : [];
   if (pl.length) out.places = pl;

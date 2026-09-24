@@ -1225,6 +1225,38 @@ email" dialog. The extracted frames carry this entry's cycle, `+0x27b76f4`, `+0x
 `+0x27b23f1`, dispatched from `g_main_context_dispatch`. The harness classified it behind G5 and
 counted the arm UNPROVEN (228). The envelope widens again: WebKit, and not only the Profile surface.
 
+### Update, 24 September 2026: runs 333 and 58 on `59974b2`, and the ten probe dispatches
+
+Recorded under handoff 32-B Addendum 3 item F, because both runs change something: the same arm
+crashed twice on one head at two different steps, and the frames carry a shape this entry's table
+does not.
+
+`pages.yml` run 333 (id `36055890815`, job `107823150434`, head `59974b2`, handoff 32-A's second PR)
+lost a web process in `webkit-390x844-light-event-flows` about 29 minutes into the WebKit matrix,
+waiting for the role-invitation sheet (`Moderate Corridor Suppers: Accra?`) to detach; the arm emitted
+16 of 19. `matrix.yml` run 58 (id `36061266246`, job `107840500715`, the same head, `ENGINE=webkit`,
+`SPECIAL=event`, `ONLY=[390,844]`, `THEME=light`) lost it in the same arm nine seconds in, waiting for
+the Withdrawn toast, one step after the going-toast wait `59974b2` added; 9 of 19. Both were the short
+count, both with the browser still connected, and in both ruling 832 stood the job down on one
+crashed arm, so neither job failed. Each wrote one core (`core.eadedCompositor.*.sig11`), extracted and
+not retained, with no ruling 850 degradation.
+
+The frames are this entry's defect: fault site `+0x588b98a`, `#1 +0x27b6be4`, the cycle `+0x27b76f4`,
+`+0x27b555f`, `+0x27b23f1`, entered at `+0x27b1885`, dispatched from `g_main_context_dispatch`. They
+differ from the table above in one respect: the cycle is interrupted by four frames, `+0x27bd55a`,
+`+0x27b8ccd`, `+0x27b7762`, `+0x27b23d5`, which run 42's 41 frames do not carry. Run 329's stack and
+run 333's are identical frame for frame (47 frames, the interlude at `#9` to `#12`); run 58's is one
+turn deeper (50 frames, 11/10/9, the interlude at `#12` to `#15`). Both workflows cap the backtrace at
+`bt 60`, so a stack ten frames deeper than run 58's would lose the entry frame and the main-loop path
+from the extraction.
+
+The ten probe dispatches followed: `matrix.yml` runs 59 to 68, all `ENGINE=webkit`, `SPECIAL=event`,
+`ONLY=[390,844]`, `THEME=light`, against `59974b2`'s deployment, five on `59974b2`'s tests and five on
+`7326ff7`'s. **Zero crashes and zero cores in ten**; every `event-flows` arm passed. So on `59974b2`
+the arm crashed in two runs of two and then passed five of five. Run 59 went red for a reason that is
+not this one (`webkit-390x844-light-guest`, "Send me a link" disabled for 30s, no core), recorded as
+its own gap below.
+
 ## G6. Withdraw separated the two states ruling 214 joined — closed (ruling 229)
 
 **Opened and closed 9 September 2026, both inside Fix PR 01. Ruling 227 stated the requirement,
@@ -4300,7 +4332,7 @@ this: before the first real member invite, a fixture policy that admits the two 
 accounts' events and no other, the shape the attestations arms already take under ruling 435, with
 the grant narrowed to run through it.
 
-## G71. The Home facet's rungs are not drawn and not built
+## G71. The Home facet's rungs are not drawn and not built — closed (ruling 1110)
 
 **Severity: medium, invite-boundary gate (ruling 140). Opened 22 September 2026 during handoff 31-A,
 filed under ruling 597. The number is assigned by this entry (ruling 638).**
@@ -4315,7 +4347,14 @@ projection's rung predicate against `member_homes.region` and the event's place,
 ratified 1085) and 32-A ports them as FacetRail's `ladders`. What stays owed is the projection's rung
 predicate and Discovery passing the ladders, which is 32-B's.
 
-## G72. FacetRail has no control on its own Browse line, so ruling 944's collapse control is not rendered
+**Closed 24 September 2026 by handoff 32-B (Addendum 1, ruling 1110).** `20260924120000` gives
+`convene_discovery` its `p_home_rung` parameter and the Home filter's rung branches (in, around, the
+stored region, the country), and Discovery draws one ladder per home in the member's order, "In
+{city}", "Around {city}", the region only where one is stored, the country and "Anywhere", which sends
+neither `p_home` nor `p_home_rung`. No distance is shown. The `discovery-facets` arms read each rung on
+a two-home fixture.
+
+## G72. FacetRail has no control on its own Browse line, so ruling 944's collapse control is not rendered — closed (ruling 944)
 
 **Severity: low. Opened 23 September 2026 during handoff 31-B item 4, filed under ruling 597 and
 reported under 732 rather than worked around at the page. The number is assigned by this entry
@@ -4334,6 +4373,11 @@ is in `public/strand/icons/` now. Owed: a Strand correction adding an action to 
 **Amended 24 September 2026 by handoff 32-A.** Correction 24 §1 gave the heading its slot and 32-A
 ports it as `headingAction`. Open until Discovery passes 944's control, which is 32-B's.
 
+**Closed 24 September 2026 by handoff 32-B item 7.** Discovery passes `panel-left-close` with the
+accessible name `Collapse browse` and no visible word as the rail's `headingAction`; it collapses the
+rail to its 64 strip and writes the member's row for the band (1111). The mount arms read it on the
+heading.
+
 ## G73. DiaLine's text is a string, so the first section's sentence cannot link the host's name
 
 **Severity: low. Opened 23 September 2026 during handoff 31-B item 7, filed under ruling 597 and
@@ -4349,7 +4393,7 @@ text: the host's name is not linked, so DiaLine's string is the whole answer and
 is owed. `DiscoverySurface` already rendered it that way; the comment names 1053 and the below density
 arm now asserts that the sentence carries no link.
 
-## G74. On Discovery a card's React and Save render and do nothing
+## G74. On Discovery a card's React and Save render and do nothing — closed (rulings 1096, 1097)
 
 **Severity: medium. Opened 23 September 2026 during handoff 31-B item 3, filed under ruling 597. The
 number is assigned by this entry (ruling 638).**
@@ -4360,6 +4404,11 @@ actions render. Share needs no write and is wired; `Ask the host` and the card's
 event page. React and Save have no write path on this surface and are inert. Owed: a ruling on
 whether Discovery takes the Feed's two existence toggles (`setSaved`, `setReacted` and the `loadMarks`
 read beside them) as a second write path, or the card at rest on Discovery hides them.
+
+**Closed 24 September 2026 by handoff 32-B items 4 to 6.** The card is PostCard's discovery face,
+which carries no React (1096). Save is the menu's Save or Saved, written through the Feed's own
+`setSaved` and read through its `loadMarks` inside `loadDiscovery`, so it is the one existing path and
+not a second (item 6).
 
 ## G75. A FacetRail option never wraps, and the longest category family is wider than the medium rail
 
@@ -4381,7 +4430,7 @@ box it wraps in (the nav, and at 390 the Sheet's scrolling body), whose `scrollW
 `clientWidth`. A one-line chip is now 39.75 rather
 than 36 (G87 item 1).
 
-## G76. FacetRail has no per-axis single select, so When and Home toggle rather than choose
+## G76. FacetRail has no per-axis single select, so When and Home toggle rather than choose — closed (ruling 1085)
 
 **Severity: low. Opened 23 September 2026 during handoff 31-B item 9, filed under ruling 597 and
 reported under 732. The number is assigned by this entry (ruling 638).**
@@ -4395,6 +4444,10 @@ radio group. Owed: a Strand correction for a per-axis `select="single"`.
 **Amended 24 September 2026 by handoff 32-A.** Correction 24 §3's per-axis `select` is ported;
 without it every axis stays a toggle group, so Discovery is unchanged. Open until Discovery declares
 When and Home single, which is 32-B's.
+
+**Closed 24 September 2026 by handoff 32-B item 2.** Format, Price and When are single segments led by
+Any (radiogroups), and Home is a single ladders axis, so each chooses rather than toggles and a screen
+reader hears a radio group.
 
 ## G77. Below expanded the event page's Back row names Feed when the member came from Discovery
 
@@ -4451,6 +4504,11 @@ not.
 **Amended 24 September 2026 by handoff 32-A.** Correction 24 §6's `open` is ported: one grid whose
 list column is the same element open or closed. Open until DiscoverySurface renders one Pane with
 `open` rather than two trees, which is 32-B's.
+
+**Amended 24 September 2026 by handoff 32-B.** Not taken: handoff 32-B's twelve items and three
+addenda do not name it, and its scope is the brief (CLAUDE.md). Discovery still returns one tree with
+the pane open and another with it closed, so the lanes' horizontal position still resets on each
+switch. Owed as before, in a brief that names it.
 
 ## G80. place-resolve's ordering arm reads Mapbox's live answer, so an empty side fails it
 
@@ -4553,6 +4611,12 @@ one scroller per tier and the column does not scroll (its only style is `min-wid
 31-B bound the Pane, and 1083's list follow will be one too. Owed before 32-B relies on either: Pane
 scrolls the nearest scrolling ancestor, or Strand gives the list column its own scroller, which is a
 Design question under 104.
+
+**Amended 24 September 2026 by handoff 32-B item 7.** Discovery binds `selectedKey` and Previous and
+Next, and the list follow is inert as this entry says. So the surface brings the open card into view
+in its own lane (`scrollIntoView` with `nearest` on both axes, keyed on the lane and the event), which
+moves the centre column and the lane's row, the two scrollers this shell has. The workaround is the
+page's, and it goes when Pane follows the nearest scrolling ancestor.
 
 ## G86. A Sheet inside the Pane closes the Pane with it on Escape, because the app's modal Sheet never prevents the keydown
 
@@ -4764,3 +4828,166 @@ Found in the same run and closed by this PR: `pages.yml` run 332 failed "notific
 the event page and marks the row read" at chromium 1280 dark because the check read the mock's reads
 on the tick the URL changed, while `NotificationPanel`'s `onRow` navigates first and marks the row
 read after. The check now waits for the read, bounded at 5s.
+
+## G97. Discovery's Format, Price and When words are arrays in the component
+
+**Severity: low. Opened 24 September 2026 by handoff 32-B item 11, filed under ruling 597. The number
+is assigned by this entry (ruling 638).**
+
+`src/components/dna/DiscoverySurface.tsx` keeps `FORMAT_OPTIONS` (In person, Online, Hybrid),
+`PRICE_OPTIONS` (Free, Paid) and `WHEN_OPTIONS` (Next two weeks, This month, Later) as arrays with
+their words in code. The ids are the projection's own structural values (its `p_format`, `p_price`
+and `p_when` branches), but the words a member reads are labels, and no vocabulary table serves them.
+Handoff 32-B edits Price's array (the third option is gone under 1095) and adds none. Owed: a ruling
+on whether these three are content vocabularies under the fixed-vocabularies absolute or structural
+like the Feed's lens set (999), and if the former, a table served by `vocabularies()`.
+
+## G98. The composed OpenGraph image for a public event page is not built
+
+**Severity: low. Opened 24 September 2026 by handoff 32-B (Held 4, ruling 1113), filed under ruling
+597. The number is assigned by this entry (ruling 638).**
+
+`/e/{slug}` keeps the link-preview tags it has. The composed image ruling 1100 describes (the cover,
+the title, one line and the wordmark at 1.91:1) is its own handoff after 32-B under 1113, and nothing
+in this PR draws or serves it.
+
+## G99. The Hub's alias editor is not built
+
+**Severity: low. Opened 24 September 2026 by handoff 32-B (Held 5), filed under ruling 597. The number
+is assigned by this entry (ruling 638).**
+
+`20260924110000` gives every event a `custom_slug` and a `short_code`, keeps the alias history in
+`event_aliases`, and ships `public.event_alias_check(event, alias)`, which answers the Hub's live
+preview with a status word. The editor that calls it is Brief 8 Revision 4's draw and is not built
+without an approved prototype (ruling 62). Until it is, a host cannot change an alias from the app;
+the database's own trigger writes the first one.
+
+## G100. A Discovery card opens through a button, not a link
+
+**Severity: medium. Opened 24 September 2026 during handoff 32-B item 4, filed under ruling 597 and
+reported under 732 rather than worked around at the page. The number is assigned by this entry
+(ruling 638).**
+
+Ruling 1067 says cards open through real links that preload on hover intent at expanded. PostCard's
+discovery face (correction 25 §1, ported by 32-A) opens through `onOpen`: its title is a `button`
+and the whole face is a click target, and it takes no `href`. So a Discovery card cannot be opened in
+a new tab, copied as a link or middle-clicked, and a keyboard or screen-reader member meets a button
+where 1067 promises a link. Hover intent still preloads the event route and its read at expanded
+through `onPreload`. Owed: a Strand correction giving the discovery face an `href` its title renders
+as an anchor, which Discovery then passes as the member event path.
+
+## G101. The menu has no second line for Not this, so "Fewer like this in your lanes" is a toast
+
+**Severity: low. Opened 24 September 2026 during handoff 32-B item 5, filed under ruling 597. The
+number is assigned by this entry (ruling 638).**
+
+Handoff 32-B item 5 gives Not this the line "Fewer like this in your lanes". Strand's `Menu` items
+carry an id, a label, an icon, a tone and an action, with no description, and correction 25's drawing
+shows Not this alone. Discovery says the sentence as the toast that confirms the dismissal, which is a
+reading and not a drawing. Owed: a ruling that the toast is the place, or a Menu correction for an
+item's second line.
+
+## G102. Topics cannot render in two columns at 150 and up
+
+**Severity: low. Opened 24 September 2026 during handoff 32-B item 2, filed under ruling 597 and
+reported under 732. The number is assigned by this entry (ruling 638).**
+
+Item 2 asks for the Topics checklist in two columns at 150 and up. FacetRail's `checklist` display is
+one flex column of 44 rows (correction 25 §3), the compile draws one column, and 32-B changes no part,
+so Topics renders in one column at every width. Owed: a Strand correction for a checklist's columns,
+with the width the second column begins at.
+
+## G103. Format is a single segment, so format=online,hybrid shows as Online
+
+**Severity: low. Opened 24 September 2026 during handoff 32-B items 1 to 3, filed under ruling 597.
+The number is assigned by this entry (ruling 638).**
+
+Join from anywhere's See all and the retired `/convene/online` both land on `format=online,hybrid`,
+which the projection reads as two formats. Format is a single-select segment led by Any (item 2), so
+the rail can show one choice: it checks Online while Hybrid is applied too, and picking any other
+seat replaces both. The narrowing is right; what the rail shows under it is not the whole of it. Owed:
+a ruling on whether Format is multi-select (chips) or the segment gains an "Online or hybrid" seat.
+
+## G104. Five labels and five glyphs do not fit the Convene lens bar at compact
+
+**Severity: medium. Opened 24 September 2026 during handoff 32-B item 7, filed under ruling 597. The
+number is assigned by this entry (ruling 638).**
+
+Item 7 asks for the five lenses with `labels="always"` and icons at every tier. At medium and
+expanded they fit. At 360, 390 and 430 they do not, under either packing: with 952's `fill` the five
+equal seats are narrower than "Communities" or "My network" with its glyph, and the words run under
+the next seat's glyph; with `content` the seats still shrink to the track and four of five overflow
+(measured on the local build: at 360 the seats are 48 to 74 wide with `scrollWidth` past
+`clientWidth` on four). `labels` switches the part's fit test off, so the page cannot keep both.
+Discovery keeps item 7 at medium and expanded and, at compact, leaves the fit test on, which answers
+icon-first with five equal 62 seats at 360 (correction 25's drawing uses icon-first at compact). Each
+seat keeps its word as its accessible name. The header slot, which takes the bar once the member
+scrolls past 72, renders it `compact`, which forces icon-first too. Owed: a ruling on item 7 at
+compact, or Design drawing the Convene bar at compact with its words.
+
+## G105. Place's kind word is matched as the member types
+
+**Severity: low. Opened 24 September 2026 during handoff 32-B item 2, filed under ruling 597. The
+number is assigned by this entry (ruling 638).**
+
+Item 2 labels each Place option by its kind. The option's label is the place's name, so the kind
+rides in its `detail` ("City, Ghana", "Region, Ghana", "Country"), and FacetRail's combobox matches
+by prefix on each word of the label and of the detail (correction 25 §3). So typing "c" offers every
+city and every country, and "re" every region, before the member has typed a place. Owed: a ruling on
+whether the kind word is matched, or a combobox option field that is shown and not searched.
+
+## G106. On WebKit the guest sheet's Send me a link stayed disabled for 30 seconds
+
+**Severity: low, unread. Opened 24 September 2026 while reading G5's runs for handoff 32-B Addendum 3
+item F, filed under ruling 597. The number is assigned by this entry (ruling 638).**
+
+`matrix.yml` run 59 (id `36063982157`, job `107849293819`, head `59974b2`, `ENGINE=webkit`,
+`SPECIAL=event`, `ONLY=[390,844]`) failed `webkit-390x844-light-guest` with `locator.click: Timeout
+30000ms exceeded` on the I am going sheet's `[data-testid="guest-send"]`, which resolved to a disabled
+button for the whole wait; the arm emitted 6 of 21, no core was written and nothing classified it as
+G5. The nine dispatches around it passed the same arm on the same deployment. The cause is not read:
+`GuestSheet` disables the button while the field is empty or a request is in flight, so either the
+field did not take the fill or a request did not settle. Owed: read it in WebKit.
+
+## G107. B9-SPEC is cited and is not in the tree, so parts of Discovery were built with no drawing
+
+**Severity: low. Opened 24 September 2026 during handoff 32-B, filed under ruling 597. The number is
+assigned by this entry (ruling 638).**
+
+Handoff 32-B names `B9-SPEC.md` in Project knowledge as the spec; the tree holds no copy, and the
+only drawing of the page in it is correction 25's proof fixture inside
+`docs/strand/v1790279130697923/_ds_bundle.js`, relayed from B9 Revisions 6 and 8. Built from the
+handoff's words with no drawing: See all (its placement against the lane's heading and its style),
+"While you are in {city}", Place's placeholder and kind words, When's four options, the menu's Saved,
+Following and Subscribed words, the rail's memory, and the region rung's absence. Where the fixture
+and the handoff differ (the fixture's When options, its Place placeholder, its expanded rail at 280
+where the shell draws 260), the handoff was built. Owed: the spec in the tree, and a design read of
+the undrawn items on the deployed preview.
+
+## G108. Three client wrappers call set_follow
+
+**Severity: low. Opened 24 September 2026 during handoff 32-B item 6, filed under ruling 597. The
+number is assigned by this entry (ruling 638).**
+
+`set_follow` is the one write path, and three client functions call it: `setFollowing` in
+`src/lib/connect.ts` (Connect, and Discovery's menu under item 6), `setFollow` in
+`src/lib/event-page.ts` (the event page) and `setFollow` in `src/lib/profile.ts` (Profile). They
+differ only in how they report an error. Not a second write path in the database, but the shape the
+one-write-path absolute exists to prevent, one layer up. Owed: one wrapper, imported by all three.
+
+## G109. FacetRail's compact Sheet carries no z-index, so positioned content after its host paints over it
+
+**Severity: medium. Opened 24 September 2026 during handoff 32-B item 7, filed under ruling 597. The
+number is assigned by this entry (ruling 638).**
+
+At compact FacetRail opens its axes in the repository's Sheet with `contained`, which renders the
+dialog `position: absolute` with `z-index: auto` inside whatever element hosts the rail. Anything
+positioned after the host in the same stacking context paints over it. Handoff 32-B's cards are
+PostCard's discovery face, which is `position: relative`, so at 390 the lanes drew over the open
+Browse Sheet from its Format row down, and a press on a Home rung landed on a card (read on the local
+build: `elementFromPoint` inside the Sheet answered the card at 30 and 60 percent of its height).
+Discovery lifts the row that hosts the rail with `z-index: var(--z-sheet)`, a flex item's stacking
+context, which does not move the Sheet's containing block; the compact `discovery-facets` arm presses
+every Home rung through the Sheet.
+Owed: the contained Sheet takes `--z-sheet` itself (603), so a caller cannot reintroduce this by
+placing positioned content after it. Correction brief material with G30.

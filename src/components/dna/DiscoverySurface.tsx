@@ -7,9 +7,9 @@
 // One read projection and one write path per surface (CLAUDE.md): everything this surface shows comes
 // through `loadDiscovery` (the cards are the Feed's own views, hydrated by post id inside it, 660) and
 // Place's options through `convene_places()` (1095). Every menu act is an existing write path (item
-// 6): Save is the Feed's `setSaved`, Add to calendar the event page's `.ics`, Follow is `set_follow`,
-// Subscribe `set_subscription` and Not this `dismiss_discovery_item`. The rail's open or collapsed
-// state is the member's own row in `member_rail_state` (1111). Nothing here filters, ranks or counts:
+// 6): Save is the Feed's `setSaved`, Add to calendar the event page's `.ics`, Follow is Connect's
+// `set_follow` wrapper, Subscribe `set_subscription` and Not this `dismiss_discovery_item`. The
+// rail's open or collapsed state is the member's own row in `member_rail_state` (1111). Nothing here filters, ranks or counts:
 // the projection chose every lane and every item under row policy, and a lane it did not return is
 // absent with no heading and no placeholder (632).
 //
@@ -18,7 +18,7 @@
 // `convene_lanes`; the ids alone live in code.
 //
 // Layout (1082 as amended by 1094; item 7). The LensBar shows the five lenses with labels always and
-// icons at every tier and no trailing seat. The FacetRail is collapsed by default at every width: a
+// icons at every tier and no seat after the lenses. The FacetRail is collapsed by default at every width: a
 // Sheet behind the Browse pill at compact, and the 64 strip at medium and expanded, opened and
 // collapsed by the member and remembered per member per width band. There is no right column. At
 // expanded a card opens the event page as Strand's Pane over the lanes (688, 1047): the rail collapses
@@ -82,7 +82,8 @@ import {
   type DiscoverySearch,
   type FacetLists,
 } from "@/lib/discovery-search";
-import { downloadIcs, loadEventPage, setFollow } from "@/lib/event-page";
+import { setFollowing } from "@/lib/connect";
+import { downloadIcs, loadEventPage } from "@/lib/event-page";
 import { setSaved } from "@/lib/feed";
 import { setHeaderLens } from "@/lib/header-lens-store";
 import { useBackToOrigin, type Origin } from "@/lib/origin";
@@ -106,7 +107,7 @@ const RAIL_SURFACE = "discovery";
 
 /**
  * The three structural axes' words (item 2, 1095), in the projection's own facet values. These are
- * words in code rather than a vocabulary table; a gap names it (item 11). Donation is gone.
+ * words in code rather than a vocabulary table; a gap names it (item 11). Price is Free and Paid only.
  */
 const FORMAT_OPTIONS: { id: DiscoveryFormat; label: string }[] = [
   { id: "in_person", label: "In person" },
@@ -562,7 +563,11 @@ export function DiscoverySurface({
         c="convene"
         label="Convene lens"
         width="fill"
-        labels="always"
+        // Item 7: labels always and icons at every tier. At compact five words with five glyphs do
+        // not fit five seats under either packing (360 to 430, measured), and `labels` switches the
+        // bar's fit test off, so there the bar keeps its fit test, which lands icon-first as
+        // correction 25 draws it. A gap names it for a ruling.
+        labels={compact ? undefined : "always"}
         icons
         collapsed={inContent ? scrolled : undefined}
       />
@@ -738,7 +743,7 @@ export function DiscoverySurface({
         icon: "user-plus",
         onSelect: () => {
           setFollowNow((f) => ({ ...f, [hostId]: !following }));
-          setFollow(hostId, !following).catch(() => {
+          setFollowing(hostId, !following).catch(() => {
             setFollowNow((f) => ({ ...f, [hostId]: following }));
             say("That did not go through. Try again.");
           });
@@ -906,9 +911,10 @@ export function DiscoverySurface({
         alignItems: "flex-start",
         // The selected ring sits 4px outside the card (1083), so the row keeps 4px round it.
         padding: "4px 4px 8px",
+        // The snap point keeps the same 4px, so a card snapped to the start keeps its ring.
         ...(compact
           ? { margin: "0 -16px", paddingLeft: 16, paddingRight: 16, scrollPaddingInline: 16 }
-          : { minWidth: 0 }),
+          : { minWidth: 0, scrollPaddingInline: 4 }),
       }}
     >
       {children}
@@ -1071,7 +1077,17 @@ export function DiscoverySurface({
           </div>
           <div
             data-first-row
-            style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8 }}
+            // FacetRail's compact Sheet is `contained`: absolute, with no z-index of its own, so the
+            // discovery faces after this row (each `position: relative`) painted over it. A flex
+            // item's z-index lifts the row, Sheet and all, above the lanes without becoming the
+            // Sheet's containing block (a gap names the part's side of it).
+            style={{
+              display: "flex",
+              flexWrap: "wrap",
+              alignItems: "center",
+              gap: 8,
+              zIndex: "var(--z-sheet)" as unknown as number,
+            }}
           >
             <FacetRail
               tier="compact"

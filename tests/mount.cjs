@@ -23,7 +23,7 @@
 // check is recorded after the flow so a thrown flow still emits it (ruling 228's count).
 const M = require("./matrix.cjs");
 const { seedAttend, seedGuest } = require("./event.cjs");
-const { __seedCorpus: seedCorpus, __full: fullDensity } = require("./discovery.cjs");
+const { __seedDiscovery: seedDiscovery } = require("./discovery.cjs");
 
 const { launch, makeMockDb, seedPosts, mockSupabase, signIn, record, eventId, BASE, SB, VOCAB } = M;
 
@@ -93,9 +93,7 @@ async function context(browserType, [w, h], theme, db) {
 
 const discoveryDb = () => {
   const db = makeMockDb();
-  seedPosts(db, 1);
-  const E = seedCorpus(db);
-  Object.assign(db.discovery, fullDensity(E), { homes: null, fail: false });
+  seedDiscovery(db);
   return db;
 };
 
@@ -342,59 +340,198 @@ function readLens(page, selector, tabs) {
   );
 }
 
-/** FacetRail, 24 and 25 with no new axis field: every axis a multi group of chips and the chips
- *  wrapping inside their bound (24 §2, ported under 844). The bound is the nav in the rail form and
- *  the Sheet's scrolling body at compact (`bound`); the rail form also draws its heading, its label
- *  alone (`heading`). */
-function readRail(page, selector, { bound = null, heading: needHeading = false } = {}) {
+/** Handoff 32-B's rail (item 2; 1095, 1110): Format, Price and When as segments, Topics as a
+ *  checklist, Home as ladders and Place as a combobox, in that order; every control inside its
+ *  bound (the nav in the rail form, the Sheet's scrolling body at compact) and nothing scrolling
+ *  sideways. The rail form's heading holds its label and the one Collapse browse action. */
+const RAIL_32B = [
+  "format:segment",
+  "price:segment",
+  "when:segment",
+  "family:checklist",
+  "home:ladders",
+  "place:combobox",
+];
+function readDiscoveryRail(page, selector, { bound = null, heading: needHeading = false } = {}) {
   return page.evaluate(
-    ({ selector, bound, needHeading }) => {
+    ({ selector, bound, needHeading, want }) => {
       const nav = document.querySelector(selector);
       if (!nav) return { ok: false, detail: "no rail" };
       const box0 = bound ? nav.querySelector(bound) : nav;
       if (!box0) return { ok: false, detail: "no " + bound };
       const why = [];
-      const groups = Array.from(nav.querySelectorAll("[data-axis-id]"));
-      if (!groups.length) why.push("no axis");
-      for (const g of groups) {
-        if (g.getAttribute("role") !== "group")
-          why.push(g.dataset.axisId + " role " + g.getAttribute("role"));
-        if (g.dataset.display !== "chips")
-          why.push(g.dataset.axisId + " display " + g.dataset.display);
-        if (g.dataset.select !== "multi")
-          why.push(g.dataset.axisId + " select " + g.dataset.select);
-      }
-      const chips = Array.from(nav.querySelectorAll("[data-option]"));
-      if (!chips.length) why.push("no chip");
+      const got = Array.from(nav.querySelectorAll("[data-axis-id]")).map(
+        (g) => g.dataset.axisId + ":" + g.dataset.display,
+      );
+      if (got.join(",") !== want.join(",")) why.push("axes " + got.join(","));
       const box = box0.getBoundingClientRect();
       const cs = getComputedStyle(box0);
       const right = box.right - parseFloat(cs.borderRightWidth) - parseFloat(cs.paddingRight);
-      for (const c of chips) {
-        const s = getComputedStyle(c);
-        if (s.whiteSpace === "nowrap") why.push(c.dataset.option + " nowrap");
-        if (c.hasAttribute("role")) why.push(c.dataset.option + " role " + c.getAttribute("role"));
-        if (!c.hasAttribute("aria-pressed")) why.push(c.dataset.option + " no aria-pressed");
+      const controls = Array.from(
+        nav.querySelectorAll('[data-axis-id] button, [data-axis-id] input, [role="radio"]'),
+      );
+      for (const c of controls)
         if (c.getBoundingClientRect().right > right + 0.5)
-          why.push(c.dataset.option + " past the pad");
-      }
+          why.push((c.textContent || c.getAttribute("placeholder") || "").trim() + " past the pad");
       if (box0.scrollWidth > box0.clientWidth)
         why.push(`scrolls ${box0.scrollWidth}/${box0.clientWidth}`);
-      const heading = nav.querySelector("[data-heading]");
-      if (needHeading && !heading) why.push("no heading");
-      if (heading) {
-        if (heading.querySelector("[data-heading-action]")) why.push("a heading action");
-        if (heading.children.length !== 1 || heading.children[0].tagName !== "H2")
-          why.push("heading holds more than its label");
+      if (needHeading) {
+        const heading = nav.querySelector("[data-heading]");
+        const action = heading && heading.querySelector("[data-heading-action]");
+        if (!heading || !heading.querySelector("h2")) why.push("no heading");
+        if (!action || !action.querySelector('button[aria-label="Collapse browse"]'))
+          why.push("no Collapse browse action");
       }
       return {
         ok: why.length === 0,
         detail:
-          `${groups.length} axes, ${chips.length} chips` +
+          `${got.length} axes, ${controls.length} controls` +
           (why.length ? "; " + why.join(" | ") : ""),
       };
     },
-    { selector, bound, needHeading },
+    { selector, bound, needHeading, want: RAIL_32B },
   );
+}
+
+/** PostCard's discovery face as 32-B binds it (item 4; 1076 to 1079, 1083, 1087): every card in
+ *  the scope the discovery face, 320 wide, media at 16:9, no feed face, and ringed only where
+ *  `ringed` says (the event open in the pane), never elsewhere. */
+function readDiscoveryCards(page, scope, ringed = null) {
+  return page.evaluate(
+    ({ scope, ringed }) => {
+      const slots = Array.from(document.querySelectorAll(scope));
+      const bad = [];
+      for (const s of slots) {
+        const a = s.querySelector("article");
+        const m = a && a.querySelector("[data-media]");
+        const why = [];
+        if (!a || a.getAttribute("data-presentation") !== "discovery")
+          why.push("not the discovery face");
+        if (s.querySelector("article[data-c]")) why.push("a feed face");
+        if (a && Math.abs(a.getBoundingClientRect().width - 320) > 0.6)
+          why.push("width " + a.getBoundingClientRect().width);
+        if (!m || !m.clientHeight || Math.abs(m.clientWidth / m.clientHeight - 16 / 9) > 0.02)
+          why.push("media " + (m ? m.clientWidth + "x" + m.clientHeight : "none"));
+        const on = !!a && a.hasAttribute("data-selected");
+        const want = ringed !== null && s.getAttribute("data-discovery-item") === ringed;
+        if (on !== want) why.push(on ? "ringed" : "not ringed");
+        if (why.length) bad.push(s.getAttribute("data-discovery-item") + ": " + why.join(", "));
+      }
+      return {
+        ok: slots.length > 0 && bad.length === 0,
+        detail: `${slots.length} card(s)` + (bad.length ? "; " + bad.slice(0, 3).join(" | ") : ""),
+      };
+    },
+    { scope, ringed },
+  );
+}
+
+/**
+ * MediaBlock's frame and images inside one card (Addendum 3 item E; 1115, 1118, 1120). The frame is
+ * the images' parent; its inner box is its client box, inside the 1px edge. Answers the frame's
+ * inner size and aspect-ratio, and each image's box and natural size, once every image has loaded.
+ */
+async function readMedia(page, cardSel) {
+  // The frame is the first image's parent, and only its own images are read: an event page also
+  // carries avatars, which are no part of the cover.
+  await page.waitForFunction(
+    (sel) => {
+      const first = document.querySelector(sel + " img");
+      if (!first) return false;
+      const imgs = Array.from(first.parentElement.querySelectorAll(":scope > img"));
+      return imgs.every((i) => i.complete && i.naturalWidth > 0);
+    },
+    cardSel,
+    { timeout: 15000 },
+  );
+  return page.evaluate((sel) => {
+    const frame = document.querySelector(sel + " img").parentElement;
+    const imgs = Array.from(frame.querySelectorAll(":scope > img"));
+    const fr = frame.getBoundingClientRect();
+    const cs = getComputedStyle(frame);
+    const inner = {
+      left: fr.left + parseFloat(cs.borderLeftWidth),
+      top: fr.top + parseFloat(cs.borderTopWidth),
+      w: frame.clientWidth,
+      h: frame.clientHeight,
+    };
+    return {
+      ratio: cs.aspectRatio,
+      sizing: cs.boxSizing,
+      outer: { w: fr.width, h: fr.height },
+      inner,
+      imgs: imgs.map((i) => {
+        const r = i.getBoundingClientRect();
+        const s = getComputedStyle(i);
+        return {
+          x: r.left - inner.left,
+          y: r.top - inner.top,
+          w: r.width,
+          h: r.height,
+          nw: i.naturalWidth,
+          nh: i.naturalHeight,
+          fit: s.objectFit,
+          maxH: s.maxHeight,
+        };
+      }),
+    };
+  }, cardSel);
+}
+
+/**
+ * The frame measures `ratio` and its images tile the area inside its 1px edge (the 2px gap aside).
+ * Strand's base sizes boxes border-box, so the ratio is the frame's own box, edge included, to half
+ * a pixel; inside the edge it is 2px short each way, which no arm reads as a ratio.
+ */
+function fills(m, ratio) {
+  const why = [];
+  if (Math.abs(m.outer.h - m.outer.w / ratio) > 0.5)
+    why.push(`frame ${m.outer.w}x${m.outer.h} (${m.sizing})`);
+  for (const i of m.imgs) {
+    if (i.x < -0.5 || i.y < -0.5 || i.x + i.w > m.inner.w + 0.5 || i.y + i.h > m.inner.h + 0.5)
+      why.push(
+        `a tile past the edge ${Math.round(i.x)},${Math.round(i.y)} ${Math.round(i.w)}x${Math.round(i.h)}`,
+      );
+    if (i.fit !== "cover") why.push("fit " + i.fit);
+  }
+  const area = m.imgs.reduce((a, i) => a + i.w * i.h, 0);
+  if (area < m.inner.w * m.inner.h * 0.97)
+    why.push(`tiles cover ${Math.round((area / (m.inner.w * m.inner.h)) * 100)}%`);
+  return {
+    ok: why.length === 0,
+    detail: why.join(" | ") || `${m.inner.w}x${m.inner.h}, ${m.imgs.length} tile(s)`,
+  };
+}
+
+/**
+ * The boxes ea35e8e's MediaBlock gives one image or two with no ratio, from its rules as written
+ * there: one image is width 100% of the frame, `max-height: 420`, height from the image's own
+ * aspect, and the frame declares no aspect-ratio; two images sit in a 16/10 frame, one row, each
+ * tile half the inner width less the 2px gap and the full inner height.
+ */
+function keepsEa35(m) {
+  const why = [];
+  if (m.imgs.length === 1) {
+    const i = m.imgs[0];
+    const h = Math.min(420, (m.inner.w * i.nh) / i.nw);
+    if (m.ratio !== "auto") why.push("aspect-ratio " + m.ratio);
+    if (i.maxH !== "420px") why.push("max-height " + i.maxH);
+    if (Math.abs(i.w - m.inner.w) > 0.5) why.push(`width ${i.w} of ${m.inner.w}`);
+    if (Math.abs(i.h - h) > 1) why.push(`height ${i.h}, ea35e8e gives ${h}`);
+    if (Math.abs(m.inner.h - i.h) > 1) why.push(`frame ${m.inner.h} for an image of ${i.h}`);
+  } else if (m.imgs.length === 2) {
+    if (m.ratio.replace(/\s/g, "") !== "16/10") why.push("aspect-ratio " + m.ratio);
+    if (Math.abs(m.outer.h - m.outer.w / 1.6) > 0.5) why.push(`frame ${m.outer.w}x${m.outer.h}`);
+    for (const i of m.imgs) {
+      if (Math.abs(i.w - (m.inner.w - 2) / 2) > 1) why.push(`tile width ${i.w}`);
+      if (Math.abs(i.h - m.inner.h) > 1) why.push(`tile height ${i.h} of ${m.inner.h}`);
+      if (Math.abs(i.y) > 0.5) why.push("a second row");
+    }
+  } else why.push(m.imgs.length + " images");
+  return {
+    ok: why.length === 0,
+    detail: why.join(" | ") || `${Math.round(m.inner.w)}x${Math.round(m.inner.h)}`,
+  };
 }
 
 // ---- The arms. ----
@@ -603,6 +740,14 @@ async function runMountComposer(bt, bname, [w, h], theme, route) {
   );
 }
 
+/**
+ * Discovery as handoff 32-B binds it (items 2, 4 and 7): 32-B passes the props 32-A ported, so this
+ * arm reads that configuration rather than 92fbdc3's. The LensBar's five lenses with no trailing
+ * seat on the 52 track; every card the discovery face; at compact the Sheet's six axes in their
+ * displays, its body reaching the last, and the header's bar once scrolled; above compact the
+ * collapsed 64 strip at first load, then the opened rail's axes inside the nav with the heading's
+ * one action, pinned in its own scroller.
+ */
 async function runMountConvene(bt, bname, [w, h], theme, path) {
   const lensArm = path !== "/convene";
   const tag = `${bname}-${w}x${h}-${theme}-mount-${lensArm ? "lens" : "convene"}`;
@@ -615,9 +760,10 @@ async function runMountConvene(bt, bname, [w, h], theme, path) {
       await signIn(s.page);
       await openDiscovery(s.page, path);
       if (lensArm)
-        await s.page.waitForSelector('[data-discovery][data-lens="online"] [data-discovery-item]', {
-          timeout: 20000,
-        });
+        await s.page.waitForSelector(
+          '[data-discovery][data-lens="curated"] [data-lens-cards] [data-discovery-item]',
+          { timeout: 20000 },
+        );
       return s;
     },
     async ({ page }) => {
@@ -634,13 +780,13 @@ async function runMountConvene(bt, bname, [w, h], theme, path) {
       );
       if (lensArm) {
         const on = await page
-          .locator(`${where} [role="tab"][data-lens="online"][aria-selected="true"]`)
+          .locator(`${where} [role="tab"][data-lens="curated"][aria-selected="true"]`)
           .count();
         record(tag + " LensBar: the route's lens is the selected tab", on === 1, on + " selected");
       }
-      const cards = await readCards(page, "[data-discovery-item] article[data-c]");
+      const cards = await readDiscoveryCards(page, "[data-discovery-item]");
       record(
-        tag + " PostCard: every card in the corpus the feed face, unselected, no ring",
+        tag + " PostCard: every card the discovery face at 320, media 16:9, none ringed (32-B)",
         cards.ok,
         cards.detail,
       );
@@ -649,15 +795,14 @@ async function runMountConvene(bt, bname, [w, h], theme, path) {
         const dialog = '[role="dialog"][aria-label="Browse"]';
         await page.locator(dialog).waitFor({ timeout: 10000 });
         await page.waitForTimeout(400);
-        const rail = await readRail(page, dialog, { bound: "[data-sheet-body]" });
+        const rail = await readDiscoveryRail(page, dialog, { bound: "[data-sheet-body]" });
         record(
-          tag +
-            " FacetRail in the compact Sheet: multi chip groups that wrap inside its body, no new axis field",
+          tag + " FacetRail in the compact Sheet: the six axes in their displays, inside its body",
           rail.ok,
           rail.detail,
         );
-        // The chips' 24 §2 height pushes the lower axes past the sheet at compact, so the part
-        // draws the scrolling body this repository's Sheet lacks (G30): its last axis is reachable.
+        // The axes run past the sheet at compact, so the part draws the scrolling body this
+        // repository's Sheet lacks (G30): its last axis is reachable.
         const reach = await page.evaluate(async (sel) => {
           const d = document.querySelector(sel);
           const body = d && d.querySelector("[data-sheet-body]");
@@ -695,28 +840,43 @@ async function runMountConvene(bt, bname, [w, h], theme, path) {
           hl.detail,
         );
       } else {
-        const rail = await readRail(page, '[data-scroller="left"] nav[aria-label="Browse"]', {
-          heading: true,
-        });
+        const nav = '[data-scroller="left"] nav[aria-label="Browse"]';
+        const strip = await page.evaluate((nav) => {
+          const n = document.querySelector(nav);
+          if (!n) return { ok: false, detail: "no strip" };
+          const wd = Math.round(n.getBoundingClientRect().width);
+          const expand = !!n.querySelector('button[aria-label="Show browse"]');
+          const axes = n.querySelectorAll("[data-axis-id]").length;
+          return { ok: wd === 64 && expand && axes === 0, detail: `width ${wd}, ${axes} axes` };
+        }, nav);
+        record(
+          tag + " FacetRail: the collapsed 64 strip at first load (1094)",
+          strip.ok,
+          strip.detail,
+        );
+        await tap(page, page.locator(`${nav} button[aria-label="Show browse"]`));
+        await page.locator(`${nav} [data-axis-id]`).first().waitFor({ timeout: 10000 });
+        await page.waitForTimeout(300);
+        const rail = await readDiscoveryRail(page, nav, { heading: true });
         record(
           tag +
-            " FacetRail: multi chip groups that wrap inside the nav, the heading its label alone",
+            " FacetRail opened: the six axes in their displays inside the nav, Collapse browse on the heading",
           rail.ok,
           rail.detail,
         );
-        const pin = await page.evaluate(() => {
-          const nav = document.querySelector('[data-scroller="left"] nav[aria-label="Browse"]');
-          const pinEl = nav && nav.querySelector("[data-heading-pin]");
-          if (!nav || !pinEl) return { ok: false, detail: "no pin" };
-          const s = getComputedStyle(nav);
+        const pin = await page.evaluate((sel) => {
+          const n = document.querySelector(sel);
+          const pinEl = n && n.querySelector("[data-heading-pin]");
+          if (!n || !pinEl) return { ok: false, detail: "no pin" };
+          const st = getComputedStyle(n);
           return {
             ok:
-              pinEl.parentElement === nav &&
-              s.overflowY === "auto" &&
+              pinEl.parentElement === n &&
+              st.overflowY === "auto" &&
               !pinEl.hasAttribute("data-scrolled"),
-            detail: `overflowY ${s.overflowY}, scrolled ${pinEl.hasAttribute("data-scrolled")}`,
+            detail: `overflowY ${st.overflowY}, scrolled ${pinEl.hasAttribute("data-scrolled")}`,
           };
-        });
+        }, nav);
         record(
           tag + " FacetRail: its own scroller with the heading pinned and at rest (25 §3)",
           pin.ok,
@@ -727,6 +887,8 @@ async function runMountConvene(bt, bname, [w, h], theme, path) {
   );
 }
 
+/** /convene/events/$id at expanded: Discovery with the event page in its Pane (1047). A cold arrival
+ *  carries no lane, so the pane steps nowhere and shows its one close control (1083). */
 async function runMountEvent(bt, bname, [w, h], theme) {
   const tag = `${bname}-${w}x${h}-${theme}-mount-event`;
   const tabs = VOCAB.convene_lenses.length;
@@ -778,7 +940,8 @@ async function runMountEvent(bt, bname, [w, h], theme) {
         };
       });
       record(
-        tag + " Pane: open by default, the 360 list track, one close control and no step pair",
+        tag +
+          " Pane: open, the 360 list track, one close control and no step pair on a cold arrival",
         pane.ok,
         pane.detail,
       );
@@ -797,11 +960,209 @@ async function runMountEvent(bt, bname, [w, h], theme) {
         tabs,
       );
       record(tag + " LensBar above the pane: no trailing seat, the 52 track", lens.ok, lens.detail);
-      const cards = await readCards(page, "[data-pane-list] article[data-c]");
+      const cards = await readDiscoveryCards(
+        page,
+        "[data-pane-list] [data-discovery-item]",
+        eventId("loaded"),
+      );
       record(
-        tag + " PostCard in the pane's list: the feed face, unselected, no ring",
+        tag +
+          " PostCard in the pane's list: the discovery face, the open event ringed and no other",
         cards.ok,
         cards.detail,
+      );
+    },
+  );
+}
+
+/** A Convene post with `n` images, and a plain post with `n` images, for the media arms. */
+function seedMediaPost(db, key, n, c) {
+  const id = "media-" + key;
+  const convene = c === "convene";
+  const oid = convene ? eventId("media-" + key) : null;
+  db.posts.unshift({
+    id,
+    author_kind: "member",
+    author_id: "00000000-0000-4000-8000-0000000000f2",
+    created_by: "00000000-0000-4000-8000-0000000000f2",
+    author_name: "Kwame Mensah",
+    author_handle: "kwame-mensah",
+    author_avatar_path: null,
+    c_category: c,
+    body: "Pictures from the evening, " + key + ".",
+    anchor_kind: null,
+    anchor_id: null,
+    created_object_kind: convene ? "event" : null,
+    created_object_id: oid,
+    audience: "everyone",
+    status: "published",
+    published_at: new Date(Date.now() - 600e3).toISOString(),
+    created_at: new Date(Date.now() - 600e3).toISOString(),
+  });
+  if (convene) {
+    const starts = new Date(Date.now() + 12 * 86400e3);
+    starts.setUTCHours(18, 0, 0, 0);
+    db.events.push({
+      id: oid,
+      host_member_id: "00000000-0000-4000-8000-0000000000f2",
+      title: "Corridor Suppers, " + key,
+      starts_at: starts.toISOString(),
+      ends_at: null,
+      doors_at: null,
+      when_text: "An evening",
+      mode: "in_person",
+      family: "small_social",
+      ticket_kind: "free",
+      space_id: null,
+      status: "published",
+      timezone: "Africa/Accra",
+      time_confirmed: true,
+      date_confirmed: true,
+      expected_window_start: null,
+      expected_window_end: null,
+      window_basis: null,
+      delivery_intent: null,
+      cancelled_at: null,
+      cancelled_reason: null,
+      slug: "media-" + key,
+      created_at: new Date().toISOString(),
+    });
+    db.event_delivery.push({
+      id: "d-media-" + key,
+      event_id: oid,
+      kind: "physical",
+      position: 0,
+      place_id: "dXJuOm1ieHBvaTpmcm9udC1yb29t",
+      place_name: "Front Room",
+      place_text: null,
+      city: "Accra",
+      country: "Ghana",
+    });
+  }
+  for (let i = 0; i < n; i++)
+    db.post_media.push({
+      id: "m-" + key + "-" + i,
+      post_id: id,
+      storage_path: "seed/" + key + "-" + i + ".jpg",
+      width: 1200,
+      height: 800,
+      position: i,
+    });
+  return `[data-post-id="${id}"] article`;
+}
+
+/**
+ * Addendum 3 item E (755; 1077, 1115, 1118, 1120): the Feed's Convene card with one image and with
+ * several measures 16:9 inside its frame's edge; a post of another C with three and with four images
+ * fills its 16/10 frame; one and two images keep the boxes ea35e8e gave them.
+ */
+async function runMountMedia(bt, bname, [w, h], theme) {
+  const tag = `${bname}-${w}x${h}-${theme}-mount-media`;
+  const cards = {};
+  await arm(
+    tag,
+    async () => {
+      const db = makeMockDb();
+      seedPosts(db, 1);
+      for (const [key, n, c] of [
+        ["plain-4", 4, "convey"],
+        ["plain-3", 3, "convey"],
+        ["plain-2", 2, "convey"],
+        ["plain-1", 1, "convey"],
+        ["convene-4", 4, "convene"],
+        ["convene-2", 2, "convene"],
+        ["convene-1", 1, "convene"],
+      ])
+        cards[key] = seedMediaPost(db, key, n, c);
+      const s = await context(bt, [w, h], theme, db);
+      await signIn(s.page);
+      await s.page.locator(cards["convene-1"]).waitFor({ timeout: 15000 });
+      return s;
+    },
+    async ({ page }) => {
+      const one = await readMedia(page, cards["convene-1"]);
+      const r1 = fills(one, 16 / 9);
+      record(
+        tag +
+          " Feed Convene card, one image: the frame 16:9, the image filling it inside the edge (1077, 1115)",
+        r1.ok && one.ratio.replace(/\s/g, "") === "16/9",
+        one.ratio + "; " + r1.detail,
+      );
+      const two = await readMedia(page, cards["convene-2"]);
+      const four = await readMedia(page, cards["convene-4"]);
+      const r2 = fills(two, 16 / 9);
+      const r4 = fills(four, 16 / 9);
+      record(
+        tag +
+          " Feed Convene card, several images: the frame 16:9, the tiles filling it inside the edge (1077)",
+        r2.ok && r4.ok,
+        "two: " + r2.detail + " / four: " + r4.detail,
+      );
+      for (const n of [3, 4]) {
+        const m = await readMedia(page, cards["plain-" + n]);
+        const r = fills(m, 16 / 10);
+        record(
+          tag + ` another C, ${n} images: the tiles fill the 16/10 frame (1118, 1120)`,
+          r.ok,
+          r.detail,
+        );
+      }
+      for (const n of [1, 2]) {
+        const m = await readMedia(page, cards["plain-" + n]);
+        const r = keepsEa35(m);
+        record(
+          tag + ` another C, ${n} image${n > 1 ? "s" : ""}: the box ea35e8e gave it (1118)`,
+          r.ok,
+          r.detail,
+        );
+      }
+    },
+  );
+}
+
+/**
+ * Addendum 3 item D: the event pages' covers are not cards and pass no ratio, so each keeps the box
+ * ea35e8e gave it, on the member page (the pane at expanded, its own route below) and on the public
+ * page reached by a client navigation (tests/event.cjs's clientGo), the cover served by event-media.
+ */
+/** MediaBlock's frame (its 14 radius, inline): the page chrome's wordmark and avatars are images too. */
+const COVER = 'div[style*="border-radius: 14px"]';
+
+async function runMountCovers(bt, bname, [w, h], theme) {
+  const tag = `${bname}-${w}x${h}-${theme}-mount-covers`;
+  await arm(
+    tag,
+    async () => {
+      const db = discoveryDb();
+      seedGuest(db);
+      db.attend.publicPages[SLUG].media = [{ position: 0, width: 1200, height: 800 }];
+      const s = await context(bt, [w, h], theme, db);
+      await signIn(s.page);
+      return s;
+    },
+    async ({ page }) => {
+      await page.goto(BASE + "/convene/events/" + eventId("loaded"), {
+        waitUntil: "networkidle",
+      });
+      await page.waitForSelector('[data-event-page][data-event-state="loaded"]', {
+        timeout: 20000,
+      });
+      const member = keepsEa35(await readMedia(page, "[data-event-page] " + COVER));
+      record(
+        tag + " the member event page's cover keeps ea35e8e's box (no ratio)",
+        member.ok,
+        member.detail,
+      );
+      await page.evaluate((p) => {
+        window.history.pushState({}, "", p);
+        window.dispatchEvent(new PopStateEvent("popstate", { state: {} }));
+      }, "/e/" + SLUG);
+      await page.waitForSelector(`[data-public-event="${SLUG}"]`, { timeout: 15000 });
+      const pub = keepsEa35(await readMedia(page, `[data-public-event="${SLUG}"] ` + COVER));
+      record(
+        tag + " the public event page's cover keeps ea35e8e's box (no ratio)",
+        pub.ok,
+        pub.detail,
       );
     },
   );
@@ -1147,7 +1508,7 @@ async function runMount(bt, bname, vp, theme) {
   await runMountComposer(bt, bname, vp, theme, "feed");
   await runMountComposer(bt, bname, vp, theme, "connect");
   await runMountConvene(bt, bname, vp, theme, "/convene");
-  await runMountConvene(bt, bname, vp, theme, "/convene/online");
+  await runMountConvene(bt, bname, vp, theme, "/convene/curated");
   // At expanded /convene/events/$id is Discovery with the pane (1047); below it is Brief 10's own
   // route, which binds none of the changed parts.
   if (vp[0] > 1024) await runMountEvent(bt, bname, vp, theme);
@@ -1160,6 +1521,9 @@ async function runMount(bt, bname, vp, theme) {
   await runMountAuth(bt, bname, vp, theme, "sign-in");
   await runMountAuth(bt, bname, vp, theme, "reset");
   await runMountShell(bt, bname, vp, theme);
+  // Addendum 3 item E: MediaBlock's ratio on the Feed's Convene card, and every other box kept.
+  await runMountMedia(bt, bname, vp, theme);
+  await runMountCovers(bt, bname, vp, theme);
 }
 
 module.exports = { runMount, MOUNT_CELLS };

@@ -33,7 +33,7 @@ export type DiscoveryLaneId =
   "soon" | "weekend" | "online" | "fresh" | "curated" | "follow" | "taste" | "near" | "network";
 
 export type DiscoveryFormat = "in_person" | "online" | "hybrid";
-/** 1095: Donation is gone; the projection counts a donation event as paid. */
+/** 1095: Free and Paid alone; the projection counts every priced event as paid. */
 export type DiscoveryPrice = "free" | "paid";
 export type DiscoveryWhen = "two_weeks" | "this_month" | "later";
 /** 1110: how far from the chosen home. Absent with a home is `in`; Anywhere is no home at all. */
