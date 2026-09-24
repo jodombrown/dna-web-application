@@ -904,7 +904,8 @@ export function DiscoverySurface({
         scrollSnapType: "x proximity",
         scrollbarWidth: "none",
         alignItems: "flex-start",
-        padding: "4px 0 8px",
+        // The selected ring sits 4px outside the card (1083), so the row keeps 4px round it.
+        padding: "4px 4px 8px",
         ...(compact
           ? { margin: "0 -16px", paddingLeft: 16, paddingRight: 16, scrollPaddingInline: 16 }
           : { minWidth: 0 }),
@@ -1012,6 +1013,17 @@ export function DiscoverySurface({
           nextLabel: "Next event",
         }
       : {};
+
+  // The list follows the open card (1083): Pane's `selectedKey` scrolls a list column this shell does
+  // not scroll (G85), and a lane scrolls sideways, so the card is brought into its lane's view here.
+  useEffect(() => {
+    if (!paneOpen || !paneId) return;
+    const section = openLane ? `[data-section="${openLane}"]` : "";
+    const el = document.querySelector<HTMLElement>(
+      `[data-discovery] ${section}[data-discovery-item="${paneId}"]`,
+    );
+    el?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [paneOpen, paneId, openLane]);
 
   const toasts = (
     <>
