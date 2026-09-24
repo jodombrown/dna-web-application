@@ -3758,6 +3758,7 @@ extraction and SPEC.md are the visual contract (ruling 62) and Strand does not o
 the one the compile governs" does not hold for the descriptor's size and spacing, the track's and the
 seat's radii, the track hairline or the chip's shadow; G82 carries the descriptor, which is the one of
 those 844 reaches.
+Since G82 closed, the descriptor's size is the compile's 13; its 12 below the track stays, under 405.
 
 ## G54. `width="content"` is reachable and this bar's active seat is bolder than its inactive one, so that packing would re-lay the row on every selection
 
@@ -4487,6 +4488,11 @@ and seat radii (the port's `--radius-m` and `--radius-badge` against the compile
 kind of line with no numbered ruling behind them, but a radius is not a size, a padding, a track or a
 floor, so 844 does not reach them; they are listed in the port record. G53's "every frame the code
 produces is the one the compile governs" is not true of these lines.
+
+**Closed 24 September 2026 by handoff 32-A, under 844 with no new ruling.** Chat decided it as
+recommended: the scope line takes the compile's 13 italic, and the spacing stays 12 below the track
+inside ruling 405's collapsing box, which both app contracts give. `LensBar.tsx` draws 13, and
+`docs/shell/LENS_BAR_SPEC.md` line 42 now says 13, citing this entry.
 
 ## G83. Strand's Input puts a textarea on a line box: every multiline field grows 7.5px under the wrappers correction 25 draws
 

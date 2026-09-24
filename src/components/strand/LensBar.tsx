@@ -60,7 +60,9 @@
 // the track is `--radius-m` and the seat `--radius-badge`, not pills, because the header's composer
 // entry is built to share the track's shape; the disabled seat, the haptic, the hover rung and the
 // accessible name folding `scope` are the app's chassis; and the descriptor collapses by max-height
-// and is latched for the visit (ruling 405), where the compile re-latches on every `collapsed`.
+// and is latched for the visit (ruling 405), where the compile re-latches on every `collapsed`, so
+// its 12 below the track sits inside the collapsing box where the compile has a 6 gap; its size is
+// the compile's 13 (G82).
 // Rulings 997 and 999: `Lens.icon` stays optional and `compact` requiring a glyph on every lens is a
 // rule its caller keeps. Ruling 1000: `dense` is gone, and `AppHeader`'s bell reads the tier.
 import {
@@ -489,8 +491,10 @@ export function LensBar<Id extends string = string>({
         >
           <div
             style={{
+              // The compile's 13 (G82, closed under 844); 12 below the track rather than the
+              // compile's 6 gap, inside the collapsing box, as both app contracts give it (405).
               fontStyle: "italic",
-              fontSize: 15,
+              fontSize: 13,
               lineHeight: 1.4,
               color: "var(--ink-3)",
               padding: "12px 4px 0",
