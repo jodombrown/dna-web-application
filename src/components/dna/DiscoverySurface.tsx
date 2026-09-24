@@ -911,15 +911,17 @@ export function DiscoverySurface({
         alignItems: "flex-start",
         // The selected ring sits 4px outside the card (1083), so the row keeps 4px above it.
         padding: "4px 0 8px",
-        // Inline, each tier draws its padding back out with an equal negative margin and repeats it
-        // as scroll padding, so the first card lines up with the lane's heading. Only expanded
-        // rings a card (the pane opens there), so only expanded keeps 4px beside it. Medium keeps
-        // none: with 4px there, Chrome re-snapped the router's restore on Back 4px short (1065).
+        // Inline, the padding is drawn back out by a negative margin and repeated as scroll padding,
+        // so the first card lines up with the lane's heading. Only expanded rings a card (the pane
+        // opens there), so only expanded keeps 4px beside it, drawn back on the left alone: the
+        // expanded column has no end padding to take it, and overflow at the start never scrolls.
+        // Medium keeps none: with 4px there, Chrome re-snapped the router's restore on Back 4px
+        // short (1065).
         ...(compact
           ? { margin: "0 -16px", paddingLeft: 16, paddingRight: 16, scrollPaddingInline: 16 }
           : expanded
             ? {
-                margin: "0 -4px",
+                marginLeft: -4,
                 minWidth: 0,
                 paddingLeft: 4,
                 paddingRight: 4,
