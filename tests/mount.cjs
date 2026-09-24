@@ -55,6 +55,10 @@ const SLUG = "corridor-suppers-accra-3f2a1b";
 const CONVENE =
   "We are hosting a Diaspora Builders Dinner in Nairobi on Thu 16 Oct at 19:00. Doors at 18:30. Free for members, bring one person who should be in the room.";
 
+/** Every session `context()` opens, in order: `arm()` closes and reads the ones its arm opened even
+ *  when the arm's own gate throws before it can hand its session back. */
+const opened = [];
+
 async function context(browserType, [w, h], theme, db) {
   const browser = await launch(browserType);
   const ctx = await browser.newContext({
@@ -82,7 +86,9 @@ async function context(browserType, [w, h], theme, db) {
   page.on("console", (m) => {
     if (m.type() === "error" && !IGNORED_CONSOLE.test(m.text())) errors.push(m.text());
   });
-  return { browser, page, errors };
+  const session = { browser, page, errors };
+  opened.push(session);
+  return session;
 }
 
 const discoveryDb = () => {
@@ -160,6 +166,19 @@ async function sheetSettled(page, selector) {
   );
 }
 
+/** AppShell's own flag that the member scrolled past its threshold, and the scroller's offset. */
+async function shellScrolled(page) {
+  return page.evaluate(() => {
+    const t = document.querySelector("[data-tier]");
+    const sc = document.querySelector('[data-scroller="feed"]');
+    const flag = t ? t.getAttribute("data-scrolled") : null;
+    return {
+      scrolled: flag === "1",
+      detail: `data-scrolled ${flag}, scrollTop ${sc ? Math.round(sc.scrollTop) : "none"}`,
+    };
+  });
+}
+
 async function scrollCentre(page, y) {
   await page.evaluate((top) => {
     const sc = document.querySelector('[data-scroller="feed"]');
@@ -197,7 +216,10 @@ function readInputs(page, scope) {
       const rs = root ? getComputedStyle(root) : null;
       const label = document.querySelector(`label[for="${el.id}"]`);
       const desc = el.getAttribute("aria-describedby");
-      const line = desc ? document.getElementById(desc) : null;
+      // The line is the part's own next child after the field; tied means the field names it, and
+      // a field with no line names nothing.
+      const kids = root ? Array.from(root.children) : [];
+      const line = kids[kids.indexOf(el) + 1] || null;
       const why = [];
       if (el.getAttribute("role") === "combobox" || el.hasAttribute("aria-expanded"))
         why.push("combobox");
@@ -207,8 +229,9 @@ function readInputs(page, scope) {
       if (!root || rs.display !== "flex" || rs.flexDirection !== "column" || rs.rowGap !== "6px")
         why.push("field is not the part's own child");
       if (label && label.parentElement !== root) why.push("label is not the field's sibling");
-      if (desc && (!line || line.parentElement !== root || !line.textContent.trim()))
-        why.push("describedby names no line");
+      if (line && (!line.id || desc !== line.id)) why.push("line not tied by aria-describedby");
+      if (line && !line.textContent.trim()) why.push("empty line");
+      if (!line && desc) why.push("describedby with no line");
       if (!["true", "false"].includes(el.getAttribute("aria-invalid") || ""))
         why.push("aria-invalid " + el.getAttribute("aria-invalid"));
       if (el.getBoundingClientRect().height < 44) why.push("under the 44 floor");
@@ -223,8 +246,8 @@ function readInputs(page, scope) {
   }, scope);
 }
 
-/** Select at rest (24 §5 absent): not invalid, a line only if described, the 44 floor, the 1px
- *  edge and the chevron's 40 pad. */
+/** Select at rest (24 §5 absent): not invalid, its line (if any) tied by aria-describedby and a
+ *  field with no line describing nothing, the 44 floor, the 1px edge and the chevron's 40 pad. */
 function readSelects(page, scope) {
   return page.evaluate((scope) => {
     // The select a label[for] names inside the part's own column: a native select another part
@@ -242,7 +265,10 @@ function readSelects(page, scope) {
       const why = [];
       if (el.getAttribute("aria-invalid") === "true") why.push("invalid");
       const desc = el.getAttribute("aria-describedby");
-      if (desc && !document.getElementById(desc)) why.push("describedby names no line");
+      const kids = Array.from(el.parentElement.parentElement.children);
+      const line = kids[kids.indexOf(el.parentElement) + 1] || null;
+      if (line && (!line.id || desc !== line.id)) why.push("line not tied by aria-describedby");
+      if (!line && desc) why.push("describedby with no line");
       if (el.getBoundingClientRect().height < 44) why.push("under the 44 floor");
       if (cs.borderTopWidth !== "1px") why.push("edge " + cs.borderTopWidth);
       if (cs.paddingRight !== "40px") why.push("pad " + cs.paddingRight);
@@ -256,10 +282,18 @@ function readSelects(page, scope) {
 }
 
 /** PostCard's feed face (25 §1 and 23 §2 absent): no presentation marker, not selected, no
- *  aria-current, no ring, the 1.5px identity frame. */
+ *  aria-current, no ring, the 1.5px identity frame. The discovery face renders
+ *  `data-presentation` and no `data-c`, so every `article[data-c]` in the scope is also read as
+ *  `article[data-presentation]`: a card that took the other face is read and fails, not dropped. */
 function readCards(page, scope) {
   return page.evaluate((scope) => {
-    const els = Array.from(document.querySelectorAll(scope));
+    const other = scope.replace(/article\[data-c\]/g, "article[data-presentation]");
+    const els = Array.from(
+      new Set([
+        ...document.querySelectorAll(scope),
+        ...(other === scope ? [] : document.querySelectorAll(other)),
+      ]),
+    );
     const bad = [];
     for (const el of els) {
       const cs = getComputedStyle(el);
@@ -308,70 +342,83 @@ function readLens(page, selector, tabs) {
   );
 }
 
-/** FacetRail's rail form, 24 and 25 with no new axis field: every axis a multi group of chips, the
- *  heading its label alone, and the chips wrapping inside the nav (24 §2, ported under 844). */
-function readRail(page, selector) {
-  return page.evaluate((selector) => {
-    const nav = document.querySelector(selector);
-    if (!nav) return { ok: false, detail: "no rail" };
-    const why = [];
-    const groups = Array.from(nav.querySelectorAll("[data-axis-id]"));
-    if (!groups.length) why.push("no axis");
-    for (const g of groups) {
-      if (g.getAttribute("role") !== "group")
-        why.push(g.dataset.axisId + " role " + g.getAttribute("role"));
-      if (g.dataset.display !== "chips")
-        why.push(g.dataset.axisId + " display " + g.dataset.display);
-      if (g.dataset.select !== "multi") why.push(g.dataset.axisId + " select " + g.dataset.select);
-    }
-    const chips = Array.from(nav.querySelectorAll("[data-option]"));
-    if (!chips.length) why.push("no chip");
-    const box = nav.getBoundingClientRect();
-    const cs = getComputedStyle(nav);
-    const right = box.right - parseFloat(cs.borderRightWidth) - parseFloat(cs.paddingRight);
-    for (const c of chips) {
-      const s = getComputedStyle(c);
-      if (s.whiteSpace === "nowrap") why.push(c.dataset.option + " nowrap");
-      if (c.hasAttribute("role")) why.push(c.dataset.option + " role " + c.getAttribute("role"));
-      if (!c.hasAttribute("aria-pressed")) why.push(c.dataset.option + " no aria-pressed");
-      if (c.getBoundingClientRect().right > right + 0.5)
-        why.push(c.dataset.option + " past the pad");
-    }
-    if (nav.scrollWidth > nav.clientWidth)
-      why.push(`scrolls ${nav.scrollWidth}/${nav.clientWidth}`);
-    const heading = nav.querySelector("[data-heading]");
-    if (heading) {
-      if (heading.querySelector("[data-heading-action]")) why.push("a heading action");
-      if (heading.children.length !== 1 || heading.children[0].tagName !== "H2")
-        why.push("heading holds more than its label");
-    }
-    return {
-      ok: why.length === 0,
-      detail:
-        `${groups.length} axes, ${chips.length} chips` + (why.length ? "; " + why.join(" | ") : ""),
-    };
-  }, selector);
+/** FacetRail, 24 and 25 with no new axis field: every axis a multi group of chips and the chips
+ *  wrapping inside their bound (24 §2, ported under 844). The bound is the nav in the rail form and
+ *  the Sheet's scrolling body at compact (`bound`); the rail form also draws its heading, its label
+ *  alone (`heading`). */
+function readRail(page, selector, { bound = null, heading: needHeading = false } = {}) {
+  return page.evaluate(
+    ({ selector, bound, needHeading }) => {
+      const nav = document.querySelector(selector);
+      if (!nav) return { ok: false, detail: "no rail" };
+      const box0 = bound ? nav.querySelector(bound) : nav;
+      if (!box0) return { ok: false, detail: "no " + bound };
+      const why = [];
+      const groups = Array.from(nav.querySelectorAll("[data-axis-id]"));
+      if (!groups.length) why.push("no axis");
+      for (const g of groups) {
+        if (g.getAttribute("role") !== "group")
+          why.push(g.dataset.axisId + " role " + g.getAttribute("role"));
+        if (g.dataset.display !== "chips")
+          why.push(g.dataset.axisId + " display " + g.dataset.display);
+        if (g.dataset.select !== "multi")
+          why.push(g.dataset.axisId + " select " + g.dataset.select);
+      }
+      const chips = Array.from(nav.querySelectorAll("[data-option]"));
+      if (!chips.length) why.push("no chip");
+      const box = box0.getBoundingClientRect();
+      const cs = getComputedStyle(box0);
+      const right = box.right - parseFloat(cs.borderRightWidth) - parseFloat(cs.paddingRight);
+      for (const c of chips) {
+        const s = getComputedStyle(c);
+        if (s.whiteSpace === "nowrap") why.push(c.dataset.option + " nowrap");
+        if (c.hasAttribute("role")) why.push(c.dataset.option + " role " + c.getAttribute("role"));
+        if (!c.hasAttribute("aria-pressed")) why.push(c.dataset.option + " no aria-pressed");
+        if (c.getBoundingClientRect().right > right + 0.5)
+          why.push(c.dataset.option + " past the pad");
+      }
+      if (box0.scrollWidth > box0.clientWidth)
+        why.push(`scrolls ${box0.scrollWidth}/${box0.clientWidth}`);
+      const heading = nav.querySelector("[data-heading]");
+      if (needHeading && !heading) why.push("no heading");
+      if (heading) {
+        if (heading.querySelector("[data-heading-action]")) why.push("a heading action");
+        if (heading.children.length !== 1 || heading.children[0].tagName !== "H2")
+          why.push("heading holds more than its label");
+      }
+      return {
+        ok: why.length === 0,
+        detail:
+          `${groups.length} axes, ${chips.length} chips` +
+          (why.length ? "; " + why.join(" | ") : ""),
+      };
+    },
+    { selector, bound, needHeading },
+  );
 }
 
 // ---- The arms. ----
 
-/** Tag, gate, reads, and the page-error check recorded after the flow, whatever it did. */
+/** Tag, gate, reads, and the page-error check recorded after the flow, whatever it did. Every
+ *  session the arm opened is read and closed here, including one whose gate threw. */
 async function arm(tag, open, body) {
   M.armStart(tag);
-  let session = null;
+  const from = opened.length;
   try {
-    session = await open();
-    await body(session);
+    await body(await open());
   } catch (e) {
     record(tag + " flow", false, String(e).slice(0, 400));
   } finally {
-    const errors = session ? session.errors : ["the page never opened"];
+    const mine = opened.splice(from);
+    const errors = mine.length
+      ? [...new Set(mine.flatMap((x) => x.errors))]
+      : ["the page never opened"];
     record(
       tag + " no page errors",
       errors.length === 0,
       errors.slice(0, 3).join(" | ").slice(0, 300),
     );
-    if (session) await session.browser.close().catch(() => {});
+    for (const x of mine) await x.browser.close().catch(() => {});
   }
 }
 
@@ -412,7 +459,12 @@ async function runMountFeed(bt, bname, [w, h], theme) {
         );
       } else {
         const n = await page.locator(sel).count();
-        record(tag + " header holds no LensBar at expanded", n === 0, n + " bar(s)");
+        const st = await shellScrolled(page);
+        record(
+          tag + " header holds no LensBar at expanded, the shell scrolled",
+          n === 0 && st.scrolled,
+          `${n} bar(s); ${st.detail}`,
+        );
       }
     },
   );
@@ -460,6 +512,8 @@ async function runMountPost(bt, bname, [w, h], theme) {
         direct.ok,
         direct.detail,
       );
+      const bars = await page.locator('[role="tablist"]').count();
+      record(tag + " direct: no LensBar", bars === 0, bars + " bar(s)");
     },
   );
 }
@@ -588,9 +642,10 @@ async function runMountConvene(bt, bname, [w, h], theme, path) {
         const dialog = '[role="dialog"][aria-label="Browse"]';
         await page.locator(dialog).waitFor({ timeout: 10000 });
         await page.waitForTimeout(400);
-        const rail = await readRail(page, dialog);
+        const rail = await readRail(page, dialog, { bound: "[data-sheet-body]" });
         record(
-          tag + " FacetRail in the compact Sheet: multi chip groups that wrap, no new axis field",
+          tag +
+            " FacetRail in the compact Sheet: multi chip groups that wrap inside its body, no new axis field",
           rail.ok,
           rail.detail,
         );
@@ -633,7 +688,9 @@ async function runMountConvene(bt, bname, [w, h], theme, path) {
           hl.detail,
         );
       } else {
-        const rail = await readRail(page, '[data-scroller="left"] nav[aria-label="Browse"]');
+        const rail = await readRail(page, '[data-scroller="left"] nav[aria-label="Browse"]', {
+          heading: true,
+        });
         record(
           tag +
             " FacetRail: multi chip groups that wrap inside the nav, the heading its label alone",
@@ -1038,8 +1095,9 @@ async function runMountAuth(bt, bname, [w, h], theme, route) {
  *  surface registers one, so the shell routes that register none show none once scrolled. */
 async function runMountShell(bt, bname, [w, h], theme) {
   const tag = `${bname}-${w}x${h}-${theme}-mount-shell`;
+  const expanded = w > 1024;
   const routes = [
-    ["/connect", '[data-testid="connect"]'],
+    ["/connect", null],
     ["/m/" + HANDLE, '[data-testid="profile"]:not([data-view="loading"])'],
     ["/password", '[data-testid="password"]'],
     ["/collaborate", '[data-testid="c-stub"]'],
@@ -1055,14 +1113,21 @@ async function runMountShell(bt, bname, [w, h], theme) {
     },
     async ({ page }) => {
       for (const [path, gate] of routes) {
-        await page.goto(BASE + path, { waitUntil: "networkidle" });
-        await page.waitForSelector(gate, { timeout: 20000 });
+        if (gate) {
+          await page.goto(BASE + path, { waitUntil: "networkidle" });
+          await page.waitForSelector(gate, { timeout: 20000 });
+        } else await openConnect(page);
         await scrollCentre(page, 400);
         const n = await page.locator('[data-app-header] [role="tablist"]').count();
+        const st = await shellScrolled(page);
+        // At expanded the header never takes a lens (AppShell's own guard), so the check says so.
         record(
-          tag + ` ${path}: the header holds no LensBar (no surface registers one)`,
-          n === 0,
-          n + " bar(s)",
+          tag +
+            (expanded
+              ? ` ${path}: the shell scrolled, the header holds no LensBar at expanded`
+              : ` ${path}: the shell scrolled, the header holds no LensBar (no surface registers one)`),
+          n === 0 && st.scrolled,
+          `${n} bar(s); ${st.detail}`,
         );
       }
     },

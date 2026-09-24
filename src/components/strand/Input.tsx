@@ -48,8 +48,8 @@ type Shared = {
   /** Enter on the active option, or a press on any option. */
   onSuggestionSelect?: ((s: InputSuggestion) => void) | undefined;
   /** The list's only line when the query is non-empty and nothing matches. Not an option. Strand
-   *  ships no copy. */
-  noMatch?: ReactNode;
+   *  ships no copy. A string, as the compile types it. */
+  noMatch?: string | undefined;
   /** `overlay` (default) floats the list under the field; `inline` lays it in flow for a scroller
    *  that clips (FacetRail). */
   listbox?: "overlay" | "inline" | undefined;
@@ -74,11 +74,13 @@ export type InputProps = Shared &
  * Correction 25 (1102): passing `suggestions` makes the single-line field a combobox:
  * role=combobox, aria-autocomplete=list, aria-expanded, aria-controls, aria-activedescendant.
  * ArrowDown opens and moves, ArrowUp moves, Enter chooses the active option, Escape closes the list
- * and calls preventDefault so the Pane's guard does not also close (23); this app's Sheet does not
- * honour it on either of its paths yet (G86). A press on an option does not blur the field. `noMatch` renders as the list's only line, not an option, when the query
- * is non-empty and nothing matches. Options are 44 high on every input mode: a suggestion is a
- * standalone target (498). No count, ever: nothing says how many matched. Hint, error, the focus
- * rendering and every non-combobox call are unchanged; the line is now tied by aria-describedby.
+ * and calls preventDefault so the Pane's guard does not also close (23), and neither does a modal
+ * Sheet, since a prevented Escape raises no `cancel` (measured in Chromium); the contained Sheet
+ * closes on Escape in a capture listener before this runs (G86). A press on an option does not blur the field. `noMatch`
+ * renders as the list's only line, not an option, when the query is non-empty and nothing matches.
+ * Options are 44 high on every input mode: a suggestion is a standalone target (498). No count,
+ * ever: nothing says how many matched. Hint, error, the focus rendering and every non-combobox call
+ * are unchanged; the line is now tied by aria-describedby.
  */
 export function Input({
   label,

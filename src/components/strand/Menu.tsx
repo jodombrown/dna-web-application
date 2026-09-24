@@ -13,7 +13,10 @@
 // WAI-ARIA menu: `role="menu"`, `menuitem`, roving focus. ArrowUp and ArrowDown wrap, Home and End,
 // Enter and Space select and close (the item is a native button), Escape and Tab close; Escape and
 // select return focus to the anchor. Escape calls `preventDefault`, so the Pane's guard of correction
-// 23 does not also close; this app's Sheet does not honour it on either of its paths yet (G86, G88).
+// 23 does not also close, and neither does a modal Sheet, which closes on the dialog's `cancel` and a
+// prevented Escape raises none (measured in Chromium). The contained Sheet closes on Escape in a
+// capture listener before this runs (G86), and only a `portal={false}` Menu takes the key inside a
+// modal Sheet: a portal one renders under the top layer there and takes no input (G88).
 // Portal by default: rendered into `document.body` at `position: fixed` from the anchor's rect,
 // bottom-end, flipped above when the room below is short, clamped inside the viewport, and
 // repositioned on scroll and resize while open. `portal={false}` renders in place, absolutely
@@ -28,8 +31,9 @@
 // `(pointer: coarse)`, rather than a second hook; the prior port record made the same call for
 // LensBar's `title` (29-A, item 53). `useMode()` answers `pointer` on its first render, where the
 // compile's hook reads the query in its initialiser, so the placing effect also runs on a change of
-// mode: a Menu mounted open on touch is placed at 36 and placed again at 44 a frame later. The compile reaches the portal through `window.ReactDOM`; this
-// imports `createPortal` from `react-dom`.
+// mode: a Menu mounted open on touch is placed at 36 while still hidden and placed again at 44 in the
+// same task, before it is first painted. The compile reaches the portal through `window.ReactDOM`;
+// this imports `createPortal` from `react-dom`.
 import {
   useCallback,
   useEffect,

@@ -3363,7 +3363,10 @@ already read.
 **Amended 24 September 2026 by handoff 32-A.** The Strand ports add four `all: "unset"` sites, so
 the check reads 52 where it read 48 at `92fbdc3`: FacetRail's checklist row, Menu's item, and PostCard's
 discovery-face title and presenter buttons. Each is the compile's own inline style and is ported as
-drawn; none of them is bound by a page yet.
+drawn; none of them is bound by a page yet. The cleared field suppressions above now sit at
+`Input.tsx:131` and `Select.tsx:71`. The port adds one `outline: "none"`, `Menu.tsx:321` on Menu's
+item, and it is not cleared: the item draws focus as its hot ground rather than a border, which is
+this gap's class (G87 item 13).
 
 ## G50. Sixteen files are not prettier-clean, and CI enforces prettier on every file type except theirs
 
@@ -4365,8 +4368,9 @@ width.
 
 **Closed 24 September 2026 by handoff 32-A.** Correction 24 §2 lets an option wrap, and the port
 carries it with no prop because 844 gives the compile the chip's padding and no app ruling kept
-`nowrap`. The mount arms read it on `/convene` at 390, 820 and 1280: no chip reaches past the nav's
-content box and the nav's `scrollWidth` equals its `clientWidth`. A one-line chip is now 39.75 rather
+`nowrap`. The mount arms read it on `/convene` at 390, 820 and 1280: no chip reaches past the content
+box it wraps in (the nav, and at 390 the Sheet's scrolling body), whose `scrollWidth` equals its
+`clientWidth`. A one-line chip is now 39.75 rather
 than 36 (G87 item 1).
 
 ## G76. FacetRail has no per-axis single select, so When and Home toggle rather than choose
@@ -4508,9 +4512,9 @@ reset, welcome, where, the guest sheet, ConveneForm, the composer's link, IntroS
 editor: every single-line field held its box, and every textarea's line and everything below it moved
 7.5px (IntroSheet's line 548.7 to 556.2 at 390). Neither the compile's `tokens/base.css` nor its
 `styles.css` nor this app's preflight gives a textarea block display. Under Chat's ruling the port
-keeps 92fbdc3's structure for every call that passes neither `suggestions` nor `icon`, marked
-divergent in `docs/strand-ports/v1790212533284400.md`; after that change the same 48 fields measured
-identical to 92fbdc3. Owed by Strand: `display: block` on the field, or `display: flex` on the inner
+keeps 92fbdc3's structure for every call that is neither the combobox (`suggestions` on a
+single-line field) nor passes `icon`, marked divergent in `docs/strand-ports/v1790212533284400.md`;
+after that change the same 48 fields measured identical to 92fbdc3. Owed by Strand: `display: block` on the field, or `display: flex` on the inner
 wrapper; then the port drops its gate. Also for the same correction brief: with `multiline` and
 `icon` together the glyph renders but the padding stays `10px 14px`, so the glyph sits on the text.
 
@@ -4562,9 +4566,10 @@ on the contained path, which is the Sheet's change and not the Pane's.
 
 ## G87. Correction 25's compile, read against its own extractions and against this app: what Strand's next correction brief should carry
 
-**Severity: low; nothing below is reached by a caller at this PR's head. Opened 24 September 2026
-during handoff 32-A's reconciliation (862), filed under ruling 597. The number is assigned by this entry
-(ruling 638).**
+**Severity: low. Items 1, 2 and 11 are reached at this PR's head, all by Discovery's FacetRail on
+`/convene`: the 39.75 chip, the 1px pin, and on WebKit a row that moves 1px when a chip is set. The
+rest are reached by no caller. Opened 24 September 2026 during handoff 32-A's reconciliation (862),
+filed under ruling 597. The number is assigned by this entry (ruling 638).**
 
 1. Extraction 24 §2 says `minHeight: 36` still holds a one-line chip. It does not: `var(--space-2)`
    padding and `var(--text-s-lh)` make a one-line chip 39.75 (measured). The bundle governs and is
@@ -4611,12 +4616,18 @@ during handoff 32-A's reconciliation (862), filed under ruling 597. The number i
     that exists only while expanded; and the ArrowDown that opens the list skips the caller's own
     `onKeyDown`. Its `.d.ts` also leaves out `id`, the handlers and `aria-labelledby`, which the
     compiled part reads.
-16. A Menu that mounts with `open` already true, as a child of the element its `anchorRef` names, is
-    never placed until the window scrolls or resizes: React attaches a parent's ref after its
-    children's layout effects run, so the first `place()` finds no anchor and returns, `pos` stays
-    null, the portal menu stays `visibility: hidden`, and the first item is never focused. Menu's
-    header in the compile documents no such constraint. Nothing opens a Menu on mount at this head;
-    the port keeps the compile's behaviour.
+16. A portal Menu that mounts with `open` already true, as a child of the element its `anchorRef`
+    names, is not placed until something scrolls (the listener is a capture listener on the window,
+    so any scroller counts) or the window resizes, and then it is placed and its first item takes
+    focus. React attaches a parent's ref after its children's layout effects run, so the first
+    `place()` finds no anchor and returns, `pos` stays null and the menu stays `visibility: hidden`.
+    That holds in the compile's Menu on any device, and in the port whenever its mode does not change
+    after mount: a fine pointer with no `input`, or any device when `input` is passed. On a coarse
+    pointer with no `input` the port differs: its placing effect runs again when `useMode()` answers
+    `touch`, by which time the ref is attached, so it is placed and focused where the compile's stays
+    hidden. `portal={false}` is not affected: CSS
+    places it and its first item is focused on mount. Menu's header in the compile documents no such
+    constraint. Nothing opens a Menu on mount at this head.
 
 ## G88. A Menu opened from inside a modal Sheet renders under the Sheet's top layer and cannot be used
 
