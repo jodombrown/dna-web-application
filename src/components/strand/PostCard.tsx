@@ -68,7 +68,8 @@ export type PostCardProps = {
   children?: ReactNode;
   fields?: PostCardField[] | undefined;
   /** The feed face reads a MediaBlock props object; the discovery face reads a source string or
-   *  `{ src, alt }`, which is the same object without a kind. */
+   *  `{ src, alt }`, which is the same object without a kind. The type is one for both faces, so a
+   *  string on the feed face type-checks and renders no media, as a kind-less object always has. */
   media?: MediaBlockProps | string | undefined;
   link?: PostCardLink | null | undefined;
   actions?: ReactNode;

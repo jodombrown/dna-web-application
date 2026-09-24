@@ -1,10 +1,11 @@
 // Strand `components/dna/Pane.jsx`, first ported at compile v1789885868097915 (ruling 851) and
 // reconciled at compile v1790212533284400 (handoff 32-A, rulings 862 and 844) with corrections 23
-// §1 (1083, Escape amended by 1084) and 24 §6 (1064, ratified 1085). The .jsx and the bundle agree
-// byte for byte; the dispositions are in docs/strand-ports/v1790212533284400.md.
+// §1 (1083, Escape amended by 1084) and 24 §6 (1064, ratified 1085). The .jsx and the bundle are
+// identical once both are compiled the same way; the dispositions are in
+// docs/strand-ports/v1790212533284400.md.
 //
-// Rulings the compiled part cites in its own doc comment: 561, 607, 612, 588, 589, 700, 719, 1083
-// and 1064.
+// Rulings the compiled part cites in its own doc comment: 561, 607, 612, 79, 588, 589, 700, 719,
+// 1083, 69 and 1064.
 // A pane (561) is a second surface consulted alongside the first. It is navigated into, never
 // summoned. Above `--tier-expanded` it is a pane beside the list; below it the pane is its own
 // route, full width, with its own back affordance — medium taking the pane was the counter-case 561
@@ -26,7 +27,8 @@
 // Previous, Next, Close. `hasPrevious` / `hasNext` false render the control disabled in place:
 // `aria-disabled`, still focusable so focus does not jump, inert on activation and on its key. The
 // edge stops; it never wraps and never closes. ArrowLeft and ArrowRight fire the pair on the pane
-// section's own onKeyDown beside Escape, so only while focus is within the pane; guarded by an
+// section's own onKeyDown beside Escape, so only while focus is within the pane (or within a portal
+// the pane's content renders, since React's keydown follows the React tree); guarded by an
 // editable target and by `defaultPrevented`, so a gallery or lens inside the page that takes arrows
 // wins. Escape yields to `defaultPrevented` too (1084); this port already did, as correction 21's
 // bundle did. `selectedKey` re-runs the bring-into-view against `[data-selected]` in the list
@@ -38,7 +40,8 @@
 // takes the full content width, and the section is inert and aria-hidden with its cluster not
 // rendered; nothing is a different element tree, so React never rebuilds the list and a lane
 // scrolled sideways keeps its position across open and close. The track snaps; the section's opacity
-// moves at `--dur-slow` (589). Default open, so every existing caller is unchanged. Below
+// moves at `--dur-slow` (589). Default open, so an existing caller renders as it did, with the
+// markers and the cluster's wrapper the port record's section 4 lists. Below
 // `--tier-expanded` `open` does nothing: the pane is its own route (561). `selected={false}` is
 // still a pane open on its own empty state and is not the closed pane.
 //
@@ -132,7 +135,8 @@ export function Pane({
     if (canNext && onNext) onNext();
   };
   // 719: keys are handled on the pane section itself, so they fire only while focus is within the
-  // pane. No document listener.
+  // pane, or within a portal its content renders (React's keydown follows the React tree). No
+  // document listener.
   const onPaneKey =
     onClose || stepping
       ? (e: KeyboardEvent<HTMLElement>) => {

@@ -4680,3 +4680,14 @@ Select the same. `src/components/strand/PasswordField.tsx` copies Input's line (
 place of the hint) but gives the line no id and the field no `aria-describedby`, so on the sign-in,
 reset and change-password forms the email field's line is announced with the field and the password
 field's is not. Owed: the same tie in PasswordField, in a change that names it.
+
+## G94. The Feed's Read more prefetch starts on a touch tap, and its timer outlives the card
+
+**Severity: low. Opened 24 September 2026 during handoff 32-A's verification pass, filed under ruling 597. The number is assigned by this entry (ruling 638). Found in code, not measured on a device.**
+
+`src/components/strand/PostCard.tsx` fires `onReadMoreIntent` after an 80ms `mouseenter` hold on Read
+more, and its comment says never on touch (ruling 84). A tap delivers a compatibility `mouseenter`
+before its click, so the hold starts on touch as well, and nothing clears the timer when the card
+unmounts, so it can fire after the tap's click has already navigated. At `92fbdc3` and after this PR
+alike. Owed: the hold starts only for a pointer whose type is mouse, and the timer is cleared on
+unmount.
