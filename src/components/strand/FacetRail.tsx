@@ -38,8 +38,10 @@
 //     pinned header above a scrolling body, with a Close control. This repository's `Sheet` has no
 //     heading, body or close of its own — it focuses `[data-sheet-heading]` when a caller supplies
 //     one (480) — so `title` lands on `label`, the dialog's accessible name, and the rail's heading
-//     is drawn by this part instead, which is what every other Sheet caller in this tree does. That
-//     header and body geometry is the Sheet's and arrives with G30, not through this part.
+//     is drawn by this part instead, which is what every other Sheet caller in this tree does. Its
+//     scrolling body is drawn here too (handoff 32-A), under a heading row that does not scroll,
+//     because 24 §2's taller chips push the lower axes past a sheet that has none. The pinned
+//     header's own geometry and its Close control are the Sheet's and arrive with G30.
 //
 // Bound by `DiscoverySurface` (handoff 31-B) in all three forms. No page passes `headingAction`,
 // an axis `select`, `ladders` or `display` in this port; binding them is 32-B's.
@@ -518,19 +520,18 @@ export function FacetRail({
           // Ruling 618: the compiled call is `tier="compact"`, which this repository's Sheet spells
           // `variant="sheet"`. Its `title` is the dialog's accessible name here, because this Sheet
           // renders no heading of its own (G30), so the heading below stands in (480). Nor does it
-          // render a scrolling body, which Strand's does and 25 §3's "every display renders in it"
-          // relies on, so the part draws one, as every other Sheet caller here does: at rest nothing
-          // moves, and the axes the chips' 24 §2 height pushes past the sheet stay reachable.
+          // render the scrolling body Strand's Sheet pins that title above, which 25 §3's "every
+          // display renders in it" relies on, so the part draws the two as this repository's other
+          // Sheet callers with a scroller do: the heading in a row that does not scroll, the axes in
+          // a body that does. At rest nothing moves, and the axes the chips' 24 §2 height pushes
+          // past the sheet stay reachable.
           <Sheet open onClose={() => onOpenChange?.(false)} variant="sheet" label={label} contained>
-            <div
-              data-sheet-body
-              style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "var(--space-5)" }}
-            >
+            <div style={{ flex: "none", padding: "var(--space-5) var(--space-5) 0" }}>
               <h2
                 data-sheet-heading
                 tabIndex={-1}
                 style={{
-                  margin: "0 0 var(--space-5)",
+                  margin: 0,
                   fontFamily: "var(--font-display)",
                   fontSize: "var(--display-s)",
                   lineHeight: "var(--display-s-lh)",
@@ -539,6 +540,11 @@ export function FacetRail({
               >
                 {label}
               </h2>
+            </div>
+            <div
+              data-sheet-body
+              style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "var(--space-5)" }}
+            >
               {body}
             </div>
           </Sheet>

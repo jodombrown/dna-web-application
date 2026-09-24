@@ -8,7 +8,9 @@
 // Input's, and no Select ever carried one, so the compile's rendering is taken as drawn. The focus
 // rendering (--surface ground, --ink border) arrived with them because it is part of that form (24,
 // doctrine flag 6), and Chat ratified it on every Select (1085). The compile reads `id ||
-// React.useId()`, a conditional hook; this keeps the unconditional call. Dispositions:
+// React.useId()`, a conditional hook; this keeps the unconditional call. As the compile draws it, a
+// caller's own onFocus, onBlur, aria-invalid or aria-describedby replaces the part's rather than
+// joining it (no caller passes one); Input chains its handlers instead. Dispositions:
 // docs/strand-ports/v1790212533284400.md.
 import {
   useId,
@@ -23,8 +25,9 @@ export type SelectOption = { value: string; label: string };
 
 export type SelectProps = Omit<SelectHTMLAttributes<HTMLSelectElement>, "style" | "id"> & {
   label?: ReactNode;
-  /** 1061. A line under the control in --ink-3, as Input's. Replaced by `error` when both are set. */
-  hint?: ReactNode;
+  /** 1061. A line under the control in --ink-3, as Input's. Replaced by `error` when both are set.
+   *  Words, as the compile's own types have it. */
+  hint?: string | undefined;
   /** 1061. Words: colours the border and the line --error (425), sets aria-invalid, replaces the
    *  hint and ties the line by aria-describedby. As Input's. */
   error?: string | undefined;

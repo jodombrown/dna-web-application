@@ -2072,12 +2072,13 @@ meantime, which is the repository's convention and not the compile's. No second 
 **Amended 24 September 2026 by handoff 32-A.** Correction 25's FacetRail keeps its compact form
 "unchanged" because Strand's Sheet pins a title above a scrolling body (`div[data-sheet-body]`, flex 1,
 overflow-y auto) and draws a Close control. This repository's Sheet has neither, so FacetRail draws its
-own heading (480) and, from this PR, its own scrolling body, as every other Sheet caller here does. At
-`92fbdc3` the Browse sheet had none, and with the Home axis present it sat past the sheet's bottom at
-360 (194px) and 390 (71px) with nothing to scroll to it, the Sheet's wheel handler finding no
-scroller; correction 24 §2's taller chips would have pushed it to 235 and 104, and 34 at 430. The body
-makes it reachable at all three, measured, and the mount arms read the last axis in reach at 390. The
-pinned title and the Close control stay this migration's.
+own heading (480) and, from this PR, its own scrolling body under a heading row that does not scroll,
+as this repository's other Sheet callers with a scroller do. At `92fbdc3` the Browse sheet had none,
+and with the Home axis present it sat past the sheet's bottom at 360 (194px) and 390 (71px) with
+nothing to scroll to it, the Sheet's wheel handler finding no scroller; correction 24 §2's taller chips
+would have pushed it to 235 and 104, and 34 at 430. The body makes it reachable at all three, measured,
+and the mount arms read the last axis in reach at 390. The pinned header's own geometry and the Close
+control stay this migration's.
 
 ## G31. A chromium sighting on the public profile at 1280 by 800, seen once and not reproduced
 

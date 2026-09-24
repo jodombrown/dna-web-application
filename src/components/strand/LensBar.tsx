@@ -15,8 +15,8 @@
 // part by correction 25 §4 (1102) alone: `trailing`, one seat at the bar's end on the track's row
 // and outside the tablist, a door that is not a lens and never a tab. The fit test prices the column
 // less the seat and TRAIL_GAP (8, in the metrics) and re-measures when the seat resizes. Absent, the
-// bar renders exactly as before: no row is drawn and the tablist stays the wrapper's own child. Every
-// other difference from the compile is the 29-A record's, carried forward in
+// bar renders exactly as before: no row is drawn and the tablist stays the wrapper's own child. The
+// differences from the compile that this port keeps are listed in section 2 of
 // docs/strand-ports/v1790212533284400.md. No page passes `trailing` in this port; 32-B binds it.
 // Every seat carries `minWidth: SEAT` in every mode, `compact` included (rulings 905, 498; items 50
 // and 54a): a lens tab is a standalone thumb target wherever it renders, so the header slot's
@@ -50,10 +50,12 @@
 // border-box, exactly 1 unscaled) before they are priced. The probe sits in a 0×0 `overflow: hidden`
 // box (item 54b) so it stops contributing its own width to the scrollable overflow of the container
 // it is measuring. It re-measures on resize, when the document's fonts settle and on every later
-// font load (item 14), and every listener, frame and timer is released on unmount (item 18).
+// font load (item 14), and on unmount every listener is released and the pending frame and timer
+// are cancelled; a retry an earlier frame scheduled finds `alive` false and does nothing (item 18).
 //
-// What this port keeps against the compile, each for a named reason, is recorded in full in
-// `docs/strand-ports/v1789885868097915.md`. In short: the active chip is the tab's own background
+// What this port keeps against the compile, each for a named reason, is recorded in
+// `docs/strand-ports/v1789885868097915.md` and, with the differences 29-A did not list, in section 2
+// of `docs/strand-ports/v1790212533284400.md`. In short: the active chip is the tab's own background
 // (ruling 488) and its label is 15/700 `--ink` with the C brand rung on the icon (LENS_BAR_SPEC);
 // the track is `--radius-m` and the seat `--radius-badge`, not pills, because the header's composer
 // entry is built to share the track's shape; the disabled seat, the haptic, the hover rung and the
