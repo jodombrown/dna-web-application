@@ -387,6 +387,7 @@
   --z-sticky: 20; /* @kind other */ /* AppHeader, PulseDock, sticky bars */
   --z-scrim: 50; /* @kind other */ /* scrim behind any summoned layer */
   --z-sheet: 60; /* @kind other */ /* sheet, and FacetRail's collapsed sheet form under 640 */
+  --z-menu: 62; /* @kind other */ /* 1103: Menu, summoned from a control; above pane and sticky chrome (and a sheet it opens from), below dialog and notification */
   --z-dialog: 65; /* @kind other */ /* 606: a dialog over a sheet stacks by DOM order */
   --z-notification: 70; /* @kind other */ /* pointer notification panel, above a sheet */
   --z-toast: 80; /* @kind other */
