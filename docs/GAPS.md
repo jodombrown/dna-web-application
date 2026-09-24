@@ -4741,3 +4741,26 @@ Show less and waits for `/feed` before its direct load, which is the sequence th
 direct-load check has always used and which WebKit passes. Owed: read it in WebKit. If a member who
 follows a link or types an address while a post is open in place is sent back to that post, it is a
 defect in the in-place route, not in the harness.
+
+## G96. The event page's toast is blanked by the timer of the toast before it
+
+**Severity: low. Opened 24 September 2026 during handoff 32-A, filed under ruling 597. The number is
+assigned by this entry (ruling 638).**
+
+`EventSurface`'s `say()` sets the toast and starts a 2,600ms `setTimeout(() => setToast(null))`, and
+never clears the timer before it, where `ConnectSurface` and `ProfileSurface` keep the timer in a
+ref and clear it. So a toast raised less than 2.6s after the last one is removed when the older
+timer fires, however recently it appeared. The event flow's withdraw hits it: timed with a
+`requestAnimationFrame` probe in Chromium at 1280, twelve runs on each build, the going toast shows
+at about 2,300ms and its timer fires at about 4,900, and the Withdrawn toast lands between 4,720 and
+5,100, on both sides of that moment, at `92fbdc3` and at this PR's head alike. When it lands just
+before it, it is gone a few milliseconds later, and `tests/event.cjs` waited 8s for a toast that had
+already come and gone: one of three isolated runs at 1280 dark, and the local full run at 1280 light.
+The arm now waits the going toast out before withdrawing, and the Withdrawn toast is still required.
+Owed, in a brief that may touch `EventSurface`: `say()` clears its previous timer, as the other two
+surfaces do. This PR changes no page (handoff 32-A item 6).
+
+Found in the same run and closed by this PR: `pages.yml` run 332 failed "notification: Respond opens
+the event page and marks the row read" at chromium 1280 dark because the check read the mock's reads
+on the tick the URL changed, while `NotificationPanel`'s `onRow` navigates first and marks the row
+read after. The check now waits for the read, bounded at 5s.
