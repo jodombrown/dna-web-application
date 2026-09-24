@@ -32,13 +32,36 @@ export type PublicEventPage = {
   partners: never[];
 };
 
+/** A client with no session, no storage and no URL detection: all an anonymous read needs. */
+function anonClient() {
+  return createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+  });
+}
+
 export async function loadPublicEventPage(slug: string): Promise<PublicEventPage | null> {
   const s = slug.trim();
   if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(s)) return null;
-  const sb = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
-    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
-  });
-  const { data, error } = await sb.rpc("event_public_page", { p_slug: s });
+  const { data, error } = await anonClient().rpc("event_public_page", { p_slug: s });
   if (error) throw error;
   return (data as unknown as PublicEventPage | null) ?? null;
+}
+
+/**
+ * Handoff 32-B item 9 (1080, 1081, 1100, 1109): the canonical slug behind an event's alias (`e`, the
+ * segment of `/e/{alias}`) or its short code (`x`, the segment of `/x/{code}`), through
+ * `public.resolve_event_link`. The database answers a slug only when `event_public_page` would answer
+ * a page for that slug, so an alias or code for an event without a public page is null, exactly as
+ * its slug is. Callable signed out, like the page. An empty or oversized segment is null without a
+ * call; the function lower-cases and trims what it is given.
+ */
+export async function resolveEventLink(kind: "e" | "x", segment: string): Promise<string | null> {
+  const s = segment.trim();
+  if (!s || s.length > 64) return null;
+  const { data, error } = await anonClient().rpc("resolve_event_link", {
+    p_kind: kind,
+    p_segment: s,
+  });
+  if (error) throw error;
+  return typeof data === "string" && data ? data : null;
 }
