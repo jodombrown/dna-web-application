@@ -48,6 +48,12 @@ serves /collaborate
 # Brief 10's member event page, opened by tests/event.cjs; the shell serves it signed out too.
 serves /convene/events/00000000-0000-4000-8000-000000000000
 serves /strand/adinkra/mate-masie.svg
+# Handoff 32-A's mount arms (tests/mount.cjs) open these by document load; the shell, profile and
+# Discovery suites open them too and were not listed here.
+serves /feed
+serves /posts/seed-1
+serves /m/thandiwe-dube
+serves /convene/online
 # Ruling 184's asset contract: every path in the table serves, so the redesign stays a file
 # overwrite. favicon.ico is absent by the founder's 9 September edit and is deliberately not here.
 serves /strand/logo.png
