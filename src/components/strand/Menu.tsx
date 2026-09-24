@@ -12,20 +12,23 @@
 // compile writes --danger; this reads --error under ruling 425, and --danger is var(--error).
 // WAI-ARIA menu: `role="menu"`, `menuitem`, roving focus. ArrowUp and ArrowDown wrap, Home and End,
 // Enter and Space select and close (the item is a native button), Escape and Tab close; Escape and
-// select return focus to the anchor. Escape calls `preventDefault`, so the Pane and Sheet guards of
-// correction 23 do not also close.
+// select return focus to the anchor. Escape calls `preventDefault`, so the Pane's guard of correction
+// 23 does not also close; this app's Sheet does not honour it on either of its paths yet (G86, G88).
 // Portal by default: rendered into `document.body` at `position: fixed` from the anchor's rect,
 // bottom-end, flipped above when the room below is short, clamped inside the viewport, and
 // repositioned on scroll and resize while open. `portal={false}` renders in place, absolutely
 // positioned inside the anchor's positioned parent, for frames and specimens that are scaled.
 // Items are 44 on touch and 36 on pointer; `input` overrides the detected mode for proofs. Stacking
 // is `--z-menu` (1103), 62: above the pane and sticky chrome, below dialog and notification, and
-// clear of a sheet the menu opens from. Menu reads `--z-menu` and never `--z-notification`. No count,
-// ever.
+// clear of a contained sheet the menu opens from. A modal Sheet here is a native dialog in the top
+// layer, which no z-index clears, so a portal Menu opened inside one renders under it (G88). Menu
+// reads `--z-menu` and never `--z-notification`. No count, ever.
 //
 // The input mode comes from `useMode()` in `src/lib/tier.ts`, the app's one watcher of
 // `(pointer: coarse)`, rather than a second hook; the prior port record made the same call for
-// LensBar's `title` (29-A, item 53). The compile reaches the portal through `window.ReactDOM`; this
+// LensBar's `title` (29-A, item 53). `useMode()` answers `pointer` on its first render, where the
+// compile's hook reads the query in its initialiser, so the placing effect also runs on a change of
+// mode: a Menu mounted open on touch is placed at 36 and placed again at 44 a frame later. The compile reaches the portal through `window.ReactDOM`; this
 // imports `createPortal` from `react-dom`.
 import {
   useCallback,
@@ -71,8 +74,8 @@ export type MenuProps = {
   label?: string | undefined;
   /** Default true: rendered into `document.body`, fixed, bottom-end from the anchor, flipped above
    *  when short of room. false: in place, absolute in the anchor's positioned parent. */
-  portal?: boolean;
-  placement?: MenuPlacement;
+  portal?: boolean | undefined;
+  placement?: MenuPlacement | undefined;
   /** Overrides the detected input mode. Items are 44 on touch, 36 on pointer. */
   input?: Mode | undefined;
   style?: CSSProperties | undefined;
@@ -142,6 +145,8 @@ export function Menu({
     top = Math.max(edge, Math.min(top, vh - edge - m.height));
     setPos({ top, left, up });
   }, [portal, anchorRef, placement]);
+  // `mode` is a dependency so a menu whose items change height under it is placed again (the
+  // header's note on `useMode`).
   useLayoutEffect(() => {
     if (!open) {
       setPos(null);
@@ -156,7 +161,7 @@ export function Menu({
       window.removeEventListener("resize", place);
       window.removeEventListener("scroll", place, true);
     };
-  }, [open, place, portal]);
+  }, [open, place, portal, mode]);
   useLayoutEffect(() => {
     // Focus the first item once the menu is placed: a portal menu is `visibility: hidden` until it
     // has a position, and a hidden element cannot take focus (correction 25 section 7).

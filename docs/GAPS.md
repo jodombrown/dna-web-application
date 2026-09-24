@@ -4605,6 +4605,12 @@ during handoff 32-A's reconciliation (862), filed under ruling 597. The number i
     that exists only while expanded; and the ArrowDown that opens the list skips the caller's own
     `onKeyDown`. Its `.d.ts` also leaves out `id`, the handlers and `aria-labelledby`, which the
     compiled part reads.
+16. A Menu that mounts with `open` already true, as a child of the element its `anchorRef` names, is
+    never placed until the window scrolls or resizes: React attaches a parent's ref after its
+    children's layout effects run, so the first `place()` finds no anchor and returns, `pos` stays
+    null, the portal menu stays `visibility: hidden`, and the first item is never focused. Menu's
+    header in the compile documents no such constraint. Nothing opens a Menu on mount at this head;
+    the port keeps the compile's behaviour.
 
 ## G88. A Menu opened from inside a modal Sheet renders under the Sheet's top layer and cannot be used
 

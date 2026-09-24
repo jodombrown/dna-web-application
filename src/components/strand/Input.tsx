@@ -52,7 +52,7 @@ type Shared = {
   noMatch?: ReactNode;
   /** `overlay` (default) floats the list under the field; `inline` lays it in flow for a scroller
    *  that clips (FacetRail). */
-  listbox?: "overlay" | "inline";
+  listbox?: "overlay" | "inline" | undefined;
   /** A leading glyph from Strand's set inside the field, e.g. "search" or "map-pin". */
   icon?: string | undefined;
 };
@@ -74,8 +74,8 @@ export type InputProps = Shared &
  * Correction 25 (1102): passing `suggestions` makes the single-line field a combobox:
  * role=combobox, aria-autocomplete=list, aria-expanded, aria-controls, aria-activedescendant.
  * ArrowDown opens and moves, ArrowUp moves, Enter chooses the active option, Escape closes the list
- * and calls preventDefault so a Pane or Sheet guard does not also close (23). A press on an option
- * does not blur the field. `noMatch` renders as the list's only line, not an option, when the query
+ * and calls preventDefault so the Pane's guard does not also close (23); this app's Sheet does not
+ * honour it on either of its paths yet (G86). A press on an option does not blur the field. `noMatch` renders as the list's only line, not an option, when the query
  * is non-empty and nothing matches. Options are 44 high on every input mode: a suggestion is a
  * standalone target (498). No count, ever: nothing says how many matched. Hint, error, the focus
  * rendering and every non-combobox call are unchanged; the line is now tied by aria-describedby.
