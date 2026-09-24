@@ -57,3 +57,6 @@ export * from "./Segment";
 // compile carries and this tree did not. Neither is bound by a page yet.
 export * from "./FacetRail";
 export * from "./Pane";
+// Strand compile v1790212533284400 (handoff 32-A, correction 25 §2, ruling 1102): Menu, the list of
+// acts a card's ellipsis summons. It reads --z-menu (1103). No page binds it yet; 32-B does.
+export * from "./Menu";
