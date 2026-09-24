@@ -303,6 +303,7 @@ export async function hydratePosts(
           family: e.family,
           hostId: e.host_member_id,
           when,
+          startsAt: e.starts_at,
           places:
             e.mode === "virtual"
               ? []

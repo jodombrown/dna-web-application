@@ -32,12 +32,14 @@ export type EventView = {
    * from the same rows the meta line is built from. `when` is the meta line's own when, the viewer's
    * zone first and the event's local time second; `places` is each physical row's city in position
    * order (its place words where it names no city), empty for an online event; `family` is the
-   * convene_families value, whose label comes from the vocabulary.
+   * convene_families value, whose label comes from the vocabulary. `startsAt` is the row's own
+   * start, null for an event with no date yet, which has no calendar file (1097).
    */
   mode: "in_person" | "virtual" | "hybrid";
   family: string | null;
   hostId: string;
   when: string;
+  startsAt: string | null;
   places: string[];
 };
 

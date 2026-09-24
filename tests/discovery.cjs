@@ -158,8 +158,9 @@ function placeIds(cities) {
 function seedEvent(db, key, { title, mode, days, cities = [], family = null, host = KWAME }) {
   const id = eventId("discovery-" + key);
   const postId = "post-d-" + key;
-  const starts = new Date(Date.now() + days * 86400e3);
-  starts.setUTCHours(18, 0, 0, 0);
+  // `days: null` is an event with no date yet: a window only, which has no calendar file.
+  const starts = days === null ? null : new Date(Date.now() + days * 86400e3);
+  if (starts) starts.setUTCHours(18, 0, 0, 0);
   db.posts.unshift({
     id: postId,
     author_kind: "member",
@@ -183,7 +184,7 @@ function seedEvent(db, key, { title, mode, days, cities = [], family = null, hos
     id,
     host_member_id: host.id,
     title,
-    starts_at: starts.toISOString(),
+    starts_at: starts ? starts.toISOString() : null,
     ends_at: null,
     doors_at: null,
     when_text: "An evening",
@@ -198,7 +199,7 @@ function seedEvent(db, key, { title, mode, days, cities = [], family = null, hos
     date_confirmed: true,
     expected_window_start: null,
     expected_window_end: null,
-    window_basis: null,
+    window_basis: starts ? null : "October",
     delivery_intent: null,
     cancelled_at: null,
     cancelled_reason: null,
@@ -227,7 +228,14 @@ function seedEvent(db, key, { title, mode, days, cities = [], family = null, hos
       position: cities.length,
       url: "https://meet.example/" + key,
     });
-  return { event_id: id, post_id: postId, starts_at: starts.toISOString(), mode, cities, family };
+  return {
+    event_id: id,
+    post_id: postId,
+    starts_at: starts ? starts.toISOString() : null,
+    mode,
+    cities,
+    family,
+  };
 }
 
 /**
@@ -308,6 +316,13 @@ function seedCorpus(db) {
       days: 22,
       family: "giving_cause",
     }),
+    undated: seedEvent(db, "undated", {
+      title: "A supper in Kilimani",
+      mode: "in_person",
+      days: null,
+      cities: ["Nairobi"],
+      family: "small_social",
+    }),
   };
   const rungs = {
     loaded: { [H1]: "in" },
@@ -317,6 +332,7 @@ function seedCorpus(db) {
     tema: { [H1]: "region" },
     kumasi: { [H1]: "country" },
     table: { [H2]: "in" },
+    undated: { [H2]: "in" },
   };
   for (const [k, e] of Object.entries(E)) {
     e.places = placeIds(e.cities);
@@ -342,7 +358,7 @@ const item = (e, reason) => ({
 
 /**
  * Full density (632, 1092): all nine lanes. The member follows Kwame Mensah and Culture and arts,
- * is going to Corridor Suppers, and has saved it.
+ * is going to Corridor Suppers, which they have saved, and to an undated supper in Kilimani.
  */
 function fullDensity(E) {
   const soon = (e) => item(e, { kind: "soon", starts_at: e.starts_at, mode: e.mode });
@@ -355,7 +371,7 @@ function fullDensity(E) {
       online: [E.readers, E.stream, E.harvest, E.cloth].map((e) =>
         item(e, { kind: "online", starts_at: e.starts_at, mode: e.mode }),
       ),
-      fresh: [E.kumasi, E.table].map((e) =>
+      fresh: [E.kumasi, E.table, E.undated].map((e) =>
         item(e, { kind: "fresh", published_at: new Date(Date.now() - 86400e3).toISOString() }),
       ),
       curated: [E.loaded, E.cloth].map((e) =>
@@ -413,7 +429,7 @@ function seedDiscovery(db) {
   const E = seedCorpus(db);
   setAnswer(db, fullDensity(E));
   db.discovery.places = PLACES;
-  db.discovery.going = [E.supper.event_id];
+  db.discovery.going = [E.supper.event_id, E.undated.event_id];
   db.saves.push({
     member_id: UID,
     post_id: E.supper.post_id,
@@ -604,6 +620,17 @@ async function digitsOutsideWhen(page) {
 }
 
 /** Waits until the last projection call satisfies `pred` and the lanes have settled on it. */
+/** Polls the lanes until `ok(ids)` holds for every item id shown, or 10s pass; answers the ids. */
+async function lanesUntil(page, ok) {
+  let ids = [];
+  for (let t = 0; t < 100; t++) {
+    ids = Object.values(await laneItems(page)).flat();
+    if (ok(ids)) break;
+    await page.waitForTimeout(100);
+  }
+  return ids;
+}
+
 async function settled(page, db, pred) {
   const start = Date.now();
   while (!pred(lastCall(db)) && Date.now() - start < 10000) await page.waitForTimeout(100);
@@ -948,6 +975,9 @@ async function runDiscovery(browserType, bname, [w, h], theme) {
       JSON.stringify({ home: words.home, place: words.place }),
     );
     await closeRail(page, tier);
+    // The collapsed strip renders from the optimistic state; the second write reaches the mock after.
+    for (let t = 0; tier !== "compact" && db.discovery.railWrites.length < 2 && t < 100; t++)
+      await page.waitForTimeout(50);
     const writes = db.discovery.railWrites.map(
       (r) => `${r.surface}:${r.width_band}:${r.collapsed}`,
     );
@@ -1015,32 +1045,27 @@ async function runDiscovery(browserType, bname, [w, h], theme) {
     await closeMenu(page);
     const other = await readMenu(page, cardSel(E.stream, "network"));
     await closeMenu(page);
+    const undated = await readMenu(page, cardSel(E.undated, "fresh"));
+    await closeMenu(page);
     record(
       tag +
-        " menu: Add to calendar absent when not going, Subscribe absent with no topic, none disabled",
+        " menu: Add to calendar absent when not going or undated, Subscribe absent with no topic, none disabled",
       plain.map((x) => x.label).join(",") ===
         "Share,Copy link,Save,|,Following Kwame Mensah,|,Not this" &&
         other.map((x) => x.label).join(",") ===
           "Share,Copy link,Save,|,Follow Adaeze Nwosu,Subscribe to Learning and dialogue,|,Not this" &&
-        [...plain, ...other].every((x) => !x.disabled),
-      plain.map((x) => x.label).join(",") + " / " + other.map((x) => x.label).join(","),
+        undated.map((x) => x.label).join(",") ===
+          "Share,Copy link,Save,|,Following Kwame Mensah,Subscribe to Small social gatherings,|,Not this" &&
+        [...plain, ...other, ...undated].every((x) => !x.disabled),
+      [plain, other, undated].map((m) => m.map((x) => x.label).join(",")).join(" / "),
     );
 
-    // Not this (1044, 1105): out of its lane at once with the toast, and still out on reload.
+    // Not this (1044, 1105): out of its lane at once with the toast. No reload before the pane, so
+    // the projection still carries the card and only the surface's own skip can step past it; the
+    // dismissal's persistence is read on reload after the pane.
     await menuSelect(page, cardSel(E.madina, "soon"), "Not this");
     await page.locator(cardSel(E.madina, "soon")).waitFor({ state: "detached", timeout: 10000 });
     const toast = (await page.locator('[role="status"]').allInnerTexts()).join(" ");
-    await openDiscovery(page);
-    record(
-      tag + " menu: Not this takes the card out of its lane with the toast, and out on reload",
-      toast.includes("Fewer like this in your lanes.") &&
-        db.discovery.dismissals.some(
-          (d) => d.p_event === E.madina.event_id && d.p_section === "soon",
-        ) &&
-        (await page.locator(cardSel(E.madina, "soon")).count()) === 0 &&
-        (await page.locator(cardSel(E.madina, "near")).count()) === 1,
-      toast,
-    );
 
     // A card's title: the pane at expanded (688, 1047), the page's own route below it (1023).
     await page.locator(`${cardSel(E.supper, "soon")} [data-card-open]`).click();
@@ -1085,7 +1110,8 @@ async function runDiscovery(browserType, bname, [w, h], theme) {
           pane.ring.join(",") === "soon:true",
         JSON.stringify(pane),
       );
-      // Stepping (1083, 1044): Happening soon reads readers, supper, cloth once madina is dismissed.
+      // Stepping (1083, 1044): Happening soon reads readers, supper, madina, cloth as the projection
+      // answered it; madina was dismissed in this session, so the surface steps supper to cloth.
       const stepTo = async (label, id) => {
         await page.locator(`[data-pane-cluster] button[aria-label="${label}"]`).click();
         await page.waitForURL((u) => u.pathname === "/convene/events/" + id, { timeout: 10000 });
@@ -1150,17 +1176,29 @@ async function runDiscovery(browserType, bname, [w, h], theme) {
           (await page.locator("[data-event-page] [data-back-row]").count()) === 1,
       );
     }
+    await openDiscovery(page);
+    record(
+      tag + " menu: Not this takes the card out of its lane with the toast, and out on reload",
+      toast.includes("Fewer like this in your lanes.") &&
+        db.discovery.dismissals.some(
+          (d) => d.p_event === E.madina.event_id && d.p_section === "soon",
+        ) &&
+        (await page.locator(cardSel(E.madina, "soon")).count()) === 0 &&
+        (await page.locator(cardSel(E.madina, "near")).count()) === 1,
+      toast,
+    );
 
     // Below density (632, 650): the Communities lane is its heading and one sentence, only with
-    // suggest.
+    // suggest, in its own place in convene_lanes order (1092).
     setAnswer(db, belowDensity(E));
     await openDiscovery(page);
     const below = await laneIds(page);
     const firstLane = page.locator('[data-discovery] [data-lane="follow"]');
     const sentence = await firstLane.locator('[data-dia="done"]').allInnerTexts();
     record(
-      tag + " below: the Communities lane is its heading and DIA's one sentence, then three lanes",
-      below.join(",") === "follow,online,curated,network" &&
+      tag +
+        " below: the Communities lane is its heading and DIA's one sentence, in its place in the lanes' order",
+      below.join(",") === "online,curated,follow,network" &&
         (await firstLane.locator("h2").innerText()).trim() === "From communities you follow" &&
         sentence.length === 1 &&
         sentence[0].startsWith(
@@ -1322,12 +1360,14 @@ async function runDiscoveryFacets(browserType, bname, [w, h], theme) {
       null,
       { timeout: 10000 },
     );
-    const inAccra = await laneItems(page);
     const accraIds = new Set(
       Object.values(E)
         .filter((e) => e.places.includes("city|ghana|accra"))
         .map((e) => e.event_id),
     );
+    // The heading is the URL's; the cards are the answer's, which lands after it.
+    await lanesUntil(page, (ids) => ids.length > 0 && ids.every((id) => accraIds.has(id)));
+    const inAccra = await laneItems(page);
     const strays = Object.values(inAccra)
       .flat()
       .filter((id) => !accraIds.has(id));
@@ -1385,11 +1425,16 @@ async function runDiscoveryFacets(browserType, bname, [w, h], theme) {
         { timeout: 10000 },
       );
       const ok = await settled(page, db, (c) => c.p_home === H1 && c.p_home_rung === rung);
-      const shown = new Set(Object.values(await laneItems(page)).flat());
       const want = new Set(
         Object.values(E)
           .filter((e) => e.rungs[H1] && RUNG.indexOf(e.rungs[H1]) <= RUNG.indexOf(rung))
           .map((e) => e.event_id),
+      );
+      const shown = new Set(
+        await lanesUntil(
+          page,
+          (ids) => new Set(ids).size === want.size && ids.every((id) => want.has(id)),
+        ),
       );
       const checked = await page
         .locator(`${scope} [data-axis-id="home"] [data-option="${H1}:${rung}"]`)
@@ -1437,12 +1482,14 @@ async function runDiscoveryFacets(browserType, bname, [w, h], theme) {
         readersMenu.some((x) => x.label === "Saved"),
       flipped.map((x) => x.label).join(",") + " / " + readersMenu.map((x) => x.label).join(","),
     );
-    const download = page.waitForEvent("download", { timeout: 15000 });
-    await menuSelect(page, cardSel(E.supper, "follow"), "Add to calendar");
-    const file = await download.then(
+    // The handler is attached as the waiter is made, so a failed menu path cannot leave it
+    // rejecting with nothing to catch it.
+    const download = page.waitForEvent("download", { timeout: 15000 }).then(
       (d) => d.suggestedFilename(),
       (e) => "no download: " + String(e).slice(0, 80),
     );
+    await menuSelect(page, cardSel(E.supper, "follow"), "Add to calendar");
+    const file = await download;
     record(
       tag + " writes: Add to calendar downloads the event page's .ics (1097)",
       /\.ics$/.test(file),
@@ -1467,6 +1514,9 @@ async function runDiscoveryFacets(browserType, bname, [w, h], theme) {
       await openDiscovery(page);
       await page.locator(`${RAIL} button[aria-label="Show browse"]`).click();
       await page.locator(`${RAIL} [data-axis-id]`).first().waitFor({ timeout: 10000 });
+      // The rail renders open from the optimistic state; the write reaches the mock after it.
+      for (let t = 0; db.discovery.railWrites.length < 1 && t < 100; t++)
+        await page.waitForTimeout(50);
       await openDiscovery(page);
       await page.waitForTimeout(400);
       const open = await page.locator(`${RAIL} [data-axis-id]`).count();

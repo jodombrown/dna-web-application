@@ -1278,6 +1278,11 @@ async function mockSupabase(page, db, opts = {}) {
         over(body.p_target, { following: !!body.p_on });
         db.profile.following = !!body.p_on;
         db.profile.follows.push(body.p_on ? "on" : "off");
+        // Discovery's projection reads the member's follows, so the next answer carries the write.
+        const d = db.discovery;
+        d.follows = d.follows.filter((f) => f.id !== body.p_target);
+        if (body.p_on)
+          d.follows.push({ id: body.p_target, name: null, handle: null, avatar_path: null });
         return json(null, 204);
       }
       if (fn === "dismiss_suggestion") {
@@ -1710,7 +1715,14 @@ async function mockSupabase(page, db, opts = {}) {
     if (p === "/rest/v1/rpc/convene_places") return json(db.discovery.places);
     if (p === "/rest/v1/rpc/set_subscription") {
       const b = req.postDataJSON() || {};
-      db.discovery.subscriptionWrites.push(b);
+      const d = db.discovery;
+      d.subscriptionWrites.push(b);
+      // The next projection answer carries the write, as member_subscriptions does.
+      d.subscriptions = d.subscriptions.filter((x) => x.family !== b.p_family);
+      if (b.p_on) {
+        const f = VOCAB.convene_families.find((x) => x.value === b.p_family);
+        d.subscriptions.push({ family: b.p_family, label: f ? f.label : b.p_family });
+      }
       return json(null, 204);
     }
     if (p === "/rest/v1/rpc/vocabularies")

@@ -231,7 +231,7 @@ export function DiscoverySurface({
   const [browseOpen, setBrowseOpen] = useState(false);
   const [dismissed, setDismissed] = useState<ReadonlySet<string>>(new Set());
   const [homes, setHomes] = useState<DiscoveryHome[] | null>(null);
-  // The member's own acts on a card, held until the next read says the same (optimistic, item 6).
+  // The member's own acts on a card, held until the reads they change have answered again (item 6).
   const [savedNow, setSavedNow] = useState<Record<string, boolean>>({});
   const [followNow, setFollowNow] = useState<Record<string, boolean>>({});
   const [subscribedNow, setSubscribedNow] = useState<Record<string, boolean>>({});
@@ -281,13 +281,32 @@ export function DiscoverySurface({
   useEffect(() => {
     const next = droppedUnknown(lists, known);
     if (!next) return;
+    // `state: true` keeps the history state, so a pane open over the lanes keeps its origin and the
+    // lane it steps through while only the search changes.
     void navigate({
       to: ".",
       search: searchOf(next) as never,
       replace: true,
       resetScroll: false,
+      state: true,
     });
   }, [lists, known, navigate]);
+
+  // An act's optimistic word stands until every read it changes has answered again (this surface's
+  // projection, and the Feed's marks or the event page's follow beside it); then the read is the
+  // source, so a change made elsewhere is never hidden behind it. A failed re-read keeps the word.
+  const reread = (keys: string[][], drop: () => void) =>
+    void Promise.all(keys.map((queryKey) => qc.invalidateQueries({ queryKey }))).then(
+      drop,
+      () => undefined,
+    );
+  const unset =
+    <V,>(key: string) =>
+    (m: Record<string, V>) => {
+      const n = { ...m };
+      delete n[key];
+      return n;
+    };
 
   const say = (text: string) => {
     setToast(text);
@@ -710,32 +729,45 @@ export function DiscoverySurface({
         icon: "bookmark",
         onSelect: () => {
           setSavedNow((s) => ({ ...s, [postId]: !saved }));
-          setSaved(member.id, postId, !saved).catch(() => {
-            setSavedNow((s) => ({ ...s, [postId]: saved }));
-            say("That did not go through. Try again.");
-          });
+          setSaved(member.id, postId, !saved).then(
+            () =>
+              reread(
+                [
+                  ["discovery", member.id],
+                  ["marks", member.id],
+                ],
+                () => setSavedNow(unset(postId)),
+              ),
+            () => {
+              setSavedNow((s) => ({ ...s, [postId]: saved }));
+              say("That did not go through. Try again.");
+            },
+          );
         },
       },
-      going && {
-        id: "calendar",
-        label: "Add to calendar",
-        icon: "calendar",
-        onSelect: () => {
-          void qc
-            .fetchQuery({
-              queryKey: [EVENT_PAGE_KEY, member.id, item.event_id],
-              queryFn: () => loadEventPage(item.event_id),
-              staleTime: 30_000,
-            })
-            .then(
-              (page) => {
-                if (!page || !downloadIcs(page.calendar, page.event.slug))
-                  say("The calendar file could not be made.");
-              },
-              () => say("The calendar file could not be made."),
-            );
+      // 1097: only for an event the member is going to, and only one with a date, which is the
+      // event page's own rule for its calendar file.
+      going &&
+        !!ev?.startsAt && {
+          id: "calendar",
+          label: "Add to calendar",
+          icon: "calendar",
+          onSelect: () => {
+            void qc
+              .fetchQuery({
+                queryKey: [EVENT_PAGE_KEY, member.id, item.event_id],
+                queryFn: () => loadEventPage(item.event_id),
+                staleTime: 30_000,
+              })
+              .then(
+                (page) => {
+                  if (!page || !downloadIcs(page.calendar, page.event.slug))
+                    say("The calendar file could not be made.");
+                },
+                () => say("The calendar file could not be made."),
+              );
+          },
         },
-      },
       { rule: true },
       canFollow && {
         id: "follow",
@@ -743,10 +775,20 @@ export function DiscoverySurface({
         icon: "user-plus",
         onSelect: () => {
           setFollowNow((f) => ({ ...f, [hostId]: !following }));
-          setFollowing(hostId, !following).catch(() => {
-            setFollowNow((f) => ({ ...f, [hostId]: following }));
-            say("That did not go through. Try again.");
-          });
+          setFollowing(hostId, !following).then(
+            () =>
+              reread(
+                [
+                  ["discovery", member.id],
+                  ["event-follow", member.id],
+                ],
+                () => setFollowNow(unset(hostId)),
+              ),
+            () => {
+              setFollowNow((f) => ({ ...f, [hostId]: following }));
+              say("That did not go through. Try again.");
+            },
+          );
         },
       },
       !!family &&
@@ -756,10 +798,13 @@ export function DiscoverySurface({
           icon: "bell",
           onSelect: () => {
             setSubscribedNow((s) => ({ ...s, [family]: !subscribed }));
-            setSubscription(family, !subscribed).catch(() => {
-              setSubscribedNow((s) => ({ ...s, [family]: subscribed }));
-              say("That did not go through. Try again.");
-            });
+            setSubscription(family, !subscribed).then(
+              () => reread([["discovery", member.id]], () => setSubscribedNow(unset(family))),
+              () => {
+                setSubscribedNow((s) => ({ ...s, [family]: subscribed }));
+                say("That did not go through. Try again.");
+              },
+            );
           },
         },
       { rule: true },
@@ -934,26 +979,27 @@ export function DiscoverySurface({
     </div>
   );
 
-  // All (685, 1092): each lane the projection returned, in the lanes' order; the Communities lane as
-  // its sentence alone when the member follows no host.
+  // All (685, 1092): each lane the projection returned, in the lanes' order, and the Communities
+  // lane as its sentence alone, in its own place in that order, when the member follows no host.
   const followLane = sections.find((s) => s.section === "follow");
-  const sentenceFirst =
+  const sentenceLane =
     lens === "all" && !!sentence && (!followLane || followLane.items.length === 0);
-  const laneSections = sections.filter((s) => s.items.length > 0);
+  const laneList: { id: DiscoveryLaneId; body: ReactNode; seeAll: boolean }[] = [
+    ...sections
+      .filter((s) => s.items.length > 0)
+      .map((s) => ({
+        id: s.section,
+        body: laneRow(
+          s.section,
+          s.items.map((it) => card(it, s.section)),
+        ),
+        seeAll: lens === "all",
+      })),
+    ...(sentenceLane ? [{ id: "follow" as const, body: sentenceLine, seeAll: false }] : []),
+  ].sort((a, b) => (laneOrder.get(a.id) ?? 99) - (laneOrder.get(b.id) ?? 99));
   const lanesView = (
     <div data-lanes style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
-      {sentenceFirst && lane("follow", true, sentenceLine, false)}
-      {laneSections.map((s, i) =>
-        lane(
-          s.section,
-          i === 0 && !sentenceFirst,
-          laneRow(
-            s.section,
-            s.items.map((it) => card(it, s.section)),
-          ),
-          lens === "all",
-        ),
-      )}
+      {laneList.map((l, i) => lane(l.id, i === 0, l.body, l.seeAll))}
     </div>
   );
 
@@ -1010,24 +1056,27 @@ export function DiscoverySurface({
   );
 
   // Pane stepping (1083, 1044): Previous and Next across the lane the open card came from, in its
-  // visible order, past the member's dismissals. An event opened from outside Discovery, or no longer
-  // in its lane, steps nowhere.
-  const stepLane = paneOpen && openLane ? sections.find((s) => s.section === openLane) : undefined;
+  // order, to the nearest neighbours the member has not dismissed. The open card is found in the lane
+  // as the projection answered it, so dismissing the card that is open still steps from its place.
+  // An event opened from outside Discovery, or not in the lane the projection answered, steps nowhere.
+  const stepLane =
+    paneOpen && openLane ? (data?.sections ?? []).find((s) => s.section === openLane) : undefined;
   const stepIds = stepLane ? stepLane.items.map((i) => i.event_id) : [];
   const at = paneId ? stepIds.indexOf(paneId) : -1;
+  const kept = (id: string) => !dismissed.has(openLane + ":" + id);
+  const prevId = at > -1 ? stepIds.slice(0, at).reverse().find(kept) : undefined;
+  const nextId = at > -1 ? stepIds.slice(at + 1).find(kept) : undefined;
   const stepping =
     stepLane && at > -1
       ? {
           onPrevious: () => {
-            const prev = stepIds[at - 1];
-            if (prev) openEvent(prev, stepLane.section, true);
+            if (prevId) openEvent(prevId, stepLane.section, true);
           },
           onNext: () => {
-            const next = stepIds[at + 1];
-            if (next) openEvent(next, stepLane.section, true);
+            if (nextId) openEvent(nextId, stepLane.section, true);
           },
-          hasPrevious: at > 0,
-          hasNext: at < stepIds.length - 1,
+          hasPrevious: !!prevId,
+          hasNext: !!nextId,
           previousLabel: "Previous event",
           nextLabel: "Next event",
         }
@@ -1037,9 +1086,12 @@ export function DiscoverySurface({
   // not scroll (G85), and a lane scrolls sideways, so the card is brought into its lane's view here.
   useEffect(() => {
     if (!paneOpen || !paneId) return;
-    const section = openLane ? `[data-section="${openLane}"]` : "";
-    const el = document.querySelector<HTMLElement>(
-      `[data-discovery] ${section}[data-discovery-item="${paneId}"]`,
+    // Compared as data, never built into a selector: the id is the route's own param.
+    const el = Array.from(
+      document.querySelectorAll<HTMLElement>("[data-discovery] [data-discovery-item]"),
+    ).find(
+      (e) =>
+        e.dataset["discoveryItem"] === paneId && (!openLane || e.dataset["section"] === openLane),
     );
     el?.scrollIntoView({ block: "nearest", inline: "nearest" });
   }, [paneOpen, paneId, openLane]);

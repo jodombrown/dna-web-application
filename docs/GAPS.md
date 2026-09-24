@@ -4838,9 +4838,12 @@ is assigned by this entry (ruling 638).**
 `PRICE_OPTIONS` (Free, Paid) and `WHEN_OPTIONS` (Next two weeks, This month, Later) as arrays with
 their words in code. The ids are the projection's own structural values (its `p_format`, `p_price`
 and `p_when` branches), but the words a member reads are labels, and no vocabulary table serves them.
-Handoff 32-B edits Price's array (the third option is gone under 1095) and adds none. Owed: a ruling
-on whether these three are content vocabularies under the fixed-vocabularies absolute or structural
-like the Feed's lens set (999), and if the former, a table served by `vocabularies()`.
+Handoff 32-B edits Price's array (the third option is gone under 1095). Read against the tree rather
+than the handoff (555), it also adds two of the same shape: `PLACE_KIND` (City, Region, Country for
+`convene_places()`'s `kind`) and `whereFor`'s format words (In person, Online, Hybrid), a second copy
+of `FORMAT_OPTIONS`'s words for the card's where line. Owed: a ruling on whether these are content
+vocabularies under the fixed-vocabularies absolute or structural like the Feed's lens set (999); if
+the former, a table served by `vocabularies()`, which `whereFor` reads too.
 
 ## G98. The composed OpenGraph image for a public event page is not built
 

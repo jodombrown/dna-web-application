@@ -1174,6 +1174,8 @@ async function runLiveDbArms({ record, skip }) {
       const section = (d, id) => ((d && d.sections) || []).find((s) => s.section === id) || null;
       const sectionIds = (d) => ((d && d.sections) || []).map((s) => s.section);
 
+      // As the owner: live_arms holds no EXECUTE on vocabularies() (ruling 382), authenticated does.
+      await actAs(client, owner.id);
       const vocab = await ask("select public.vocabularies() as d");
       const families =
         vocab.ok && Array.isArray(vocab.d.convene_families) ? vocab.d.convene_families : [];
@@ -1182,7 +1184,6 @@ async function runLiveDbArms({ record, skip }) {
       const lanes = vocab.ok && Array.isArray(vocab.d.convene_lanes) ? vocab.d.convene_lanes : [];
       const laneIds = lanes.map((l) => l.value);
 
-      await actAs(client, owner.id);
       const all = await ask("select public.convene_discovery('all') as d");
       const ids = all.ok ? sectionIds(all.d) : [];
       const inOrder = ids.every(
@@ -1244,6 +1245,17 @@ async function runLiveDbArms({ record, skip }) {
         "Brief 9 (1044, 1105): a dismissal in curated empties that lane and is keyed on the lane alone";
       if (curatedItem) {
         const eventId = curatedItem.event_id;
+        // The owner may hold committed dismissals of this event in other lanes from the app, so
+        // the arm reads what this dismissal added, not what the owner holds.
+        const sectionsOf = async () => {
+          const r = await attempt(
+            client,
+            "select section from public.discovery_dismissals where event_id = $1::uuid",
+            [eventId],
+          );
+          return r.ok ? r.rows.map((x) => x.section) : null;
+        };
+        const before = await sectionsOf();
         const dismissed = await attempt(
           client,
           "select public.dismiss_discovery_item($1::uuid, 'curated')",
@@ -1252,23 +1264,19 @@ async function runLiveDbArms({ record, skip }) {
         const curated = dismissed.ok
           ? await ask("select public.convene_discovery('curated') as d")
           : dismissed;
-        const rows = await attempt(
-          client,
-          "select section from public.discovery_dismissals where event_id = $1::uuid",
-          [eventId],
-        );
+        const after = await sectionsOf();
         const curatedSection = curated.ok ? section(curated.d, "curated") : null;
-        const keyed = rows.ok ? rows.rows.map((r) => r.section) : null;
+        const added = before && after ? after.filter((x) => !before.includes(x)) : null;
         record(
           dismissName,
           !!curatedSection &&
             curatedSection.items.length === 0 &&
-            !!keyed &&
-            keyed.length === 1 &&
-            keyed[0] === "curated",
+            !!added &&
+            added.length === 1 &&
+            added[0] === "curated",
           (curated.ok ? "curated " + JSON.stringify(curated.d.sections) : failed(curated)) +
-            " rows " +
-            (rows.ok ? JSON.stringify(keyed) : failed(rows)),
+            " added " +
+            JSON.stringify(added),
         );
       } else record(dismissName, false, "no curated item to dismiss");
 
@@ -1451,7 +1459,9 @@ async function runLiveDbArms({ record, skip }) {
       await actAs(client, owner.id);
       const own = await attempt(
         client,
-        "insert into public.member_rail_state (member_id, surface, width_band, collapsed) values ($1, 'discovery', 'wide', false)",
+        // Idempotent against a row the owner committed from the app, through the owner's insert and
+        // update policies both.
+        "insert into public.member_rail_state (member_id, surface, width_band, collapsed) values ($1, 'discovery', 'wide', false) on conflict (member_id, surface, width_band) do update set collapsed = excluded.collapsed, updated_at = now()",
         [owner.id],
       );
       await actAs(client, member.id);
