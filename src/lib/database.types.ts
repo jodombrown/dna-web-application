@@ -30,6 +30,17 @@
 // `private.convene_thresholds`) are absent by design: the private schema is not exposed by
 // PostgREST, so the generator does not see it and no surface may reach it.
 
+// PROVISIONAL (handoff 32-B, Chat's condition on Addenda 1 to 3): the entries for
+// 20260924100000_p2_discovery_lanes, 20260924110000_p2_event_links and
+// 20260924120000_p2_home_ladders_and_rail are written by hand from those files, in the generator's
+// layout, because Chat applies the four 32-B migrations only once the surface is ready for its
+// enforcing run. They are `convene_lanes`, `event_aliases`, `reserved_link_words`,
+// `member_rail_state`, `events.custom_slug` and `events.short_code`, `discovery_dismissals`' section
+// key now on `convene_lanes`, and the functions `convene_places`, `event_alias_check`,
+// `resolve_event_link` and `convene_discovery` with `p_places` and `p_home_rung`.
+// 20260924130000_p2_persona_comments changes only comments and no type. The regeneration after the
+// apply replaces this whole file before the enforcing run starts, and this paragraph goes with it.
+
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
 
 export type Database = {
@@ -154,6 +165,24 @@ export type Database = {
           label?: string;
           position?: number;
           schema_org?: string[];
+        };
+        Relationships: [];
+      };
+      convene_lanes: {
+        Row: {
+          lane: string;
+          name: string;
+          position: number;
+        };
+        Insert: {
+          lane: string;
+          name: string;
+          position: number;
+        };
+        Update: {
+          lane?: string;
+          name?: string;
+          position?: number;
         };
         Relationships: [];
       };
@@ -306,8 +335,8 @@ export type Database = {
             foreignKeyName: "discovery_dismissals_section_fkey";
             columns: ["section"];
             isOneToOne: false;
-            referencedRelation: "convene_lenses";
-            referencedColumns: ["lens"];
+            referencedRelation: "convene_lanes";
+            referencedColumns: ["lane"];
           },
         ];
       };
@@ -398,6 +427,35 @@ export type Database = {
             columns: ["member_id"];
             isOneToOne: true;
             referencedRelation: "members";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      event_aliases: {
+        Row: {
+          alias: string;
+          created_at: string;
+          event_id: string;
+          retired_at: string | null;
+        };
+        Insert: {
+          alias: string;
+          created_at?: string;
+          event_id: string;
+          retired_at?: string | null;
+        };
+        Update: {
+          alias?: string;
+          created_at?: string;
+          event_id?: string;
+          retired_at?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "event_aliases_event_id_fkey";
+            columns: ["event_id"];
+            isOneToOne: false;
+            referencedRelation: "events";
             referencedColumns: ["id"];
           },
         ];
@@ -629,6 +687,7 @@ export type Database = {
           cancelled_at: string | null;
           cancelled_reason: string | null;
           created_at: string;
+          custom_slug: string;
           date_confirmed: boolean;
           delivery_intent: string;
           doors_at: string | null;
@@ -639,6 +698,7 @@ export type Database = {
           host_member_id: string;
           id: string;
           mode: Database["public"]["Enums"]["event_mode"];
+          short_code: string;
           slug: string;
           space_id: string | null;
           starts_at: string | null;
@@ -655,6 +715,7 @@ export type Database = {
           cancelled_at?: string | null;
           cancelled_reason?: string | null;
           created_at?: string;
+          custom_slug: string;
           date_confirmed?: boolean;
           delivery_intent?: string;
           doors_at?: string | null;
@@ -665,6 +726,7 @@ export type Database = {
           host_member_id: string;
           id?: string;
           mode?: Database["public"]["Enums"]["event_mode"];
+          short_code: string;
           slug: string;
           space_id?: string | null;
           starts_at?: string | null;
@@ -681,6 +743,7 @@ export type Database = {
           cancelled_at?: string | null;
           cancelled_reason?: string | null;
           created_at?: string;
+          custom_slug?: string;
           date_confirmed?: boolean;
           delivery_intent?: string;
           doors_at?: string | null;
@@ -691,6 +754,7 @@ export type Database = {
           host_member_id?: string;
           id?: string;
           mode?: Database["public"]["Enums"]["event_mode"];
+          short_code?: string;
           slug?: string;
           space_id?: string | null;
           starts_at?: string | null;
@@ -1352,6 +1416,38 @@ export type Database = {
             foreignKeyName: "member_origin_member_id_fkey";
             columns: ["member_id"];
             isOneToOne: true;
+            referencedRelation: "members";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      member_rail_state: {
+        Row: {
+          collapsed: boolean;
+          member_id: string;
+          surface: string;
+          updated_at: string;
+          width_band: string;
+        };
+        Insert: {
+          collapsed: boolean;
+          member_id: string;
+          surface: string;
+          updated_at?: string;
+          width_band: string;
+        };
+        Update: {
+          collapsed?: boolean;
+          member_id?: string;
+          surface?: string;
+          updated_at?: string;
+          width_band?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "member_rail_state_member_id_fkey";
+            columns: ["member_id"];
+            isOneToOne: false;
             referencedRelation: "members";
             referencedColumns: ["id"];
           },
@@ -2037,6 +2133,21 @@ export type Database = {
         };
         Relationships: [];
       };
+      reserved_link_words: {
+        Row: {
+          created_at: string;
+          word: string;
+        };
+        Insert: {
+          created_at?: string;
+          word: string;
+        };
+        Update: {
+          created_at?: string;
+          word?: string;
+        };
+        Relationships: [];
+      };
       second_degree: {
         Row: {
           fof_id: string;
@@ -2259,17 +2370,24 @@ export type Database = {
           p_families?: string[];
           p_format?: string[];
           p_home?: string;
+          p_home_rung?: string;
           p_lens?: string;
+          p_places?: string[];
           p_price?: string[];
           p_when?: string;
         };
         Returns: Json;
       };
+      convene_places: { Args: never; Returns: Json };
       dismiss_discovery_item: {
         Args: { p_event: string; p_section: string };
         Returns: undefined;
       };
       dismiss_suggestion: { Args: { p_target: string }; Returns: undefined };
+      event_alias_check: {
+        Args: { p_alias: string; p_event: string };
+        Returns: string;
+      };
       event_media_object: {
         Args: { p_key: string; p_kind: string; p_slug: string };
         Returns: {
@@ -2328,6 +2446,10 @@ export type Database = {
       publish_post: { Args: { payload: Json }; Returns: string };
       rate_limit_check: { Args: { p_action: string }; Returns: boolean };
       remove_event_party: { Args: { p_party: string }; Returns: Json };
+      resolve_event_link: {
+        Args: { p_kind: string; p_segment: string };
+        Returns: string;
+      };
       respond_to_event_role: {
         Args: { p_accept: boolean; p_party: string };
         Returns: Json;
