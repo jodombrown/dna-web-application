@@ -1,8 +1,11 @@
-// Strand `components/dna/Pane.jsx`, ported at compile v1789885868097915 (ruling 851 names it as
-// scope). The compiled function is byte-identical between the correction 17 and correction 21
-// bundles, so this is a first port rather than a re-sync.
+// Strand `components/dna/Pane.jsx`, first ported at compile v1789885868097915 (ruling 851) and
+// reconciled at compile v1790212533284400 (handoff 32-A, rulings 862 and 844) with corrections 23
+// §1 (1083, Escape amended by 1084) and 24 §6 (1064, ratified 1085). The .jsx and the bundle are
+// identical once both are compiled the same way; the dispositions are in
+// docs/strand-ports/v1790212533284400.md.
 //
-// Rulings the compiled part cites in its own doc comment: 561, 607, 612, 588, 589, 700 and 719.
+// Rulings the compiled part cites in its own doc comment: 561, 607, 612, 79, 588, 589, 700, 719,
+// 1083, 69 and 1064.
 // A pane (561) is a second surface consulted alongside the first. It is navigated into, never
 // summoned. Above `--tier-expanded` it is a pane beside the list; below it the pane is its own
 // route, full width, with its own back affordance — medium taking the pane was the counter-case 561
@@ -19,11 +22,31 @@
 // page content.
 // 700 (correction 13): `onClose`, when supplied, renders one close control at the pane's top right
 // named by `closeLabel`, and fires on activation and on Escape while focus is within the pane (719).
-// Absent, nothing renders and the pane is as before. Escape is handled on the pane section itself,
-// so it fires only while focus is within the pane; there is no document listener.
+// Absent, nothing renders and the pane is as before.
+// 1083 (correction 23): `onPrevious` / `onNext` render a stepping pair in the same cluster, ordered
+// Previous, Next, Close. `hasPrevious` / `hasNext` false render the control disabled in place:
+// `aria-disabled`, still focusable so focus does not jump, inert on activation and on its key. The
+// edge stops; it never wraps and never closes. ArrowLeft and ArrowRight fire the pair on the pane
+// section's own onKeyDown beside Escape, so only while focus is within the pane (or within a portal
+// the pane's content renders, since React's keydown follows the React tree); guarded by an
+// editable target and by `defaultPrevented`, so a gallery or lens inside the page that takes arrows
+// wins. Escape yields to `defaultPrevented` too (1084); this port already did, as correction 21's
+// bundle did. `selectedKey` re-runs the bring-into-view against `[data-selected]` in the list
+// column when it changes: list scroll only, focus untouched. Loading keeps the cluster, so the
+// member can step again before the item arrives. No position, no count (69).
+// 1064 (correction 24, brief 31-E, ratified 1085): `open`. The list slot is the same element in the
+// same position whether or not an item is open: one grid, the list column its first child always,
+// the pane section its second. `open={false}` sets the pane track to 0 and the gap to 0, so the list
+// takes the full content width, and the section is inert and aria-hidden with its cluster not
+// rendered; nothing is a different element tree, so React never rebuilds the list and a lane
+// scrolled sideways keeps its position across open and close. The track snaps; the section's opacity
+// moves at `--dur-slow` (589). Default open, so an existing caller renders as it did, with the
+// markers and the cluster's wrapper the port record's section 4 lists. Below
+// `--tier-expanded` `open` does nothing: the pane is its own route (561). `selected={false}` is
+// still a pane open on its own empty state and is not the closed pane.
 //
-// Nothing in `src/` binds this part yet, so ruling 755's page proof and ruling 627's proof by a
-// person performing the act fall to the first brief that binds it (7, 9 or 10).
+// Bound by `DiscoverySurface` (handoff 31-B) with `onClose` only. The stepping pair, `selectedKey`
+// and `open` are 32-B's to bind; no page passes them in this port.
 import { useEffect, useRef, type CSSProperties, type KeyboardEvent, type ReactNode } from "react";
 import { IconButton } from "./IconButton";
 
@@ -46,8 +69,35 @@ export type PaneProps = {
   backLabel?: string;
   onClose?: (() => void) | undefined;
   closeLabel?: string;
+  /** 1083. Either renders the stepping pair before the close control. */
+  onPrevious?: (() => void) | undefined;
+  onNext?: (() => void) | undefined;
+  /** Accessible names; the caller supplies the noun ("Previous event"). Words only (69). */
+  previousLabel?: string;
+  nextLabel?: string;
+  /** The edge stops: false renders that control `aria-disabled` in place, inert on activation and
+   *  on its key. Undefined reads as true when the handler is supplied. */
+  hasPrevious?: boolean | undefined;
+  hasNext?: boolean | undefined;
+  /** When it changes, the list column brings `[data-selected]` into view (expanded only). Opaque
+   *  to Pane, which reads only that it changed. */
+  selectedKey?: string | undefined;
+  /** 1064. Expanded only. False is the closed pane; default true. */
+  open?: boolean;
   style?: CSSProperties | undefined;
 };
+
+const EDITABLE = /^(input|textarea|select)$/i;
+const isEditable = (t: EventTarget | null) =>
+  !!t && (EDITABLE.test((t as HTMLElement).tagName) || !!(t as HTMLElement).isContentEditable);
+function bringIntoView(col: HTMLElement | null, sel: string) {
+  if (!col) return;
+  const el = col.querySelector(sel);
+  if (!el) return;
+  const box = el.getBoundingClientRect();
+  const c = col.getBoundingClientRect();
+  col.scrollTop += box.top - c.top;
+}
 
 export function Pane({
   tier = "expanded",
@@ -64,29 +114,79 @@ export function Pane({
   backLabel = "Back",
   onClose,
   closeLabel = "Close",
+  onPrevious,
+  onNext,
+  previousLabel = "Previous",
+  nextLabel = "Next",
+  hasPrevious,
+  hasNext,
+  selectedKey,
+  open = true,
   style,
 }: PaneProps) {
   const listCol = useRef<HTMLDivElement>(null);
-  // 719: Escape is handled on the pane section itself, so it fires only while focus is within the
-  // pane. No document listener.
-  const onPaneKey = onClose
-    ? (e: KeyboardEvent<HTMLElement>) => {
-        if (e.key === "Escape" && !e.defaultPrevented) {
-          e.preventDefault();
-          onClose();
+  const stepping = !!(onPrevious || onNext);
+  const canPrev = !!onPrevious && hasPrevious !== false;
+  const canNext = !!onNext && hasNext !== false;
+  const prev = () => {
+    if (canPrev && onPrevious) onPrevious();
+  };
+  const next = () => {
+    if (canNext && onNext) onNext();
+  };
+  // 719: keys are handled on the pane section itself, so they fire only while focus is within the
+  // pane, or within a portal its content renders (React's keydown follows the React tree). No
+  // document listener.
+  const onPaneKey =
+    onClose || stepping
+      ? (e: KeyboardEvent<HTMLElement>) => {
+          if (e.defaultPrevented) return;
+          if (e.key === "Escape" && onClose) {
+            e.preventDefault();
+            onClose();
+            return;
+          }
+          if (!stepping || isEditable(e.target)) return;
+          if (e.key === "ArrowLeft") {
+            e.preventDefault();
+            prev();
+          } else if (e.key === "ArrowRight") {
+            e.preventDefault();
+            next();
+          }
         }
-      }
-    : undefined;
-  const closeBtn = onClose ? <IconButton name="x" label={closeLabel} onClick={onClose} /> : null;
+      : undefined;
+  const stepBtn = (name: string, label: string, on: boolean, go: () => void, key: string) => (
+    <IconButton
+      key={key}
+      name={name}
+      label={label}
+      aria-disabled={on ? undefined : true}
+      data-step={key}
+      onClick={go}
+      style={on ? undefined : { opacity: 0.45, cursor: "default" }}
+    />
+  );
+  const cluster =
+    onClose || stepping ? (
+      <div
+        data-pane-cluster
+        style={{ display: "flex", alignItems: "center", gap: "var(--space-1)" }}
+      >
+        {stepping && stepBtn("chevron-left", previousLabel, canPrev, prev, "previous")}
+        {stepping && stepBtn("chevron-right", nextLabel, canNext, next, "next")}
+        {onClose && <IconButton name="x" label={closeLabel} onClick={onClose} />}
+      </div>
+    ) : null;
   useEffect(() => {
     // 607: bring the arrived-at item into view without moving focus or the page.
-    if (!cold || tier !== "expanded" || !listCol.current) return;
-    const el = listCol.current.querySelector("[data-arrived]");
-    if (!el) return;
-    const box = el.getBoundingClientRect();
-    const col = listCol.current.getBoundingClientRect();
-    listCol.current.scrollTop += box.top - col.top;
+    if (cold && tier === "expanded") bringIntoView(listCol.current, "[data-arrived]");
   }, [cold, tier]);
+  useEffect(() => {
+    // 1083: the list follows the open item as the member steps. List scroll only.
+    if (selectedKey != null && tier === "expanded")
+      bringIntoView(listCol.current, "[data-selected]");
+  }, [selectedKey, tier]);
   const paneBody = loading ? (
     <p
       style={{
@@ -164,7 +264,7 @@ export function Pane({
           >
             {cold ? backLabel : title}
           </span>
-          {closeBtn}
+          {cluster}
         </div>
         <div aria-live="polite" style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
           {paneBody}
@@ -172,39 +272,56 @@ export function Pane({
       </section>
     );
 
+  // 1064: one grid, one tree. The track SNAPS between its two states and only the pane section's
+  // opacity moves, over --dur-slow. Three builds that animated the track's width were read and
+  // rejected in correction 24; a part's motion should not depend on a measurement or a paint. Open:
+  // minmax(0,--pane-list-width) minmax(0,1fr) with --pane-gap. Closed: minmax(0,1fr) 0 with no gap,
+  // section inert and hidden. The compile writes `inert: ''`, React 18's idiom; React 19 takes a
+  // boolean and renders the same empty attribute from `true`.
   return (
     <div
+      data-pane-open={open ? "true" : "false"}
       style={{
         display: "grid",
-        gridTemplateColumns: "minmax(0,var(--pane-list-width)) minmax(0,1fr)",
-        gap: "var(--pane-gap)",
+        gridTemplateColumns: open
+          ? "minmax(0,var(--pane-list-width)) minmax(0,1fr)"
+          : "minmax(0,1fr) 0px",
+        gap: open ? "var(--pane-gap)" : 0,
         alignItems: "start",
         fontFamily: "var(--font-sans)",
         color: "var(--ink)",
         ...style,
       }}
     >
-      <div ref={listCol} style={{ minWidth: 0 }}>
+      <div data-pane-list ref={listCol} style={{ minWidth: 0 }}>
         {cold ? listFallback : list}
       </div>
       <section
         aria-label={title}
-        aria-live="polite"
+        aria-live={open ? "polite" : undefined}
+        aria-hidden={open ? undefined : true}
+        inert={open ? undefined : true}
         onKeyDown={onPaneKey}
         style={{
           position: "sticky",
           top: "var(--space-4)",
           zIndex: "var(--z-pane)" as unknown as number,
           minWidth: 0,
+          boxSizing: "border-box",
           background: "var(--surface)",
           border: "var(--border-thin) solid var(--line)",
           borderRadius: "var(--radius-l)",
           overflow: "hidden",
-          animation: "strand-pane-in var(--dur-slow) var(--ease)",
+          opacity: open ? 1 : 0,
+          visibility: open ? "visible" : "hidden",
+          transition:
+            "opacity var(--dur-slow) var(--ease), visibility 0s linear " +
+            (open ? "0s" : "var(--dur-slow)"),
+          animation: open ? "strand-pane-in var(--dur-slow) var(--ease)" : "none",
         }}
       >
         <style>{"@keyframes strand-pane-in{from{opacity:0}to{opacity:1}}"}</style>
-        {closeBtn && (
+        {open && cluster && (
           <div
             style={{
               position: "absolute",
@@ -213,10 +330,10 @@ export function Pane({
               zIndex: 1,
             }}
           >
-            {closeBtn}
+            {cluster}
           </div>
         )}
-        {paneBody}
+        {open && paneBody}
       </section>
     </div>
   );

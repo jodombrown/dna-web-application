@@ -6,6 +6,20 @@
 // Without `feed` the card renders exactly as Brief 1 shipped it (composer preview).
 // Production addition: readMoreHref renders "Read more" as a real link (prefetch, new tab) and
 // onReadMoreIntent fires after an 80ms hover hold (ruling 84); both default to the bundle's button.
+//
+// Reconciled at compile v1790212533284400 (handoff 32-A, rulings 862 and 844) with correction 23 §2
+// (1083) and correction 25 §1 (1076 to 1079, 1087, 1096, 1097, 1102); the dispositions are in
+// docs/strand-ports/v1790212533284400.md. `PostCard` now dispatches on `presentation` before any
+// hook runs: `feed` (the default) is the body above, renamed `FeedFace` and otherwise unchanged
+// except for `selected`; `discovery` is Convene's fixed-size face. `selected` (1083) draws a 2px
+// --ink ring 2px outside the identity frame on either face, with `data-selected` for Pane's
+// `selectedKey` follow and `aria-current="true"`; absent, nothing is drawn. The compile carries the
+// ring's `box-shadow` transition on every article, selected or not, and so does this port: at rest
+// there is no shadow for it to move. The app-only markers and behaviours the compile does not carry
+// (data-c, data-expanded, data-kicker, the footer's data-testids and aria-pressed, the handle line,
+// the clamp-gated body tap, Read more as a link, Show less) are kept under rulings 84, 105, 416 and
+// W54, and both faces read G42's --c-system rungs where the compile writes --line-strong and --ink-3.
+// No page passes `presentation` or `selected` in this port; binding them is 32-B's.
 import {
   Fragment,
   useRef,
@@ -14,11 +28,14 @@ import {
   type MouseEvent,
   type ReactNode,
 } from "react";
+import { useMode, type Mode } from "@/lib/tier";
 import { Avatar } from "./Avatar";
 import { CBadge } from "./CBadge";
 import { Icon } from "./Icon";
+import { Chip } from "./Chip";
 import { IconButton } from "./IconButton";
 import { MediaBlock, type MediaBlockProps } from "./MediaBlock";
+import { Menu, type MenuProps } from "./Menu";
 import type { CardC } from "./cmeta";
 
 export type PostCardField = {
@@ -50,7 +67,10 @@ export type PostCardProps = {
   title?: ReactNode;
   children?: ReactNode;
   fields?: PostCardField[] | undefined;
-  media?: MediaBlockProps | undefined;
+  /** The feed face reads a MediaBlock props object; the discovery face reads a source string or
+   *  `{ src, alt }`, which is the same object without a kind. The type is one for both faces, so a
+   *  string on the feed face type-checks and renders no media, as a kind-less object always has. */
+  media?: MediaBlockProps | string | undefined;
   link?: PostCardLink | null | undefined;
   actions?: ReactNode;
   saved?: boolean | undefined;
@@ -73,13 +93,58 @@ export type PostCardProps = {
   onCollapse?: (() => void) | undefined;
   reacted?: boolean | undefined;
   onReact?: (() => void) | undefined;
+  /** 1083 (correction 23). The card a pane is open on: a 2px --ink ring 2px outside the identity
+   *  frame on a --bg gap, `data-selected` and `aria-current="true"`. Absent: unchanged. */
+  selected?: boolean | undefined;
+  /** Correction 25 (1102). `feed` (default) renders exactly as before; `discovery` is the
+   *  fixed-size Convene face, which reads only the props below and `c`, `title`, `media`,
+   *  `selected` and `style`. */
+  presentation?: "feed" | "discovery" | undefined;
+  /** discovery: the member's zone first, the event's local second (1099), composed by the caller. */
+  when?: string | undefined;
+  /** discovery: "In person · Accra", "Online", "Hybrid · Nairobi". */
+  where?: string | undefined;
+  /** discovery: the presenter's name, beside a 24 Avatar. */
+  presenter?: string | undefined;
+  presenterSrc?: string | undefined;
+  /** discovery: the topic, a Chip in the C; absent when null. */
+  topic?: string | undefined;
+  /** discovery: DIA's reason in words (1096). Absent, the row holds its height empty. Never a number. */
+  reason?: string | undefined;
+  /** discovery: the whole face opens the event; a press on a control does not. */
+  onOpen?: (() => void) | undefined;
+  /** discovery: once, on pointer enter or focus. */
+  onPreload?: (() => void) | undefined;
+  /** discovery: the presenter's name opens their profile. */
+  onPresenter?: (() => void) | undefined;
+  /** discovery: the topic chip narrows. */
+  onTopic?: (() => void) | undefined;
+  /** discovery: the ellipsis Menu's items; absent when they do not apply, never disabled (1102).
+   *  No items, no control. */
+  menu?: MenuProps["items"] | undefined;
+  /** discovery: the ellipsis control's accessible name. Default "More". */
+  menuLabel?: string;
+  /** discovery: false renders the Menu in place (scaled frames). Default true. */
+  menuPortal?: boolean;
+  /** discovery: overrides the detected input mode (44 control and 44 presenter row on touch; 36
+   *  and 32 on pointer; hover only on pointer). */
+  input?: Mode | undefined;
   style?: CSSProperties | undefined;
 };
 
 /** The one card chassis (rule 1). Identity marker is a 1.5px full-frame border in the C color (rule 2).
  *  c="system" is the fallback category: framed in --line-strong, no glyph badge.
- *  fields: structured rows of the created object; a row with mine=true was written by the member (DIA never rewrites it). */
-export function PostCard({
+ *  fields: structured rows of the created object; a row with mine=true was written by the member (DIA never rewrites it).
+ *  Correction 25: dispatches to one of two faces before any hook runs, so hook order never
+ *  depends on `presentation`. */
+export function PostCard(props: PostCardProps) {
+  if (props.presentation === "discovery") return <DiscoveryFace {...props} />;
+  return <FeedFace {...props} />;
+}
+
+const SELECTED_RING = "0 0 0 2px var(--bg), 0 0 0 4px var(--ink)";
+
+function FeedFace({
   c = "connect",
   author,
   authorHandle,
@@ -111,6 +176,7 @@ export function PostCard({
   onCollapse,
   reacted,
   onReact,
+  selected,
   style,
 }: PostCardProps) {
   const [, setHover] = useState(false);
@@ -151,12 +217,16 @@ export function PostCard({
       aria-label={preview ? "Preview of your post" : undefined}
       data-c={c}
       data-expanded={onReadMore ? (expanded ? "1" : "0") : undefined}
+      data-selected={selected ? "" : undefined}
+      aria-current={selected ? "true" : undefined}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       style={{
         background: "var(--surface)",
         borderRadius: 14,
         border: "1.5px solid " + frame,
+        boxShadow: selected ? SELECTED_RING : undefined,
+        transition: "box-shadow var(--dur-default) var(--ease)",
         padding: 16,
         display: "flex",
         flexDirection: "column",
@@ -395,7 +465,9 @@ export function PostCard({
           </dl>
         )}
       </div>
-      {media && media.kind && media.kind !== "none" && <MediaBlock {...media} />}
+      {media && typeof media === "object" && media.kind && media.kind !== "none" && (
+        <MediaBlock {...media} />
+      )}
       {link && link.url && (
         <MediaBlock
           kind="link"
@@ -484,6 +556,298 @@ export function PostCard({
           <IconButton name="share" label="Share" onClick={onShare} />
         </footer>
       )}
+    </article>
+  );
+}
+
+/** The discovery face (correction 25 §1: 1076 to 1079, 1087, 1096, 1097; Revision 6 ratified).
+ *  Fixed size: every region holds its height whatever the record carries, so a lane of cards is one
+ *  height and nothing jumps as data arrives. In order and nothing else: media at 16:9, the flyer
+ *  fitted by object-fit cover, the C glyph on --bg-sunken when there is none (never a collapsed
+ *  frame); the one control, an ellipsis IconButton on the media's top right on a --surface ground
+ *  with a 1px --line edge, 44 touch, 36 pointer, opening Menu with the caller's items (items absent
+ *  when they do not apply, never disabled); title in the display face, clamped to two lines and
+ *  holding two lines' height (1087); when, one line; where, one line; presenter (24 Avatar and name,
+ *  onPresenter opens the profile) and topic (a Chip in the C, onTopic narrows) on one row; last,
+ *  the reason row (1096): DIA's words, two lines held, empty and aria-hidden when there is no
+ *  reason. No going row (1096), no Report (1097), no price, badge, count or number. The whole face
+ *  opens the event (onOpen); a press on a control does not. onPreload fires once on pointer enter
+ *  and on focus. Pointer hover underlines the title in --line-strong, drawn with longhands only so a
+ *  re-render never mixes them with the shorthand (25 §7); the frame stays the C colour (rule 2).
+ *  `input` overrides the detected input mode for proofs. The face never shrinks in a flex lane
+ *  (flex: none, 25 §7). */
+const DISC_TITLE_H = "calc(2 * var(--display-s) * var(--display-s-lh))";
+const DISC_REASON_H = "calc(2 * var(--text-xs) * var(--text-xs-lh))";
+const DISC_LINE: CSSProperties = {
+  fontSize: "var(--text-s)",
+  lineHeight: "var(--text-s-lh)",
+  color: "var(--ink-2)",
+  whiteSpace: "nowrap",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  minHeight: "calc(var(--text-s) * var(--text-s-lh))",
+};
+
+function DiscoveryFace({
+  c = "convene",
+  title,
+  when,
+  where,
+  presenter,
+  presenterSrc,
+  topic,
+  reason,
+  media,
+  onOpen,
+  onPreload,
+  onPresenter,
+  onTopic,
+  menu = [],
+  menuLabel = "More",
+  menuPortal = true,
+  selected,
+  input,
+  style,
+}: PostCardProps) {
+  const detected = useMode();
+  const mode = input || detected;
+  const touch = mode === "touch";
+  const [hot, setHot] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const preloaded = useRef(false);
+  const anchor = useRef<HTMLSpanElement>(null);
+  const preload = () => {
+    if (preloaded.current) return;
+    preloaded.current = true;
+    if (onPreload) onPreload();
+  };
+  // G42, as on the feed face: the system frame reads its own token, which holds --line-strong.
+  const frame = c === "system" ? "var(--c-system)" : "var(--c-" + c + ")";
+  const img = media ? (typeof media === "string" ? media : media.src) : undefined;
+  const alt = media && typeof media === "object" ? media.alt || "" : "";
+  const hasMenu = (menu || []).some((it) => it && !("rule" in it && it.rule));
+  const ctl = touch ? 44 : 36;
+  const open = (e: MouseEvent<HTMLElement>) => {
+    const t = e.target as Element | null;
+    if (t && t.closest && t.closest("[data-card-control]")) return;
+    if (onOpen) onOpen();
+  };
+  const rowH = touch ? "var(--target-primary)" : 32;
+  // The compile appends ": " + title; a title here may be a node, so only a string is appended.
+  const label = typeof title === "string" && title ? menuLabel + ": " + title : menuLabel;
+  return (
+    <article
+      data-presentation="discovery"
+      data-input={mode}
+      data-selected={selected ? "" : undefined}
+      aria-current={selected ? "true" : undefined}
+      onClick={open}
+      onMouseEnter={() => {
+        if (touch) return;
+        setHot(true);
+        preload();
+      }}
+      onMouseLeave={() => setHot(false)}
+      onFocus={preload}
+      style={{
+        position: "relative",
+        background: "var(--surface)",
+        borderRadius: "var(--radius-l)",
+        border: "var(--border-card) solid " + frame,
+        boxShadow: selected ? SELECTED_RING : undefined,
+        transition: "box-shadow var(--dur-default) var(--ease)",
+        padding: "var(--space-4)",
+        display: "flex",
+        flexDirection: "column",
+        gap: "var(--space-3)",
+        fontFamily: "var(--font-sans)",
+        color: "var(--ink)",
+        boxSizing: "border-box",
+        width: "var(--lane-card-width)",
+        flex: "none",
+        cursor: onOpen ? "pointer" : "default",
+        ...style,
+      }}
+    >
+      <div
+        data-media={img ? "image" : "none"}
+        style={{
+          position: "relative",
+          aspectRatio: "16 / 9",
+          borderRadius: "var(--radius-m)",
+          overflow: "hidden",
+          background: "var(--bg-sunken)",
+          border: "var(--border-thin) solid var(--line)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          flex: "none",
+        }}
+      >
+        {img ? (
+          <img
+            src={img}
+            alt={alt}
+            style={{
+              position: "absolute",
+              inset: 0,
+              width: "100%",
+              height: "100%",
+              objectFit: "cover",
+              display: "block",
+            }}
+          />
+        ) : (
+          <CBadge c={c === "system" ? "brand" : c} size={48} />
+        )}
+      </div>
+      {hasMenu && (
+        <span
+          ref={anchor}
+          data-card-control=""
+          style={{
+            position: "absolute",
+            top: "calc(var(--space-4) + var(--space-2))",
+            right: "calc(var(--space-4) + var(--space-2))",
+            display: "inline-flex",
+            zIndex: 1,
+          }}
+        >
+          <IconButton
+            name="ellipsis"
+            label={menuLabel}
+            size={ctl}
+            aria-haspopup="menu"
+            aria-expanded={menuOpen}
+            onClick={(e) => {
+              e.stopPropagation();
+              setMenuOpen((o) => !o);
+            }}
+            style={{ background: "var(--surface)", border: "var(--border-thin) solid var(--line)" }}
+          />
+          <Menu
+            open={menuOpen}
+            onClose={() => setMenuOpen(false)}
+            anchorRef={anchor}
+            items={menu}
+            label={label}
+            input={mode}
+            portal={menuPortal}
+          />
+        </span>
+      )}
+      <h3
+        style={{
+          margin: 0,
+          minHeight: DISC_TITLE_H,
+          fontFamily: "var(--font-display)",
+          fontWeight: "var(--weight-regular)" as unknown as number,
+          fontSize: "var(--display-s)",
+          lineHeight: "var(--display-s-lh)",
+        }}
+      >
+        <button
+          type="button"
+          data-card-open=""
+          onClick={(e) => {
+            e.stopPropagation();
+            if (onOpen) onOpen();
+          }}
+          style={{
+            all: "unset",
+            cursor: "pointer",
+            display: "-webkit-box",
+            WebkitLineClamp: 2,
+            WebkitBoxOrient: "vertical",
+            overflow: "hidden",
+            textWrap: "pretty",
+            overflowWrap: "anywhere",
+            textDecorationLine: hot ? "underline" : "none",
+            textDecorationColor: "var(--line-strong)",
+            textDecorationThickness: 1,
+            textUnderlineOffset: 3,
+          }}
+        >
+          {title}
+        </button>
+      </h3>
+      <div data-row="when" style={DISC_LINE}>
+        {when}
+      </div>
+      <div data-row="where" style={DISC_LINE}>
+        {where}
+      </div>
+      <div
+        data-row="presenter"
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "var(--space-2)",
+          minHeight: rowH,
+          minWidth: 0,
+        }}
+      >
+        {presenter && (
+          <button
+            type="button"
+            data-card-control=""
+            onClick={(e) => {
+              e.stopPropagation();
+              if (onPresenter) onPresenter();
+            }}
+            style={{
+              all: "unset",
+              cursor: "pointer",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "var(--space-2)",
+              minHeight: rowH,
+              minWidth: 0,
+              flex: "0 1 auto",
+              fontSize: "var(--text-s)",
+              fontWeight: "var(--weight-medium)" as unknown as number,
+              color: "var(--ink)",
+            }}
+          >
+            <Avatar name={presenter} src={presenterSrc} size={24} />
+            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {presenter}
+            </span>
+          </button>
+        )}
+        {topic && (
+          <span
+            data-card-control=""
+            style={{ flex: "none", display: "inline-flex", alignItems: "center", minHeight: rowH }}
+          >
+            <Chip
+              c={c === "system" ? undefined : c}
+              onClick={() => {
+                if (onTopic) onTopic();
+              }}
+            >
+              {topic}
+            </Chip>
+          </span>
+        )}
+      </div>
+      <div
+        data-row="reason"
+        aria-hidden={reason ? undefined : "true"}
+        style={{
+          minHeight: DISC_REASON_H,
+          fontSize: "var(--text-xs)",
+          lineHeight: "var(--text-xs-lh)",
+          color: "var(--ink-3)",
+          display: "-webkit-box",
+          WebkitLineClamp: 2,
+          WebkitBoxOrient: "vertical",
+          overflow: "hidden",
+          textWrap: "pretty",
+        }}
+      >
+        {reason || ""}
+      </div>
     </article>
   );
 }

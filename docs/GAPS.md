@@ -1217,6 +1217,14 @@ each one would also mean a push per sighting, each push starting the run that pr
 from here a G5 crash is recorded only when it changes something: a new shape, a new count, a job that
 ruling 832 cannot stand down, or ruling 849's teardown case, which is still unobserved and still owed.
 
+### Update, 24 September 2026: a sighting outside the Profile surface
+
+`pages.yml` run 329 (job `107762099627`, head `de65851`, handoff 32-A) lost a web process in
+`webkit-390x844-light-guest`, the public event page's guest flow, waiting for GuestSheet's "Check your
+email" dialog. The extracted frames carry this entry's cycle, `+0x27b76f4`, `+0x27b555f` and
+`+0x27b23f1`, dispatched from `g_main_context_dispatch`. The harness classified it behind G5 and
+counted the arm UNPROVEN (228). The envelope widens again: WebKit, and not only the Profile surface.
+
 ## G6. Withdraw separated the two states ruling 214 joined — closed (ruling 229)
 
 **Opened and closed 9 September 2026, both inside Fix PR 01. Ruling 227 stated the requirement,
@@ -2068,6 +2076,17 @@ every caller keeps drawing its own, or `title` arrives too and the five existing
 duplicates. `src/components/strand/FacetRail.tsx` passes `label` and draws its own heading in the
 meantime, which is the repository's convention and not the compile's. No second sheet was added and
 `Sheet` was not rewritten (handoff 29-A item 3's instruction).
+
+**Amended 24 September 2026 by handoff 32-A.** Correction 25's FacetRail keeps its compact form
+"unchanged" because Strand's Sheet pins a title above a scrolling body (`div[data-sheet-body]`, flex 1,
+overflow-y auto) and draws a Close control. This repository's Sheet has neither, so FacetRail draws its
+own heading (480) and, from this PR, its own scrolling body under a heading row that does not scroll,
+as this repository's other Sheet callers with a scroller do. At `92fbdc3` the Browse sheet had none,
+and with the Home axis present it sat past the sheet's bottom at 360 (194px) and 390 (71px) with
+nothing to scroll to it, the Sheet's wheel handler finding no scroller; correction 24 §2's taller chips
+would have pushed it to 235 and 104, and 34 at 430. The body makes it reachable at all three, measured,
+and the mount arms read the last axis in reach at 390. The pinned header's own geometry and the Close
+control stay this migration's.
 
 ## G31. A chromium sighting on the public profile at 1280 by 800, seen once and not reproduced
 
@@ -3349,6 +3368,14 @@ none of which is in question. The `outline: "none"` suppressions on fields, list
 Focus order, roving tabindex and the dialog focus traps, which the block-focus and keyboard arms
 already read.
 
+**Amended 24 September 2026 by handoff 32-A.** The Strand ports add four `all: "unset"` sites, so
+the check reads 52 where it read 48 at `92fbdc3`: FacetRail's checklist row, Menu's item, and PostCard's
+discovery-face title and presenter buttons. Each is the compile's own inline style and is ported as
+drawn; none of them is bound by a page yet. The cleared field suppressions above now sit at
+`Input.tsx:131` and `Select.tsx:71`. The port adds one `outline: "none"`, `Menu.tsx:321` on Menu's
+item, and it is not cleared: the item draws focus as its hot ground rather than a border, which is
+this gap's class (G87 item 13).
+
 ## G50. Sixteen files are not prettier-clean, and CI enforces prettier on every file type except theirs
 
 **Severity: low, tidiness with one decision behind it. Not a merge blocker. Opened 19 September 2026
@@ -3738,6 +3765,12 @@ and `SPEC.md` line 15 against compile `v1789885868097915`. Neither is code this 
 extraction and SPEC.md are the visual contract (ruling 62) and Strand does not open the app project
 (663).
 
+**Amended 24 September 2026 by handoff 32-A.** The severity line's "every frame the code produces is
+the one the compile governs" does not hold for the descriptor's size and spacing, the track's and the
+seat's radii, the track hairline or the chip's shadow; G82 carries the descriptor, which is the one of
+those 844 reaches.
+Since G82 closed, the descriptor's size is the compile's 13; its 12 below the track stays, under 405.
+
 ## G54. `width="content"` is reachable and this bar's active seat is bolder than its inactive one, so that packing would re-lay the row on every selection
 
 **Severity: low, because no caller passes it — `FeedSurface`, `ConnectSurface` and `AppHeader` all
@@ -3770,6 +3803,10 @@ own widest measured shape, so the fit verdict would be right even where the rend
 is what Strand did and what would make `content` safe here as it is there, or `width="content"` is
 refused by the type until it does. Both are one line; neither is this PR's to choose, because the
 15/700 active label is the visual contract's (ruling 62) and this handoff's scope is the re-sync.
+
+**Amended 24 September 2026 by handoff 32-A.** Correction 25's `trailing` seat makes a `content`
+tablist `flex: 0 1 auto` with the seat at `margin-left: auto`, so the reflow this entry describes would
+also slide the seat. No caller passes `trailing` or `content`.
 
 ## G55. Nothing in the harness proves that a file under `public/strand/icons/` serves from the deployment
 
@@ -4274,6 +4311,10 @@ in-person and hybrid events whose physical delivery city matches the chosen home
 nothing wider. Owed: a Design correction drawing the rungs on FacetRail's home axis, and the
 projection's rung predicate against `member_homes.region` and the event's place, in a new migration.
 
+**Amended 24 September 2026 by handoff 32-A.** Strand drew the rungs (correction 24 §4, 1060,
+ratified 1085) and 32-A ports them as FacetRail's `ladders`. What stays owed is the projection's rung
+predicate and Discovery passing the ladders, which is 32-B's.
+
 ## G72. FacetRail has no control on its own Browse line, so ruling 944's collapse control is not rendered
 
 **Severity: low. Opened 23 September 2026 during handoff 31-B item 4, filed under ruling 597 and
@@ -4289,6 +4330,9 @@ shell's `lanes` mode already carries the collapsed width (`rail: "collapsed"`, t
 the pane uses under 688, so the control lands as one prop once Strand gives the heading a slot. The
 extraction's own note also stands: the icon set had no collapse glyph at the time; `panel-left-close`
 is in `public/strand/icons/` now. Owed: a Strand correction adding an action to FacetRail's heading.
+
+**Amended 24 September 2026 by handoff 32-A.** Correction 24 §1 gave the heading its slot and 32-A
+ports it as `headingAction`. Open until Discovery passes 944's control, which is 32-B's.
 
 ## G73. DiaLine's text is a string, so the first section's sentence cannot link the host's name
 
@@ -4330,6 +4374,13 @@ fits. The prototype drew stand-in family labels (Revision 1, conflict 3), which 
 never showed it. Owed: a Strand correction letting an option wrap, or a Design ruling on the rail's
 width.
 
+**Closed 24 September 2026 by handoff 32-A.** Correction 24 §2 lets an option wrap, and the port
+carries it with no prop because 844 gives the compile the chip's padding and no app ruling kept
+`nowrap`. The mount arms read it on `/convene` at 390, 820 and 1280: no chip reaches past the content
+box it wraps in (the nav, and at 390 the Sheet's scrolling body), whose `scrollWidth` equals its
+`clientWidth`. A one-line chip is now 39.75 rather
+than 36 (G87 item 1).
+
 ## G76. FacetRail has no per-axis single select, so When and Home toggle rather than choose
 
 **Severity: low. Opened 23 September 2026 during handoff 31-B item 9, filed under ruling 597 and
@@ -4340,6 +4391,10 @@ is one selection across the whole rail, so the two axes render as the rail's tog
 (`aria-pressed`) and Discovery keeps only the newest choice in each when it writes the query. The
 behaviour is single-select; the semantics a screen reader hears are a toggle group rather than a
 radio group. Owed: a Strand correction for a per-axis `select="single"`.
+
+**Amended 24 September 2026 by handoff 32-A.** Correction 24 §3's per-axis `select` is ported;
+without it every axis stays a toggle group, so Discovery is unchanged. Open until Discovery declares
+When and Home single, which is 32-B's.
 
 ## G77. Below expanded the event page's Back row names Feed when the member came from Discovery
 
@@ -4393,6 +4448,10 @@ column and each lane through the router's element restoration (1065). Owed: Stra
 under 1064 (Design brief 31-E), which gives the list one place in the tree whether the pane is open or
 not.
 
+**Amended 24 September 2026 by handoff 32-A.** Correction 24 §6's `open` is ported: one grid whose
+list column is the same element open or closed. Open until DiscoverySurface renders one Pane with
+`open` rather than two trees, which is 32-B's.
+
 ## G80. place-resolve's ordering arm reads Mapbox's live answer, so an empty side fails it
 
 **Severity: low. Opened 23 September 2026 during handoff 31-D, on run 319 (35850287842), filed under
@@ -4419,3 +4478,289 @@ the event page and marks the row read` records `db.reads.includes("n-role")` as 
 dark and passed at 390 light and both 1280 arms of the same run, and in every arm of the run before
 it. Neither file is touched by 31-D. Owed: the arm waits for the write (as the Feed's own mark-read
 arm does for its dot) before it reads, or the panel marks read before it navigates.
+
+## G82. The LensBar's scope line: the app's two visual contracts disagree on its size, and neither agrees with the port on both numbers
+
+**Severity: low. Opened 24 September 2026 during handoff 32-A's reconciliation (862), filed under
+ruling 597 as the one port-against-compile disagreement the port record could not decide under 844.
+The number is assigned by this entry (ruling 638).**
+
+The compile (`v1790212533284400`, byte-identical here to correction 21's) draws the descriptor at 13
+italic under the wrapper's 6px gap. `src/components/strand/LensBar.tsx` draws it at 15 italic with
+12 of top padding inside the collapsing box, which is ruling 405's mechanism and is kept. 844 gives
+the compile a size and a padding unless an app ruling keeps the port, and the app's two ruling-62
+contracts split: `docs/shell/LENS_BAR_SPEC.md` line 42 says "sans italic 15 ... 12 below it", and
+`docs/shell/SPEC.md` line 79 says both "Descriptor sans italic 12 below the track" and "Scope line: 13
+italic". The size therefore has the compile and SPEC.md for 13 against LENS_BAR_SPEC alone for 15;
+the spacing has both specs for 12 against the compile's 6. 32-A keeps the port (15 and 12) because
+correction 25 does not carry the descriptor and porting it would change Feed's, Connect's and
+Discovery's descriptors with no prop passed. Recommendation, for Chat to rule: 13 (the compile and
+SPEC.md), kept 12 below (both specs, and 405's collapse needs the spacing inside the box). The track
+and seat radii (the port's `--radius-m` and `--radius-badge` against the compile's 999) are the same
+kind of line with no numbered ruling behind them, but a radius is not a size, a padding, a track or a
+floor, so 844 does not reach them; they are listed in the port record. G53's "every frame the code
+produces is the one the compile governs" is not true of these lines.
+
+**Closed 24 September 2026 by handoff 32-A, under 844 with no new ruling.** Chat decided it as
+recommended: the scope line takes the compile's 13 italic, and the spacing stays 12 below the track
+inside ruling 405's collapsing box, which both app contracts give. `LensBar.tsx` draws 13, and
+`docs/shell/LENS_BAR_SPEC.md` line 42 now says 13, citing this entry.
+
+## G83. Strand's Input puts a textarea on a line box: every multiline field grows 7.5px under the wrappers correction 25 draws
+
+**Severity: low, and a Strand defect rather than the app's. Opened 24 September 2026 during handoff
+32-A under Chat's ruling on 25 §5, filed under ruling 597. The number is assigned by this entry (ruling
+638).**
+
+Correction 25 §5 nests every Input's field in `div{position:relative; display:flex; column}` then
+`div{position:relative}`, on every call. The inner wrapper is a block container, so a `textarea` in it
+is inline-level and sits on the line's baseline, and the strut's descent opens a gap under it.
+Measured in Chromium on this app's callers at 390 and 1280, 48 Strand Input fields across sign-in,
+reset, welcome, where, the guest sheet, ConveneForm, the composer's link, IntroSheet and the profile
+editor: every single-line field held its box, and every textarea's line and everything below it moved
+7.5px (IntroSheet's line 548.7 to 556.2 at 390). Neither the compile's `tokens/base.css` nor its
+`styles.css` nor this app's preflight gives a textarea block display. Under Chat's ruling the port
+keeps 92fbdc3's structure for every call that is neither the combobox (`suggestions` on a
+single-line field) nor passes `icon`, marked divergent in `docs/strand-ports/v1790212533284400.md`;
+after that change the same 48 fields measured identical to 92fbdc3. Owed by Strand: `display: block` on the field, or `display: flex` on the inner
+wrapper; then the port drops its gate. Also for the same correction brief: with `multiline` and
+`icon` together the glyph renders but the padding stays `10px 14px`, so the glyph sits on the text.
+
+## G84. The app carries none of the compile's reduced-motion block, so every Strand motion runs for a member who asked for none
+
+**Severity: medium for accessibility (ruling 608). Opened 24 September 2026 during handoff 32-A,
+filed under ruling 597. The number is assigned by this entry (ruling 638).**
+
+The compile's `tokens/base.css` lines 9 to 12 zero the `--dur-*` tokens and set
+`animation-duration` and `transition-duration` to 0 with `!important` on every element under
+`prefers-reduced-motion`. `src/styles/strand.css` has no such block; the only reduced-motion rule is
+the Sheet backdrop's, and LensBar reads `matchMedia` inline without subscribing. So under reduced
+motion the Pane's entrance still runs (its own prompt promises it does not, 608) and so do, from this
+PR, the Pane section's fade, PostCard's selected-ring transition, Menu's item background and Select's
+border. 29-A's token comparison read `:root` and dark only, which is why nothing caught it. Not ported
+here: handoff 32-A item 3 moves no token but `--z-menu`. Owed: a ruling on carrying base.css's block
+into strand.css.
+
+## G85. Pane scrolls its list column, and in this shell the list column is not a scroller
+
+**Severity: low today, medium once 32-B binds `selectedKey`. Opened 24 September 2026 during handoff
+32-A, filed under ruling 597. The number is assigned by this entry (ruling 638).**
+
+`bringIntoView` in `src/components/strand/Pane.tsx` adds to the list column's own `scrollTop`, which is
+the compile's 607 routine and now 1083's `selectedKey` follow as well. Under ruling 104 the shell owns
+one scroller per tier and the column does not scroll (its only style is `min-width: 0`); the centre
+`[data-scroller="feed"]` does. So 607's cold-arrival scroll to `[data-arrived]` has been a no-op since
+31-B bound the Pane, and 1083's list follow will be one too. Owed before 32-B relies on either: Pane
+scrolls the nearest scrolling ancestor, or Strand gives the list column its own scroller, which is a
+Design question under 104.
+
+## G86. A Sheet inside the Pane closes the Pane with it on Escape, because the app's modal Sheet never prevents the keydown
+
+**Severity: low. Opened 24 September 2026 during handoff 32-A, filed under ruling 597. The number is
+assigned by this entry (ruling 638).**
+
+Ruling 1084 amends 719 so that a dialog inside the pane that consumes Escape closes itself and not the
+pane, and the Pane honours it: it returns on `defaultPrevented` (this port already did, as correction
+21's bundle did). But this repository's `Sheet` calls `preventDefault` on an Escape keydown only when
+`contained`; a modal Sheet lets the native dialog consume Escape through its `cancel` event and the
+keydown still bubbles through the React tree to the Pane's section, which closes. EventSurface opens
+RsvpSheet inside the Pane at expanded, so Escape there closes both, at 92fbdc3 and after this PR alike.
+The contained path fails the other way: the Sheet handles Escape there in a window listener in the
+capture phase, which closes it before any child's handler runs and ignores `defaultPrevented`. So
+neither a Menu (G88) nor correction 25's combobox, whose Escape "closes the list ... so a Pane or Sheet
+guard does not also close", can keep the key inside FacetRail's compact Sheet once a page binds them.
+Owed: the Sheet prevents the Escape keydown it consumes on the modal path and yields to a prevented one
+on the contained path, which is the Sheet's change and not the Pane's.
+
+## G87. Correction 25's compile, read against its own extractions and against this app: what Strand's next correction brief should carry
+
+**Severity: low. Items 1, 2, 11 and the second half of 8 are reached at this PR's head, all by
+Discovery's FacetRail on `/convene`: the 39.75 chip, the 1px pin, a set chip's 1.5px border, and the
+heritage chip on two lines in the 240 medium rail. The rest, and item 8's heading action, are
+reached by no caller. Opened 24 September 2026 during handoff 32-A's reconciliation (862),
+filed under ruling 597. The number is assigned by this entry (ruling 638).**
+
+1. Extraction 24 §2 says `minHeight: 36` still holds a one-line chip. It does not: `var(--space-2)`
+   padding and `var(--text-s-lh)` make a one-line chip 39.75 (measured). The bundle governs and is
+   ported.
+2. Extraction 25 §3 says the heading pin's net geometry is unchanged at rest. Its transparent 1px
+   bottom border is not cancelled by the margins, so the axes sit 1px lower (68.5 to 69.5). Ported.
+3. Extraction 25 §3 says a ladders axis renders as a radiogroup. The code makes it a radiogroup only
+   when the axis also declares `select: "single"`.
+4. Extraction 23 §1 and its doctrine flag 3 say Escape did not honour `defaultPrevented` before. It
+   did, in correction 21's bundle (line 2257) and in this port.
+5. Pane's closed state leaves the section's two 1px borders past the 0 track (a 1200 grid scrolls to
+   1202), and the close shows no fade, because the body and the cluster unmount in the same commit that
+   snaps the track; only that sliver fades.
+6. Pane's arrow keys carry no modifier or repeat guard: Alt+ArrowLeft, which is Back in Chrome and
+   Firefox on Windows and Linux, is prevented and becomes a step, and a held arrow steps once per repeat.
+7. Input's combobox names its listbox from `label`; FacetRail's combobox display passes
+   `aria-labelledby` to the field and no label, so its listbox has no accessible name. And LensBar's
+   trailing seat, when at least as wide as the wrapper, reads as no measurement and after twenty retries
+   keeps its previous verdict instead of going icon-first.
+8. Extraction 24 §1 says the label stays where it was with a heading action. The row is 44 with an 8px
+   pull-back, so the axes move 8.5; and 24 §2's "three lines at 240" is two with this app's Alegreya
+   Sans, and none at the 260 expanded rail (1082's 280 is not in this tree).
+9. FacetRail's `scrolled` state survives the swap between `collapsed` and `facets` on one instance, so
+   a rail that was scrolled comes back at the top still carrying the hairline and `data-scrolled`.
+10. On a single axis whose two ladders share one "Anywhere" id, choosing it checks two radios and makes
+    two tab stops in one radiogroup; a parked first option leaves a single axis with no tab stop; a
+    chosen combobox id that is not among the options renders as its raw id.
+11. Unmeasured, for WebKit: a set chip has a 1.5px border and an unset one 1px. Chromium floors 1.5 to 1
+    and both chips are 39.75; WebKit at DPR 2 keeps 1.5, so setting a chip would move every row under it
+    1px, which the old `min-height: 36` absorbed.
+12. Menu prevents only ArrowUp, ArrowDown, Home, End and Escape. Inside a stepping Pane, ArrowLeft and
+    ArrowRight bubble through the portal to the Pane's keydown, which steps to another item while the
+    menu is still open.
+13. Menu's item draws focus only as its hot ground, with `all: unset` and `outline: none`; in dark
+    theme `--bg-sunken` on `--surface` is about 1.03:1 and the inset `--line` about 1.3:1, so keyboard
+    focus on an item is close to invisible (G49's class).
+14. A question rather than a defect: Menu's items are 36 on pointer. Ruling 498 is a standalone-target
+    rule (44) against an in-row one (24), not a touch and pointer split, and this compile's own combobox
+    options hold 44 in every mode. 25 §2 accepted 36; Chat may want to confirm it against 498.
+15. Input's combobox: the no-match line alone sets no `box-sizing`, so it is 60 tall in Strand's own
+    stylesheet and 44 under this app's reset; the active option survives a blur, so a reopened list
+    can choose an option the member never moved to; the active option is never scrolled into view in
+    the 264 list; Enter chooses under a modifier and on an IME commit; `aria-controls` names a listbox
+    that exists only while expanded; and the ArrowDown that opens the list skips the caller's own
+    `onKeyDown`. Its `.d.ts` also leaves out `id`, the handlers and `aria-labelledby`, which the
+    compiled part reads.
+16. A portal Menu that mounts with `open` already true, as a child of the element its `anchorRef`
+    names, is not placed until something scrolls (the listener is a capture listener on the window,
+    so any scroller counts) or the window resizes, and then it is placed and its first item takes
+    focus. React attaches a parent's ref after its children's layout effects run, so the first
+    `place()` finds no anchor and returns, `pos` stays null and the menu stays `visibility: hidden`.
+    That holds in the compile's Menu on any device, and in the port whenever its mode does not change
+    after mount: a fine pointer with no `input`, or any device when `input` is passed. On a coarse
+    pointer with no `input` the port differs: its placing effect runs again when `useMode()` answers
+    `touch`, by which time the ref is attached, so it is placed and focused where the compile's stays
+    hidden. `portal={false}` is not affected: CSS
+    places it and its first item is focused on mount. Menu's header in the compile documents no such
+    constraint. Nothing opens a Menu on mount at this head.
+
+## G88. A Menu opened from inside a modal Sheet renders under the Sheet's top layer and cannot be used
+
+**Severity: medium once a caller does it; no caller does at this PR's head. Opened 24 September 2026
+during handoff 32-A, filed under ruling 597. The number is assigned by this entry (ruling 638).**
+
+Correction 25 §2 portals Menu into `document.body` at `--z-menu` 62, "so a menu clears the sheet it
+opens from" (1103). In this repository the Sheet is a native modal `<dialog>` (ruling 499), which sits
+in the top layer above every z-index and makes the rest of the document inert. A portal Menu opened from
+a control inside a non-contained Sheet therefore renders beneath it and takes no input. Owed before any
+Sheet hosts a Menu: the Menu renders inside the dialog there (`portal={false}` or a portal target inside
+the dialog), or a ruling on the Sheet's modality. The compile's own Sheet opens with `showModal()` when
+it is not contained too, so this is 1103's claim failing in Strand as well, not only here. And a
+contained Sheet is no way out for Escape: this Sheet handles Escape in a window capture listener that
+runs before Menu's own handler and ignores `defaultPrevented`, so one Escape closes the menu and the
+sheet together.
+
+## G89. Profile's Visitor overflow is a second menu beside Strand's Menu
+
+**Severity: low. Opened 24 September 2026 during handoff 32-A, filed under ruling 597. The number is
+assigned by this entry (ruling 638).**
+
+`src/components/dna/ProfileBlockControl.tsx` draws its own menu for the block control (Brief 4A,
+ruling 216), with `role="menuitem"` items read by `tests/block.cjs` and `tests/profile.cjs`. With Menu
+ported there are now two menus in the tree. Owed: moving the overflow onto Menu in a brief that names
+it, carrying the `data-testid`s those arms read; at pointer its item height would go from 44 to Menu's 36.
+The file's own header names ruling 221 as giving Strand this Menu and says that when Menu ships its panel
+is what gets swapped for it, and that Menu "has not landed". Menu lands in this PR, so that sentence is
+now stale; handoff 32-A item 6 keeps `src/components/dna` untouched, so the swap and the comment are both
+for the brief that binds Menu.
+
+## G90. A both-engine `matrix.yml` dispatch no longer fits its 60-minute job
+
+**Severity: low; the PR path is unaffected. Opened 24 September 2026 during handoff 32-A, filed under
+ruling 597. The number is assigned by this entry (ruling 638).**
+
+`matrix.yml`'s `matrix` job has `timeout-minutes: 60` and, with the `engine` input empty, runs both
+engines in one process (`WEBKIT: "1"`). `pages.yml` run 321 on `92fbdc3` took 39m52s for Chromium's
+matrix step and 43m27s for WebKit's, about 83 minutes together, and this PR's mount arms add about two
+and a half minutes per engine locally. A dispatch with no engine is cancelled before WebKit finishes.
+Owed: split the dispatch per engine as `pages.yml` does, or say in the input's description that an
+empty engine no longer fits.
+
+## G91. ConnectSurface imports Input and renders none
+
+**Severity: trivial. Opened 24 September 2026 during handoff 32-A, filed under ruling 597. The number
+is assigned by this entry (ruling 638).**
+
+`src/components/dna/ConnectSurface.tsx` imports `Input` at line 30 and never renders it; `/connect`'s
+Input is IntroSheet's. Handoff 32-A's route table read the import as a binding. Owed: drop the import
+in a change that touches the surface.
+
+## G92. The shell's own layers hardcode their z-index, so 603's order does not hold against Menu
+
+**Severity: low. Opened 24 September 2026 during handoff 32-A, filed under ruling 597. The number is
+assigned by this entry (ruling 638).**
+
+`src/styles/strand.css` says of the 603 scale that no component hardcodes a z-index, and 1103 places
+`--z-menu` 62 below dialog and notification. In the tree, `AppShell.tsx` draws its account popover and
+panel at 50 and their click-catchers at 40, `NotificationPanel.tsx`'s click-catcher is at 40,
+`FeedSurface.tsx:66` holds a fixed layer at 70, and `ProfileBlockControl.tsx:49` at 20, among smaller
+local ones. So a Menu at 62 would sit above the account and notification layers at 50, which 1103
+says it must not. Low in practice: Menu's outside press closes it before the bell or the account
+control opens. Owed: those layers read the 603 tokens (`--z-notification`, `--z-scrim`, `--z-sticky`)
+in a change that touches the shell.
+
+## G93. PasswordField draws Input's hint and error line and does not tie it to the field
+
+**Severity: low. Opened 24 September 2026 during handoff 32-A, filed under ruling 597. The number is
+assigned by this entry (ruling 638).**
+
+Correction 25 §5 ties Input's hint or error line to its field by `aria-describedby`, and 24 §5 gives
+Select the same. `src/components/strand/PasswordField.tsx` copies Input's line (13 on 1.4, error in
+place of the hint) but gives the line no id and the field no `aria-describedby`, so on the sign-in,
+reset and change-password forms the email field's line is announced with the field and the password
+field's is not. Owed: the same tie in PasswordField, in a change that names it.
+
+## G94. The Feed's Read more prefetch starts on a touch tap, and its timer outlives the card
+
+**Severity: low. Opened 24 September 2026 during handoff 32-A's verification pass, filed under ruling 597. The number is assigned by this entry (ruling 638). Found in code, not measured on a device.**
+
+`src/components/strand/PostCard.tsx` fires `onReadMoreIntent` after an 80ms `mouseenter` hold on Read
+more, and its comment says never on touch (ruling 84). A tap delivers a compatibility `mouseenter`
+before its click, so the hold starts on touch as well, and nothing clears the timer when the card
+unmounts, so it can fire after the tap's click has already navigated. At `92fbdc3` and after this PR
+alike. Owed: the hold starts only for a pointer whose type is mouse, and the timer is cleared on
+unmount.
+
+## G95. On WebKit a document load issued while a post is open in place is interrupted by a navigation back to that post
+
+**Severity: low, unread. Opened 24 September 2026 during handoff 32-A, filed under ruling 597. The
+number is assigned by this entry (ruling 638).**
+
+`pages.yml` run 329 (job `107762099627`, head `de65851`) failed `mount-post` at all three WebKit cells
+with the same error: `page.goto: Navigation to ".../posts/seed-1" is interrupted by another navigation
+to ".../posts/seed-0"`. The arm had opened `/posts/seed-0` in place from the Feed's Read more,
+under ruling 105, and then issued a document load of `/posts/seed-1` without closing it. Chromium
+passes the same sequence, locally and in CI. The cause is not read: Read more stops propagation and
+calls `openPost` once, and its hover-intent timer only prefetches a query (`warmPost`), so neither
+accounts for a second navigation. Locally there is no WebKit to read it in. The arm now closes the post with
+Show less and waits for `/feed` before its direct load, which is the sequence the Feed suite's own
+direct-load check has always used and which WebKit passes. Owed: read it in WebKit. If a member who
+follows a link or types an address while a post is open in place is sent back to that post, it is a
+defect in the in-place route, not in the harness.
+
+## G96. The event page's toast is blanked by the timer of the toast before it
+
+**Severity: low. Opened 24 September 2026 during handoff 32-A, filed under ruling 597. The number is
+assigned by this entry (ruling 638).**
+
+`EventSurface`'s `say()` sets the toast and starts a 2,600ms `setTimeout(() => setToast(null))`, and
+never clears the timer before it, where `ConnectSurface` and `ProfileSurface` keep the timer in a
+ref and clear it. So a toast raised less than 2.6s after the last one is removed when the older
+timer fires, however recently it appeared. The event flow's withdraw hits it: timed with a
+`requestAnimationFrame` probe in Chromium at 1280, twelve runs on each build, the going toast shows
+at about 2,300ms and its timer fires at about 4,900, and the Withdrawn toast lands between 4,720 and
+5,100, on both sides of that moment, at `92fbdc3` and at this PR's head alike. When it lands just
+before it, it is gone a few milliseconds later, and `tests/event.cjs` waited 8s for a toast that had
+already come and gone: one of three isolated runs at 1280 dark, and the local full run at 1280 light.
+The arm now waits the going toast out before withdrawing, and the Withdrawn toast is still required.
+Owed, in a brief that may touch `EventSurface`: `say()` clears its previous timer, as the other two
+surfaces do. This PR changes no page (handoff 32-A item 6).
+
+Found in the same run and closed by this PR: `pages.yml` run 332 failed "notification: Respond opens
+the event page and marks the row read" at chromium 1280 dark because the check read the mock's reads
+on the tick the URL changed, while `NotificationPanel`'s `onRow` navigates first and marks the row
+read after. The check now waits for the read, bounded at 5s.

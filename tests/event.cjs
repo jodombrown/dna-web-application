@@ -697,7 +697,13 @@ async function runEventFlows(browserType, bname, [w, h], theme) {
       JSON.stringify(second),
     );
 
-    // Withdraw: the inline confirm, then not_going.
+    // Withdraw: the inline confirm, then not_going. EventSurface's toast never clears the timer of
+    // the toast before it (G96), so a toast raised just under 2.6s after the last one is blanked
+    // when that older timer fires; the going toast is waited out first, so the withdraw's own toast
+    // is shown for its full time and is still required below.
+    await page
+      .locator('[role="status"]', { hasText: "You are going." })
+      .waitFor({ state: "hidden", timeout: 5000 });
     await page.click('[data-testid="rsvp-change"]');
     dlg = dialog("Change your answer");
     await dlg.waitFor({ timeout: 8000 });
@@ -845,6 +851,10 @@ async function runEventFlows(browserType, bname, [w, h], theme) {
     );
     await row.locator('[data-testid="notification-respond"]').click();
     await page.waitForURL("**/convene/events/" + EV.loaded + "**", { timeout: 10000 });
+    // NotificationPanel's onRow navigates first and marks the row read after, so the read reaches the
+    // mock after the URL has changed; wait for it, bounded, rather than reading it on the same tick
+    // (pages.yml run 332 read it before it landed at chromium 1280 dark; G96).
+    for (let i = 0; i < 50 && !db.reads.includes("n-role"); i++) await page.waitForTimeout(100);
     record(
       tag + " notification: Respond opens the event page and marks the row read",
       page.url().includes("/convene/events/" + EV.loaded) && db.reads.includes("n-role"),

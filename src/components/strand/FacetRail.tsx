@@ -1,8 +1,10 @@
-// Strand `components/dna/FacetRail.jsx`, ported at compile v1789885868097915 (ruling 851 names it
-// as scope). The compiled function is byte-identical between the correction 17 and correction 21
-// bundles, so this is a first port rather than a re-sync.
+// Strand `components/dna/FacetRail.jsx`, first ported at compile v1789885868097915 (ruling 851) and
+// reconciled at compile v1790212533284400 (handoff 32-A, rulings 862 and 844) with correction 24
+// §1 to §4 (1055, 1060) and correction 25 §3 (663, 1102). The .jsx and the bundle agree byte for
+// byte; the dispositions are in docs/strand-ports/v1790212533284400.md.
 //
-// Rulings the compiled part cites in its own doc comment: 561, 586, 589, 102, 79, 687, 688 and 725.
+// Rulings the compiled part cites in its own doc comment: 561, 586, 589, 102, 79, 687, 688, 725,
+// 1055, 1060 and 1102.
 // Filters for a list surface. At expanded it is a sticky rail in its own column; at medium the same
 // rail; at compact it is a trigger plus the same body inside a Sheet, which is a rendering and not a
 // mode. `mode="single"` is one selection across the rail, exposed through `onChange` as
@@ -10,25 +12,44 @@
 // `mode="collapsed"` is a 64px icon strip (612 as amended by 725): one 48px square per axis, named
 // from the axis label, tinted when any option in that axis is set. A square is not a control over an
 // option — it expands the rail through `onExpand`.
-// Arrow keys move focus only; Enter, Space or a click selects (688).
+// Arrow keys move focus only; Enter, Space or a click selects (688, 718).
+// Correction 24 (1055): `headingAction` is a slot on the rail's heading line (G72), an option may
+// wrap and stays inside the nav's padding (G75), an axis may declare `select: "single"` inside a
+// multi-select rail and becomes a radiogroup whose choice replaces the axis's value (G76), and an
+// axis may carry `ladders`, named rungs selected like options and never numbered (1060).
+// Correction 25 (1102): an axis may declare `display` (`chips`, `segment`, `checklist`,
+// `combobox`), the facets rendering only; an axis with ladders is the ladder part whatever `display`
+// says. The rail form is its own scroller, and its heading is sticky at the scroller's top on
+// --surface with a --line hairline once the axes have scrolled under it.
+//
+// Four of those change what an existing caller renders with no new prop, and are ported because
+// ruling 844 gives the compile a size and a padding and no app ruling keeps the old values: the
+// chip's padding, line height, wrap and max width (24 §2; G75 is this app's own ask for it), which
+// take a one-line chip from 36 to 39.75 rather than holding 36 as 24 §2 says; the heading pin, whose
+// transparent 1px bottom border moves the axes down 1px at rest where 25 §3 says nothing moves; the
+// nav as its own scroller; and the data-axis-id, data-display, data-select and data-option markers.
 //
 // Two things the app's own tree decides rather than the compile:
 //   - The compact rendering goes through this repository's `Sheet` as `variant="sheet"` (ruling 618:
 //     Strand's Sheet replaced `variant` and `width` with `tier` and `size`, and a caller passing
 //     `variant="sheet"` wants `tier="compact"`). Ruling 605's repo-side Sheet migration is
 //     unstarted, logged as G30.
-//   - The compiled call passes `title`, which Strand's Sheet renders as a visible heading. This
-//     repository's `Sheet` has no heading prop at all — it focuses `[data-sheet-heading]` when a
-//     caller supplies one but renders none itself — so `title` lands on `label`, the dialog's
-//     accessible name, and the rail's heading is drawn by this part instead, which is what every
-//     other Sheet caller in this tree does. Recorded against G30 rather than given a number of its
-//     own, because G30 is ruling 605's Sheet migration.
+//   - The compiled call passes `title`, which Strand's Sheet renders as a visible heading in its own
+//     pinned header above a scrolling body, with a Close control. This repository's `Sheet` has no
+//     heading, body or close of its own — it focuses `[data-sheet-heading]` when a caller supplies
+//     one (480) — so `title` lands on `label`, the dialog's accessible name, and the rail's heading
+//     is drawn by this part instead, which is what every other Sheet caller in this tree does. Its
+//     scrolling body is drawn here too (handoff 32-A), under a heading row that does not scroll,
+//     because 24 §2's taller chips push the lower axes past a sheet that has none. The pinned
+//     header's own geometry and its Close control are the Sheet's and arrive with G30.
 //
-// Nothing in `src/` binds this part yet, so ruling 755's page proof and ruling 627's proof by a
-// person performing the act fall to the first brief that binds it (7, 9 or 10).
-import type { CSSProperties, KeyboardEvent, ReactNode } from "react";
+// Bound by `DiscoverySurface` (handoff 31-B) in all three forms. No page passes `headingAction`,
+// an axis `select`, `ladders` or `display` in this port; binding them is 32-B's.
+import { useState, type CSSProperties, type KeyboardEvent, type ReactNode } from "react";
 import { Button } from "./Button";
 import { Icon } from "./Icon";
+import { Input } from "./Input";
+import { Segment } from "./Segment";
 import { Sheet } from "./Sheet";
 
 export type FacetOption = {
@@ -36,6 +57,16 @@ export type FacetOption = {
   label: string;
   /** Rendered, disabled and dimmed: an option the corpus cannot serve yet. */
   parked?: boolean | undefined;
+  /** Correction 25: a second line in the combobox's suggestion, e.g. the country. Never a count. */
+  detail?: string | undefined;
+};
+
+/** 1060: one ladder of named rungs inside an axis, e.g. one per home. */
+export type FacetLadder = {
+  id: string;
+  /** Heads the ladder's row when the axis carries more than one ladder. */
+  label?: string | undefined;
+  rungs: FacetOption[];
 };
 
 export type FacetAxis = {
@@ -44,6 +75,20 @@ export type FacetAxis = {
   /** Strand glyph name, used by the collapsed strip (725). */
   icon?: string | undefined;
   options?: FacetOption[] | undefined;
+  /** G76 (correction 24): a single axis is a radiogroup and choosing replaces its value. */
+  select?: "single" | "multi" | undefined;
+  /** 1060: named rungs; when present, `options` is not rendered. */
+  ladders?: FacetLadder[] | undefined;
+  /** Correction 25: the facets rendering. `segment` needs `select: "single"`. */
+  display?: "chips" | "segment" | "checklist" | "combobox" | undefined;
+  /** segment: the leading seat that clears the axis. Default "Any". */
+  anyLabel?: string | undefined;
+  /** combobox: the field's placeholder, its no-match line, the chosen chip's remove word and its
+   *  leading glyph (default "map-pin"). Strand ships no copy. */
+  placeholder?: string | undefined;
+  noMatch?: string | undefined;
+  removeLabel?: string | undefined;
+  fieldIcon?: string | undefined;
 };
 
 /** Selected option ids per axis. An axis with nothing selected carries no key. */
@@ -62,12 +107,39 @@ export type FacetRailProps = {
   style?: CSSProperties | undefined;
   mode?: "facets" | "single" | "collapsed";
   /** 718 addendum: a collapsed strip declares the selection model of the rail it stands for. */
-  select?: "single" | undefined;
+  select?: "single" | "multi" | undefined;
   /** Compact only: the caller's own pill in place of the default trigger button. */
   trigger?: ((p: { open: boolean; onOpen: () => void; label: string }) => ReactNode) | undefined;
   onExpand?: (() => void) | undefined;
   expandLabel?: string;
+  /** G72 (correction 24): the caller's control on the rail's heading line, right of the label (944's
+   *  "Collapse browse"). Rail form only. Absent, the heading holds its label alone. */
+  headingAction?: ReactNode;
 };
+
+const CHIP = (on: boolean, parked?: boolean): CSSProperties => ({
+  all: "unset",
+  boxSizing: "border-box",
+  cursor: parked ? "default" : "pointer",
+  minHeight: 36,
+  maxWidth: "100%",
+  padding: "var(--space-2) var(--space-4)",
+  display: "inline-flex",
+  alignItems: "center",
+  borderRadius: "var(--radius-pill)",
+  fontFamily: "var(--font-sans)",
+  fontSize: "var(--text-s)",
+  lineHeight: "var(--text-s-lh)",
+  fontWeight: "var(--weight-medium)" as unknown as number,
+  textAlign: "left",
+  overflowWrap: "anywhere",
+  color: parked ? "var(--ink-4)" : on ? "var(--ink)" : "var(--ink-2)",
+  background: on ? "var(--bg-sunken)" : "transparent",
+  border: on ? "var(--border-card) solid var(--ink)" : "var(--border-thin) solid var(--line)",
+  opacity: parked ? 0.6 : 1,
+  transition:
+    "background var(--dur-default) var(--ease), border-color var(--dur-default) var(--ease)",
+});
 
 export function FacetRail({
   axes = [],
@@ -84,22 +156,45 @@ export function FacetRail({
   trigger,
   onExpand,
   expandLabel = "Show " + label.toLowerCase(),
+  headingAction,
 }: FacetRailProps) {
+  // Declared before the collapsed return: DiscoverySurface swaps one instance between `collapsed`
+  // and `facets`, so a hook after that return would change the hook count on the swap.
+  const [scrolled, setScrolled] = useState(false);
   // 718 addendum: a collapsed strip declares the selection model of the rail it stands for;
   // `select="single"` is the Hub's strip.
-  const single = mode === "single" || (mode === "collapsed" && select === "single");
-  const set = (axisId: string, optionId: string) => {
-    if (single) {
-      onChange?.({ [axisId]: [optionId] });
+  const railSingle = mode === "single" || (mode === "collapsed" && select === "single");
+  const axisSingle = (axis: FacetAxis) => railSingle || axis.select === "single";
+  const set = (axis: FacetAxis, optionId: string) => {
+    if (railSingle) {
+      onChange?.({ [axis.id]: [optionId] });
       return;
     }
-    const cur = value[axisId] || [];
+    // G76: choose, not toggle.
+    if (axis.select === "single") {
+      onChange?.({ ...value, [axis.id]: [optionId] });
+      return;
+    }
+    const cur = value[axis.id] || [];
     const next: FacetValue = {
       ...value,
-      [axisId]:
+      [axis.id]:
         cur.indexOf(optionId) > -1 ? cur.filter((o) => o !== optionId) : cur.concat(optionId),
     };
-    if (!next[axisId]?.length) delete next[axisId];
+    if (!next[axis.id]?.length) delete next[axis.id];
+    onChange?.(next);
+  };
+  const drop = (axis: FacetAxis, optionId: string) => {
+    const next: FacetValue = {
+      ...value,
+      [axis.id]: (value[axis.id] || []).filter((o) => o !== optionId),
+    };
+    if (!next[axis.id]?.length) delete next[axis.id];
+    onChange?.(next);
+  };
+  const clearAxis = (axis: FacetAxis) => {
+    const next: FacetValue = { ...value };
+    delete next[axis.id];
     onChange?.(next);
   };
   const isOn = (axisId: string, optionId: string) => (value[axisId] || []).indexOf(optionId) > -1;
@@ -117,26 +212,6 @@ export function FacetRail({
     // 718: arrows move focus only; Enter, Space or click selects.
     opts[(i + (fwd ? 1 : opts.length - 1)) % opts.length]?.focus();
   };
-  const chip = (on: boolean, parked?: boolean): CSSProperties => ({
-    all: "unset",
-    boxSizing: "border-box",
-    cursor: parked ? "default" : "pointer",
-    minHeight: 36,
-    padding: "0 var(--space-4)",
-    display: "inline-flex",
-    alignItems: "center",
-    borderRadius: "var(--radius-pill)",
-    fontFamily: "var(--font-sans)",
-    fontSize: "var(--text-s)",
-    fontWeight: "var(--weight-medium)" as unknown as number,
-    whiteSpace: "nowrap",
-    color: parked ? "var(--ink-4)" : on ? "var(--ink)" : "var(--ink-2)",
-    background: on ? "var(--bg-sunken)" : "transparent",
-    border: on ? "var(--border-card) solid var(--ink)" : "var(--border-thin) solid var(--line)",
-    opacity: parked ? 0.6 : 1,
-    transition:
-      "background var(--dur-default) var(--ease), border-color var(--dur-default) var(--ease)",
-  });
 
   if (mode === "collapsed") {
     // 612, as amended by 725: an icon strip at expanded when the pane is open. One 48px square per
@@ -240,6 +315,43 @@ export function FacetRail({
     );
   }
 
+  // 1060 and 1085: an axis with ladders is the ladder part whatever `display` says. The single
+  // rail and its strip ignore `display`, and a segment needs a single axis.
+  const displayOf = (axis: FacetAxis) => {
+    if (axis.ladders && axis.ladders.length) return "ladders";
+    if (mode !== "facets") return "chips";
+    const d = axis.display || "chips";
+    if (d === "segment" && axis.select !== "single") return "chips";
+    return d;
+  };
+  const chip = (axis: FacetAxis, o: FacetOption, first: boolean) => {
+    const on = isOn(axis.id, o.id);
+    const sgl = axisSingle(axis);
+    const axisHas = (value[axis.id] || []).length > 0;
+    // The roving stop: the checked option, else the first (on the single rail, the rail's first).
+    const tab = sgl
+      ? on || (!axisHas && first && (railSingle ? !any && axis === axes[0] : true))
+        ? 0
+        : -1
+      : undefined;
+    return (
+      <button
+        key={o.id}
+        type="button"
+        role={sgl ? "radio" : undefined}
+        aria-checked={sgl ? on : undefined}
+        aria-pressed={sgl ? undefined : on}
+        tabIndex={tab}
+        disabled={o.parked}
+        aria-disabled={o.parked || undefined}
+        data-option={o.id}
+        onClick={() => set(axis, o.id)}
+        style={CHIP(on, o.parked)}
+      >
+        {o.label}
+      </button>
+    );
+  };
   const body = (
     <div
       style={{
@@ -249,55 +361,133 @@ export function FacetRail({
         fontFamily: "var(--font-sans)",
       }}
     >
-      {axes.map((axis) => (
-        <div
-          key={axis.id}
-          role={single ? "radiogroup" : "group"}
-          aria-labelledby={"facet-" + axis.id}
-          onKeyDown={onAxisKey}
-          style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)" }}
-        >
+      {axes.map((axis) => {
+        const disp = displayOf(axis);
+        const own = disp === "segment" || disp === "combobox";
+        return (
           <div
-            id={"facet-" + axis.id}
-            style={{
-              fontSize: "var(--text-xs)",
-              letterSpacing: "var(--tracking-caps)",
-              textTransform: "uppercase",
-              color: "var(--ink-3)",
-            }}
+            key={axis.id}
+            role={
+              own
+                ? undefined
+                : axisSingle(axis) && (disp === "chips" || disp === "ladders")
+                  ? "radiogroup"
+                  : "group"
+            }
+            aria-labelledby={own ? undefined : "facet-" + axis.id}
+            data-axis-id={axis.id}
+            data-display={disp}
+            data-select={axisSingle(axis) ? "single" : "multi"}
+            onKeyDown={disp === "combobox" ? undefined : onAxisKey}
+            style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)" }}
           >
-            {axis.label}
-          </div>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--space-2)" }}>
-            {(axis.options || []).map((o) => {
-              const on = isOn(axis.id, o.id);
-              return (
-                <button
-                  key={o.id}
-                  type="button"
-                  role={single ? "radio" : undefined}
-                  aria-checked={single ? on : undefined}
-                  aria-pressed={single ? undefined : on}
-                  tabIndex={
-                    single
-                      ? on || (!any && axis === axes[0] && o === (axis.options || [])[0])
-                        ? 0
-                        : -1
-                      : undefined
-                  }
-                  disabled={o.parked}
-                  aria-disabled={o.parked || undefined}
-                  onClick={() => set(axis.id, o.id)}
-                  style={chip(on, o.parked)}
+            <div
+              id={"facet-" + axis.id}
+              style={{
+                fontSize: "var(--text-xs)",
+                letterSpacing: "var(--tracking-caps)",
+                textTransform: "uppercase",
+                color: "var(--ink-3)",
+              }}
+            >
+              {axis.label}
+            </div>
+            {disp === "segment" ? (
+              <Segment
+                label={axis.label}
+                options={[{ value: "", label: axis.anyLabel || "Any" }].concat(
+                  (axis.options || []).map((o) => ({ value: o.id, label: o.label })),
+                )}
+                value={(value[axis.id] || [])[0] || ""}
+                onChange={(v) => (v ? set({ ...axis, select: "single" }, v) : clearAxis(axis))}
+              />
+            ) : disp === "checklist" ? (
+              <div style={{ display: "flex", flexDirection: "column" }}>
+                {(axis.options || []).map((o) => {
+                  const on = isOn(axis.id, o.id);
+                  return (
+                    <button
+                      key={o.id}
+                      type="button"
+                      role="checkbox"
+                      aria-checked={on}
+                      data-option={o.id}
+                      disabled={o.parked}
+                      onClick={() => set(axis, o.id)}
+                      style={{
+                        all: "unset",
+                        boxSizing: "border-box",
+                        cursor: o.parked ? "default" : "pointer",
+                        minHeight: 44,
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "var(--space-3)",
+                        fontFamily: "var(--font-sans)",
+                        fontSize: "var(--text-s)",
+                        lineHeight: "var(--text-s-lh)",
+                        color: o.parked ? "var(--ink-4)" : "var(--ink)",
+                        overflowWrap: "anywhere",
+                      }}
+                    >
+                      <span
+                        aria-hidden="true"
+                        style={{
+                          flex: "none",
+                          width: 22,
+                          height: 22,
+                          boxSizing: "border-box",
+                          borderRadius: "var(--radius-s)",
+                          border:
+                            "var(--border-card) solid " +
+                            (on ? "var(--ink)" : "var(--line-strong)"),
+                          background: on ? "var(--ink)" : "var(--surface)",
+                          color: "var(--on-fill)",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          transition: "background var(--dur-micro) var(--ease)",
+                        }}
+                      >
+                        {on && <Icon name="check" size={14} />}
+                      </span>
+                      <span style={{ minWidth: 0 }}>{o.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            ) : disp === "combobox" ? (
+              <ComboAxis
+                axis={axis}
+                chosen={value[axis.id] || []}
+                onPick={(id) => set(axis, id)}
+                onDrop={(id) => drop(axis, id)}
+              />
+            ) : axis.ladders && axis.ladders.length ? (
+              axis.ladders.map((ld, li) => (
+                <div
+                  key={ld.id}
+                  data-ladder={ld.id}
+                  style={{ display: "flex", flexDirection: "column", gap: "var(--space-2)" }}
                 >
-                  {o.label}
-                </button>
-              );
-            })}
+                  {(axis.ladders || []).length > 1 && ld.label && (
+                    <div style={{ fontSize: "var(--text-xs)", color: "var(--ink-3)" }}>
+                      {ld.label}
+                    </div>
+                  )}
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--space-2)" }}>
+                    {(ld.rungs || []).map((o, oi) => chip(axis, o, li === 0 && oi === 0))}
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--space-2)" }}>
+                {(axis.options || []).map((o, oi) => chip(axis, o, oi === 0))}
+              </div>
+            )}
           </div>
-        </div>
-      ))}
-      {!single && (
+        );
+      })}
+      {!railSingle && (
         <div aria-live="polite" role="status" style={{ minHeight: 0 }}>
           {any && (
             <Button variant="ghost" size="sm" onClick={() => onClear?.()}>
@@ -329,14 +519,19 @@ export function FacetRail({
         {open && (
           // Ruling 618: the compiled call is `tier="compact"`, which this repository's Sheet spells
           // `variant="sheet"`. Its `title` is the dialog's accessible name here, because this Sheet
-          // renders no heading of its own (G53), so the heading below stands in.
+          // renders no heading of its own (G30), so the heading below stands in (480). Nor does it
+          // render the scrolling body Strand's Sheet pins that title above, which 25 §3's "every
+          // display renders in it" relies on, so the part draws the two as this repository's other
+          // Sheet callers with a scroller do: the heading in a row that does not scroll, the axes in
+          // a body that does. At rest nothing moves, and the axes the chips' 24 §2 height pushes
+          // past the sheet stay reachable.
           <Sheet open onClose={() => onOpenChange?.(false)} variant="sheet" label={label} contained>
-            <div style={{ padding: "var(--space-5)" }}>
+            <div style={{ flex: "none", padding: "var(--space-5) var(--space-5) 0" }}>
               <h2
                 data-sheet-heading
                 tabIndex={-1}
                 style={{
-                  margin: "0 0 var(--space-5)",
+                  margin: 0,
                   fontFamily: "var(--font-display)",
                   fontSize: "var(--display-s)",
                   lineHeight: "var(--display-s-lh)",
@@ -345,6 +540,11 @@ export function FacetRail({
               >
                 {label}
               </h2>
+            </div>
+            <div
+              data-sheet-body
+              style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "var(--space-5)" }}
+            >
               {body}
             </div>
           </Sheet>
@@ -356,6 +556,8 @@ export function FacetRail({
   return (
     <nav
       aria-label={label}
+      data-rail-scroller=""
+      onScroll={(e) => setScrolled(e.currentTarget.scrollTop > 0)}
       style={{
         position: "sticky",
         top: "var(--space-4)",
@@ -369,21 +571,141 @@ export function FacetRail({
         border: "var(--border-thin) solid var(--line)",
         borderRadius: "var(--radius-l)",
         boxShadow: "var(--shadow-0)",
+        // 25 §3: the rail is its own scroller; the caller bounds its height through `style`.
+        overflowY: "auto",
+        overflowX: "hidden",
+        overscrollBehavior: "contain",
+        boxSizing: "border-box",
         ...style,
       }}
     >
-      <h2
+      <div
+        data-heading-pin=""
+        data-scrolled={scrolled ? "" : undefined}
         style={{
-          margin: 0,
-          fontFamily: "var(--font-display)",
-          fontSize: "var(--display-s)",
-          lineHeight: "var(--display-s-lh)",
-          fontWeight: "var(--weight-regular)" as unknown as number,
+          position: "sticky",
+          top: "calc(-1 * var(--space-5))",
+          zIndex: 1,
+          flex: "none",
+          margin: "calc(-1 * var(--space-5)) calc(-1 * var(--space-5)) calc(-1 * var(--space-3))",
+          padding: "var(--space-5) var(--space-5) var(--space-3)",
+          background: "var(--surface)",
+          borderBottom: "var(--border-thin) solid " + (scrolled ? "var(--line)" : "transparent"),
+          transition: "border-color var(--dur-default) var(--ease)",
         }}
       >
-        {label}
-      </h2>
+        <div
+          data-heading
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "var(--space-2)",
+            minHeight: headingAction ? 44 : undefined,
+            margin: headingAction ? "calc(-1 * var(--space-2)) calc(-1 * var(--space-2)) 0 0" : 0,
+          }}
+        >
+          <h2
+            style={{
+              margin: 0,
+              flex: 1,
+              minWidth: 0,
+              fontFamily: "var(--font-display)",
+              fontSize: "var(--display-s)",
+              lineHeight: "var(--display-s-lh)",
+              fontWeight: "var(--weight-regular)" as unknown as number,
+            }}
+          >
+            {label}
+          </h2>
+          {headingAction && (
+            <div
+              data-heading-action
+              style={{ flex: "none", display: "flex", alignItems: "center" }}
+            >
+              {headingAction}
+            </div>
+          )}
+        </div>
+      </div>
       {body}
     </nav>
+  );
+}
+
+/** Correction 25 §3: the combobox display (Place). Prefix match on each word of the label and the
+ *  detail; chosen options leave the list and render as removable chips under the field. Nothing
+ *  says how many matched. */
+function ComboAxis({
+  axis,
+  chosen,
+  onPick,
+  onDrop,
+}: {
+  axis: FacetAxis;
+  chosen: string[];
+  onPick: (id: string) => void;
+  onDrop: (id: string) => void;
+}) {
+  const [q, setQ] = useState("");
+  const ql = q.trim().toLowerCase();
+  const words = (s: string | undefined) =>
+    (s || "")
+      .toLowerCase()
+      .split(/[\s,·()-]+/)
+      .filter(Boolean);
+  const hit = (o: FacetOption) =>
+    !!ql &&
+    (o.label.toLowerCase().indexOf(ql) === 0 ||
+      words(o.label)
+        .concat(words(o.detail))
+        .some((w) => w.indexOf(ql) === 0));
+  const sugg = (axis.options || [])
+    .filter((o) => !o.parked && chosen.indexOf(o.id) < 0 && hit(o))
+    .slice(0, 8)
+    .map((o) => ({ value: o.id, label: o.label, detail: o.detail }));
+  const byId: Record<string, FacetOption> = {};
+  (axis.options || []).forEach((o) => {
+    byId[o.id] = o;
+  });
+  const nameOf = (id: string) => byId[id]?.label || id;
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-2)" }}>
+      <Input
+        aria-labelledby={"facet-" + axis.id}
+        icon={axis.fieldIcon || "map-pin"}
+        placeholder={axis.placeholder}
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        suggestions={sugg}
+        onSuggestionSelect={(s) => {
+          onPick(s.value);
+          setQ("");
+        }}
+        noMatch={axis.noMatch}
+        listbox="inline"
+      />
+      {chosen.length > 0 && (
+        <div
+          role="list"
+          aria-label={axis.label}
+          style={{ display: "flex", flexWrap: "wrap", gap: "var(--space-2)" }}
+        >
+          {chosen.map((id) => (
+            <div key={id} role="listitem" style={{ maxWidth: "100%", display: "flex" }}>
+              <button
+                type="button"
+                data-chosen={id}
+                aria-label={(axis.removeLabel || "Remove") + " " + nameOf(id)}
+                onClick={() => onDrop(id)}
+                style={{ ...CHIP(true, false), gap: "var(--space-2)" }}
+              >
+                <span style={{ minWidth: 0 }}>{nameOf(id)}</span>
+                <Icon name="x" size={14} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }

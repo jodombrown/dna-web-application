@@ -1,12 +1,38 @@
-// Ported from Strand components/core/Input.jsx. Behavior unchanged. label accepts a node.
+// Ported from Strand components/core/Input.jsx. label accepts a node. Reconciled at compile
+// v1790212533284400 (handoff 32-A, rulings 862 and 844) with correction 25 §5 (663, 1102): the
+// combobox on `suggestions`, and the hint or error line tied to the field by aria-describedby.
+// Dispositions: docs/strand-ports/v1790212533284400.md.
+//
+// Kept against the compile: --error where the compile writes --danger (ruling 425; --danger is
+// var(--error), so nothing computes differently); ruling 548's two jobs for `error` (below), under
+// which a boolean marks the field invalid and leaves the hint in place, where the compile would
+// render an empty line; the unconditional `useId()`, where the compile reads `id || React.useId()`,
+// a conditional hook; and 92fbdc3's structure on every call that passes neither `suggestions` nor
+// `icon`, under Chat's ruling on 25 §5 (see `drawn` below).
 import {
+  useEffect,
   useId,
   useState,
+  type ChangeEvent,
   type CSSProperties,
+  type FocusEvent,
   type InputHTMLAttributes,
+  type KeyboardEvent,
+  type MouseEvent,
   type ReactNode,
   type TextareaHTMLAttributes,
 } from "react";
+import { Icon } from "./Icon";
+
+/** Correction 25 (1102). One suggestion in the combobox's list. */
+export type InputSuggestion = {
+  value: string;
+  label: string;
+  /** A second line under the label, e.g. the country for a city. Never a count. */
+  detail?: string | undefined;
+};
+
+type Field = HTMLInputElement | HTMLTextAreaElement;
 
 type Shared = {
   label?: ReactNode;
@@ -16,6 +42,19 @@ type Shared = {
   rows?: number;
   id?: string;
   style?: CSSProperties | undefined;
+  /** Correction 25 (1102). An array, possibly empty, makes the single-line field a WAI-ARIA 1.2
+   *  combobox with a listbox. The caller owns the query and the matching. */
+  suggestions?: InputSuggestion[] | undefined;
+  /** Enter on the active option, or a press on any option. */
+  onSuggestionSelect?: ((s: InputSuggestion) => void) | undefined;
+  /** The list's only line when the query is non-empty and nothing matches. Not an option. Strand
+   *  ships no copy. A string, as the compile types it. */
+  noMatch?: string | undefined;
+  /** `overlay` (default) floats the list under the field; `inline` lays it in flow for a scroller
+   *  that clips (FacetRail). */
+  listbox?: "overlay" | "inline" | undefined;
+  /** A leading glyph from Strand's set inside the field, e.g. "search" or "map-pin". */
+  icon?: string | undefined;
 };
 export type InputProps = Shared &
   Omit<InputHTMLAttributes<HTMLInputElement>, "style" | "id"> &
@@ -31,14 +70,52 @@ export type InputProps = Shared &
  * nothing, so the field lost its hint and put no text where it had been; harmless where a block
  * carried the reason, a silent loss anywhere else. A boolean now paints the border and sets
  * aria-invalid, and the hint stays exactly where it was.
+ *
+ * Correction 25 (1102): passing `suggestions` makes the single-line field a combobox:
+ * role=combobox, aria-autocomplete=list, aria-expanded, aria-controls, aria-activedescendant.
+ * ArrowDown opens and moves, ArrowUp moves, Enter chooses the active option, Escape closes the list
+ * and calls preventDefault so the Pane's guard does not also close (23), and neither does a modal
+ * Sheet, since a prevented Escape raises no `cancel` (measured in Chromium); the contained Sheet
+ * closes on Escape in a capture listener before this runs (G86). A press on an option does not blur the field. `noMatch`
+ * renders as the list's only line, not an option, when the query is non-empty and nothing matches.
+ * Options are 44 high on every input mode: a suggestion is a standalone target (498). No count,
+ * ever: nothing says how many matched. Hint, error, the focus rendering and every non-combobox call
+ * are unchanged; the line is now tied by aria-describedby.
  */
-export function Input({ label, hint, error, multiline, rows = 4, id, style, ...rest }: InputProps) {
+export function Input({
+  label,
+  hint,
+  error,
+  multiline,
+  rows = 4,
+  id,
+  style,
+  suggestions,
+  onSuggestionSelect,
+  noMatch,
+  listbox = "overlay",
+  icon,
+  ...rest
+}: InputProps) {
   const autoId = useId();
   const uid = id || autoId;
   const [focus, setFocus] = useState(false);
+  const [listOpen, setListOpen] = useState(false);
+  const [active, setActive] = useState(-1);
   // The two jobs, separated: invalid is the state, message is the words, and only words render.
   const invalid = !!error;
   const message = typeof error === "boolean" ? null : error;
+  const combo = Array.isArray(suggestions) && !multiline;
+  const listId = uid + "-list";
+  const descId = uid + "-desc";
+  const q = rest.value != null ? String(rest.value) : "";
+  const opts = combo ? suggestions : [];
+  const optsKey = combo ? opts.map((o) => o.value).join("\u0001") : "";
+  useEffect(() => {
+    setActive(-1);
+  }, [optsKey]);
+  const expanded =
+    combo && focus && listOpen && (opts.length > 0 || (!!noMatch && q.trim() !== ""));
   const field: CSSProperties = {
     width: "100%",
     boxSizing: "border-box",
@@ -49,19 +126,196 @@ export function Input({ label, hint, error, multiline, rows = 4, id, style, ...r
     background: focus ? "var(--surface)" : "var(--bg-sunken)",
     border: "1px solid " + (invalid ? "var(--error)" : focus ? "var(--ink)" : "var(--line)"),
     borderRadius: "var(--radius-m)",
-    padding: multiline ? "10px 14px" : "0 14px",
+    padding: multiline ? "10px 14px" : icon ? "0 14px 0 40px" : "0 14px",
     minHeight: 44,
     outline: "none",
     resize: "vertical",
     transition: "border-color var(--dur-default) var(--ease)",
   };
+  const choose = (o: InputSuggestion) => {
+    if (onSuggestionSelect) onSuggestionSelect(o);
+    setListOpen(false);
+    setActive(-1);
+  };
+  const { onKeyDown: userKey, onChange: userChange, onFocus: userFocus, onBlur: userBlur } = rest;
+  const userClick = rest.onClick;
+  const comboProps = combo
+    ? {
+        role: "combobox",
+        "aria-autocomplete": "list" as const,
+        "aria-expanded": expanded,
+        "aria-controls": listId,
+        "aria-activedescendant": expanded && active > -1 ? listId + "-" + active : undefined,
+        autoComplete: "off",
+        onChange: (e: ChangeEvent<Field>) => {
+          setListOpen(true);
+          if (userChange) (userChange as (e: ChangeEvent<Field>) => void)(e);
+        },
+        onClick: (e: MouseEvent<Field>) => {
+          setListOpen(true);
+          if (userClick) (userClick as (e: MouseEvent<Field>) => void)(e);
+        },
+        onKeyDown: (e: KeyboardEvent<Field>) => {
+          if (e.key === "ArrowDown") {
+            e.preventDefault();
+            if (!listOpen) {
+              setListOpen(true);
+              return;
+            }
+            if (opts.length) setActive((a) => (a + 1) % opts.length);
+          } else if (e.key === "ArrowUp") {
+            e.preventDefault();
+            if (opts.length) setActive((a) => (a <= 0 ? opts.length - 1 : a - 1));
+          } else if (e.key === "Enter" && expanded && active > -1) {
+            e.preventDefault();
+            const o = opts[active];
+            if (o) choose(o);
+          } else if (e.key === "Escape" && expanded) {
+            e.preventDefault();
+            e.stopPropagation();
+            setListOpen(false);
+            setActive(-1);
+          }
+          if (userKey) (userKey as (e: KeyboardEvent<Field>) => void)(e);
+        },
+      }
+    : {};
   const common = {
     id: uid,
-    style: field,
-    onFocus: () => setFocus(true),
-    onBlur: () => setFocus(false),
     "aria-invalid": invalid,
+    "aria-describedby": message || hint ? descId : undefined,
   };
+  const handlers = {
+    onFocus: (e: FocusEvent<Field>) => {
+      setFocus(true);
+      if (userFocus) (userFocus as (e: FocusEvent<Field>) => void)(e);
+    },
+    onBlur: (e: FocusEvent<Field>) => {
+      setFocus(false);
+      setListOpen(false);
+      if (userBlur) (userBlur as (e: FocusEvent<Field>) => void)(e);
+    },
+  };
+  const list = expanded && (
+    <div
+      id={listId}
+      role="listbox"
+      aria-label={typeof label === "string" ? label : undefined}
+      data-listbox={listbox}
+      onMouseDown={(e) => e.preventDefault()}
+      style={{
+        ...(listbox === "inline"
+          ? { position: "static" }
+          : {
+              position: "absolute",
+              top: "calc(100% + 4px)",
+              left: 0,
+              right: 0,
+              zIndex: "var(--z-sticky)" as unknown as number,
+              boxShadow: "var(--shadow-3)",
+            }),
+        boxSizing: "border-box",
+        padding: "var(--space-1)",
+        background: "var(--surface)",
+        border: "var(--border-thin) solid var(--line)",
+        borderRadius: "var(--radius-m)",
+        display: "flex",
+        flexDirection: "column",
+        maxHeight: 264,
+        overflowY: "auto",
+      }}
+    >
+      {opts.length ? (
+        opts.map((o, i) => (
+          <div
+            key={o.value}
+            id={listId + "-" + i}
+            role="option"
+            aria-selected={i === active}
+            data-value={o.value}
+            onClick={() => choose(o)}
+            onMouseEnter={() => setActive(i)}
+            style={{
+              boxSizing: "border-box",
+              minHeight: 44,
+              padding: "var(--space-2) var(--space-3)",
+              display: "flex",
+              flexDirection: "column",
+              justifyContent: "center",
+              borderRadius: "var(--radius-s)",
+              cursor: "pointer",
+              background: i === active ? "var(--bg-sunken)" : "transparent",
+              boxShadow: i === active ? "inset 0 0 0 1px var(--line)" : "none",
+              fontFamily: "var(--font-sans)",
+            }}
+          >
+            <span
+              style={{
+                fontSize: "var(--text-s)",
+                lineHeight: "var(--text-s-lh)",
+                fontWeight: "var(--weight-medium)" as unknown as number,
+                color: "var(--ink)",
+              }}
+            >
+              {o.label}
+            </span>
+            {o.detail && (
+              <span
+                style={{
+                  fontSize: "var(--text-xs)",
+                  lineHeight: "var(--text-xs-lh)",
+                  color: "var(--ink-3)",
+                }}
+              >
+                {o.detail}
+              </span>
+            )}
+          </div>
+        ))
+      ) : (
+        <div
+          role="presentation"
+          data-no-match=""
+          style={{
+            minHeight: 44,
+            padding: "var(--space-2) var(--space-3)",
+            display: "flex",
+            alignItems: "center",
+            fontSize: "var(--text-s)",
+            color: "var(--ink-3)",
+            fontFamily: "var(--font-sans)",
+          }}
+        >
+          {noMatch}
+        </div>
+      )}
+    </div>
+  );
+  const fieldEl = multiline ? (
+    <textarea
+      rows={rows}
+      {...common}
+      {...(rest as TextareaHTMLAttributes<HTMLTextAreaElement>)}
+      {...handlers}
+      style={field}
+    />
+  ) : (
+    <input
+      {...common}
+      {...(rest as InputHTMLAttributes<HTMLInputElement>)}
+      {...handlers}
+      {...comboProps}
+      style={field}
+    />
+  );
+  // Handoff 32-A, Chat's ruling on correction 25 §5 ("every non-combobox call is unchanged"): the
+  // compile nests the field in two wrappers on every call. Measured on this app's callers at 390
+  // and 1280, a single-line field holds its box and a textarea does not: inside the block
+  // `position: relative` wrapper it is inline-level, sits on the line's baseline and leaves 7.5px
+  // under itself, so its line and everything below it move. The wrappers therefore render only
+  // when a prop that needs them is passed (the combobox's list, or the leading glyph); every other
+  // call keeps 92fbdc3's structure. Divergent, with the mismatch filed for Strand in docs/GAPS.md.
+  const drawn = combo || !!icon;
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 6, ...style }}>
       {label && (
@@ -69,17 +323,39 @@ export function Input({ label, hint, error, multiline, rows = 4, id, style, ...r
           {label}
         </label>
       )}
-      {multiline ? (
-        <textarea
-          rows={rows}
-          {...common}
-          {...(rest as TextareaHTMLAttributes<HTMLTextAreaElement>)}
-        />
+      {drawn ? (
+        <div
+          style={{
+            position: "relative",
+            display: "flex",
+            flexDirection: "column",
+            gap: listbox === "inline" ? 4 : 0,
+          }}
+        >
+          <div style={{ position: "relative" }}>
+            {icon && (
+              <Icon
+                name={icon}
+                size={18}
+                style={{
+                  position: "absolute",
+                  left: 14,
+                  top: 13,
+                  color: "var(--ink-3)",
+                  pointerEvents: "none",
+                }}
+              />
+            )}
+            {fieldEl}
+          </div>
+          {list}
+        </div>
       ) : (
-        <input {...common} {...(rest as InputHTMLAttributes<HTMLInputElement>)} />
+        fieldEl
       )}
       {(message || hint) && (
         <div
+          id={descId}
           style={{
             fontSize: 13,
             lineHeight: 1.4,

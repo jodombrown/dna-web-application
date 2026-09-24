@@ -4,7 +4,7 @@
 // layer, so the real client code paths run against a deterministic backend. Backend behaviour
 // (RLS, the feed view) is verified separately in SQL against the live project.
 // Usage: BASE=https://b2-shell-feed.dna-web-application.pages.dev WEBKIT=1 node tests/matrix.cjs
-// Env: ONLY='[390,844]' runs one viewport; SPECIAL=publish,guards,keyboard,silence,shell,width,targeted,profile,connect,event,discovery,vocab,block,auth,onboarding runs flows only.
+// Env: ONLY='[390,844]' runs one viewport; SPECIAL=publish,guards,keyboard,silence,shell,width,targeted,profile,connect,event,discovery,vocab,block,auth,onboarding,mount runs flows only.
 // Brief 3 profile flows live in tests/profile.cjs and Brief 4 Connect flows in tests/connect.cjs; both share this mock.
 const { chromium, webkit } = require("playwright");
 const fs = require("fs");
@@ -5917,6 +5917,13 @@ if (require.main === module)
             for (const theme of process.env.THEME ? [process.env.THEME] : THEMES)
               await runConnect(bt, bname, vp, theme);
         }
+        // Handoff 32-A item 5: the mount arms, one cell per tier (tests/mount.cjs).
+        if (process.env.SPECIAL.includes("mount")) {
+          const { runMount, MOUNT_CELLS } = require("./mount.cjs");
+          for (const [vp, theme] of MOUNT_CELLS)
+            if (!only || (vp[0] === only[0] && vp[1] === only[1]))
+              await runMount(bt, bname, vp, theme);
+        }
         // Brief 4B (rulings 230 to 236, 240): sign-in's additions, the two reset routes and the
         // signed-in change-password path. The layout pass runs everywhere; the state flows run on
         // the two representative layouts, as vocab and block do.
@@ -6041,6 +6048,10 @@ if (require.main === module)
         for (const theme of THEMES) await runOnboardingFlows(bt, bname, vp, theme);
       // Ruling 345: the HEIC and oversized-JPEG arm runs once per engine, at the compact tier.
       await runOnboardingPhotoFormats(bt, bname, [390, 844], "light");
+      // Handoff 32-A item 5 (rulings 755, 556, 627): every route that binds a part Strand compile
+      // v1790212533284400 changed, read after its open gate, one cell per tier (tests/mount.cjs).
+      const { runMount, MOUNT_CELLS } = require("./mount.cjs");
+      for (const [vp, theme] of MOUNT_CELLS) await runMount(bt, bname, vp, theme);
     }
     finish({ full: true, engines: engines.map(([n]) => n) });
   })().catch((e) => {
