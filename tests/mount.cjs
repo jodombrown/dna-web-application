@@ -503,6 +503,13 @@ async function runMountPost(bt, bname, [w, h], theme) {
         lens.ok,
         lens.detail,
       );
+      // Close it the way the Feed suite does before its own direct load (tests/matrix.cjs): Show less
+      // pops the URL back to /feed. A document load issued while /posts/$id is open in place is
+      // interrupted on WebKit by a navigation back to that post (run 329, all three cells).
+      await tap(page, page.locator("[data-feed] [data-show-less]").first());
+      await page.waitForURL((u) => u.pathname === "/feed", { timeout: 15000 });
+      await page.locator("[data-feed] [data-read-more]").first().waitFor({ timeout: 15000 });
+      await page.waitForTimeout(300);
       // The direct form: a document load of /posts/$id renders the one card and no lens bar.
       await page.goto(BASE + "/posts/seed-1", { waitUntil: "networkidle" });
       await page.locator('[data-direct-post="seed-1"] article[data-c]').waitFor({ timeout: 15000 });

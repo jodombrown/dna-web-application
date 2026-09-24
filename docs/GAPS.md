@@ -1217,6 +1217,14 @@ each one would also mean a push per sighting, each push starting the run that pr
 from here a G5 crash is recorded only when it changes something: a new shape, a new count, a job that
 ruling 832 cannot stand down, or ruling 849's teardown case, which is still unobserved and still owed.
 
+### Update, 24 September 2026: a sighting outside the Profile surface
+
+`pages.yml` run 329 (job `107762099627`, head `de65851`, handoff 32-A) lost a web process in
+`webkit-390x844-light-guest`, the public event page's guest flow, waiting for GuestSheet's "Check your
+email" dialog. The extracted frames carry this entry's cycle, `+0x27b76f4`, `+0x27b555f` and
+`+0x27b23f1`, dispatched from `g_main_context_dispatch`. The harness classified it behind G5 and
+counted the arm UNPROVEN (228). The envelope widens again: WebKit, and not only the Profile surface.
+
 ## G6. Withdraw separated the two states ruling 214 joined — closed (ruling 229)
 
 **Opened and closed 9 September 2026, both inside Fix PR 01. Ruling 227 stated the requirement,
@@ -4566,9 +4574,10 @@ on the contained path, which is the Sheet's change and not the Pane's.
 
 ## G87. Correction 25's compile, read against its own extractions and against this app: what Strand's next correction brief should carry
 
-**Severity: low. Items 1, 2 and 11 are reached at this PR's head, all by Discovery's FacetRail on
-`/convene`: the 39.75 chip, the 1px pin, and on WebKit a row that moves 1px when a chip is set. The
-rest are reached by no caller. Opened 24 September 2026 during handoff 32-A's reconciliation (862),
+**Severity: low. Items 1, 2, 11 and the second half of 8 are reached at this PR's head, all by
+Discovery's FacetRail on `/convene`: the 39.75 chip, the 1px pin, a set chip's 1.5px border, and the
+heritage chip on two lines in the 240 medium rail. The rest, and item 8's heading action, are
+reached by no caller. Opened 24 September 2026 during handoff 32-A's reconciliation (862),
 filed under ruling 597. The number is assigned by this entry (ruling 638).**
 
 1. Extraction 24 §2 says `minHeight: 36` still holds a one-line chip. It does not: `var(--space-2)`
@@ -4715,3 +4724,20 @@ before its click, so the hold starts on touch as well, and nothing clears the ti
 unmounts, so it can fire after the tap's click has already navigated. At `92fbdc3` and after this PR
 alike. Owed: the hold starts only for a pointer whose type is mouse, and the timer is cleared on
 unmount.
+
+## G95. On WebKit a document load issued while a post is open in place is interrupted by a navigation back to that post
+
+**Severity: low, unread. Opened 24 September 2026 during handoff 32-A, filed under ruling 597. The
+number is assigned by this entry (ruling 638).**
+
+`pages.yml` run 329 (job `107762099627`, head `de65851`) failed `mount-post` at all three WebKit cells
+with the same error: `page.goto: Navigation to ".../posts/seed-1" is interrupted by another navigation
+to ".../posts/seed-0"`. The arm had opened `/posts/seed-0` in place from the Feed's Read more,
+under ruling 105, and then issued a document load of `/posts/seed-1` without closing it. Chromium
+passes the same sequence, locally and in CI. The cause is not read: Read more stops propagation and
+calls `openPost` once, and its hover-intent timer only prefetches a query (`warmPost`), so neither
+accounts for a second navigation. Locally there is no WebKit to read it in. The arm now closes the post with
+Show less and waits for `/feed` before its direct load, which is the sequence the Feed suite's own
+direct-load check has always used and which WebKit passes. Owed: read it in WebKit. If a member who
+follows a link or types an address while a post is open in place is sent back to that post, it is a
+defect in the in-place route, not in the harness.
