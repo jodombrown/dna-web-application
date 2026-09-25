@@ -878,12 +878,11 @@ export function DiscoverySurface({
     <DiaLine state="done" text={sentence ?? undefined} style={{ alignItems: "flex-start" }} />
   );
 
-  // See all (item 3; 1092, 1112): Happening soon applies the two weeks and Join from anywhere online
-  // and hybrid, the four relationship lanes switch to their lens, and This weekend, New this week and
-  // Near your homes carry none.
+  // See all (item 3; 1092, 1112, 1122): Happening soon applies the two weeks, the four relationship
+  // lanes switch to their lens, and This weekend, Join from anywhere, New this week and Near your
+  // homes carry none. Format is single-choice, so no See all writes a Format value (1122).
   const seeAllOf = (id: DiscoveryLaneId): SeeAll | null => {
     if (id === "soon") return { to: "/convene", search: { ...search, when: "two_weeks" } };
-    if (id === "online") return { to: "/convene", search: { ...search, format: "online,hybrid" } };
     if (id === "curated" || id === "follow" || id === "taste" || id === "network")
       return { lens: id };
     return null;
