@@ -235,13 +235,16 @@ export function AppShell({
           onSelectC={go}
           onIntentC={warm}
           lensBar={headerLens}
+          // 1123: on Discovery (the `lanes` layout) at expanded the header's row takes the canvas's
+          // edges, 5% of the viewport each side with no maximum; every other surface keeps 1440.
+          maxWidth={lanes && expanded ? "none" : undefined}
           style={{
             // Ruling 344: the safe-area insets live here and on the dock, once. viewport-fit=cover
             // is declared in the root route's head, so on a notched phone the header's row starts
             // below the status bar and, in landscape, clear of the notch on either side.
             paddingTop: "env(safe-area-inset-top)",
-            paddingLeft: `calc(${expanded ? 32 : 16}px + env(safe-area-inset-left))`,
-            paddingRight: `calc(${expanded ? 32 : 8}px + env(safe-area-inset-right))`,
+            paddingLeft: `calc(${lanes && expanded ? "5vw" : expanded ? "32px" : "16px"} + env(safe-area-inset-left))`,
+            paddingRight: `calc(${lanes && expanded ? "5vw" : expanded ? "32px" : "8px"} + env(safe-area-inset-right))`,
             height: "auto",
             minHeight: expanded ? 64 : 56,
             zIndex: 20,
@@ -264,9 +267,6 @@ export function AppShell({
               flex: 1,
               minHeight: 0,
               width: "100%",
-              // B9-SPEC's tiers: the canvas is at most 1600 at expanded.
-              maxWidth: 1600,
-              margin: "0 auto",
               boxSizing: "border-box",
               display: "grid",
               // B9-SPEC's tiers (1082 as amended by 1094): the rail 240 open at medium and 280 at
@@ -279,7 +279,9 @@ export function AppShell({
                 (wide && rightRail ? " 320px" : ""),
               gridTemplateRows: "auto minmax(0, 1fr)",
               columnGap: 24,
-              padding: "0 32px",
+              // B9-SPEC line 13 as 1123 rules it: at expanded the canvas has no maximum width and a
+              // gutter of 5% of the viewport each side; medium keeps line 12's 32.
+              padding: expanded ? "0 5vw" : "0 32px",
               overflow: "hidden",
             }}
           >
