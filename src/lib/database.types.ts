@@ -1,7 +1,6 @@
 // Generated from the canonical Supabase project (dgspjevjoblujcoljvkn) with the Supabase MCP
-// generate_typescript_types tool on handoff 32-B's branch, after its four migrations were applied and
-// recorded: 20260924100000_p2_discovery_lanes, 20260924110000_p2_event_links,
-// 20260924120000_p2_home_ladders_and_rail and 20260924130000_p2_persona_comments.
+// generate_typescript_types tool on the Discovery follow-up's branch (#66), after
+// 20260924140000_p2_event_presenters was applied and recorded.
 //
 // Nothing here is hand-written except this header and the `Views` helper at the end, which the
 // generator drops and every regeneration restores (`src/lib/feed.ts` reads it). The regeneration
@@ -11,18 +10,13 @@
 // file byte for byte, and `tests/migration-drift.cjs` reads it, so the generator returns it. Every
 // object the generator returns is explained by a migration in this tree, so nothing is left out.
 //
-// What 32-B adds here, replacing the entries `ccb81dc` wrote by hand from the files before the apply:
-// the tables `convene_lanes`, Discovery's nine lanes (1105), `event_aliases` and
-// `reserved_link_words` (1080, 1100, 1109), and `member_rail_state`, the rail's memory per member
-// per width band (1111); `events.custom_slug` and `events.short_code` (1080, 1081);
-// `discovery_dismissals`' section key, now on `convene_lanes`; and the functions `convene_places`
-// (1095), `event_alias_check` and `resolve_event_link` (1080, 1081, 1109), and `convene_discovery`
-// with `p_places` and `p_home_rung` (1095, 1110). 20260924130000 changes comments only and no type.
+// What 20260924140000 adds here: the function `event_presenters`, the presenter line for many events
+// at once as the event pane resolves it (674, 1079, 1121): each event id keys `presented_by` from
+// `private.event_post_facts` and `host` from `private.member_display`. It runs as the caller, so the
+// row policy on `events` decides which ids answer; authenticated only; at most 200 ids a call.
 //
-// The private helpers (`private.event_alias_problem`, `private.new_event_alias`,
-// `private.new_short_code`, `private.new_event_slug`, and the trigger functions
-// `private.events_link_fields` and `private.events_alias_history`) are absent by design: the private
-// schema is not exposed by PostgREST, so the generator does not see it and no surface may reach it.
+// The two private functions it reads are absent by design: the private schema is not exposed by
+// PostgREST, so the generator does not see it and no surface may reach it.
 
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
 
@@ -2379,6 +2373,7 @@ export type Database = {
         }[];
       };
       event_page: { Args: { p_event: string }; Returns: Json };
+      event_presenters: { Args: { p_events: string[] }; Returns: Json };
       event_public_page: { Args: { p_slug: string }; Returns: Json };
       event_speakers: {
         Args: { p_events: string[] };
