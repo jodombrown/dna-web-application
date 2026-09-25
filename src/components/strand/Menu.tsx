@@ -1,10 +1,11 @@
 // Strand `components/core/Menu.jsx`, ported at compile v1790212533284400 (handoff 32-A, correction
 // 25 section 2, rulings 663, 1097, 1102 and 1103), unchanged at v1790279130697923, and reconciled at
 // compile v1790366257373061 (correction 28, ratified 1134; handoff 33-A item 2). Correction 28 item
-// 6 (G113, B9-SPEC line 27) changes one declaration: the minimum width is 240 for every caller, where
-// it was 220; the maximum stays 320. Nothing else in Menu or its item differs between the two
-// bundles. The dispositions are in `docs/strand-ports/v1790366257373061.md`. When the part was new,
-// the compile before it had no menu, and a card's ellipsis handed its caller a press (`onMenu`).
+// 6 (G113; B9-SPEC's card menu, line 49 of Revision 2) changes one declaration: the minimum width is
+// 240 for every caller, where it was 220; the maximum stays 320. Nothing else in Menu or its item
+// differs between the two bundles. The dispositions are in `docs/strand-ports/v1790366257373061.md`.
+// When the part was new, the compile before it had no menu, and a card's ellipsis handed its caller
+// a press (`onMenu`).
 //
 // A list of acts summoned from one control, most often an ellipsis. Not for navigation, not for
 // choosing a value (Select), not for filters (FacetRail).
@@ -261,7 +262,7 @@ export function Menu({
       style={{
         ...geo,
         zIndex: "var(--z-menu)" as unknown as number,
-        // Correction 28 item 6 (G113, B9-SPEC line 27): 240 for every caller, where it was 220.
+        // Correction 28 item 6 (G113; B9-SPEC's card menu): 240 for every caller, where it was 220.
         minWidth: 240,
         maxWidth: 320,
         boxSizing: "border-box",
