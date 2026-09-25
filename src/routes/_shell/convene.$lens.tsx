@@ -5,14 +5,15 @@
 //
 // Three paths were lenses before 1093 made them lanes, and each goes to the All view with what it used
 // to show, as a facet where one expresses it (item 1): /convene/soon to `when=two_weeks`,
-// /convene/online to `format=online,hybrid`, /convene/near to /convene. The query the member arrived
-// with is kept, and the redirect's own facet replaces its axis. Anything else is not found.
+// /convene/online to `format=online`, one value because Format is single-choice (1122), /convene/near
+// to /convene. The query the member arrived with is kept, and the redirect's own facet replaces its
+// axis. Anything else is not found.
 import { createFileRoute, notFound, redirect } from "@tanstack/react-router";
 import { isLensId, type DiscoverySearch } from "@/lib/discovery-search";
 
 const FORMER: Record<string, (s: DiscoverySearch) => DiscoverySearch> = {
   soon: (s) => ({ ...s, when: "two_weeks" }),
-  online: (s) => ({ ...s, format: "online,hybrid" }),
+  online: (s) => ({ ...s, format: "online" }),
   near: (s) => s,
 };
 

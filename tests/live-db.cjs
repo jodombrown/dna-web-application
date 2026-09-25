@@ -838,6 +838,28 @@ async function runLiveDbArms({ record, skip }) {
           " page " +
           (mine.ok ? JSON.stringify(page && page.viewer) : mine.code + " " + mine.message),
       );
+      // Addendum 4 item 1 (1121): the presenter line for a list of events is the pane's own. The
+      // member reads it for the event they just answered, beside event_page's own two values.
+      const presenters = await attempt(
+        client,
+        "select public.event_presenters(array[$1::uuid]) as p",
+        [eventId],
+      );
+      const line = presenters.ok && presenters.rows[0].p ? presenters.rows[0].p[eventId] : null;
+      record(
+        "Addendum 4 item 1 (1121): event_presenters answers an event's presenter and host exactly as event_page does",
+        !!page &&
+          !!line &&
+          !!line.presented_by &&
+          JSON.stringify(line.presented_by) === JSON.stringify(page.presented_by) &&
+          JSON.stringify(line.host) === JSON.stringify(page.host),
+        presenters.ok
+          ? JSON.stringify({
+              line,
+              page: page && { presented_by: page.presented_by, host: page.host },
+            })
+          : presenters.code + " " + presenters.message,
+      );
       await client.query("set local role anon");
       await client.query("select set_config('request.jwt.claims', '', true)");
       const pub = await attempt(client, "select public.event_public_page($1) as p", [slug]);
@@ -861,6 +883,16 @@ async function runLiveDbArms({ record, skip }) {
         "Brief 10 (1023): signed out cannot call the member projection",
         !refused.ok && refused.code === "42501",
         refused.ok ? "answered" : refused.code + " " + refused.message,
+      );
+      const anonPresenters = await attempt(
+        client,
+        "select public.event_presenters(array[$1::uuid]) as p",
+        [eventId],
+      );
+      record(
+        "Addendum 4 item 1 (1121): signed out cannot call event_presenters",
+        !anonPresenters.ok && anonPresenters.code === "42501",
+        anonPresenters.ok ? "answered" : anonPresenters.code + " " + anonPresenters.message,
       );
       await actAs(client, member.id);
       const media = await attempt(
@@ -1345,38 +1377,46 @@ async function runLiveDbArms({ record, skip }) {
       );
       // 1095: Place's options are grounded places, and the projection takes one and refuses a
       // malformed id. The project's own upcoming events carry no city (run 349 read one option,
-      // `country|ghana`), so the owner publishes an in-person event in Accra under a savepoint, as
+      // `country|ghana`), so the owner publishes in-person events in Accra under a savepoint, as
       // Convene Pass 1 does, and the arm rolls back to that savepoint after its reads, so every
-      // later check reads the project as it is.
+      // later check reads the project as it is. Two events, because 20260924100000 sets Near's floor
+      // to 2: with one, the city's narrowing answered no lanes and Near was never read (G117).
       await client.query("savepoint places_fixture");
-      const placeStarts = new Date(Date.now() + 10 * 86400e3);
-      placeStarts.setUTCHours(18, 0, 0, 0);
-      const fixture = await attempt(client, "select public.publish_post($1::jsonb) as id", [
-        JSON.stringify({
-          verb: "convene",
-          body: "Place arm (1095). Rolled back by the same run.",
-          author_kind: "member",
-          author_id: owner.id,
-          audience: "everyone",
-          host_context: "live-checks",
-          fields: {
-            "convene.title": "Place arm supper",
-            "convene.format": "in_person",
-            "convene.when": "in ten days at 18:00",
-            "convene.starts_at": placeStarts.toISOString(),
-            "convene.timezone": "Africa/Accra",
-            "convene.place_id": "live-arms-place",
-            "convene.place_name": "Front Room",
-            "convene.city": "Accra",
-            "convene.region": "Greater Accra",
-            "convene.country": "Ghana",
-            "convene.lng": "-0.1747",
-            "convene.lat": "5.5559",
-            "convene.price_nature": "free",
-            "convene.delivery_intent": "In person at Front Room, Accra.",
-          },
-        }),
-      ]);
+      const placeEvent = async (title, days, hour, when) => {
+        const starts = new Date(Date.now() + days * 86400e3);
+        starts.setUTCHours(hour, 0, 0, 0);
+        return attempt(client, "select public.publish_post($1::jsonb) as id", [
+          JSON.stringify({
+            verb: "convene",
+            body: "Place arm (1095). Rolled back by the same run.",
+            author_kind: "member",
+            author_id: owner.id,
+            audience: "everyone",
+            host_context: "live-checks",
+            fields: {
+              "convene.title": title,
+              "convene.format": "in_person",
+              "convene.when": when,
+              "convene.starts_at": starts.toISOString(),
+              "convene.timezone": "Africa/Accra",
+              "convene.place_id": "live-arms-place",
+              "convene.place_name": "Front Room",
+              "convene.city": "Accra",
+              "convene.region": "Greater Accra",
+              "convene.country": "Ghana",
+              "convene.lng": "-0.1747",
+              "convene.lat": "5.5559",
+              "convene.price_nature": "free",
+              "convene.delivery_intent": "In person at Front Room, Accra.",
+            },
+          }),
+        ]);
+      };
+      const fixtures = [
+        await placeEvent("Place arm supper", 10, 18, "in ten days at 18:00"),
+        await placeEvent("Place arm breakfast", 11, 8, "in eleven days at 08:00"),
+      ];
+      const refused = fixtures.find((f) => !f.ok);
       const places = await ask("select public.convene_places() as d");
       const opts = places.ok && Array.isArray(places.d) ? places.d : [];
       const wellFormed = opts.every((o) => {
@@ -1390,19 +1430,27 @@ async function runLiveDbArms({ record, skip }) {
           o.name !== ""
         );
       });
-      const city = opts.find((o) => o.kind === "city");
+      // The fixture's own city, not whichever city sorts first, so the lane read is the one the
+      // fixture filled.
+      const city = opts.find((o) => o.id === "city|ghana|accra");
       const narrowed = city
         ? await ask(
             "select public.convene_discovery('all', null, null, null, null, null, array[$1]) as d",
             [city.id],
           )
         : null;
+      // Near must be there to be read: a lane under its floor is absent, and an absent lane proves
+      // nothing about its reasons (228).
+      const near = narrowed && narrowed.ok ? section(narrowed.d, "near") : null;
       const nearPlace =
-        narrowed && narrowed.ok && section(narrowed.d, "near")
-          ? section(narrowed.d, "near").items.every(
-              (i) => i.reason && i.reason.place && i.reason.place.city,
-            )
-          : true;
+        !!near &&
+        near.items.length > 0 &&
+        near.items.every(
+          (i) =>
+            i.reason &&
+            i.reason.place &&
+            String(i.reason.place.city || "").toLowerCase() === "accra",
+        );
       const malformed = await attempt(
         client,
         "select public.convene_discovery('all', null, null, null, null, null, array['town|x'])",
@@ -1410,7 +1458,7 @@ async function runLiveDbArms({ record, skip }) {
       await client.query("rollback to savepoint places_fixture");
       record(
         "Handoff 32-B (1095): convene_places() answers grounded places by kind; a city narrows and Near reads the place; a malformed place is refused",
-        fixture.ok &&
+        !refused &&
           places.ok &&
           opts.length > 0 &&
           wellFormed &&
@@ -1419,7 +1467,7 @@ async function runLiveDbArms({ record, skip }) {
           nearPlace &&
           !malformed.ok &&
           malformed.code === "22023",
-        (fixture.ok ? "" : "publish_post refused: " + failed(fixture) + "; ") +
+        (refused ? "publish_post refused: " + failed(refused) + "; " : "") +
           (places.ok
             ? opts.length + " option(s), city " + JSON.stringify(city || null)
             : failed(places)) +
@@ -1429,6 +1477,8 @@ async function runLiveDbArms({ record, skip }) {
               ? JSON.stringify(sectionIds(narrowed.d))
               : failed(narrowed)
             : "no city") +
+          " near " +
+          (near ? near.items.length + " item(s)" : "absent") +
           " malformed " +
           (malformed.ok ? "answered" : malformed.code),
       );

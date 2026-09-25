@@ -822,6 +822,8 @@ function makeMockDb() {
     attend: {
       pages: {},
       reads: [],
+      // Addendum 4 item 1: every event_presenters call, its ids and whether it carried no session.
+      presenterReads: [],
       speakers: [],
       parties: [],
       rsvps: [],
@@ -1548,6 +1550,29 @@ async function mockSupabase(page, db, opts = {}) {
       const b = req.postDataJSON() || {};
       const ids = Array.isArray(b.p_events) ? b.p_events : [];
       return json(db.attend.speakers.filter((sp) => ids.includes(sp.event_id)));
+    }
+    // Addendum 4 item 1 (1121): the presenter line for many events, which the database resolves
+    // through the same two private functions as event_page, so the mock answers from the same page
+    // fixtures: presented_by and host per id it holds a page for. Anon holds no execute grant
+    // (20260924140000), so a signed-out call is refused; more than 200 ids is the function's 22023.
+    if (p === "/rest/v1/rpc/event_presenters") {
+      const b = req.postDataJSON() || {};
+      const ids = Array.isArray(b.p_events) ? b.p_events : [];
+      const anon = !(req.headers()["authorization"] || "").includes(JWT);
+      db.attend.presenterReads.push({ ids, anon });
+      if (anon)
+        return json(
+          { code: "42501", message: "permission denied for function event_presenters" },
+          401,
+        );
+      if (ids.length > 200)
+        return json({ code: "22023", message: "At most 200 events at a time." }, 400);
+      const out = {};
+      for (const id of ids) {
+        const pg = db.attend.pages[id];
+        if (pg) out[id] = { presented_by: pg.presented_by ?? null, host: pg.host ?? null };
+      }
+      return json(out);
     }
     if (p === "/rest/v1/rpc/rsvp_event") {
       const b = req.postDataJSON() || {};
@@ -6025,6 +6050,7 @@ if (require.main === module)
             runDiscovery,
             runDiscoveryFacets,
             runDiscoveryPlace,
+            FOLLOWUP_ARMS,
             DISCOVERY_VIEWPORTS,
             FACET_VIEWPORTS,
             PLACE_VIEWPORTS,
@@ -6041,6 +6067,11 @@ if (require.main === module)
           for (const [vp, theme] of PLACE_VIEWPORTS)
             if (!only || (vp[0] === only[0] && vp[1] === only[1]))
               await runDiscoveryPlace(bt, bname, vp, theme);
+          // Handoff 32-B Addenda 4 and 5: one arm per item (1 to 5, and 8), each on its own cells.
+          for (const [run, cells] of FOLLOWUP_ARMS)
+            for (const [vp, theme] of cells)
+              if (!only || (vp[0] === only[0] && vp[1] === only[1]))
+                await run(bt, bname, vp, theme);
         }
         if (process.env.SPECIAL.includes("connect")) {
           const { runConnect } = require("./connect.cjs");
@@ -6120,6 +6151,7 @@ if (require.main === module)
         runDiscovery,
         runDiscoveryFacets,
         runDiscoveryPlace,
+        FOLLOWUP_ARMS,
         DISCOVERY_VIEWPORTS,
         FACET_VIEWPORTS,
         PLACE_VIEWPORTS,
@@ -6130,6 +6162,9 @@ if (require.main === module)
       for (const [vp, theme] of FACET_VIEWPORTS) await runDiscoveryFacets(bt, bname, vp, theme);
       // Handoff 31-D item 7 (1063, 1065, 1067): the lens, the place and the intent.
       for (const [vp, theme] of PLACE_VIEWPORTS) await runDiscoveryPlace(bt, bname, vp, theme);
+      // Handoff 32-B Addenda 4 and 5: one arm per item (1 to 5, and 8), each on its own cells.
+      for (const [run, cells] of FOLLOWUP_ARMS)
+        for (const [vp, theme] of cells) await run(bt, bname, vp, theme);
       // Handoff 30-D item 14.3: the public page's guest path on the two representative layouts.
       for (const vp of [
         [390, 844],

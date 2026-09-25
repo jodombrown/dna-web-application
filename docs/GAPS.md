@@ -5032,6 +5032,17 @@ event, Back to Discovery), the edges `aria-disabled` in place, the arrows while 
 the rail at its strip, and the header row moved into the list column. Owed: a Strand correction for
 the pane's tracks, the toolbar and the hidden list.
 
+Amended 25 September 2026 by #66 (handoff 32-B, Addenda 4 and 5). The height is now carried by the
+page, as G78's padding is: Discovery gives the pane body the list column's height, less the pane's
+sticky offset and the column's foot, and a scroller of its own, so the pane's cluster stays in view
+and Previous and Next start each event at its top (Addendum 4 item 4). The tracks are still Strand's,
+and 1123 widens what they divide: with the canvas at 5% gutters and no maximum, the list keeps 360 and
+the pane takes the rest, measured on the local build at 680 at 1280, 824 at 1440, 1256 at 1920 and
+1832 at 2560, with the event page inside it held to `--content-max`. Addendum 5 describes the pane as
+keeping its 520; it has not been 520 on any build, which is this gap, so the arm proves what 1123
+asks of it (the list column holding a full 320 card, the pane inside the new edges) and the width is
+left to the Strand correction. Owed as before: the tracks, the toolbar and the hidden list.
+
 ## G111. FacetRail's Clear all sits after the axes, not in the pinned heading row (line 20)
 
 **Severity: low. Opened 25 September 2026 during handoff 32-B, filed under ruling 597. The number is
@@ -5128,3 +5139,36 @@ into the compile, the video frame with it, so the next re-sync does not reopen t
 
 Chat accepted the divergence as tracked on 25 September 2026, after `7d52411`'s run 348; the change goes
 to Strand in correction 28, after this PR merges.
+
+## G117. Run 350 passed the live Place check's "Near reads the place" with nothing to read — closed (1095)
+
+**Severity: low. Opened and closed 25 September 2026, after handoff 32-B merged as #64 on Chat's 1114
+read, filed under ruling 597. The number is assigned by this entry (ruling 638).**
+
+`tests/live-db.cjs`'s check "convene_places() answers grounded places by kind; a city narrows and Near
+reads the place; a malformed place is refused" passed on #64's enforcing run 350 (`pages.yml` id
+`36086569219`, head `48703c1`) without its Near clause ever reading a lane. The clause read Near only
+when the city's narrowing returned it, and held true otherwise. The narrowing returned no lanes at
+all, `narrowed []`: the fixture published one Accra event, and `20260924100000_p2_discovery_lanes`
+sets Near's floor in `private.convene_thresholds` to 2, so the lane stayed under its floor and the
+clause held on an empty premise. Under ruling 228 a clause that did not run is not a pass, and the
+1114 comment on #64 said so rather than let the green be read as coverage.
+
+Closed by this change. The fixture publishes a second Accra event under the same savepoint, so the
+city's Near lane meets its floor of 2 (lanes rank per section, so the two events also sit in Fresh
+without leaving Near). The check narrows on the fixture's own `city|ghana|accra` rather than whichever
+city sorts first, and requires the Near lane present with every item's reason naming Accra, so a floor
+raised above the fixture's two events now fails the check by name instead of passing it. The proof is
+the `live` job on this change's head.
+
+## G118. B9-SPEC line 23 still names See all on This weekend and Join from anywhere
+
+**Severity: low. Opened 25 September 2026 during #66 (handoff 32-B, Addendum 4 item 2), filed under
+ruling 597. The number is assigned by this entry (ruling 638).**
+
+B9-SPEC line 23 reads "See all (soon, weekend, online apply the matching facet; relationship lanes
+switch lens)". Ruling 1112 took See all off This weekend, as #64 built it, and ruling 1122 takes it off
+Join from anywhere, as this change builds it, so Happening soon is the one lane whose See all applies a
+facet and the four relationship lanes switch lens. Line 13 is amended in this change because Addendum
+5 asks for it; neither addendum names line 23, so it stays as Chat wrote it. Owed: line 23 restated
+to 1112 and 1122.

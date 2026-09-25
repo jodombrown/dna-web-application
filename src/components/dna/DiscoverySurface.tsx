@@ -33,7 +33,15 @@
 // format word and places, and there is no count anywhere.
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation, useNavigate, useRouter } from "@tanstack/react-router";
-import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
 import { EVENT_PAGE_KEY } from "@/components/dna/EventSurface";
 import { Ghosts } from "@/components/dna/Ghosts";
 import { LoadError } from "@/components/dna/LoadError";
@@ -633,7 +641,13 @@ export function DiscoverySurface({
           value={railValue}
           label="Filters"
           expandLabel={paneOpen ? "Back to Discovery and show filters" : "Show filters"}
-          onExpand={paneOpen ? closeToDiscovery : () => setRailCollapsed(false)}
+          onExpand={() => {
+            // Item 3 (D6; 1094, 1111): the strip is the rail's own toggle. With the pane open it
+            // closes the pane and shows the filters, as its name says; the write is the member's
+            // toggle, never the pane's, and nothing is written when the rail is already open.
+            if (railCollapsed) setRailCollapsed(false);
+            if (paneOpen) closeToDiscovery();
+          }}
         />
       ) : (
         <FacetRail
@@ -656,7 +670,20 @@ export function DiscoverySurface({
     });
     // The rail reads the axes' sources and the current facets; listing those is enough.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [compact, railShut, paneOpen, band, touch, lists, familyRows, homes, places, lens, search]);
+  }, [
+    compact,
+    railShut,
+    railCollapsed,
+    paneOpen,
+    band,
+    touch,
+    lists,
+    familyRows,
+    homes,
+    places,
+    lens,
+    search,
+  ]);
   useEffect(() => {
     setRightRail(null);
   }, []);
@@ -715,9 +742,10 @@ export function DiscoverySurface({
     const saved = postId ? (savedNow[postId] ?? !!data?.saved.has(postId)) : false;
     const going = !!data?.going.has(item.event_id);
     const hostId = ev?.hostId ?? "";
-    const presenter = post.author_name;
-    const canFollow =
-      post.author_kind === "member" && !!hostId && hostId !== member.id && !!presenter;
+    // 1121: the Follow item names the presenter as the pane does, and follows the host as it does.
+    const presenter = ev?.presenter?.name ?? post.author_name;
+    const presenterKind = ev?.presenter?.kind ?? post.author_kind;
+    const canFollow = presenterKind === "member" && !!hostId && hostId !== member.id && !!presenter;
     const following = hostId ? (followNow[hostId] ?? followedIds.has(hostId)) : false;
     const family = ev?.family ?? "";
     const topic = familyLabel(family);
@@ -830,6 +858,10 @@ export function DiscoverySurface({
     const title = post.fields["title"]?.value;
     const topic = familyLabel(ev?.family ?? null);
     const family = ev?.family ?? null;
+    // 1121: the presenter row reads the pane's presenter, name, face and handle from one record; a
+    // card the read answered nothing for keeps the author's line (416).
+    const shown = ev?.presenter;
+    const presenterHandle = shown ? shown.handle : post.author_handle;
     return (
       <div
         key={lane + ":" + item.event_id}
@@ -845,8 +877,8 @@ export function DiscoverySurface({
           title={typeof title === "string" ? <span style={TITLE_CLAMP}>{title}</span> : undefined}
           when={ev?.when || undefined}
           where={ev ? whereFor(ev) : undefined}
-          presenter={post.author_name || undefined}
-          presenterSrc={post.author_avatar}
+          presenter={(shown ? shown.name : post.author_name) || undefined}
+          presenterSrc={shown ? shown.avatar : post.author_avatar}
           topic={topic ?? undefined}
           reason={reasonFor(lane, item.reason)}
           media={post.media[0]}
@@ -855,9 +887,8 @@ export function DiscoverySurface({
           onOpen={() => openEvent(item.event_id, lane)}
           onPreload={expanded && !touch ? () => warmEvent(item.event_id) : undefined}
           onPresenter={
-            post.author_handle
-              ? () =>
-                  void navigate({ to: "/m/$handle", params: { handle: post.author_handle ?? "" } })
+            presenterHandle
+              ? () => void navigate({ to: "/m/$handle", params: { handle: presenterHandle } })
               : undefined
           }
           onTopic={
@@ -874,12 +905,11 @@ export function DiscoverySurface({
     <DiaLine state="done" text={sentence ?? undefined} style={{ alignItems: "flex-start" }} />
   );
 
-  // See all (item 3; 1092, 1112): Happening soon applies the two weeks and Join from anywhere online
-  // and hybrid, the four relationship lanes switch to their lens, and This weekend, New this week and
-  // Near your homes carry none.
+  // See all (item 3; 1092, 1112, 1122): Happening soon applies the two weeks, the four relationship
+  // lanes switch to their lens, and This weekend, Join from anywhere, New this week and Near your
+  // homes carry none. Format is single-choice, so no See all writes a Format value (1122).
   const seeAllOf = (id: DiscoveryLaneId): SeeAll | null => {
     if (id === "soon") return { to: "/convene", search: { ...search, when: "two_weeks" } };
-    if (id === "online") return { to: "/convene", search: { ...search, format: "online,hybrid" } };
     if (id === "curated" || id === "follow" || id === "taste" || id === "network")
       return { lens: id };
     return null;
@@ -1089,6 +1119,36 @@ export function DiscoverySurface({
         }
       : {};
 
+  // Item 4 (B9-SPEC line 14; 1083): the pane body scrolls on its own, apart from the list column,
+  // and holds the column's height less the pane's sticky offset and the column's foot, so the pane's
+  // cluster (Previous, Next, Back to Discovery) at its top right stays in view however far either
+  // scrolls. The height is the column's own, measured, because the lens row above it is content.
+  const paneBody = useRef<HTMLDivElement>(null);
+  const [paneHeight, setPaneHeight] = useState<number | null>(null);
+  useLayoutEffect(() => {
+    if (!paneOpen) return;
+    const body = paneBody.current;
+    const section = body?.parentElement;
+    const column = body?.closest<HTMLElement>('[data-scroller="feed"]');
+    if (!body || !section || !column) return;
+    const measure = () => {
+      const foot = parseFloat(getComputedStyle(column).paddingBottom) || 0;
+      const sec = getComputedStyle(section);
+      const stuck = parseFloat(sec.top) || 0;
+      const edges =
+        (parseFloat(sec.borderTopWidth) || 0) + (parseFloat(sec.borderBottomWidth) || 0);
+      setPaneHeight(Math.max(0, Math.floor(column.clientHeight - foot - stuck - edges)));
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(column);
+    return () => ro.disconnect();
+  }, [paneOpen]);
+  // Previous and Next replace the event under the same pane, so the body starts each one at its top.
+  useLayoutEffect(() => {
+    paneBody.current?.scrollTo({ top: 0 });
+  }, [paneId]);
+
   // The list follows the open card (1083): Pane's `selectedKey` scrolls a list column this shell does
   // not scroll (G85), and a lane scrolls sideways, so the card is brought into its lane's view here.
   useEffect(() => {
@@ -1154,7 +1214,17 @@ export function DiscoverySurface({
           selectedKey={paneId ?? undefined}
           {...stepping}
         >
-          {pane}
+          <div
+            ref={paneBody}
+            data-pane-body
+            style={{
+              height: paneHeight ?? undefined,
+              overflowY: "auto",
+              overscrollBehavior: "contain",
+            }}
+          >
+            {pane}
+          </div>
         </Pane>
         {toasts}
       </div>

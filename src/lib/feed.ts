@@ -7,10 +7,11 @@ import type { FieldValues } from "@/components/strand/verb-schema";
 import type { Member } from "./auth";
 import type { Database, Tables, Views } from "./database.types";
 import { signedMediaUrl } from "./dia";
+import type { EventPerson, EventPresenter } from "./event-page";
 import { deliverImageUrl } from "./media";
 import { placeLine } from "./place";
 import type { LensId } from "./lens";
-import { domainOf, type EventView, type PostView } from "./post-view";
+import { domainOf, type EventPresenterView, type EventView, type PostView } from "./post-view";
 import { getSupabase, type Supabase } from "./supabase";
 import { instrumentLabels } from "./vocabularies";
 import { browserZone, dateInZone, isPast, knownZone, localLine, whenLabel, whenLine } from "./when";
@@ -72,6 +73,55 @@ function asPost(r: FeedRow): FeedPost | null {
   };
 }
 
+/** What `event_presenters` answers for one event: the pane's two values (674, 1079, 1121). */
+type PresenterRecord = { presented_by: EventPresenter; host: EventPerson | null };
+
+/** The function takes at most 200 ids a call, so a page names its events in slices of 200. */
+const PRESENTERS_PER_CALL = 200;
+
+/**
+ * Addendum 4 item 1 (1121): the presenter line for a page of events, keyed by event id, from the one
+ * database read the event pane's own resolution runs through. A slice that fails answers nothing, and
+ * its events keep the author's line (416).
+ */
+async function eventPresenters(sb: Supabase, ids: string[]): Promise<Map<string, PresenterRecord>> {
+  const slices: string[][] = [];
+  for (let i = 0; i < ids.length; i += PRESENTERS_PER_CALL)
+    slices.push(ids.slice(i, i + PRESENTERS_PER_CALL));
+  const answers = await Promise.all(
+    slices.map((p_events) => sb.rpc("event_presenters", { p_events })),
+  );
+  const out = new Map<string, PresenterRecord>();
+  for (const { data } of answers) {
+    if (!data || typeof data !== "object" || Array.isArray(data)) continue;
+    for (const [id, rec] of Object.entries(data as Record<string, PresenterRecord | null>))
+      if (rec) out.set(id, rec);
+  }
+  return out;
+}
+
+/** Whose face and handle the presenter row carries: the pane's rule, a member presenter or the host. */
+function presenterPerson(rec: PresenterRecord): EventPerson | null {
+  const by = rec.presented_by;
+  if (by?.kind === "member") return by;
+  return rec.host;
+}
+
+/** The pane's presenter line (EventSurface): presented_by's name, else the host's. */
+function presenterView(
+  rec: PresenterRecord | undefined,
+  avatarUrls: Map<string, string | undefined>,
+): EventPresenterView | null {
+  if (!rec) return null;
+  const by = rec.presented_by;
+  const face = presenterPerson(rec);
+  const avatar = face?.avatar_path ? avatarUrls.get(face.avatar_path) : undefined;
+  if (by?.kind === "space") return { kind: "space", id: by.id, name: by.name, avatar };
+  const person = by ?? rec.host;
+  if (!person?.name) return null;
+  return { kind: "member", id: person.id, name: person.name, handle: person.handle, avatar };
+}
+
 /** Resolve the created objects, media and links for a page of posts and map them to PostViews. */
 export async function hydratePosts(
   sb: Supabase,
@@ -131,7 +181,7 @@ export async function hydratePosts(
   const eventSpaceIds = eventRows
     .map((e) => e.space_id)
     .filter((id): id is string => !!id && !spaceIds.has(id));
-  const [delivery, hookSpaces, speakers] = await Promise.all([
+  const [delivery, hookSpaces, speakers, presenters] = await Promise.all([
     eventRows.length
       ? sb
           .from("event_delivery")
@@ -154,6 +204,13 @@ export async function hydratePosts(
       : Promise.resolve({
           data: [] as Database["public"]["Functions"]["event_speakers"]["Returns"],
         }),
+    // Addendum 4 item 1 (674, 1079, 1121): the presenter line as the event pane resolves it.
+    eventRows.length
+      ? eventPresenters(
+          sb,
+          eventRows.map((e) => e.id),
+        )
+      : Promise.resolve(new Map<string, PresenterRecord>()),
   ]);
   const speakersByEvent = new Map<string, NonNullable<typeof speakers.data>>();
   for (const sp of speakers.data ?? []) {
@@ -201,6 +258,15 @@ export async function hydratePosts(
   // Brief 10 (679): one delivery URL per speaker photo, the same size as the author avatar.
   for (const sp of speakers.data ?? []) {
     const path = sp.avatar_path;
+    if (!path || avatarUrls.has(path)) continue;
+    avatarUrls.set(
+      path,
+      await deliverImageUrl("profile-media", path, { width: 80, height: 80, resize: "cover" }),
+    );
+  }
+  // Addendum 4 item 1: the presenter's photo as the pane draws it, the same size again.
+  for (const rec of presenters.values()) {
+    const path = presenterPerson(rec)?.avatar_path;
     if (!path || avatarUrls.has(path)) continue;
     avatarUrls.set(
       path,
@@ -269,9 +335,13 @@ export async function hydratePosts(
           (p.feed_author ?? NO_AUTHOR).name ??
           (p.author_id === member.id ? member.name : "The host");
         const cancelledOn = e.cancelled_at ? dateInZone(new Date(e.cancelled_at), viewerTz) : "";
+        // 1121: the presenter line names the presenter as the pane does; every other name keeps 416.
+        const presenter = presenterView(presenters.get(e.id), avatarUrls);
         eventMeta = cancelled
           ? ["Was set for " + wasSetFor, where || null].filter(Boolean).join(" · ")
-          : ["Presented by " + hostName, when || null, where || null].filter(Boolean).join(" · ");
+          : ["Presented by " + (presenter?.name ?? hostName), when || null, where || null]
+              .filter(Boolean)
+              .join(" · ");
         eventView = {
           id: e.id,
           cancelled,
@@ -324,6 +394,7 @@ export async function hydratePosts(
                       .filter((w): w is string => !!w),
                   ),
                 ],
+          presenter,
         };
       }
     } else if (verb === "collaborate") {

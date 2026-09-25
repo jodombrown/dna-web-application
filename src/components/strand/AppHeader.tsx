@@ -13,7 +13,8 @@
 // three-way tier, which is the axis the bell asks about, because `variant` reads "compact" at the
 // medium tier too and the bell belongs in the row there.
 // Production additions: homeHref renders the logo and Home item as real links (hover-intent prefetch,
-// ruling 84); onIntentC prefetches a C route from the inline dock.
+// ruling 84); onIntentC prefetches a C route from the inline dock; maxWidth takes "none", so the
+// expanded row can take a surface's own edges, as Discovery's canvas under 1123.
 import { useState, type CSSProperties, type MouseEvent, type ReactNode } from "react";
 import { Avatar } from "./Avatar";
 import { Icon } from "./Icon";
@@ -48,7 +49,7 @@ export type AppHeaderProps = {
   onIntentC?: ((c: C) => void) | undefined;
   /** Compact and medium only: the LensBar takes the centre slot while the member is in the list. */
   lensBar?: HeaderLensBar | null | undefined;
-  maxWidth?: number;
+  maxWidth?: number | "none" | undefined;
   children?: ReactNode;
   style?: CSSProperties | undefined;
 };

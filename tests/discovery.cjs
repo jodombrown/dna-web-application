@@ -8,8 +8,9 @@
 //                  display face at 22, none without items; every card PostCard's discovery face at
 //                  320 with 16:9 media and a title clamped to two lines whose height is held; the
 //                  reason row in words on the four relationship lanes and empty on the other five;
-//                  the where line; no digit outside the when line; See all on six lanes and not on
-//                  This weekend, New this week or Near your homes; the LensBar's five lenses with
+//                  the where line; no digit outside the when line; See all on five lanes and not
+//                  on This weekend, Join from anywhere, New this week or Near your homes (1122);
+//                  the LensBar's five lenses with
 //                  labels and icons and no trailing seat; the homes line; no right column; the rail
 //                  collapsed at first load with nothing written; the facet set and order with its
 //                  words and no Donation; the rail's toggle written per band, never at compact.
@@ -42,9 +43,24 @@
 // `runDiscoveryPlace` (handoff 31-D: 1063, 1065, 1067), on its own viewports: the lens kept behind
 // the pane with no second read, the column and a lane restored on Back, and hover intent.
 //
+// Addendum 4's arms, one per item (7), and Addendum 5's, each on its own cells:
+//
+//   presenter      item 1 (1121): the card's presenter row, the menu's Follow and the Feed's
+//                  "Presented by" name the presenter the pane names, where 416 hides the author, a
+//                  Space presenter keeps its name and no Follow, and no signed-out render reads it.
+//   online         item 2 (1122): Join from anywhere has no See all, and /convene/online lands on
+//                  format=online, one value, with Online lit.
+//   rail           item 3 (D6; 1094, 1111): the pane takes the rail's width, closing it returns the
+//                  rail to the member's last choice, and only the member's toggle writes.
+//   step           item 4 (B9-SPEC line 14): two Next presses leave the pane body at its top with
+//                  the cluster in view, the list and the body scrolling apart.
+//   homes          item 5 (1110, 928): Home between Topics and Place, a ladder for each of two homes.
+//   width          item 8 (1123): the canvas and the header on 5% and 95% of the viewport, the Feed
+//                  still 1440 at 1920, no page scroll, and the pane beside a full 320 card.
+//
 // Usage: BASE=https://<preview>.dna-web-application.pages.dev SPECIAL=discovery node tests/matrix.cjs
 const M = require("./matrix.cjs");
-const { seedAttend, seedAttendCard } = require("./event.cjs");
+const { seedAttend, seedAttendCard, publicPage } = require("./event.cjs");
 
 const {
   launch,
@@ -235,6 +251,7 @@ function seedEvent(db, key, { title, mode, days, cities = [], family = null, hos
     mode,
     cities,
     family,
+    host,
   };
 }
 
@@ -254,6 +271,7 @@ function seedCorpus(db) {
       mode: "in_person",
       cities: ["Accra"],
       family: null,
+      host: KWAME,
     },
     supper: seedEvent(db, "supper", {
       title: "Corridor Suppers",
@@ -345,6 +363,17 @@ function seedCorpus(db) {
         ...loadedPage,
         event: { ...loadedPage.event, id: e.event_id, slug: "discovery-" + e.event_id },
       };
+  // 1121: the card reads the pane's presenter, so each page names who the database would: the
+  // latest published post's author (every post here is its host's) and the host, as event_page and
+  // event_presenters both resolve them. Brief 10's page keeps its Space presenter in tests/event.cjs.
+  for (const e of Object.values(E)) {
+    const who = { id: e.host.id, name: e.host.name, handle: e.host.handle, avatar_path: null };
+    db.attend.pages[e.event_id] = {
+      ...db.attend.pages[e.event_id],
+      presented_by: { kind: "member", ...who },
+      host: who,
+    };
+  }
   return E;
 }
 
@@ -859,19 +888,16 @@ async function runDiscovery(browserType, bname, [w, h], theme) {
       return s && s.href ? new URL(s.href, "https://x.invalid") : null;
     };
     const soonTo = hrefOf("soon");
-    const onlineTo = hrefOf("online");
     record(
-      tag + " full: See all on six lanes to their targets, none on the other three (1092, 1112)",
+      tag +
+        " full: See all on five lanes to their targets, none on the other four (1092, 1112, 1122)",
       !!soonTo &&
         soonTo.pathname === "/convene" &&
         soonTo.searchParams.get("when") === "two_weeks" &&
-        !!onlineTo &&
-        onlineTo.pathname === "/convene" &&
-        onlineTo.searchParams.get("format") === "online,hybrid" &&
         ["curated", "follow", "taste", "network"].every(
           (l) => hrefOf(l) && hrefOf(l).pathname === "/convene/" + l,
         ) &&
-        ["weekend", "fresh", "near"].every((l) => !hrefOf(l)),
+        ["weekend", "online", "fresh", "near"].every((l) => !hrefOf(l)),
       JSON.stringify(seeAll),
     );
 
@@ -1328,10 +1354,8 @@ async function runDiscoveryFacets(browserType, bname, [w, h], theme) {
       ],
       [
         "/convene/online?price=free",
-        (u) =>
-          u.searchParams.get("format") === "online,hybrid" &&
-          u.searchParams.get("price") === "free",
-        "format=online,hybrid with the price kept",
+        (u) => u.searchParams.get("format") === "online" && u.searchParams.get("price") === "free",
+        "format=online with the price kept",
       ],
       ["/convene/near", (u) => [...u.searchParams.keys()].length === 0, "no query"],
     ]) {
@@ -1742,10 +1766,749 @@ async function runDiscoveryPlace(browserType, bname, [w, h], theme) {
   }
 }
 
+// ---------------------------------------------------------------------------------------------------
+// Handoff 32-B Addendum 4 (items 1 to 5, rulings 1121 and 1122) and Addendum 5 (item 8, ruling 1123):
+// one arm per item, each on its own cells.
+// ---------------------------------------------------------------------------------------------------
+
+/** Items 1, 2 and 5: compact, where the page and the Sheet stand in, and expanded, with the pane. */
+const FOLLOWUP_VIEWPORTS = [
+  [[390, 844], "light"],
+  [[1280, 800], "dark"],
+];
+/** Items 3 and 4 are the pane's, which opens at expanded only: the expanded band and the wide one. */
+const PANE_VIEWPORTS = [
+  [[1280, 800], "light"],
+  [[1600, 1000], "dark"],
+];
+/** Item 8's widths (1123). */
+const WIDTH_VIEWPORTS = [
+  [[1280, 800], "light"],
+  [[1440, 900], "dark"],
+  [[1920, 1080], "light"],
+  [[2560, 1440], "dark"],
+];
+
+/** Item 1's member presenter: a name 416 keeps from this viewer on the post's author line. */
+const EFUA = {
+  id: "00000000-0000-4000-8000-0000000000f8",
+  name: "Efua Asante",
+  handle: "efua-asante",
+};
+const EFUA_PHOTO = "seed/efua-asante.jpg";
+/** Item 1's Space presenter: a Space-authored post, hosted by Kwame Mensah. */
+const GUILD = { id: "00000000-0000-4000-8000-0000000000c9", name: "Corridor Suppers" };
+const VEILED_TITLE = "The reading room";
+
+/**
+ * Item 1's two events at the head of Happening soon: one whose post the feed view carries with no
+ * author (416 does not admit the author to this viewer), presented by Efua Asante with a photo, and
+ * one authored by a Space. Each page names who the database would (event_page and event_presenters
+ * resolve both from the same two private functions).
+ */
+function seedPresenters(db) {
+  const veiled = seedEvent(db, "veiled", {
+    title: VEILED_TITLE,
+    mode: "in_person",
+    days: 4,
+    cities: ["Accra"],
+    family: "learning_dialogue",
+    host: { ...EFUA },
+  });
+  Object.assign(
+    db.posts.find((p) => p.id === veiled.post_id),
+    { author_name: null, author_handle: null, author_avatar_path: null },
+  );
+  const guild = seedEvent(db, "guild", {
+    title: "Suppers on the corridor",
+    mode: "in_person",
+    days: 6,
+    cities: ["Accra"],
+    family: "small_social",
+  });
+  Object.assign(
+    db.posts.find((p) => p.id === guild.post_id),
+    {
+      author_kind: "space",
+      author_id: GUILD.id,
+      author_name: null,
+      author_handle: null,
+      author_avatar_path: null,
+    },
+  );
+  const base = db.attend.pages[LOADED];
+  const pageOf = (e, title, presented_by, host) =>
+    (db.attend.pages[e.event_id] = {
+      ...base,
+      event: { ...base.event, id: e.event_id, slug: "discovery-" + e.event_id, title },
+      presented_by,
+      host,
+    });
+  const efua = { id: EFUA.id, name: EFUA.name, handle: EFUA.handle, avatar_path: EFUA_PHOTO };
+  pageOf(veiled, VEILED_TITLE, { kind: "member", ...efua }, efua);
+  pageOf(
+    guild,
+    "Suppers on the corridor",
+    { kind: "space", id: GUILD.id, name: GUILD.name },
+    { id: KWAME.id, name: KWAME.name, handle: KWAME.handle, avatar_path: null },
+  );
+  for (const e of [veiled, guild]) {
+    e.places = placeIds(e.cities);
+    e.rungs = {};
+  }
+  const soon = (e) => item(e, { kind: "soon", starts_at: e.starts_at, mode: e.mode });
+  db.discovery.sections.soon = [soon(veiled), soon(guild), ...db.discovery.sections.soon];
+  return { veiled, guild };
+}
+
+/** A client-side navigation, so a public page's loader reads the mock (tests/event.cjs's own). */
+async function clientGo(page, path) {
+  await page.evaluate((p) => {
+    window.history.pushState({}, "", p);
+    window.dispatchEvent(new PopStateEvent("popstate", { state: {} }));
+  }, path);
+}
+
+/** The file a signed avatar URL delivers, or null. */
+function photoOf(src) {
+  if (!src) return null;
+  const at = decodeURIComponent(new URL(src, "https://x.invalid").pathname).split(
+    "/profile-media/",
+  );
+  return at.length > 1 ? at[1] : null;
+}
+
+/** A card's presenter row as drawn: the name beside the avatar, and the photo's source. */
+function presenterRow(page, card) {
+  return page.evaluate((sel) => {
+    const control = document.querySelector(sel + ' [data-row="presenter"] button');
+    const name = control && control.lastElementChild;
+    const img = control && control.querySelector("img");
+    return { name: name ? (name.textContent || "").trim() : null, src: img ? img.src : null };
+  }, card);
+}
+
+/** Opens a card and answers the event page's presenter block: the name after "Presented by". */
+async function openAndReadPresenter(page, card) {
+  await page.locator(`${card} [data-card-open]`).click();
+  await page.waitForSelector(
+    '[data-event-page][data-event-state="loaded"] [data-event-presenter]',
+    {
+      timeout: 20000,
+    },
+  );
+  return page.evaluate(() => {
+    const block = document.querySelector("[data-event-page] [data-event-presenter]");
+    const img = block && block.querySelector("img");
+    const line = block
+      ? Array.from(block.querySelectorAll("span")).find((el) =>
+          (el.textContent || "").trim().startsWith("Presented by "),
+        )
+      : null;
+    const name = line ? (line.textContent || "").trim().replace(/^Presented by\s+/, "") : null;
+    return { name, src: img ? img.src : null };
+  });
+}
+
+async function runDiscoveryPresenter(browserType, bname, [w, h], theme) {
+  const tag = `${bname}-${w}x${h}-${theme}-discovery-presenter`;
+  M.armStart(tag);
+  const db = makeMockDb();
+  seedDiscovery(db);
+  const P = seedPresenters(db);
+  const { browser, page, errors } = await context(browserType, [w, h], theme, db);
+  try {
+    await signIn(page);
+    await openDiscovery(page);
+    const veiled = cardSel(P.veiled, "soon");
+    const guild = cardSel(P.guild, "soon");
+    await page.locator(veiled).waitFor({ timeout: 20000 });
+    const row = await presenterRow(page, veiled);
+    const menu = (await readMenu(page, veiled)).map((x) => x.label);
+    await closeMenu(page);
+    const guildRow = await presenterRow(page, guild);
+    const guildMenu = (await readMenu(page, guild)).map((x) => x.label);
+    await closeMenu(page);
+    const pane = await openAndReadPresenter(page, veiled);
+    await openDiscovery(page);
+    const guildPane = await openAndReadPresenter(page, guild);
+
+    // The card's presenter row: the pane's name and photo, where 416 gives the author line no name.
+    record(
+      tag + " card: the presenter row names the pane's presenter, with the pane's photo (1121)",
+      pane.name === EFUA.name &&
+        row.name === pane.name &&
+        photoOf(row.src) === EFUA_PHOTO &&
+        photoOf(pane.src) === EFUA_PHOTO,
+      JSON.stringify({ row, pane }),
+    );
+    record(
+      tag + " menu: Follow names the pane's presenter (1121)",
+      menu.includes("Follow " + pane.name) && !menu.some((l) => /^Follow(ing)? Member$/.test(l)),
+      menu.join(","),
+    );
+    record(
+      tag + " space: a Space presenter is named as the pane names it, and offers no Follow (1121)",
+      guildPane.name === GUILD.name &&
+        guildRow.name === guildPane.name &&
+        !guildMenu.some((l) => /^Follow/.test(l)),
+      JSON.stringify({ guildRow, guildPane, guildMenu }),
+    );
+
+    // The Feed's Convene post: "Presented by" is the pane's presenter; the author line keeps 416.
+    await page.goto(BASE + "/feed", { waitUntil: "networkidle" });
+    const post = page.locator("main article[data-c='convene']", { hasText: VEILED_TITLE }).first();
+    await post.waitFor({ timeout: 20000 });
+    const lines = await post.evaluate((a) => {
+      const col = a.querySelector("header > div");
+      const rows = col ? Array.from(col.children).map((c) => (c.innerText || "").trim()) : [];
+      return { author: rows[0] || "", meta: rows.find((r) => r.startsWith("Presented by")) || "" };
+    });
+    record(
+      tag +
+        " feed: the post's \"Presented by\" is the pane's presenter, and its author line keeps 416",
+      lines.meta.startsWith("Presented by " + pane.name + " · ") && lines.author === "Member",
+      JSON.stringify(lines),
+    );
+
+    // Signed out: Discovery and the Feed are sign-in only, and the public page reads no presenter
+    // line; the projection's own role word is what it shows (139 to 141).
+    const slug = "the-reading-room";
+    db.attend.publicPages[slug] = {
+      ...publicPage("loaded", { slug, title: VEILED_TITLE }),
+      presented_by: { kind: "member", name: "the host" },
+      host: { name: "the host" },
+    };
+    const reads = db.attend.presenterReads.length;
+    const anonCtx = await browser.newContext({
+      viewport: { width: w, height: h },
+      colorScheme: theme,
+    });
+    const anon = await anonCtx.newPage();
+    await mockSupabase(anon, db);
+    await anon.goto(BASE + "/convene", { waitUntil: "networkidle" });
+    await anon.waitForURL((u) => u.pathname === "/sign-in", { timeout: 15000 });
+    const signInText = await anon.locator("body").innerText();
+    await clientGo(anon, "/e/" + slug);
+    await anon.waitForSelector(`[data-public-event="${slug}"]`, { timeout: 15000 });
+    const publicText = await anon.locator("body").innerText();
+    await anonCtx.close();
+    record(
+      tag + " signed out: no render names the presenter or reads event_presenters (1121)",
+      !signInText.includes(EFUA.name) &&
+        !publicText.includes(EFUA.name) &&
+        publicText.includes(VEILED_TITLE) &&
+        db.attend.presenterReads.length === reads,
+      JSON.stringify({
+        reads: db.attend.presenterReads.slice(reads),
+        named: publicText.includes(EFUA.name),
+      }),
+    );
+
+    record(tag + " no page errors", errors.length === 0, errors.join(" | ").slice(0, 300));
+  } catch (e) {
+    record(tag + " flow", false, String(e).slice(0, 400));
+  } finally {
+    await browser.close();
+  }
+}
+
+async function runDiscoveryOnline(browserType, bname, [w, h], theme) {
+  const tag = `${bname}-${w}x${h}-${theme}-discovery-online`;
+  M.armStart(tag);
+  const tier = tierOf(w);
+  const db = makeMockDb();
+  seedDiscovery(db);
+  const { browser, page, errors } = await context(browserType, [w, h], theme, db);
+  try {
+    await signIn(page);
+    await openDiscovery(page);
+    const lanes = await page.evaluate(() =>
+      Array.from(document.querySelectorAll("[data-discovery] [data-lanes] > [data-lane]")).map(
+        (l) => {
+          const a = l.querySelector("a[data-see-all]");
+          return { lane: l.getAttribute("data-lane"), href: a ? a.getAttribute("href") : null };
+        },
+      ),
+    );
+    const online = lanes.find((l) => l.lane === "online");
+    record(
+      tag + " Join from anywhere has no See all, and no See all writes a Format value (1122)",
+      !!online &&
+        online.href === null &&
+        lanes
+          .filter((l) => l.href)
+          .every((l) => !new URL(l.href, "https://x.invalid").searchParams.has("format")),
+      JSON.stringify(lanes),
+    );
+
+    await openDiscovery(page, "/convene/online?price=free");
+    const u = new URL(page.url());
+    const sent = await settled(
+      page,
+      db,
+      (c) =>
+        JSON.stringify(c.p_format) === '["online"]' && JSON.stringify(c.p_price) === '["free"]',
+    );
+    record(
+      tag +
+        " /convene/online lands on /convene with format=online, one value, the rest kept (1122)",
+      u.pathname === "/convene" &&
+        u.searchParams.getAll("format").join("|") === "online" &&
+        u.searchParams.get("price") === "free" &&
+        sent,
+      u.pathname + u.search + " " + JSON.stringify(lastCall(db)),
+    );
+
+    const scope = await openRail(page, tier);
+    const format = () =>
+      page.evaluate(
+        (scope) =>
+          Array.from(
+            document.querySelectorAll(`${scope} [data-axis-id="format"] [role="radio"]`),
+          ).map((r) => ({
+            label: (r.textContent || "").trim(),
+            on: r.getAttribute("aria-checked") === "true",
+          })),
+        scope,
+      );
+    const lit = await format();
+    record(
+      tag + " Online is lit in Format, and nothing else is (1122)",
+      lit
+        .filter((x) => x.on)
+        .map((x) => x.label)
+        .join("|") === "Online",
+      JSON.stringify(lit),
+    );
+    await page
+      .locator(`${scope} [data-axis-id="format"] [role="radio"]`, { hasText: "Hybrid" })
+      .click();
+    await page.waitForURL((v) => v.searchParams.get("format") !== "online", { timeout: 10000 });
+    const after = new URL(page.url());
+    const relit = await format();
+    record(
+      tag + " choosing Hybrid replaces Online: the control writes one Format value (1122)",
+      after.searchParams.getAll("format").join("|") === "hybrid" &&
+        relit
+          .filter((x) => x.on)
+          .map((x) => x.label)
+          .join("|") === "Hybrid" &&
+        (await settled(page, db, (c) => JSON.stringify(c.p_format) === '["hybrid"]')),
+      after.search + " " + JSON.stringify(relit),
+    );
+    await closeRail(page, tier);
+
+    record(tag + " no page errors", errors.length === 0, errors.join(" | ").slice(0, 300));
+  } catch (e) {
+    record(tag + " flow", false, String(e).slice(0, 400));
+  } finally {
+    await browser.close();
+  }
+}
+
+async function runDiscoveryRailPane(browserType, bname, [w, h], theme) {
+  const tag = `${bname}-${w}x${h}-${theme}-discovery-rail`;
+  M.armStart(tag);
+  const band = w >= 1440 ? "wide" : "expanded";
+  const db = makeMockDb();
+  seedDiscovery(db);
+  const { browser, page, errors } = await context(browserType, [w, h], theme, db);
+  const rail = () =>
+    page.evaluate((sel) => {
+      const nav = document.querySelector(sel);
+      const grid = document.querySelector("[data-canvas][data-rail]");
+      return {
+        state: grid ? grid.getAttribute("data-rail") : null,
+        width: nav ? Math.round(nav.getBoundingClientRect().width) : null,
+        axes: document.querySelectorAll(sel + " [data-axis-id]").length,
+      };
+    }, RAIL);
+  const stored = () => JSON.stringify(db.discovery.rail.filter((r) => r.width_band === band));
+  const writes = async (n) => {
+    for (let t = 0; db.discovery.railWrites.length < n && t < 100; t++)
+      await page.waitForTimeout(50);
+    return db.discovery.railWrites.length;
+  };
+  const openPane = async () => {
+    await page.locator("[data-discovery-item] [data-card-open]").first().click();
+    await page.waitForSelector('[data-discovery][data-pane-open="1"] [data-event-page]', {
+      timeout: 20000,
+    });
+    await page.waitForTimeout(300);
+  };
+  const closed = async () => {
+    await page.waitForURL((u) => !u.pathname.startsWith("/convene/events/"), { timeout: 10000 });
+    await page.waitForTimeout(500);
+  };
+  try {
+    await signIn(page);
+    await openDiscovery(page);
+    // The member opens the rail: their toggle, one row at this band.
+    await page.locator(`${RAIL} button[aria-label="Show filters"]`).click();
+    await page.locator(`${RAIL} [data-axis-id]`).first().waitFor({ timeout: 10000 });
+    await writes(1);
+    const chosen = stored();
+    await openPane();
+    const during = await rail();
+    await page.locator('button[aria-label="Back to Discovery"]').first().click();
+    await closed();
+    const after = await rail();
+    record(
+      tag +
+        ` the pane takes the rail's width, and closing it returns the rail open as the member left it at ${band} (D6; 1094, 1111)`,
+      during.state === "collapsed" &&
+        during.width === 64 &&
+        after.state === "open" &&
+        after.width === 280 &&
+        after.axes > 0,
+      JSON.stringify({ during, after }),
+    );
+
+    // A step and Escape: the same rail, and still only the member's one row.
+    await openPane();
+    await page.locator('button[aria-label="Next event"]').first().click();
+    await page.waitForTimeout(400);
+    await page.locator('button[aria-label="Next event"]').first().focus();
+    await page.keyboard.press("Escape");
+    await closed();
+    const escaped = await rail();
+    record(
+      tag + " opening, stepping and closing the pane write nothing to member_rail_state (1111)",
+      escaped.state === "open" && db.discovery.railWrites.length === 1 && stored() === chosen,
+      JSON.stringify({ escaped, writes: db.discovery.railWrites.length, stored: stored() }),
+    );
+
+    // The member collapses it: the pane closes onto collapsed, and the pane writes nothing.
+    await page.locator(`${RAIL} button[aria-label="Collapse filters"]`).click();
+    await page.locator(`${RAIL} button[aria-label="Show filters"]`).waitFor({ timeout: 10000 });
+    await writes(2);
+    const collapsedChoice = stored();
+    await openPane();
+    await page.locator('button[aria-label="Back to Discovery"]').first().click();
+    await closed();
+    const back = await rail();
+    record(
+      tag + " collapsed by the member, the rail is collapsed again after the pane closes (1111)",
+      back.state === "collapsed" &&
+        back.width === 64 &&
+        db.discovery.railWrites.length === 2 &&
+        stored() === collapsedChoice,
+      JSON.stringify({ back, writes: db.discovery.railWrites.length }),
+    );
+
+    // The strip's own expand, pressed with the pane open, is the member's toggle.
+    await openPane();
+    await page.locator(`${RAIL} button[aria-label="Back to Discovery and show filters"]`).click();
+    await closed();
+    const n = await writes(3);
+    const shown = await rail();
+    const last = db.discovery.railWrites[2] || {};
+    record(
+      tag +
+        " the strip's Back to Discovery and show filters closes the pane and opens the rail, one write of the member's (1111)",
+      shown.state === "open" &&
+        shown.axes > 0 &&
+        n === 3 &&
+        last.width_band === band &&
+        last.collapsed === false,
+      JSON.stringify({ shown, writes: db.discovery.railWrites }),
+    );
+
+    record(tag + " no page errors", errors.length === 0, errors.join(" | ").slice(0, 300));
+  } catch (e) {
+    record(tag + " flow", false, String(e).slice(0, 400));
+  } finally {
+    await browser.close();
+  }
+}
+
+async function runDiscoveryStep(browserType, bname, [w, h], theme) {
+  const tag = `${bname}-${w}x${h}-${theme}-discovery-step`;
+  M.armStart(tag);
+  const db = makeMockDb();
+  const E = seedDiscovery(db);
+  const { browser, page, errors } = await context(browserType, [w, h], theme, db);
+  const read = () =>
+    page.evaluate(() => {
+      const main = document.querySelector('[data-scroller="feed"]');
+      const body = document.querySelector("[data-discovery] [data-pane-body]");
+      const section = body && body.parentElement;
+      const m = main.getBoundingClientRect();
+      const controls = ["Previous event", "Next event", "Back to Discovery"].map((label) => {
+        const b = document.querySelector(`[data-pane-cluster] button[aria-label="${label}"]`);
+        if (!b) return { label, inView: false };
+        const r = b.getBoundingClientRect();
+        const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+        return {
+          label,
+          top: Math.round(r.top),
+          inView:
+            r.top >= m.top &&
+            r.bottom <= Math.min(m.bottom, innerHeight) &&
+            !!hit &&
+            b.contains(hit),
+        };
+      });
+      return {
+        id: location.pathname.split("/").pop(),
+        top: body ? body.scrollTop : null,
+        own: !!body && body.scrollHeight > body.clientHeight,
+        fits: !!section && section.getBoundingClientRect().bottom <= m.bottom + 1,
+        controls,
+      };
+    });
+  const next = async (id) => {
+    await page.locator('[data-pane-cluster] button[aria-label="Next event"]').click();
+    await page.waitForURL((u) => u.pathname.endsWith("/" + id), { timeout: 10000 });
+    await page.waitForSelector('[data-event-page][data-event-state="loaded"]', { timeout: 20000 });
+    await page.waitForTimeout(400);
+  };
+  try {
+    await signIn(page);
+    await openDiscovery(page);
+    // Join from anywhere, in its visible order: readers, stream, harvest, cloth, table.
+    await page.locator(`${cardSel(E.readers, "online")} [data-card-open]`).click();
+    await page.waitForSelector('[data-discovery][data-pane-open="1"] [data-event-page]', {
+      timeout: 20000,
+    });
+    await page.waitForTimeout(400);
+    const open = await read();
+    record(
+      tag + " the pane fits the list column and its body scrolls on its own (B9-SPEC line 14)",
+      open.own && open.fits && open.controls.every((c) => c.inView),
+      JSON.stringify(open),
+    );
+    await page.evaluate(() => {
+      document.querySelector("[data-discovery] [data-pane-body]").scrollTop = 600;
+    });
+    await next(E.stream.event_id);
+    const one = await read();
+    record(
+      tag + " Next once: the pane body at its top, Previous, Next and Back to Discovery in view",
+      one.id === E.stream.event_id && one.top === 0 && one.controls.every((c) => c.inView),
+      JSON.stringify(one),
+    );
+    // The body and the list both at their ends before the second step.
+    await page.evaluate(() => {
+      document.querySelector("[data-discovery] [data-pane-body]").scrollTop = 1e6;
+      document.querySelector('[data-scroller="feed"]').scrollTop = 1e6;
+    });
+    await page.waitForTimeout(300);
+    await next(E.harvest.event_id);
+    const two = await read();
+    record(
+      tag +
+        " Next twice, from the body's and the list's ends: the body at its top, the controls in view",
+      two.id === E.harvest.event_id && two.top === 0 && two.controls.every((c) => c.inView),
+      JSON.stringify(two),
+    );
+
+    record(tag + " no page errors", errors.length === 0, errors.join(" | ").slice(0, 300));
+  } catch (e) {
+    record(tag + " flow", false, String(e).slice(0, 400));
+  } finally {
+    await browser.close();
+  }
+}
+
+async function runDiscoveryHomes(browserType, bname, [w, h], theme) {
+  const tag = `${bname}-${w}x${h}-${theme}-discovery-homes`;
+  M.armStart(tag);
+  const tier = tierOf(w);
+  const db = makeMockDb();
+  seedDiscovery(db);
+  const { browser, page, errors } = await context(browserType, [w, h], theme, db);
+  try {
+    await signIn(page);
+    await openDiscovery(page);
+    const scope = await openRail(page, tier);
+    const ids = (await readAxes(page, scope)).map((a) => a.id);
+    record(
+      tag + " the Home axis renders between Topics and Place (1110, 928)",
+      ids.indexOf("family") > -1 &&
+        ids.indexOf("home") === ids.indexOf("family") + 1 &&
+        ids.indexOf("place") === ids.indexOf("home") + 1,
+      ids.join(","),
+    );
+    const ladders = await page.evaluate(
+      (scope) =>
+        Array.from(document.querySelectorAll(`${scope} [data-axis-id="home"] [data-ladder]`)).map(
+          (l) => ({
+            id: l.getAttribute("data-ladder"),
+            rungs: Array.from(l.querySelectorAll("[data-option]")).map((b) => b.textContent.trim()),
+          }),
+        ),
+      scope,
+    );
+    record(
+      tag + " two homes, two ladders: Accra with its region rung, Nairobi with none (1110)",
+      JSON.stringify(ladders) ===
+        JSON.stringify([
+          { id: H1, rungs: ["In Accra", "Around Accra", "Greater Accra", "Ghana", "Anywhere"] },
+          { id: H2, rungs: ["In Nairobi", "Around Nairobi", "Kenya", "Anywhere"] },
+        ]),
+      JSON.stringify(ladders),
+    );
+    await closeRail(page, tier);
+
+    record(tag + " no page errors", errors.length === 0, errors.join(" | ").slice(0, 300));
+  } catch (e) {
+    record(tag + " flow", false, String(e).slice(0, 400));
+  } finally {
+    await browser.close();
+  }
+}
+
+/** Where the canvas's content, the rail, the lanes column and the header's row start and end. */
+function edges(page) {
+  return page.evaluate(() => {
+    const vw = document.documentElement.clientWidth;
+    const canvas = document.querySelector("[data-canvas]");
+    const cs = canvas ? getComputedStyle(canvas) : null;
+    const box = canvas ? canvas.getBoundingClientRect() : null;
+    const at = (sel) => {
+      const el = document.querySelector(sel);
+      return el ? el.getBoundingClientRect() : null;
+    };
+    const header = document.querySelector("[data-app-header]");
+    const logo = header ? header.querySelector('[data-testid="home"] img') : null;
+    const controls = header
+      ? Array.from(header.querySelectorAll("a[href], button")).filter(
+          (el) => el.getBoundingClientRect().width > 0,
+        )
+      : [];
+    const rail = at('[data-scroller="left"]');
+    const main = at('[data-scroller="feed"]');
+    return {
+      vw,
+      maxWidth: cs ? cs.maxWidth : null,
+      left: box ? box.left + parseFloat(cs.paddingLeft) : null,
+      right: box ? box.right - parseFloat(cs.paddingRight) : null,
+      width: box ? box.width : null,
+      rail: rail ? rail.left : null,
+      main: main ? main.right : null,
+      logo: logo ? logo.getBoundingClientRect().left : null,
+      control: controls.length
+        ? Math.max(...controls.map((el) => el.getBoundingClientRect().right))
+        : null,
+      scroll: Math.max(document.documentElement.scrollWidth, document.body.scrollWidth),
+    };
+  });
+}
+
+async function runDiscoveryWidth(browserType, bname, [w, h], theme) {
+  const tag = `${bname}-${w}x${h}-${theme}-discovery-width`;
+  M.armStart(tag);
+  const db = makeMockDb();
+  seedDiscovery(db);
+  const { browser, page, errors } = await context(browserType, [w, h], theme, db);
+  const near = (a, b) => a != null && Math.abs(a - b) <= 1;
+  try {
+    await signIn(page);
+    await openDiscovery(page);
+    const e = await edges(page);
+    const five = e.vw * 0.05;
+    const ninetyFive = e.vw * 0.95;
+    record(
+      tag +
+        ` canvas: no maximum, its edges at 5% and 95% of ${w}, the rail and the lanes on them (1123)`,
+      e.maxWidth === "none" &&
+        near(e.left, five) &&
+        near(e.right, ninetyFive) &&
+        near(e.rail, five) &&
+        near(e.main, ninetyFive),
+      JSON.stringify(e),
+    );
+    record(
+      tag +
+        " header: the logo's left edge and the rightmost control's right edge on those lines (1123)",
+      near(e.logo, five) && near(e.control, ninetyFive),
+      JSON.stringify({ logo: e.logo, control: e.control, five, ninetyFive }),
+    );
+    record(
+      tag + " no horizontal page scroll",
+      e.scroll <= e.vw,
+      `scrollWidth ${e.scroll} viewport ${e.vw}`,
+    );
+
+    // The pane at 1280 and 1920: inside the new edges, beside at least one full 320 card.
+    if (w === 1280 || w === 1920) {
+      await page.locator("[data-discovery-item] [data-card-open]").first().click();
+      await page.waitForSelector('[data-discovery][data-pane-open="1"] [data-event-page]', {
+        timeout: 20000,
+      });
+      await page.waitForTimeout(500);
+      const pane = await page.evaluate(() => {
+        const list = document.querySelector("[data-pane-list]");
+        const l = list ? list.getBoundingClientRect() : null;
+        const section = document.querySelector('[data-pane-open="true"] > section');
+        const s = section ? section.getBoundingClientRect() : null;
+        const cards = list
+          ? Array.from(list.querySelectorAll("[data-discovery-item] article")).map((a) =>
+              a.getBoundingClientRect(),
+            )
+          : [];
+        const whole = cards.filter(
+          (c) => Math.round(c.width) === 320 && c.left >= l.left - 0.5 && c.right <= l.right + 0.5,
+        );
+        return {
+          list: l && [Math.round(l.left), Math.round(l.right)],
+          pane: s && [Math.round(s.left), Math.round(s.right)],
+          whole: whole.length,
+          scroll: Math.max(document.documentElement.scrollWidth, document.body.scrollWidth),
+          vw: document.documentElement.clientWidth,
+        };
+      });
+      record(
+        tag +
+          " pane open: the list column holds a full 320 card, the pane inside 95%, no page scroll",
+        pane.whole > 0 &&
+          !!pane.pane &&
+          pane.pane[1] <= Math.round(ninetyFive) + 1 &&
+          !!pane.list &&
+          pane.list[0] >= Math.round(five) - 1 &&
+          pane.scroll <= pane.vw,
+        JSON.stringify(pane),
+      );
+    }
+
+    // Every other surface keeps its caps: the Feed at 1920 is still its 1440 columns.
+    if (w === 1920) {
+      await page.goto(BASE + "/feed", { waitUntil: "networkidle" });
+      await page.waitForSelector('[data-scroller="feed"]', { timeout: 20000 });
+      await page.waitForTimeout(400);
+      const feed = await edges(page);
+      record(
+        tag + " the Feed at 1920 still measures its 1440 cap, its header row too (1123)",
+        near(feed.width, 1440) && near(feed.control, (1920 + 1440) / 2),
+        JSON.stringify({ width: feed.width, control: feed.control }),
+      );
+    }
+
+    record(tag + " no page errors", errors.length === 0, errors.join(" | ").slice(0, 300));
+  } catch (e) {
+    record(tag + " flow", false, String(e).slice(0, 400));
+  } finally {
+    await browser.close();
+  }
+}
+
+/** Addendum 4's and 5's arms and their cells, in item order, for tests/matrix.cjs to run. */
+const FOLLOWUP_ARMS = [
+  [runDiscoveryPresenter, FOLLOWUP_VIEWPORTS],
+  [runDiscoveryOnline, FOLLOWUP_VIEWPORTS],
+  [runDiscoveryRailPane, PANE_VIEWPORTS],
+  [runDiscoveryStep, PANE_VIEWPORTS],
+  [runDiscoveryHomes, FOLLOWUP_VIEWPORTS],
+  [runDiscoveryWidth, WIDTH_VIEWPORTS],
+];
+
 module.exports = {
   runDiscovery,
   runDiscoveryFacets,
   runDiscoveryPlace,
+  FOLLOWUP_ARMS,
   FACET_VIEWPORTS,
   PLACE_VIEWPORTS,
   DISCOVERY_VIEWPORTS,
