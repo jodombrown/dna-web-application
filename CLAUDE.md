@@ -69,11 +69,12 @@ Before you start, say in one line what you are about to do. Brief updates while 
 [absolute] No destructive schema change against the production database without an explicit instruction naming the table.
 [absolute] No sending to real recipients (email, push, message) from any environment other than production, and only when the brief names it.
 [absolute] No second framework, second auth path, or second payment rail without a brief that names it.
-[absolute] Every new table ships with RLS enabled and explicit policies for every persona (member, Space lead, event host, admin, service role). A table without RLS is a failed task.
+[absolute] Every new table ships with RLS enabled and explicit policies for every persona (member, Space lead, event host, admin, service role). A table without RLS is a failed task. A persona with no use for a table is named in the table's comment as deliberately absent, with the reason; that meets this absolute (ruling 1116).
 [absolute] No secrets in code, logs, or commit messages.
 [absolute] Lovable never creates or alters schema.
 [absolute] Fixed vocabularies (focus areas, industries, regional expertise, skills, languages, countries) are database tables read at runtime, never hardcoded arrays in a component. The legacy build kept them in a React file with a comment admitting they had to be hand-synced with the database; that is the named anti-pattern. What this governs is content vocabularies — the values a member's record can hold and a surface must display a label for — and not navigation (ruling 999, withdrawing 997's data half). `src/lib/lens.ts` is the standing instance of the distinction: a lens set is the surface's own corpus switch, it names no member data, nothing reads a label for it out of a row, and it is not a breach of this line. The Feed's lens set in `src/lib/lens.ts` has no vocabulary table and does not enter `public.vocabularies()` (194, 1041); Convene's lens set is `public.convene_lenses` and does (693, 1041).
 Convene's families and lenses are `public.convene_families` and `public.convene_lenses`, served by `vocabularies()`; `src/lib/lens.ts` is the Feed's structural lens set and stays in code under 194 and 1041.
+Convene's lens set is five, All, Communities, For you, Curated and My network (1093), and Discovery's nine lanes are their own table, `public.convene_lanes`, served by `vocabularies()` as `convene_lanes` (1105). A lens says who the events come from, and each lens but All shows its one lane; the lanes carry the floors and the dismissals, so neither id set stands in for the other.
 [absolute] One read projection and one write path per surface. Profile ships profile_view and save_profile_section; every surface after it follows the same shape. The legacy build had ten-plus duplicate profile-read functions.
 [absolute] A derived row, one table restating a fact whose truth lives in another, is written by its source's write path in the same transaction that writes the source, and never by a trigger (ruling 1002). `public.event_registrations` is the truth for attendance and `private.rsvp_write` writes the `event_rsvp` edge beside it; `private.rsvp_edge_drift()` names every disagreement and `tests/rsvp-drift.cjs` reads it, because a derivation nothing enforces is a derivation that drifts. The rows the build already derives by trigger are recorded as G56 and are not changed by the ruling.
 [absolute] The attestations table is chassis and already exists. Every engine writes to it; no engine creates its own attestation, endorsement, or trust table.
@@ -206,6 +207,10 @@ itself, because a child still pointing at a base that has merged or gone reports
 enforcing subject that are not the change under review, and 556's question — what head did this run
 describe — has the same wrong answer.
 
+An unpushed commit in a stood-down session is lost (ruling 1086). A session's commits live only in its
+container until they reach the remote, and standing the session down releases the container, so work
+that was committed locally and never pushed goes with it, however finished it was.
+
 The SSR nonce is held in `AsyncLocalStorage` (rulings 545, 549), which the Workers runtime provides
 under `nodejs_compat`; `nodejs_als` is the narrower flag for enabling only that API and is not what
 this depends on. `wrangler.jsonc` carries `nodejs_compat` and a compatibility date of `2026-09-01`, and
@@ -226,6 +231,7 @@ behaviour standing rather than guessing.
 
 Build order for any surface: schema and RLS, then Edge Functions, then UI. Confirm any design extraction arrived with real content before building from it; a missing or empty extraction is a stop-and-report condition, never a reason to reconstruct the prototype from ruling summaries (ruling 90). No surface is built without an approved Claude Design prototype (ruling 62); the extraction and SPEC.md are the visual contract, the brief is the behavior contract.
 Design tokens and components come from Strand via the extraction; never from shadcn, never from the old repo (rulings 70, 72).
+`--z-menu` is 62 in the stacking order, between `--z-sheet` (60) and `--z-dialog` (65) in `src/styles/strand.css` (1103): a Menu opens above the pane, the sticky chrome and a sheet it is summoned from, and below a dialog and the notification panel.
 Exit check for every surface is the responsive test matrix on the deployed URL: 360, 390, 430, 744, 820, 1024 both orientations, 1280, 1536, both themes, Safari and Chrome (ruling 61).
 
 The shell owns one scroller per tier and the document never scrolls inside it (ruling 104), so the
@@ -322,6 +328,8 @@ renamed the tables. No component keeps a stance label map.
 Discovery is `/convene`; `/convene/events/{id}` at expanded is Brief 10's page in a Pane on Discovery whatever the origin (1047), and below expanded its own route (1023).
 
 An item opened from a list carries its origin in router history state (1063, 1065); the pane closes and the Back row returns to that origin, and cards open through real links that preload on hover intent at expanded (1067).
+
+Every Convene card's media measures 16:9 at every width, one image or several, cropped with `object-fit: cover`: Discovery's card and the Feed's Convene card alike (1077).
 
 ## Convene's guest path and emails (handoff 30-D, rulings 1002, 1026, 1029, 1033, 1035)
 

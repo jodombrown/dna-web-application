@@ -264,15 +264,17 @@ export function AppShell({
               flex: 1,
               minHeight: 0,
               width: "100%",
-              maxWidth: 1440,
+              // B9-SPEC's tiers: the canvas is at most 1600 at expanded.
+              maxWidth: 1600,
               margin: "0 auto",
               boxSizing: "border-box",
               display: "grid",
-              // SPEC section 0: 240 at medium and 260 at expanded, 64 collapsed (687, 725); the
-              // lanes take the rest; the 320 right column only at 1440 and only while the surface
-              // gives it content, so the pane (612) removes the column rather than blanking it.
+              // B9-SPEC's tiers (1082 as amended by 1094): the rail 240 open at medium and 280 at
+              // expanded, 64 collapsed (687, 725); the lanes take the rest; the 320 right column
+              // only at 1440 and only while the surface gives it content, so the pane (612)
+              // removes the column rather than blanking it. Discovery gives it none (1094).
               gridTemplateColumns:
-                (layout.rail === "collapsed" ? "64px" : expanded ? "260px" : "240px") +
+                (layout.rail === "collapsed" ? "64px" : expanded ? "280px" : "240px") +
                 " minmax(0, 1fr)" +
                 (wide && rightRail ? " 320px" : ""),
               gridTemplateRows: "auto minmax(0, 1fr)",
@@ -301,14 +303,17 @@ export function AppShell({
                 gridRow: 2,
                 display: "flex",
                 flexDirection: "column",
-                padding: "0 0 " + (expanded ? "48px" : bottomPad),
+                // B9-SPEC line 13: the canvas's 24 at the foot at expanded. Below it the column
+                // keeps the shell's clearance of the fixed Pulse dock, which is 65 tall at medium,
+                // where line 12's 64 would put the last row's edge beneath it.
+                padding: "0 0 " + (expanded ? "24px" : bottomPad),
               }}
             >
               {children}
             </main>
             {/* Ruling 945: the rail scrolls on its own. In this mode a slot with no label renders
                 its content with no landmark of its own, because the content names itself (the
-                FacetRail is nav[aria-label=Browse]) and a second landmark of the same name would
+                FacetRail is nav[aria-label=Filters]) and a second landmark of the same name would
                 be announced twice. */}
             {leftRail?.label ? (
               <aside

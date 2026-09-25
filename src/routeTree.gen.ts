@@ -23,6 +23,7 @@ import { Route as ShellFeedRouteImport } from './routes/_shell/feed'
 import { Route as ShellPasswordRouteImport } from './routes/_shell/password'
 import { Route as ESlugRouteImport } from './routes/e.$slug'
 import { Route as ResetNewRouteImport } from './routes/reset_.new'
+import { Route as XCodeRouteImport } from './routes/x.$code'
 import { Route as ShellConveneLensRouteImport } from './routes/_shell/convene.$lens'
 import { Route as ShellMHandleRouteImport } from './routes/_shell/m.$handle'
 import { Route as ShellPostsIdRouteImport } from './routes/_shell/posts.$id'
@@ -97,6 +98,11 @@ const ResetNewRoute = ResetNewRouteImport.update({
   path: '/reset/new',
   getParentRoute: () => rootRouteImport,
 } as any)
+const XCodeRoute = XCodeRouteImport.update({
+  id: '/x/$code',
+  path: '/x/$code',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ShellConveneLensRoute = ShellConveneLensRouteImport.update({
   id: '/$lens',
   path: '/$lens',
@@ -132,6 +138,7 @@ export interface FileRoutesByFullPath {
   '/password': typeof ShellPasswordRoute
   '/e/$slug': typeof ESlugRoute
   '/reset/new': typeof ResetNewRoute
+  '/x/$code': typeof XCodeRoute
   '/convene/$lens': typeof ShellConveneLensRoute
   '/m/$handle': typeof ShellMHandleRoute
   '/posts/$id': typeof ShellPostsIdRoute
@@ -151,6 +158,7 @@ export interface FileRoutesByTo {
   '/password': typeof ShellPasswordRoute
   '/e/$slug': typeof ESlugRoute
   '/reset/new': typeof ResetNewRoute
+  '/x/$code': typeof XCodeRoute
   '/convene/$lens': typeof ShellConveneLensRoute
   '/m/$handle': typeof ShellMHandleRoute
   '/posts/$id': typeof ShellPostsIdRoute
@@ -172,6 +180,7 @@ export interface FileRoutesById {
   '/_shell/password': typeof ShellPasswordRoute
   '/e/$slug': typeof ESlugRoute
   '/reset_/new': typeof ResetNewRoute
+  '/x/$code': typeof XCodeRoute
   '/_shell/convene/$lens': typeof ShellConveneLensRoute
   '/_shell/m/$handle': typeof ShellMHandleRoute
   '/_shell/posts/$id': typeof ShellPostsIdRoute
@@ -193,6 +202,7 @@ export interface FileRouteTypes {
     | '/password'
     | '/e/$slug'
     | '/reset/new'
+    | '/x/$code'
     | '/convene/$lens'
     | '/m/$handle'
     | '/posts/$id'
@@ -212,6 +222,7 @@ export interface FileRouteTypes {
     | '/password'
     | '/e/$slug'
     | '/reset/new'
+    | '/x/$code'
     | '/convene/$lens'
     | '/m/$handle'
     | '/posts/$id'
@@ -232,6 +243,7 @@ export interface FileRouteTypes {
     | '/_shell/password'
     | '/e/$slug'
     | '/reset_/new'
+    | '/x/$code'
     | '/_shell/convene/$lens'
     | '/_shell/m/$handle'
     | '/_shell/posts/$id'
@@ -248,6 +260,7 @@ export interface RootRouteChildren {
   WhereRoute: typeof WhereRoute
   ESlugRoute: typeof ESlugRoute
   ResetNewRoute: typeof ResetNewRoute
+  XCodeRoute: typeof XCodeRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -350,6 +363,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ResetNewRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/x/$code': {
+      id: '/x/$code'
+      path: '/x/$code'
+      fullPath: '/x/$code'
+      preLoaderRoute: typeof XCodeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_shell/convene/$lens': {
       id: '/_shell/convene/$lens'
       path: '/$lens'
@@ -427,6 +447,7 @@ const rootRouteChildren: RootRouteChildren = {
   WhereRoute: WhereRoute,
   ESlugRoute: ESlugRoute,
   ResetNewRoute: ResetNewRoute,
+  XCodeRoute: XCodeRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

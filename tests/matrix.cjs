@@ -288,6 +288,7 @@ const VOCAB = {
     { value: "sport_wellness", label: "Sport and wellness", schema_org: ["SportsEvent"] },
     { value: "family_kids", label: "Family and kids", schema_org: ["ChildrensEvent"] },
   ],
+  // Handoff 32-B (1093, 1105): the five lenses and the nine lanes as 20260924100000 leaves them.
   convene_lenses: [
     {
       value: "all",
@@ -298,58 +299,50 @@ const VOCAB = {
     },
     {
       value: "follow",
-      name: "From communities you follow",
+      name: "Communities",
       short: "Communities",
       icon: "users",
       scope: "Events whose host you follow.",
     },
     {
       value: "taste",
-      name: "Because of what you follow",
-      short: "Categories",
+      name: "For you",
+      short: "For you",
       icon: "heart",
       scope: "Events in the category families you subscribe to.",
     },
     {
-      value: "soon",
-      name: "Happening soon",
-      short: "Soon",
-      icon: "clock",
-      scope: "The next two weeks, across every home you hold.",
-    },
-    {
-      value: "online",
-      name: "Online from anywhere",
-      short: "Online",
-      icon: "globe",
-      scope: "Online and hybrid events, any place.",
-    },
-    {
       value: "curated",
-      name: "Curated by Convene",
+      name: "Curated",
       short: "Curated",
       icon: "bookmark",
       scope: "Picks chosen by an editor and named as theirs.",
     },
     {
-      value: "near",
-      name: "Near your homes",
-      short: "My homes",
-      icon: "map-pin",
-      scope: "In-person and hybrid events in your homes, in order.",
-    },
-    {
       value: "network",
-      name: "Connected to your network",
+      name: "My network",
       short: "My network",
       icon: "user-plus",
       scope: "A connection hosting, or connections going.",
     },
   ],
+  convene_lanes: [
+    { value: "soon", name: "Happening soon" },
+    { value: "weekend", name: "This weekend" },
+    { value: "online", name: "Join from anywhere" },
+    { value: "fresh", name: "New this week" },
+    { value: "curated", name: "Curated by Convene" },
+    { value: "follow", name: "From communities you follow" },
+    { value: "taste", name: "Because of what you follow" },
+    { value: "near", name: "Near your homes" },
+    { value: "network", name: "Connected to your network" },
+  ],
 };
 
-/** Brief 9: the projection's seven sections, in convene_lenses order (631). */
-const DISCOVERY_SECTIONS = ["follow", "taste", "soon", "online", "curated", "near", "network"];
+/** Handoff 32-B: the projection's nine lanes, in convene_lanes order (1092, 1105). */
+const DISCOVERY_SECTIONS = VOCAB.convene_lanes.map((l) => l.value);
+/** The four lenses under /convene/{lens}, each the one lane of the same id (1093, 1105). */
+const DISCOVERY_LENSES = VOCAB.convene_lenses.map((l) => l.value).filter((v) => v !== "all");
 const ATTESTATIONS = {
   convene: [
     {
@@ -844,10 +837,10 @@ function makeMockDb() {
       mail: [],
       mailFail: false,
     },
-    // Brief 9 (handoff 31-B item 15): what convene_discovery answers. `sections` maps a section id
-    // to its items ({ event_id, post_id, reason }); the mock returns, under lens all, every section
-    // with an item left after this member's dismissals, and under a lens that one section, empty or
-    // not, as the projection does. Homes default to the member's own; `calls` is every argument set
+    // Brief 9 (handoff 31-B item 15, 32-B): what convene_discovery answers. `sections` maps a lane
+    // id to its items ({ event_id, post_id, reason }); the mock returns, under lens all, every lane
+    // with an item left after this member's dismissals and facets, and under a lens that one lane,
+    // empty or not, as the projection does. Homes default to the member's own; `calls` is every argument set
     // the surface sent and `dismissals` every write.
     discovery: {
       sections: {},
@@ -858,6 +851,14 @@ function makeMockDb() {
       dismissals: [],
       calls: [],
       fail: false,
+      // Handoff 32-B: what convene_places() answers (1095), the member's going registrations for
+      // Add to calendar (1097), every set_subscription write (1039), and the member's rail rows
+      // (1111) as { surface, width_band, collapsed }, with every upsert.
+      places: [],
+      going: [],
+      subscriptionWrites: [],
+      rail: [],
+      railWrites: [],
     },
     // Brief 4: Connect's projection state and the writes the surface made.
     connect: {
@@ -1277,6 +1278,11 @@ async function mockSupabase(page, db, opts = {}) {
         over(body.p_target, { following: !!body.p_on });
         db.profile.following = !!body.p_on;
         db.profile.follows.push(body.p_on ? "on" : "off");
+        // Discovery's projection reads the member's follows, so the next answer carries the write.
+        const d = db.discovery;
+        d.follows = d.follows.filter((f) => f.id !== body.p_target);
+        if (body.p_on)
+          d.follows.push({ id: body.p_target, name: null, handle: null, avatar_path: null });
         return json(null, 204);
       }
       if (fn === "dismiss_suggestion") {
@@ -1286,6 +1292,16 @@ async function mockSupabase(page, db, opts = {}) {
     }
     if (p.startsWith("/storage/v1/object/sign") || p.includes("/object/sign/"))
       return route.fulfill({ status: 200, contentType: "image/svg+xml", body: KENTE });
+    // Brief 10 (1029): the public page's cover through the event-media function, signed out.
+    if (p === "/functions/v1/event-media")
+      return route.fulfill({ status: 200, contentType: "image/svg+xml", body: KENTE });
+    // Handoff 32-B item 9: an alias or a short code answers its event's slug, or null.
+    if (p === "/rest/v1/rpc/resolve_event_link") {
+      const b = req.postDataJSON() || {};
+      const links = db.attend.links || {};
+      const slug = (links[b.p_kind] || {})[b.p_segment];
+      return json(slug ?? null);
+    }
     if (p === "/rest/v1/rpc/publish_post") {
       const payload = req.postDataJSON().payload;
       db.rpcPayloads.push(payload);
@@ -1583,8 +1599,9 @@ async function mockSupabase(page, db, opts = {}) {
       );
       return json({ id: b.p_party, status: b.p_accept ? "accepted" : "declined" });
     }
-    // Brief 9: the Discovery projection and its dismissal, with the projection's own refusals
-    // (22023) for a lens, a format, a family or a home it does not know.
+    // Brief 9 as handoff 32-B rebuilds it: the Discovery projection, its dismissal, Place's options
+    // and the subscription write, with the projection's own refusals (22023) for a lens, a format, a
+    // price, a when, a family, a home, a rung or a place it does not know.
     if (p === "/rest/v1/rpc/convene_discovery") {
       const b = req.postDataJSON() || {};
       const d = db.discovery;
@@ -1602,21 +1619,66 @@ async function mockSupabase(page, db, opts = {}) {
           id: h.id,
           city: h.city,
           place_name: h.place_name,
-          region: null,
+          region: h.region ?? null,
           country: h.country,
         }));
-      if (lens !== "all" && !DISCOVERY_SECTIONS.includes(lens)) return refuse("unknown lens");
-      if (b.p_home && !homes.some((h) => h.id === b.p_home)) return refuse("not your home");
+      if (lens !== "all" && !DISCOVERY_LENSES.includes(lens)) return refuse("That is not a lens.");
+      if (b.p_when && !["two_weeks", "this_month", "later"].includes(b.p_when))
+        return refuse("That is not a when.");
+      if (b.p_format && b.p_format.some((f) => !["in_person", "online", "hybrid"].includes(f)))
+        return refuse("That is not a format.");
+      // 1095: Donation is gone, so the projection refuses it as it refuses any unknown price.
+      if (b.p_price && b.p_price.some((f) => !["free", "paid"].includes(f)))
+        return refuse("That is not a price.");
       const families = VOCAB.convene_families.map((f) => f.value);
       if (b.p_families && b.p_families.some((f) => !families.includes(f)))
-        return refuse("unknown family");
-      if (b.p_format && b.p_format.some((f) => !["in_person", "online", "hybrid"].includes(f)))
-        return refuse("unknown format");
+        return refuse("That is not a category family.");
+      if (b.p_home && !homes.some((h) => h.id === b.p_home))
+        return refuse("That is not one of your homes.");
+      if (
+        b.p_home_rung != null &&
+        (!b.p_home || !["in", "around", "region", "country"].includes(b.p_home_rung))
+      )
+        return refuse("That is not a distance from a home.");
+      const placeOk = (x) => {
+        const parts = String(x).split("|");
+        if (parts[0] === "city" || parts[0] === "region") return parts.length === 3 && !!parts[2];
+        return parts[0] === "country" && parts.length === 2 && !!parts[1];
+      };
+      if (b.p_places && b.p_places.some((x) => !placeOk(x))) return refuse("That is not a place.");
       // An in-person-only facet drops the online and curated lanes, as the live arm reads it.
       const inPersonOnly =
         Array.isArray(b.p_format) &&
         b.p_format.length &&
         !b.p_format.some((f) => f !== "in_person");
+      // Fixture keys narrow as the projection does and never leave the mock: `_places` are the
+      // place ids an item's physical rows fall in, `_rungs` the nearest rung from each home the item
+      // sits at (1110: in, then around, then region, then country, each containing the one before),
+      // and `_price` free or paid.
+      const RUNG = ["in", "around", "region", "country"];
+      const rung = b.p_home ? b.p_home_rung || "in" : null;
+      const keep = (i) => {
+        if (
+          b.p_places &&
+          b.p_places.length &&
+          !(i._places || []).some((x) => b.p_places.includes(x))
+        )
+          return false;
+        if (b.p_home) {
+          const at = (i._rungs || {})[b.p_home];
+          if (!at || RUNG.indexOf(at) > RUNG.indexOf(rung)) return false;
+        }
+        if (b.p_price && b.p_price.length && i._price && !b.p_price.includes(i._price))
+          return false;
+        return true;
+      };
+      const strip = (i) => {
+        const out = {};
+        for (const k of Object.keys(i)) if (!k.startsWith("_")) out[k] = i[k];
+        return out;
+      };
+      const city = (b.p_places || []).find((x) => x.startsWith("city|"));
+      const cityName = city ? (d.places.find((x) => x.id === city) || {}).name || null : null;
       const sections = [];
       for (const id of DISCOVERY_SECTIONS) {
         if (lens !== "all" && lens !== id) continue;
@@ -1624,6 +1686,10 @@ async function mockSupabase(page, db, opts = {}) {
           (i) => !d.dismissals.some((x) => x.p_section === id && x.p_event === i.event_id),
         );
         if (inPersonOnly && (id === "online" || id === "curated")) items = [];
+        items = items.filter(keep).map(strip);
+        // With a city chosen in Place, Near reads the place rather than a home (1095).
+        if (id === "near" && cityName)
+          items = items.map((i) => ({ ...i, reason: { kind: "near", place: { city: cityName } } }));
         if (lens === "all" && items.length === 0) continue;
         sections.push({ section: id, items });
       }
@@ -1639,8 +1705,24 @@ async function mockSupabase(page, db, opts = {}) {
     if (p === "/rest/v1/rpc/dismiss_discovery_item") {
       const b = req.postDataJSON() || {};
       if (!DISCOVERY_SECTIONS.includes(b.p_section))
-        return json({ code: "22023", message: "unknown section", details: null, hint: null }, 400);
+        return json(
+          { code: "22023", message: "That is not a section.", details: null, hint: null },
+          400,
+        );
       db.discovery.dismissals.push(b);
+      return json(null, 204);
+    }
+    if (p === "/rest/v1/rpc/convene_places") return json(db.discovery.places);
+    if (p === "/rest/v1/rpc/set_subscription") {
+      const b = req.postDataJSON() || {};
+      const d = db.discovery;
+      d.subscriptionWrites.push(b);
+      // The next projection answer carries the write, as member_subscriptions does.
+      d.subscriptions = d.subscriptions.filter((x) => x.family !== b.p_family);
+      if (b.p_on) {
+        const f = VOCAB.convene_families.find((x) => x.value === b.p_family);
+        d.subscriptions.push({ family: b.p_family, label: f ? f.label : b.p_family });
+      }
       return json(null, 204);
     }
     if (p === "/rest/v1/rpc/vocabularies")
@@ -1815,6 +1897,40 @@ async function mockSupabase(page, db, opts = {}) {
         return json([], method === "POST" ? 201 : 200);
       }
       if (table === "member_homes") return json(db.homes);
+      // Handoff 32-B: Add to calendar is offered only for an event the member is going to (1097).
+      if (table === "event_registrations" && method === "GET") {
+        const ids = inIds("event_id");
+        return json(
+          db.discovery.going
+            .filter((e) => !ids || ids.includes(e))
+            .map((event_id) => ({ event_id })),
+        );
+      }
+      // Addendum 1 (1111): the member's own rail rows, read per surface and band, upserted on toggle.
+      if (table === "member_rail_state") {
+        const d = db.discovery;
+        if (method === "POST") {
+          const b = req.postDataJSON();
+          const row = Array.isArray(b) ? b[0] : b;
+          d.railWrites.push(row);
+          d.rail = d.rail.filter(
+            (r) => !(r.surface === row.surface && r.width_band === row.width_band),
+          );
+          d.rail.push({
+            surface: row.surface,
+            width_band: row.width_band,
+            collapsed: row.collapsed,
+          });
+          return json([], 201);
+        }
+        const surface = eqOf("surface");
+        const band = eqOf("width_band");
+        return json(
+          d.rail
+            .filter((r) => (!surface || r.surface === surface) && (!band || r.width_band === band))
+            .map((r) => ({ collapsed: r.collapsed })),
+        );
+      }
       if (table === "event_parties") {
         const ids = inIds("id");
         return json(db.attend.parties.filter((r) => !ids || ids.includes(r.id)));
@@ -5758,6 +5874,7 @@ module.exports = {
   CONNECT_WHERE,
   VOCAB,
   DISCOVERY_SECTIONS,
+  DISCOVERY_LENSES,
 };
 
 /**
@@ -5874,7 +5991,7 @@ if (require.main === module)
         // Brief 10 (handoff 30-C item 13): the member's event page at every cell, its flows on the
         // two representative layouts.
         if (process.env.SPECIAL.includes("event")) {
-          const { runEvent, runEventFlows, runGuest } = require("./event.cjs");
+          const { runEvent, runEventFlows, runGuest, runEventLinks } = require("./event.cjs");
           for (const vp of process.env.ONLY ? [JSON.parse(process.env.ONLY)] : VIEWPORTS)
             for (const theme of process.env.THEME ? [process.env.THEME] : THEMES)
               await runEvent(bt, bname, vp, theme);
@@ -5895,17 +6012,31 @@ if (require.main === module)
               ])
             for (const theme of process.env.THEME ? [process.env.THEME] : THEMES)
               await runGuest(bt, bname, vp, theme);
+          // Handoff 32-B item 9: the alias and short-code paths, on the client, at compact and expanded.
+          for (const [vp, theme] of [
+            [[390, 844], "light"],
+            [[1280, 800], "dark"],
+          ])
+            if (!only || (vp[0] === only[0] && vp[1] === only[1]))
+              await runEventLinks(bt, bname, vp, theme);
         }
         if (process.env.SPECIAL.includes("discovery")) {
           const {
             runDiscovery,
+            runDiscoveryFacets,
             runDiscoveryPlace,
             DISCOVERY_VIEWPORTS,
+            FACET_VIEWPORTS,
             PLACE_VIEWPORTS,
           } = require("./discovery.cjs");
           for (const vp of only ? [only] : DISCOVERY_VIEWPORTS)
             for (const theme of process.env.THEME ? [process.env.THEME] : THEMES)
               await runDiscovery(bt, bname, vp, theme);
+          // Handoff 32-B items 1, 2, 6 and 12 with Addendum 1: redirects, facets, ladders, writes
+          // and the rail's memory, one cell per tier plus the wide band.
+          for (const [vp, theme] of FACET_VIEWPORTS)
+            if (!only || (vp[0] === only[0] && vp[1] === only[1]))
+              await runDiscoveryFacets(bt, bname, vp, theme);
           // Handoff 31-D item 7: the lens, the place and the intent, on their own viewports.
           for (const [vp, theme] of PLACE_VIEWPORTS)
             if (!only || (vp[0] === only[0] && vp[1] === only[1]))
@@ -5977,7 +6108,7 @@ if (require.main === module)
         for (const theme of THEMES) await runConnect(bt, bname, vp, theme);
       // Brief 10 (handoff 30-C item 13): the member's event page at every cell, its flows on the
       // two representative layouts.
-      const { runEvent, runEventFlows, runGuest } = require("./event.cjs");
+      const { runEvent, runEventFlows, runGuest, runEventLinks } = require("./event.cjs");
       for (const vp of VIEWPORTS) for (const theme of THEMES) await runEvent(bt, bname, vp, theme);
       for (const vp of [
         [390, 844],
@@ -5987,12 +6118,16 @@ if (require.main === module)
       // Brief 9 (handoff 31-B item 15): Discovery at every width plus 1440, both themes.
       const {
         runDiscovery,
+        runDiscoveryFacets,
         runDiscoveryPlace,
         DISCOVERY_VIEWPORTS,
+        FACET_VIEWPORTS,
         PLACE_VIEWPORTS,
       } = require("./discovery.cjs");
       for (const vp of DISCOVERY_VIEWPORTS)
         for (const theme of THEMES) await runDiscovery(bt, bname, vp, theme);
+      // Handoff 32-B items 1, 2, 6 and 12 with Addendum 1: redirects, facets, ladders, writes, memory.
+      for (const [vp, theme] of FACET_VIEWPORTS) await runDiscoveryFacets(bt, bname, vp, theme);
       // Handoff 31-D item 7 (1063, 1065, 1067): the lens, the place and the intent.
       for (const [vp, theme] of PLACE_VIEWPORTS) await runDiscoveryPlace(bt, bname, vp, theme);
       // Handoff 30-D item 14.3: the public page's guest path on the two representative layouts.
@@ -6001,6 +6136,9 @@ if (require.main === module)
         [1280, 800],
       ])
         for (const theme of THEMES) await runGuest(bt, bname, vp, theme);
+      // Handoff 32-B item 9: the alias and short-code paths, on the client.
+      await runEventLinks(bt, bname, [390, 844], "light");
+      await runEventLinks(bt, bname, [1280, 800], "dark");
       // Rulings 193, 194: the vocabulary read served and then failing, on both layouts.
       const { runVocabulary } = require("./vocabulary.cjs");
       for (const vp of [

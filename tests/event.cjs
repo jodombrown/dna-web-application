@@ -1153,10 +1153,59 @@ async function runGuest(browserType, bname, [w, h], theme) {
   }
 }
 
+/**
+ * Handoff 32-B item 9 (1080, 1081, 1100, 1109), on the client: `/x/{code}` and `/e/{alias}` resolve
+ * through `resolve_event_link` to the event's slug and land on its public page, and an unknown code
+ * is the not-found page. Reached by a client navigation, as the guest arm is, because a document
+ * request renders on the server, which the mock cannot reach; the 308 and the 404 status are the
+ * worker's and are read against the project in tests/live-checks.cjs.
+ */
+async function runEventLinks(browserType, bname, [w, h], theme) {
+  const tag = `${bname}-${w}x${h}-${theme}-event-links`;
+  M.armStart(tag);
+  const db = makeMockDb();
+  seedPosts(db, 1);
+  seedAttend(db);
+  seedGuest(db);
+  db.attend.links = { e: { "suppers-accra": SLUG }, x: { k7m2qz: SLUG } };
+  const { browser, page, errors } = await context(browserType, [w, h], theme, db);
+  try {
+    await page.goto(BASE + "/sign-in", { waitUntil: "networkidle" });
+    for (const [from, what] of [
+      ["/x/k7m2qz", "a short code"],
+      ["/e/suppers-accra", "an alias"],
+    ]) {
+      await clientGo(page, from);
+      await page.waitForURL((u) => u.pathname === "/e/" + SLUG, { timeout: 15000 });
+      await page.waitForSelector(`[data-public-event="${SLUG}"]`, { timeout: 15000 });
+      record(
+        tag +
+          ` ${from.slice(0, 2)}: ${what} lands on the event's slug and its public page (item 9)`,
+        new URL(page.url()).pathname === "/e/" + SLUG,
+        page.url(),
+      );
+    }
+    await clientGo(page, "/x/zzzzzz");
+    await page.locator('[data-testid="not-found"]').waitFor({ timeout: 15000 });
+    record(
+      tag + " /x: an unknown code is the not-found page, and the address stays (item 9)",
+      new URL(page.url()).pathname === "/x/zzzzzz" &&
+        (await page.locator("[data-public-event]").count()) === 0,
+      page.url(),
+    );
+    record(tag + " no page errors", errors.length === 0, errors.join(" | ").slice(0, 300));
+  } catch (e) {
+    record(tag + " flow", false, String(e).slice(0, 400));
+  } finally {
+    await browser.close();
+  }
+}
+
 module.exports = {
   runEvent,
   runEventFlows,
   runGuest,
+  runEventLinks,
   attendPage,
   seedAttend,
   seedAttendCard,

@@ -3,14 +3,15 @@
 // is the not-found state, thrown as the router's own notFound so the response is a 404. The head
 // carries the link-preview tags a crawler reads from the served markup: title, description (when,
 // place or format word, presenter), the cover through event-media when there is one, the URL, and
-// the summary_large_image card. Search indexing stays off until the founder rules on it.
-import { createFileRoute, notFound } from "@tanstack/react-router";
+// the summary_large_image card. Search indexing stays off until the founder rules on it. An alias
+// resolves to the slug with a 308 (handoff 32-B item 9; /x/{code} is its sibling, x.$code.tsx).
+import { createFileRoute, notFound, redirect } from "@tanstack/react-router";
 import { createIsomorphicFn } from "@tanstack/react-start";
 import { getRequestUrl } from "@tanstack/react-start/server";
 import { PublicEventSurface } from "@/components/dna/PublicEventSurface";
 import { eventOwnWhen, placeWord } from "@/components/dna/EventParts";
 import { eventMediaUrl, publicEventPath } from "@/lib/event-page";
-import { loadPublicEventPage } from "@/lib/event-public";
+import { loadPublicEventPage, resolveEventLink } from "@/lib/event-public";
 import { ErrorComponent } from "./__root";
 
 /** This deployment's origin: the request's on the server, the window's in the browser. */
@@ -27,7 +28,15 @@ const originOf = createIsomorphicFn()
 export const Route = createFileRoute("/e/$slug")({
   loader: async ({ params }) => {
     const page = await loadPublicEventPage(params.slug);
-    if (!page) throw notFound();
+    if (!page) {
+      // Handoff 32-B item 9 (1080, 1100): a segment that is no public page's slug may be an alias
+      // the event holds or once held. A slug that comes back is answered with a permanent redirect
+      // to the canonical page; nothing else about this route changes, and null stays the 404.
+      const slug = await resolveEventLink("e", params.slug);
+      if (slug && slug !== params.slug)
+        throw redirect({ to: "/e/$slug", params: { slug }, statusCode: 308 });
+      throw notFound();
+    }
     return { page, slug: params.slug, origin: originOf() };
   },
   head: ({ loaderData }) => {

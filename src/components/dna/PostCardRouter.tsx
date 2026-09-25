@@ -103,12 +103,15 @@ export function postCardProps(view: PostView, opts: RouterOptions = {}): PostCar
   // as a text link in Collaborate's text colour, and only when the event is linked to a Space.
   const ev = view.event;
   const cancelled = !!ev?.cancelled;
+  // 1077 through 1115: a Convene card's media measures 16:9 at every width, one image or several,
+  // through MediaBlock's `ratio`. Every other C passes none and renders as before.
+  const ratio = c === "convene" ? "16/9" : undefined;
   const media: PostCardProps["media"] = cancelled
     ? undefined
     : view.media.length > 1
-      ? { kind: "gallery", items: view.media }
+      ? { kind: "gallery", items: view.media, ratio }
       : view.media.length === 1
-        ? { kind: "image", src: view.media[0], alt: "" }
+        ? { kind: "image", src: view.media[0], alt: "", ratio }
         : undefined;
   const title: ReactNode =
     typeof titleWords === "string" && titleWords ? (

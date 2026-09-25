@@ -53,7 +53,7 @@ serves /strand/adinkra/mate-masie.svg
 serves /feed
 serves /posts/seed-1
 serves /m/thandiwe-dube
-serves /convene/online
+serves /convene/curated
 # Ruling 184's asset contract: every path in the table serves, so the redesign stays a file
 # overwrite. favicon.ico is absent by the founder's 9 September edit and is deliberately not here.
 serves /strand/logo.png
