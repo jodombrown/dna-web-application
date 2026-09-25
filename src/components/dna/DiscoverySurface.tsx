@@ -1162,10 +1162,11 @@ export function DiscoverySurface({
   });
   const panePostId = paneItem?.post.id ?? paneRead.data?.post?.id ?? null;
   const paneTitleField = paneItem?.post.fields["title"]?.value;
+  // The pane and its toolbar are named by the event; until its title is known, by "Event".
   const paneTitle =
     (typeof paneTitleField === "string" ? paneTitleField : null) ??
     paneRead.data?.event.title ??
-    undefined;
+    "Event";
 
   // Previous and Next replace the event under the same pane, so the body starts each one at its top.
   // The body is the part's own scroller (correction 28), reached from this surface's root.
@@ -1174,21 +1175,47 @@ export function DiscoverySurface({
     paneRoot.current?.querySelector<HTMLElement>("[data-pane-body]")?.scrollTo({ top: 0 });
   }, [paneId]);
   // 688: the lanes stay where the member left them. With the pane bounded the feed column cannot
-  // scroll (its offset clamps to 0) and the list column scrolls instead, so the list column's offset
-  // is kept and handed to the feed column when the pane closes. Both hold the header row and then
-  // the lanes from the same top, so the offset carries over one for one.
-  const listTop = useRef(0);
+  // scroll (its offset clamps to 0) and the list column scrolls instead. So the card at the list
+  // column's top is kept, with its distance from that top, and when the pane closes the feed column
+  // is scrolled to put the same card at the same distance. A card, not an offset: a lens list's
+  // cards are `min(680px, 100%)`, narrower and so shorter in the list column than in the full one.
+  // While the list is hidden its layout has no width, so the place it was hidden at is the one kept.
+  const listAnchor = useRef<{ item: string; section: string; at: number } | null>(null);
+  const hiddenNow = useRef(listHidden);
+  hiddenNow.current = listHidden;
   useLayoutEffect(() => {
     if (!paneOpen) {
       const column = scrollerRef.current;
-      if (column && listTop.current > 0) column.scrollTop = listTop.current;
-      listTop.current = 0;
+      const kept = listAnchor.current;
+      listAnchor.current = null;
+      if (!column || !kept) return;
+      const el = Array.from(column.querySelectorAll<HTMLElement>("[data-discovery-item]")).find(
+        (e) => e.dataset["discoveryItem"] === kept.item && e.dataset["section"] === kept.section,
+      );
+      if (el)
+        column.scrollTop +=
+          el.getBoundingClientRect().top - column.getBoundingClientRect().top - kept.at;
       return;
     }
     const list = paneRoot.current?.querySelector<HTMLElement>("[data-pane-list]");
     if (!list) return;
     const keep = () => {
-      listTop.current = list.scrollTop;
+      if (hiddenNow.current) return;
+      if (list.scrollTop <= 0) {
+        listAnchor.current = null;
+        return;
+      }
+      const top = list.getBoundingClientRect().top;
+      const first = Array.from(list.querySelectorAll<HTMLElement>("[data-discovery-item]")).find(
+        (e) => e.getBoundingClientRect().bottom > top,
+      );
+      listAnchor.current = first
+        ? {
+            item: first.dataset["discoveryItem"] ?? "",
+            section: first.dataset["section"] ?? "",
+            at: first.getBoundingClientRect().top - top,
+          }
+        : null;
     };
     keep();
     list.addEventListener("scroll", keep, { passive: true });
@@ -1197,8 +1224,9 @@ export function DiscoverySurface({
 
   // The list follows the open card (1083): Pane's `selectedKey` brings it into the bounded list
   // column's view vertically, and a lane scrolls sideways, so it is brought into its lane's view here.
+  // Hidden, the list has no width to follow in; Show list brings the open card back into view.
   useEffect(() => {
-    if (!paneOpen || !paneId) return;
+    if (!paneOpen || !paneId || listHidden) return;
     // Compared as data, never built into a selector: the id is the route's own param.
     const el = Array.from(
       document.querySelectorAll<HTMLElement>("[data-discovery] [data-discovery-item]"),
@@ -1207,7 +1235,7 @@ export function DiscoverySurface({
         e.dataset["discoveryItem"] === paneId && (!openLane || e.dataset["section"] === openLane),
     );
     el?.scrollIntoView({ block: "nearest", inline: "nearest" });
-  }, [paneOpen, paneId, openLane]);
+  }, [paneOpen, paneId, openLane, listHidden]);
 
   const toasts = (
     <>

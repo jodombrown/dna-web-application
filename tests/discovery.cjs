@@ -2481,24 +2481,65 @@ async function runDiscoveryStep(browserType, bname, [w, h], theme) {
         two.selected,
       JSON.stringify(two),
     );
+    // Hidden, the list has no width to follow the open card in; Show list brings it back into view.
+    let refollow = null;
+    const listTool = page.locator('[data-pane-toolbar] [data-tool="list"]');
+    if ((await listTool.count()) === 1) {
+      await listTool.click();
+      await page.waitForTimeout(300);
+      await next(E.cloth.event_id);
+      await listTool.click();
+      await page.waitForTimeout(500);
+      refollow = await read();
+    }
+    record(
+      tag + " Hide list, Next, Show list: the open card is in the list's view again (1083, G110)",
+      !!refollow && refollow.id === E.cloth.event_id && refollow.selected,
+      JSON.stringify(refollow),
+    );
     // 688: Back to Discovery leaves the lanes where the member left them. The list column scrolls
-    // while the pane is open (G110), so its place is the one the feed column takes back.
+    // while the pane is open (G110), so the card at its top goes back to the same distance from the
+    // feed column's top once the pane has closed.
     const kept = await page.evaluate(() => {
       const list = document.querySelector("[data-discovery] [data-pane-list]");
       list.scrollTop = Math.min(900, list.scrollHeight - list.clientHeight);
-      return Math.round(list.scrollTop);
+      const top = list.getBoundingClientRect().top;
+      const first = Array.from(list.querySelectorAll("[data-discovery-item]")).find(
+        (e) => e.getBoundingClientRect().bottom > top,
+      );
+      return {
+        scrolled: Math.round(list.scrollTop),
+        item: first ? first.getAttribute("data-discovery-item") : null,
+        section: first ? first.getAttribute("data-section") : null,
+        at: first ? Math.round(first.getBoundingClientRect().top - top) : null,
+      };
     });
     await page.waitForTimeout(200);
     await page.locator('[data-pane-cluster] button[aria-label="Back to Discovery"]').click();
     await page.waitForURL((u) => u.pathname === "/convene", { timeout: 10000 });
     await page.waitForTimeout(500);
-    const back = await page.evaluate(() =>
-      Math.round(document.querySelector('[data-scroller="feed"]').scrollTop),
-    );
+    const back = await page.evaluate((k) => {
+      const column = document.querySelector('[data-scroller="feed"]');
+      const el = Array.from(document.querySelectorAll("[data-discovery-item]")).find(
+        (e) =>
+          e.getAttribute("data-discovery-item") === k.item &&
+          e.getAttribute("data-section") === k.section,
+      );
+      return {
+        column: Math.round(column.scrollTop),
+        at: el
+          ? Math.round(el.getBoundingClientRect().top - column.getBoundingClientRect().top)
+          : null,
+      };
+    }, kept);
     record(
       tag + " Back to Discovery: the lanes where the list column left them (688)",
-      kept > 0 && Math.abs(back - kept) <= 2,
-      `list ${kept}, column after ${back}`,
+      kept.scrolled > 0 &&
+        kept.item !== null &&
+        back.column > 0 &&
+        back.at !== null &&
+        Math.abs(back.at - kept.at) <= 2,
+      JSON.stringify({ kept, back }),
     );
 
     record(tag + " no page errors", errors.length === 0, errors.join(" | ").slice(0, 300));

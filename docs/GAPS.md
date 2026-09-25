@@ -5380,3 +5380,16 @@ a step, the ring's top is clipped by the column's edge. In a lens list at 1280 a
 fills the 520 or 664 column, and the ring's sides are clipped too. It is the compile's behaviour, and
 the page does not pad around it (844). Owed: a Strand correction that leaves the ring's inset when
 the list follows the open card.
+
+## G124. Arrow keys inside the Pane's toolbar step to another event
+
+**Severity: low. Opened 25 September 2026 during handoff 33-A's review (G110), filed under ruling
+597. The number is assigned by this entry (ruling 638).**
+
+Correction 28 puts a `role="toolbar"` (Hide or show the list, Copy link, Share) inside the pane's
+section. Since correction 23, that section's `onKeyDown` has mapped ArrowLeft and ArrowRight to
+Previous and Next event whenever the target is not editable (1083). A keyboard member on Hide list
+who presses ArrowRight expecting the next tool gets the next event instead. A toolbar announces
+arrow-key movement between its tools, and here the keys belong to the section. Both behaviours are
+the compile's, and Discovery binds them as ported (844). Owed: a Strand correction that lets the
+toolbar keep its arrow keys, or drops the toolbar role.
