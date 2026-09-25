@@ -5200,6 +5200,25 @@ into the compile, the video frame with it, so the next re-sync does not reopen t
 Chat accepted the divergence as tracked on 25 September 2026, after `7d52411`'s run 348; the change goes
 to Strand in correction 28, after this PR merges.
 
+Amended 25 September 2026 by handoff 33-A (1134). Correction 28 item 7 takes the one-cell frame into
+the compile. The frame declares `display: grid` and `minmax(0,1fr)` by `minmax(0,1fr)`, and the image
+takes `minHeight: 0`. Those are the port's declarations in property, value and order, so
+`MediaBlock.tsx` changes only its comments. The divergence becomes the compile's own form, and
+`docs/strand-ports/v1790366257373061.md` records it as present. Handoff 33-A said the app's grid-cell
+layout "goes"; in the tree there was nothing to take away, because the compile adopted it (555).
+
+Two things this entry said are now contradicted or unmet:
+- **Chromium.** The extraction's item 7 read the former in-flow form overrunning its bottom edge in
+  Chrome too, by 2.3 to 2.4px. That contradicts this entry's "on Chromium the boxes are the
+  compile's own", which rested on run 347's arm passing on Chromium. The arm's tolerance or the
+  readout browser's 1.2 edge may account for the difference; it is not read here.
+- **Video.** The compile took the image and not the video frame. The ratioed video's poster is still
+  in flow at `height: 100%`, so the video half this entry owed is not in `v1790366257373061` and is
+  carried as G119.
+
+The compile was measured in Chrome only. Under 1134 this entry closes only on a green
+`matrix (webkit)` arm reading the image inside its frame at 390, 820 and 1280.
+
 ## G117. Run 350 passed the live Place check's "Near reads the place" with nothing to read — closed (1095)
 
 **Severity: low. Opened and closed 25 September 2026, after handoff 32-B merged as #64 on Chat's 1114
@@ -5237,3 +5256,15 @@ to 1112 and 1122.
 `docs/convene/B9-SPEC.md` byte for byte. Its Lanes section says See all once: "Happening soon applies
 `when`; relationship lanes switch lens; This weekend (1112), Join from anywhere (1122), Browse and
 Filling up carry none." Nothing in the page changes: the surface already built 1112 and 1122.
+
+## G119. MediaBlock's ratioed video frame keeps the in-flow height that ran past the edge on WebKit
+
+**Severity: low. Opened 25 September 2026 during handoff 33-A item 2, filed under ruling 597. The
+number is assigned by this entry (ruling 638).**
+
+G116 owed the one-cell frame for the ratioed image and the ratioed video. Strand correction 28
+(`v1790366257373061`) took the image and not the video. The video frame is still
+`aspect-ratio: {ratio || 16/9}` on a border-box frame with its poster in flow at `height: 100%`: the
+mechanism WebKit resolved against the border box for the image in run 347. Nothing renders video
+(ruling 55), and no arm reads it, so nothing on a page shows it today. Owed: the video frame's poster
+in the same declared grid cell, in a Strand correction, before any surface renders video.
