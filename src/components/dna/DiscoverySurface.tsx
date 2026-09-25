@@ -33,7 +33,15 @@
 // format word and places, and there is no count anywhere.
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation, useNavigate, useRouter } from "@tanstack/react-router";
-import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
 import { EVENT_PAGE_KEY } from "@/components/dna/EventSurface";
 import { Ghosts } from "@/components/dna/Ghosts";
 import { LoadError } from "@/components/dna/LoadError";
@@ -1111,6 +1119,36 @@ export function DiscoverySurface({
         }
       : {};
 
+  // Item 4 (B9-SPEC line 14; 1083): the pane body scrolls on its own, apart from the list column,
+  // and holds the column's height less the pane's sticky offset and the column's foot, so the pane's
+  // cluster (Previous, Next, Back to Discovery) at its top right stays in view however far either
+  // scrolls. The height is the column's own, measured, because the lens row above it is content.
+  const paneBody = useRef<HTMLDivElement>(null);
+  const [paneHeight, setPaneHeight] = useState<number | null>(null);
+  useLayoutEffect(() => {
+    if (!paneOpen) return;
+    const body = paneBody.current;
+    const section = body?.parentElement;
+    const column = body?.closest<HTMLElement>('[data-scroller="feed"]');
+    if (!body || !section || !column) return;
+    const measure = () => {
+      const foot = parseFloat(getComputedStyle(column).paddingBottom) || 0;
+      const sec = getComputedStyle(section);
+      const stuck = parseFloat(sec.top) || 0;
+      const edges =
+        (parseFloat(sec.borderTopWidth) || 0) + (parseFloat(sec.borderBottomWidth) || 0);
+      setPaneHeight(Math.max(0, Math.floor(column.clientHeight - foot - stuck - edges)));
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(column);
+    return () => ro.disconnect();
+  }, [paneOpen]);
+  // Previous and Next replace the event under the same pane, so the body starts each one at its top.
+  useLayoutEffect(() => {
+    paneBody.current?.scrollTo({ top: 0 });
+  }, [paneId]);
+
   // The list follows the open card (1083): Pane's `selectedKey` scrolls a list column this shell does
   // not scroll (G85), and a lane scrolls sideways, so the card is brought into its lane's view here.
   useEffect(() => {
@@ -1176,7 +1214,17 @@ export function DiscoverySurface({
           selectedKey={paneId ?? undefined}
           {...stepping}
         >
-          {pane}
+          <div
+            ref={paneBody}
+            data-pane-body
+            style={{
+              height: paneHeight ?? undefined,
+              overflowY: "auto",
+              overscrollBehavior: "contain",
+            }}
+          >
+            {pane}
+          </div>
         </Pane>
         {toasts}
       </div>
