@@ -19,7 +19,7 @@
 //
 // Layout (1082 as amended by 1094; item 7). The LensBar shows the five lenses with labels always and
 // icons at every tier and no seat after the lenses. The FacetRail is collapsed by default at every width: a
-// Sheet behind the Browse pill at compact, and the 64 strip at medium and expanded, opened and
+// Sheet behind the Filters trigger at compact, and the 64 strip at medium and expanded, opened and
 // collapsed by the member and remembered per member per width band. There is no right column. At
 // expanded a card opens the event page as Strand's Pane over the lanes (688, 1047): the rail collapses
 // to its strip, the card the pane shows is ringed (1083), and Previous and Next step through the lane
@@ -422,7 +422,8 @@ export function DiscoverySurface({
       ? "While you are in " + nearCity
       : (laneRows.find((l) => l.value === id)?.name ?? null);
 
-  // Browse (item 2, 1095, 1110): Format, Price, When, Topics, Home, Place, in that order; no count.
+  // Filters (item 2, 1095, 1110; B9-SPEC line 20): Format, Price, When, Topics, Home, Place, in that
+  // order; no count.
   const ladders: FacetLadder[] = (homes ?? []).flatMap((h) => {
     const w = homeWord(h);
     if (!w) return [];
@@ -581,14 +582,15 @@ export function DiscoverySurface({
         scope={lensScope}
         c="convene"
         label="Convene lens"
-        width="fill"
-        // Item 7: labels always and icons at every tier. At compact five words with five glyphs do
-        // not fit five seats under either packing (360 to 430, measured), and `labels` switches the
-        // bar's fit test off, so there the bar keeps its fit test, which lands icon-first as
-        // correction 25 draws it. A gap names it for a ruling.
-        labels={compact ? undefined : "always"}
+        // Item 7 and B9-SPEC's tiers: labels always and icons at every tier. At compact the five
+        // words and glyphs do not fit five equal seats, so there each seat hugs its word and the
+        // bar's root is `max-content` in a row that scrolls sideways (B9-SPEC line 11): nothing is
+        // squeezed and the page does not pan.
+        width={compact ? "content" : "fill"}
+        labels="always"
         icons
         collapsed={inContent ? scrolled : undefined}
+        style={compact ? { width: "max-content", maxWidth: "none" } : undefined}
       />
     ) : null;
 
@@ -619,8 +621,8 @@ export function DiscoverySurface({
           mode="collapsed"
           axes={axes}
           value={railValue}
-          label="Browse"
-          expandLabel={paneOpen ? "Back to Discovery and show browse" : "Show browse"}
+          label="Filters"
+          expandLabel={paneOpen ? "Back to Discovery and show filters" : "Show filters"}
           onExpand={paneOpen ? closeToDiscovery : () => setRailCollapsed(false)}
         />
       ) : (
@@ -630,11 +632,11 @@ export function DiscoverySurface({
           value={railValue}
           onChange={onRail}
           onClear={clearFacets}
-          label="Browse"
+          label="Filters"
           headingAction={
             <IconButton
               name="panel-left-close"
-              label="Collapse browse"
+              label="Collapse filters"
               size={touch ? 44 : 36}
               onClick={() => setRailCollapsed(true)}
             />
@@ -812,7 +814,7 @@ export function DiscoverySurface({
     ];
   };
 
-  const card = (item: DiscoveryItem, lane: DiscoveryLaneId) => {
+  const card = (item: DiscoveryItem, lane: DiscoveryLaneId, lensList = false) => {
     const post = item.post;
     const ev = post.event;
     const title = post.fields["title"]?.value;
@@ -828,6 +830,8 @@ export function DiscoverySurface({
         <PostCard
           presentation="discovery"
           c="convene"
+          // B9-SPEC's lens bar: a lens but All is a vertical list of the same card at 680.
+          style={lensList ? { width: "min(680px, 100%)" } : undefined}
           title={typeof title === "string" ? title : undefined}
           when={ev?.when || undefined}
           where={ev ? whereFor(ev) : undefined}
@@ -1003,7 +1007,8 @@ export function DiscoverySurface({
     </div>
   );
 
-  // A lens (693, 1105): its one lane, the cards wrapping in rows, or the EmptyState.
+  // A lens (693, 1105): its one lane as a vertical list of the same card at 680 (B9-SPEC), or the
+  // EmptyState.
   const lensLane: DiscoveryLaneId | null = lens === "all" ? null : lens;
   const lensSection = lensLane ? sections.find((s) => s.section === lensLane) : undefined;
   const lensView = lensLane ? (
@@ -1015,16 +1020,8 @@ export function DiscoverySurface({
       {lensLane === "follow" && sentence && !lensSection?.items.length ? (
         sentenceLine
       ) : lensSection && lensSection.items.length > 0 ? (
-        <div
-          data-lens-cards
-          style={{
-            display: "flex",
-            flexWrap: "wrap",
-            gap: 12,
-            justifyContent: compact ? "center" : "flex-start",
-          }}
-        >
-          {lensSection.items.map((it) => card(it, lensLane))}
+        <div data-lens-cards style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          {lensSection.items.map((it) => card(it, lensLane, true))}
         </div>
       ) : (
         <EmptyState
@@ -1105,7 +1102,30 @@ export function DiscoverySurface({
       )}
     </>
   );
-  const laneStyle = <style>{".dna-lane::-webkit-scrollbar{display:none}"}</style>;
+  const laneStyle = (
+    <style>
+      {".dna-lane::-webkit-scrollbar,[data-lens-anchor]::-webkit-scrollbar{display:none}"}
+    </style>
+  );
+  // Medium and expanded: the homes line and the applied chips. With the pane open the row moves
+  // into the list column, so rail, list and pane start level (B9-SPEC line 14).
+  const headerRow =
+    homesLine || chipRow ? (
+      <div
+        data-header-row
+        style={{
+          display: "flex",
+          flexWrap: "wrap",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: "8px 16px",
+          ...(paneOpen ? { marginBottom: 16 } : null),
+        }}
+      >
+        {homesLine}
+        {chipRow}
+      </div>
+    ) : null;
 
   if (paneOpen)
     return (
@@ -1113,7 +1133,12 @@ export function DiscoverySurface({
         {laneStyle}
         <Pane
           tier="expanded"
-          list={body}
+          list={
+            <>
+              {headerRow}
+              {body}
+            </>
+          }
           onClose={closePane}
           closeLabel={"Back to " + (fromElsewhere ? toOrigin.origin.label : "Discovery")}
           selectedKey={paneId ?? undefined}
@@ -1136,31 +1161,42 @@ export function DiscoverySurface({
         <>
           <div
             data-lens-anchor
-            style={{ visibility: scrolled ? "hidden" : "visible", minHeight: 64 }}
+            // B9-SPEC line 11: the lens bar's row scrolls sideways at compact; the page never does.
+            style={{
+              visibility: scrolled ? "hidden" : "visible",
+              minHeight: 64,
+              overflowX: "auto",
+              overflowY: "hidden",
+              scrollbarWidth: "none",
+              minWidth: 0,
+            }}
           >
             {lensBar(true)}
           </div>
           <div
             data-first-row
-            // FacetRail's compact Sheet is `contained`: absolute, with no z-index of its own, so the
-            // discovery faces after this row (each `position: relative`) painted over it. A flex
-            // item's z-index lifts the row, Sheet and all, above the lanes without becoming the
-            // Sheet's containing block (a gap names the part's side of it).
+            // B9-SPEC line 11: one row of the homes and the Filters trigger. FacetRail's compact
+            // Sheet is `contained`: absolute, with no z-index of its own, so the discovery faces
+            // after this row (each `position: relative`) painted over it. A flex item's z-index
+            // lifts the row, Sheet and all, above the lanes without becoming the Sheet's containing
+            // block (G109).
             style={{
               display: "flex",
               flexWrap: "wrap",
               alignItems: "center",
+              justifyContent: "space-between",
               gap: 8,
               zIndex: "var(--z-sheet)" as unknown as number,
             }}
           >
+            {homesLine ?? <span />}
             <FacetRail
               tier="compact"
               axes={axes}
               value={railValue}
               onChange={onRail}
               onClear={clearFacets}
-              label="Browse"
+              label="Filters"
               open={browseOpen}
               onOpenChange={setBrowseOpen}
               trigger={({ open, onOpen, label }) => (
@@ -1170,7 +1206,7 @@ export function DiscoverySurface({
                   aria-expanded={open}
                   aria-haspopup="dialog"
                   onClick={onOpen}
-                  data-testid="browse"
+                  data-testid="filters"
                   style={{ minHeight: touch ? "var(--target-primary)" : 36 }}
                 >
                   <Icon name="sliders-horizontal" size={16} />
@@ -1178,26 +1214,22 @@ export function DiscoverySurface({
                 </Button>
               )}
             />
-            {chipRow}
           </div>
-          {homesLine}
+          {/* B9-SPEC line 11: the applied chips and Clear all, only when a facet is set. */}
+          {chipRow && (
+            <div
+              data-applied-row
+              style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8 }}
+            >
+              {chipRow}
+              <Button variant="ghost" size="sm" onClick={clearFacets}>
+                Clear all
+              </Button>
+            </div>
+          )}
         </>
       ) : (
-        (homesLine || chipRow) && (
-          <div
-            data-header-row
-            style={{
-              display: "flex",
-              flexWrap: "wrap",
-              alignItems: "center",
-              justifyContent: "space-between",
-              gap: "8px 16px",
-            }}
-          >
-            {homesLine}
-            {chipRow}
-          </div>
-        )
+        headerRow
       )}
       {body}
       {toasts}

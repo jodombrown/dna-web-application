@@ -343,7 +343,7 @@ function readLens(page, selector, tabs) {
 /** Handoff 32-B's rail (item 2; 1095, 1110): Format, Price and When as segments, Topics as a
  *  checklist, Home as ladders and Place as a combobox, in that order; every control inside its
  *  bound (the nav in the rail form, the Sheet's scrolling body at compact) and nothing scrolling
- *  sideways. The rail form's heading holds its label and the one Collapse browse action. */
+ *  sideways. The rail form's heading holds its label and the one Collapse filters action. */
 const RAIL_32B = [
   "format:segment",
   "price:segment",
@@ -379,8 +379,8 @@ function readDiscoveryRail(page, selector, { bound = null, heading: needHeading 
         const heading = nav.querySelector("[data-heading]");
         const action = heading && heading.querySelector("[data-heading-action]");
         if (!heading || !heading.querySelector("h2")) why.push("no heading");
-        if (!action || !action.querySelector('button[aria-label="Collapse browse"]'))
-          why.push("no Collapse browse action");
+        if (!action || !action.querySelector('button[aria-label="Collapse filters"]'))
+          why.push("no Collapse filters action");
       }
       return {
         ok: why.length === 0,
@@ -396,9 +396,9 @@ function readDiscoveryRail(page, selector, { bound = null, heading: needHeading 
 /** PostCard's discovery face as 32-B binds it (item 4; 1076 to 1079, 1083, 1087): every card in
  *  the scope the discovery face, 320 wide, media at 16:9, no feed face, and ringed only where
  *  `ringed` says (the event open in the pane), never elsewhere. */
-function readDiscoveryCards(page, scope, ringed = null) {
+function readDiscoveryCards(page, scope, ringed = null, lensList = false) {
   return page.evaluate(
-    ({ scope, ringed }) => {
+    ({ scope, ringed, lensList }) => {
       const slots = Array.from(document.querySelectorAll(scope));
       const bad = [];
       for (const s of slots) {
@@ -408,8 +408,11 @@ function readDiscoveryCards(page, scope, ringed = null) {
         if (!a || a.getAttribute("data-presentation") !== "discovery")
           why.push("not the discovery face");
         if (s.querySelector("article[data-c]")) why.push("a feed face");
-        if (a && Math.abs(a.getBoundingClientRect().width - 320) > 0.6)
-          why.push("width " + a.getBoundingClientRect().width);
+        // A lane's card is 320; a lens list's is the same card at 680, or the column when narrower
+        // (B9-SPEC's lens bar section).
+        const wide = lensList ? Math.min(680, s.parentElement.clientWidth) : 320;
+        if (a && Math.abs(a.getBoundingClientRect().width - wide) > 0.6)
+          why.push("width " + a.getBoundingClientRect().width + " for " + wide);
         if (!m || !m.clientHeight || Math.abs(m.clientWidth / m.clientHeight - 16 / 9) > 0.02)
           why.push("media " + (m ? m.clientWidth + "x" + m.clientHeight : "none"));
         const on = !!a && a.hasAttribute("data-selected");
@@ -422,7 +425,7 @@ function readDiscoveryCards(page, scope, ringed = null) {
         detail: `${slots.length} card(s)` + (bad.length ? "; " + bad.slice(0, 3).join(" | ") : ""),
       };
     },
-    { scope, ringed },
+    { scope, ringed, lensList },
   );
 }
 
@@ -784,15 +787,18 @@ async function runMountConvene(bt, bname, [w, h], theme, path) {
           .count();
         record(tag + " LensBar: the route's lens is the selected tab", on === 1, on + " selected");
       }
-      const cards = await readDiscoveryCards(page, "[data-discovery-item]");
+      const cards = await readDiscoveryCards(page, "[data-discovery-item]", null, lensArm);
       record(
-        tag + " PostCard: every card the discovery face at 320, media 16:9, none ringed (32-B)",
+        tag +
+          (lensArm
+            ? " PostCard: every card the discovery face in a vertical list at 680, media 16:9, none ringed (B9-SPEC)"
+            : " PostCard: every card the discovery face at 320, media 16:9, none ringed (32-B)"),
         cards.ok,
         cards.detail,
       );
       if (compact) {
-        await tap(page, page.locator('[data-testid="browse"]'));
-        const dialog = '[role="dialog"][aria-label="Browse"]';
+        await tap(page, page.locator('[data-testid="filters"]'));
+        const dialog = '[role="dialog"][aria-label="Filters"]';
         await page.locator(dialog).waitFor({ timeout: 10000 });
         await page.waitForTimeout(400);
         const rail = await readDiscoveryRail(page, dialog, { bound: "[data-sheet-body]" });
@@ -840,12 +846,12 @@ async function runMountConvene(bt, bname, [w, h], theme, path) {
           hl.detail,
         );
       } else {
-        const nav = '[data-scroller="left"] nav[aria-label="Browse"]';
+        const nav = '[data-scroller="left"] nav[aria-label="Filters"]';
         const strip = await page.evaluate((nav) => {
           const n = document.querySelector(nav);
           if (!n) return { ok: false, detail: "no strip" };
           const wd = Math.round(n.getBoundingClientRect().width);
-          const expand = !!n.querySelector('button[aria-label="Show browse"]');
+          const expand = !!n.querySelector('button[aria-label="Show filters"]');
           const axes = n.querySelectorAll("[data-axis-id]").length;
           return { ok: wd === 64 && expand && axes === 0, detail: `width ${wd}, ${axes} axes` };
         }, nav);
@@ -854,13 +860,13 @@ async function runMountConvene(bt, bname, [w, h], theme, path) {
           strip.ok,
           strip.detail,
         );
-        await tap(page, page.locator(`${nav} button[aria-label="Show browse"]`));
+        await tap(page, page.locator(`${nav} button[aria-label="Show filters"]`));
         await page.locator(`${nav} [data-axis-id]`).first().waitFor({ timeout: 10000 });
         await page.waitForTimeout(300);
         const rail = await readDiscoveryRail(page, nav, { heading: true });
         record(
           tag +
-            " FacetRail opened: the six axes in their displays inside the nav, Collapse browse on the heading",
+            " FacetRail opened: the six axes in their displays inside the nav, Collapse filters on the heading",
           rail.ok,
           rail.detail,
         );
@@ -946,10 +952,10 @@ async function runMountEvent(bt, bname, [w, h], theme) {
         pane.detail,
       );
       const strip = await page.evaluate(() => {
-        const nav = document.querySelector('[data-scroller="left"] nav[aria-label="Browse"]');
+        const nav = document.querySelector('[data-scroller="left"] nav[aria-label="Filters"]');
         if (!nav) return { ok: false, detail: "no strip" };
         const items = nav.querySelectorAll('[role="listitem"]').length;
-        const expand = nav.querySelector('button[aria-label="Back to Discovery and show browse"]');
+        const expand = nav.querySelector('button[aria-label="Back to Discovery and show filters"]');
         const wd = Math.round(nav.getBoundingClientRect().width);
         return { ok: wd === 64 && !!expand && items > 0, detail: `width ${wd}, ${items} squares` };
       });

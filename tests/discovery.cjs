@@ -368,7 +368,8 @@ function fullDensity(E) {
       weekend: [E.supper, E.tema].map((e) =>
         item(e, { kind: "weekend", starts_at: e.starts_at, mode: e.mode }),
       ),
-      online: [E.readers, E.stream, E.harvest, E.cloth].map((e) =>
+      // Five, so the lane still scrolls sideways at 1600, where the canvas is widest (B9-SPEC 13).
+      online: [E.readers, E.stream, E.harvest, E.cloth, E.table].map((e) =>
         item(e, { kind: "online", starts_at: e.starts_at, mode: e.mode }),
       ),
       fresh: [E.kumasi, E.table, E.undated].map((e) =>
@@ -483,19 +484,19 @@ async function openDiscovery(page, path = "/convene") {
 }
 
 const tierOf = (w) => (w < 640 ? "compact" : w > 1024 ? "expanded" : "medium");
-const RAIL = '[data-scroller="left"] nav[aria-label="Browse"]';
-const SHEET = '[role="dialog"][aria-label="Browse"]';
+const RAIL = '[data-scroller="left"] nav[aria-label="Filters"]';
+const SHEET = '[role="dialog"][aria-label="Filters"]';
 const lastCall = (db) => db.discovery.calls[db.discovery.calls.length - 1] || {};
 
 /** Opens the rail (medium and up) or the Sheet (compact) and answers the scope its axes are in. */
 async function openRail(page, tier) {
   if (tier === "compact") {
-    await page.locator('[data-testid="browse"]').click();
+    await page.locator('[data-testid="filters"]').click();
     await page.locator(SHEET).waitFor({ timeout: 10000 });
     await page.locator(`${SHEET} [data-axis-id]`).first().waitFor({ timeout: 10000 });
     return SHEET;
   }
-  await page.locator(`${RAIL} button[aria-label="Show browse"]`).click();
+  await page.locator(`${RAIL} button[aria-label="Show filters"]`).click();
   await page.locator(`${RAIL} [data-axis-id]`).first().waitFor({ timeout: 10000 });
   return RAIL;
 }
@@ -506,8 +507,8 @@ async function closeRail(page, tier) {
     await page.locator(SHEET).waitFor({ state: "detached", timeout: 10000 });
     return;
   }
-  await page.locator(`${RAIL} button[aria-label="Collapse browse"]`).click();
-  await page.locator(`${RAIL} button[aria-label="Show browse"]`).waitFor({ timeout: 10000 });
+  await page.locator(`${RAIL} button[aria-label="Collapse filters"]`).click();
+  await page.locator(`${RAIL} button[aria-label="Show filters"]`).waitFor({ timeout: 10000 });
 }
 
 /** The rail as the part draws it: each axis's id, display, heading and the words it offers. */
@@ -885,19 +886,30 @@ async function runDiscovery(browserType, bname, [w, h], theme) {
         ).length,
         trailing: !!(t.parentElement && t.parentElement.querySelector("[data-lensbar-trailing]")),
         row: !!t.closest("[data-lensbar-row]"),
+        // B9-SPEC line 11: at compact the row scrolls sideways inside its anchor, whole.
+        inRow: compact
+          ? (() => {
+              const a = t.closest("[data-lens-anchor]");
+              const cs = getComputedStyle(a);
+              return (
+                cs.overflowX === "auto" && a.scrollWidth >= t.getBoundingClientRect().width - 1
+              );
+            })()
+          : true,
       };
     }, tier === "compact");
-    // Item 7: labels and icons where five of each fit; at compact they do not (G104), and the bar's
-    // own fit test answers icon-first, as correction 25 draws it. Every lens is named either way.
+    // Item 7 and B9-SPEC line 11: labels and icons at every tier; at compact in a row that scrolls
+    // sideways, each seat whole (the page's own overflow is the noOverflow check below).
     const shorts = VOCAB.convene_lenses.map((l) => l.short).join("|");
     record(
       tag +
         (tier === "compact"
-          ? " compact: the LensBar's five lenses icon-first by its fit test, each named, none clipped (G104)"
+          ? " compact: the LensBar's five lenses with labels and icons in a sideways row, none clipped (B9-SPEC 11)"
           : " full: the LensBar's five lenses with labels and icons, no seat after them (1093)"),
       !!bar &&
-        bar.mode === (tier === "compact" ? "icon-first" : "labels") &&
-        (tier === "compact" || bar.words.join("|") === shorts) &&
+        bar.mode === "labels" &&
+        bar.words.join("|") === shorts &&
+        bar.inRow &&
         bar.names.join("|") === shorts &&
         bar.icons === VOCAB.convene_lenses.length &&
         bar.clipped === 0 &&
@@ -909,9 +921,15 @@ async function runDiscovery(browserType, bname, [w, h], theme) {
       tag + " full: the homes line reads Accra and Nairobi (690)",
       (await page.locator("[data-homes-line]").innerText()).trim() === "Accra and Nairobi",
     );
+    const canvas = await page.evaluate(() => {
+      const c = document.querySelector("[data-canvas]");
+      return c ? Math.round(c.getBoundingClientRect().width) : null;
+    });
     record(
-      tag + " full: no right column (item 7)",
-      (await page.locator('[data-scroller="right"]').count()) === 0,
+      tag + " full: no right column (item 7), and the canvas at most 1600 (B9-SPEC 13)",
+      (await page.locator('[data-scroller="right"]').count()) === 0 &&
+        (tier === "compact" || canvas === Math.min(w, 1600)),
+      "canvas " + canvas,
     );
 
     // Item 7 (1094, 1111): collapsed at first load at every width, and nothing written on load.
@@ -920,22 +938,26 @@ async function runDiscovery(browserType, bname, [w, h], theme) {
       return {
         left: document.querySelectorAll('[data-scroller="left"]').length,
         width: nav ? Math.round(nav.getBoundingClientRect().width) : null,
-        expand: !!(nav && nav.querySelector('button[aria-label="Show browse"]')),
+        expand: !!(nav && nav.querySelector('button[aria-label="Show filters"]')),
         axes: nav ? nav.querySelectorAll("[data-axis-id]").length : 0,
         canvas: document.querySelector("[data-canvas]")?.getAttribute("data-rail") ?? null,
-        pill: !!document.querySelector('[data-discovery] [data-testid="browse"]'),
+        // B9-SPEC line 11: one row of the homes and the Filters trigger; no chips row until set.
+        pill: !!document.querySelector(
+          '[data-discovery] [data-first-row] [data-homes-line] ~ [data-testid="filters"]',
+        ),
+        applied: !!document.querySelector("[data-discovery] [data-applied-row]"),
       };
     }, RAIL);
     record(
       tag +
         (tier === "compact"
-          ? " compact: Browse is the pill and no rail, nothing written on load (1094)"
+          ? " compact: Filters is the trigger and no rail, nothing written on load (1094)"
           : " " +
             tier +
             ": the rail is its collapsed 64 strip at first load, nothing written (1094)"),
       db.discovery.railWrites.length === 0 &&
         (tier === "compact"
-          ? first.left === 0 && first.pill
+          ? first.left === 0 && first.pill && !first.applied
           : first.width === 64 && first.expand && first.axes === 0 && first.canvas === "collapsed"),
       JSON.stringify(first),
     );
@@ -943,18 +965,26 @@ async function runDiscovery(browserType, bname, [w, h], theme) {
     // Item 2 (1095, 1110): the facet set and its order, each axis in its display with its words.
     const scope = await openRail(page, tier);
     const axes = await readAxes(page, scope);
+    // B9-SPEC lines 12, 13 and 20: the rail 240 open at medium and 280 at expanded, headed Filters.
+    const railWidth = await page.evaluate(
+      (sel) => Math.round(document.querySelector(sel).getBoundingClientRect().width),
+      scope,
+    );
     record(
-      tag + " rail: Format, Price, When, Topics, Home and Place, in that order and display",
-      axes.map((a) => `${a.id}:${a.display}:${a.label}`).join(",") ===
-        [
-          "format:segment:Format",
-          "price:segment:Price",
-          "when:segment:When",
-          "family:checklist:Topics",
-          "home:ladders:Home",
-          "place:combobox:Place",
-        ].join(","),
-      axes.map((a) => `${a.id}:${a.display}:${a.label}`).join(","),
+      tag +
+        " rail: Filters, with Format, Price, When, Topics, Home and Place in that order and display" +
+        (tier === "compact" ? "" : ", " + (tier === "medium" ? 240 : 280) + " wide"),
+      (tier === "compact" || railWidth === (tier === "medium" ? 240 : 280)) &&
+        axes.map((a) => `${a.id}:${a.display}:${a.label}`).join(",") ===
+          [
+            "format:segment:Format",
+            "price:segment:Price",
+            "when:segment:When",
+            "family:checklist:Topics",
+            "home:ladders:Home",
+            "place:combobox:Place",
+          ].join(","),
+      axes.map((a) => `${a.id}:${a.display}:${a.label}`).join(",") + " width " + railWidth,
     );
     const words = Object.fromEntries(axes.map((a) => [a.id, a.options]));
     const railText = await page.locator(scope).innerText();
@@ -1076,7 +1106,7 @@ async function runDiscovery(browserType, bname, [w, h], theme) {
     if (tier === "expanded") {
       await page.waitForTimeout(300);
       const pane = await page.evaluate((id) => {
-        const nav = document.querySelector('[data-scroller="left"] nav[aria-label="Browse"]');
+        const nav = document.querySelector('[data-scroller="left"] nav[aria-label="Filters"]');
         return {
           open: !!document.querySelector('[data-discovery][data-pane-open="1"]'),
           rail: nav ? Math.round(nav.getBoundingClientRect().width) : null,
@@ -1084,6 +1114,8 @@ async function runDiscovery(browserType, bname, [w, h], theme) {
           right: document.querySelectorAll('[data-scroller="right"]').length,
           lanes: document.querySelectorAll("[data-discovery] [data-lanes] [data-lane]").length,
           back: document.querySelectorAll("[data-event-page] [data-back-row]").length,
+          // B9-SPEC line 14: the header row moves into the list column with the pane open.
+          header: !!document.querySelector("[data-pane-list] [data-header-row] [data-homes-line]"),
           ring: Array.from(
             document.querySelectorAll("[data-discovery-item] article[data-selected]"),
           ).map((a) => {
@@ -1093,18 +1125,19 @@ async function runDiscovery(browserType, bname, [w, h], theme) {
             );
           }),
           expand: !!document.querySelector(
-            'button[aria-label="Back to Discovery and show browse"]',
+            'button[aria-label="Back to Discovery and show filters"]',
           ),
         };
       }, E.supper.event_id);
       record(
         tag +
-          " pane: the event page in the Pane, the 64 strip, no right column, the card ringed in its lane (1083)",
+          " pane: the event page in the Pane, the 64 strip, no right column, the header row in the list, the card ringed (1083)",
         pane.open &&
           pane.rail === 64 &&
           pane.col === "collapsed" &&
           pane.right === 0 &&
           pane.lanes > 0 &&
+          pane.header &&
           pane.back === 0 &&
           pane.expand &&
           pane.ring.join(",") === "soon:true",
@@ -1156,7 +1189,7 @@ async function runDiscovery(browserType, bname, [w, h], theme) {
       await page.waitForTimeout(300);
       record(
         tag + " pane: Escape returns to Discovery with the rail as the member left it (719, 1111)",
-        (await page.locator(`${RAIL} button[aria-label="Show browse"]`).count()) === 1 &&
+        (await page.locator(`${RAIL} button[aria-label="Show filters"]`).count()) === 1 &&
           (await page.locator('[data-discovery][data-pane-open="1"]').count()) === 0,
       );
       // 1047: a cold arrival at the event's address is the same pane, whatever the member came from.
@@ -1368,15 +1401,28 @@ async function runDiscoveryFacets(browserType, bname, [w, h], theme) {
     // The heading is the URL's; the cards are the answer's, which lands after it.
     await lanesUntil(page, (ids) => ids.length > 0 && ids.every((id) => accraIds.has(id)));
     const inAccra = await laneItems(page);
+    // B9-SPEC line 11: at compact, the applied chips and Clear all once a facet is set.
+    const appliedRow =
+      tier !== "compact" ||
+      ((await page.locator("[data-applied-row] [data-applied-facets]").innerText()).includes(
+        "Accra",
+      ) &&
+        (await page
+          .locator("[data-applied-row]")
+          .getByRole("button", { name: "Clear all", exact: true })
+          .count()) === 1);
     const strays = Object.values(inAccra)
       .flat()
       .filter((id) => !accraIds.has(id));
     record(
-      tag + " place: the lanes narrow to Accra and Near reads While you are in Accra (1095)",
+      tag +
+        " place: the lanes narrow to Accra and Near reads While you are in Accra (1095)" +
+        (tier === "compact" ? ", the chip and Clear all shown (B9-SPEC 11)" : ""),
       strays.length === 0 &&
         Object.keys(inAccra).includes("near") &&
-        !Object.keys(inAccra).includes("fresh"),
-      JSON.stringify({ lanes: Object.keys(inAccra), strays }),
+        !Object.keys(inAccra).includes("fresh") &&
+        appliedRow,
+      JSON.stringify({ lanes: Object.keys(inAccra), strays, appliedRow }),
     );
     if (tier === "compact") scope = await openRail(page, tier);
     await page
@@ -1512,7 +1558,7 @@ async function runDiscoveryFacets(browserType, bname, [w, h], theme) {
       // The Place and Home rows above opened and collapsed the rail; memory is read from here on.
       db.discovery.railWrites.length = 0;
       await openDiscovery(page);
-      await page.locator(`${RAIL} button[aria-label="Show browse"]`).click();
+      await page.locator(`${RAIL} button[aria-label="Show filters"]`).click();
       await page.locator(`${RAIL} [data-axis-id]`).first().waitFor({ timeout: 10000 });
       // The rail renders open from the optimistic state; the write reaches the mock after it.
       for (let t = 0; db.discovery.railWrites.length < 1 && t < 100; t++)

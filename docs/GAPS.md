@@ -4865,19 +4865,22 @@ preview with a status word. The editor that calls it is Brief 8 Revision 4's dra
 without an approved prototype (ruling 62). Until it is, a host cannot change an alias from the app;
 the database's own trigger writes the first one.
 
-## G100. A Discovery card opens through a button, not a link
+## G100. A Discovery card opens through a button, not a link (B9-SPEC line 26)
 
 **Severity: medium. Opened 24 September 2026 during handoff 32-B item 4, filed under ruling 597 and
 reported under 732 rather than worked around at the page. The number is assigned by this entry
 (ruling 638).**
 
-Ruling 1067 says cards open through real links that preload on hover intent at expanded. PostCard's
+Ruling 1067 says cards open through real links that preload on hover intent at expanded, and
+B9-SPEC line 26 says of the card "The whole face is the link". PostCard's
 discovery face (correction 25 §1, ported by 32-A) opens through `onOpen`: its title is a `button`
 and the whole face is a click target, and it takes no `href`. So a Discovery card cannot be opened in
 a new tab, copied as a link or middle-clicked, and a keyboard or screen-reader member meets a button
 where 1067 promises a link. Hover intent still preloads the event route and its read at expanded
-through `onPreload`. Owed: a Strand correction giving the discovery face an `href` its title renders
-as an anchor, which Discovery then passes as the member event path.
+through `onPreload`. It is the part's, not the page's: Chat ruled on 25 September 2026 that
+`onOpen` is a part defect and the part is not edited here. Owed: a Strand correction giving the
+discovery face an `href` it renders as the anchor across the whole face, which Discovery then
+passes as the member event path.
 
 ## G101. The menu has no second line for Not this, so "Fewer like this in your lanes" is a toast
 
@@ -4890,14 +4893,14 @@ shows Not this alone. Discovery says the sentence as the toast that confirms the
 reading and not a drawing. Owed: a ruling that the toast is the place, or a Menu correction for an
 item's second line.
 
-## G102. Topics cannot render in two columns at 150 and up
+## G102. Topics cannot render in two columns at 150 and up (B9-SPEC line 20)
 
 **Severity: low. Opened 24 September 2026 during handoff 32-B item 2, filed under ruling 597 and
 reported under 732. The number is assigned by this entry (ruling 638).**
 
-Item 2 asks for the Topics checklist in two columns at 150 and up. FacetRail's `checklist` display is
+Item 2 and B9-SPEC line 20 ask for the Topics checklist in two columns at 150 and up. FacetRail's `checklist` display is
 one flex column of 44 rows (correction 25 §3), the compile draws one column, and 32-B changes no part,
-so Topics renders in one column at every width. Owed: a Strand correction for a checklist's columns,
+so Topics renders in one column at every width, as Chat ruled it stays on 25 September 2026. Owed: a Strand correction for a checklist's columns,
 with the width the second column begins at.
 
 ## G103. Format is a single segment, so format=online,hybrid shows as Online
@@ -4911,22 +4914,21 @@ the rail can show one choice: it checks Online while Hybrid is applied too, and 
 seat replaces both. The narrowing is right; what the rail shows under it is not the whole of it. Owed:
 a ruling on whether Format is multi-select (chips) or the segment gains an "Online or hybrid" seat.
 
-## G104. Five labels and five glyphs do not fit the Convene lens bar at compact
+## G104. The Convene lens bar in the header slot is icon-first at compact (B9-SPEC lines 11 and 13)
 
-**Severity: medium. Opened 24 September 2026 during handoff 32-B item 7, filed under ruling 597. The
-number is assigned by this entry (ruling 638).**
+**Severity: low. Opened 24 September 2026 during handoff 32-B item 7, filed under ruling 597, and
+rewritten on 25 September 2026 when B9-SPEC reached the tree. The number is assigned by this entry
+(ruling 638).**
 
-Item 7 asks for the five lenses with `labels="always"` and icons at every tier. At medium and
-expanded they fit. At 360, 390 and 430 they do not, under either packing: with 952's `fill` the five
-equal seats are narrower than "Communities" or "My network" with its glyph, and the words run under
-the next seat's glyph; with `content` the seats still shrink to the track and four of five overflow
-(measured on the local build: at 360 the seats are 48 to 74 wide with `scrollWidth` past
-`clientWidth` on four). `labels` switches the part's fit test off, so the page cannot keep both.
-Discovery keeps item 7 at medium and expanded and, at compact, leaves the fit test on, which answers
-icon-first with five equal 62 seats at 360 (correction 25's drawing uses icon-first at compact). Each
-seat keeps its word as its accessible name. The header slot, which takes the bar once the member
-scrolls past 72, renders it `compact`, which forces icon-first too. Owed: a ruling on item 7 at
-compact, or Design drawing the Convene bar at compact with its words.
+B9-SPEC line 11 puts the lens bar at compact as icon and word "in a row that scrolls sideways (root
+`width:max-content`)", moving into the header after 72px of scroll. The in-content bar now does that:
+Discovery passes `labels="always"`, `icons`, `width="content"` and a `max-content` root, and its
+anchor scrolls sideways, so every seat keeps its word whole and the page does not pan (the first
+reading, icon-first by the part's fit test, is reverted on Chat's instruction). What remains is the
+header slot: `AppHeader` renders the registered bar `compact`, which forces icon-first, so once the
+member scrolls past 72 the words go. And B9-SPEC line 13 centres the expanded lens row "with the
+scope line", where LensBar draws its scope line from the start of the track. Both are the parts'.
+Owed: a Strand correction for AppHeader's slot to carry labels, and for LensBar's scope alignment.
 
 ## G105. Place's kind word is matched as the member types
 
@@ -4952,7 +4954,7 @@ G5. The nine dispatches around it passed the same arm on the same deployment. Th
 `GuestSheet` disables the button while the field is empty or a request is in flight, so either the
 field did not take the fill or a request did not settle. Owed: read it in WebKit.
 
-## G107. B9-SPEC is cited and is not in the tree, so parts of Discovery were built with no drawing
+## G107. B9-SPEC is cited and is not in the tree, so parts of Discovery were built with no drawing — closed (Chat, 25 September 2026)
 
 **Severity: low. Opened 24 September 2026 during handoff 32-B, filed under ruling 597. The number is
 assigned by this entry (ruling 638).**
@@ -4966,6 +4968,11 @@ Following and Subscribed words, the rail's memory, and the region rung's absence
 and the handoff differ (the fixture's When options, its Place placeholder, its expanded rail at 280
 where the shell draws 260), the handoff was built. Owed: the spec in the tree, and a design read of
 the undrawn items on the deployed preview.
+
+**Closed 25 September 2026.** Chat attached B9-SPEC and ruled that it governs Discovery's layout; it
+is committed byte for byte as `docs/convene/B9-SPEC.md`. The surface is reconciled to it where the
+parts allow, each delta is listed with its disposition in #64's body, and what a part cannot do
+carries its own number (G100, G102, G104, G110 to G114).
 
 ## G108. Three client wrappers call set_follow
 
@@ -4994,3 +5001,64 @@ context, which does not move the Sheet's containing block; the compact `discover
 every Home rung through the Sheet.
 Owed: the contained Sheet takes `--z-sheet` itself (603), so a caller cannot reintroduce this by
 placing positioned content after it. Correction brief material with G30.
+
+## G110. Pane cannot take B9-SPEC's pane: the tracks, the height, the toolbar and Hide list (line 14)
+
+**Severity: medium. Opened 25 September 2026 during handoff 32-B, filed under ruling 597. The number
+is assigned by this entry (ruling 638).**
+
+B9-SPEC line 14 gives the open pane the grid `minmax(0,1fr) 520px` (the list takes the rest, the pane
+is 520), a height of the frame less the header less 88, and a toolbar of Hide or show the list, Copy
+link and Share, where Hide list sets `0 minmax(0,720px)` centred. Strand's `Pane` (correction 24 §6,
+ported by 32-A) draws `--pane-list-width` (360) for the list and the pane in the rest, takes no height,
+and has no toolbar or hidden-list state. Discovery binds what it has: the cluster (Previous event, Next
+event, Back to Discovery), the edges `aria-disabled` in place, the arrows while focus is in the pane,
+the rail at its strip, and the header row moved into the list column. Owed: a Strand correction for
+the pane's tracks, the toolbar and the hidden list.
+
+## G111. FacetRail's Clear all sits after the axes, not in the pinned heading row (line 20)
+
+**Severity: low. Opened 25 September 2026 during handoff 32-B, filed under ruling 597. The number is
+assigned by this entry (ruling 638).**
+
+B9-SPEC line 20 pins the Filters heading row with the title, Clear all when any facet is set, and the
+collapse control in the G72 slot, and scrolls the axes beneath. The ported `FacetRail` pins the title
+and the collapse control and renders Clear all in a status line after the last axis, so at medium and
+expanded it scrolls away with the axes. At compact Discovery shows Clear all beside the applied chips
+(line 11). Owed: a Strand correction moving Clear all into the heading row.
+
+## G112. The homes row is words, not a button to the profile's homes (line 11)
+
+**Severity: low. Opened 25 September 2026 during handoff 32-B, filed under ruling 597. The number is
+assigned by this entry (ruling 638).**
+
+B9-SPEC line 11 makes the homes row at compact a button to the profile's homes (633). Profile has no
+homes section or editor yet: `src/lib/homes.ts` reads `member_homes` and says it is empty until
+Profile's editor lands, and nothing on `/m/{handle}` shows or edits a home. A button with no
+destination would be a dead control, so the row stays the homes in words beside the Filters trigger.
+Owed: the button, once Profile's homes land.
+
+## G113. The ported discovery face and Menu differ from B9-SPEC's card geometry (lines 26 and 27)
+
+**Severity: low. Opened 25 September 2026 during handoff 32-B, filed under ruling 597. The number is
+assigned by this entry (ruling 638).**
+
+Read from the parts as 32-A ported them (`PostCard.tsx`'s discovery face, `Menu.tsx`) against B9-SPEC
+lines 26 and 27. Matching: 320 wide, the 1.5 frame, radius 14, padding 16, media 16:9 with the C badge
+at 48, the title at 22/1.25 clamped to two lines at 55, the ellipsis at 44 touch and 36 pointer, the
+selected ring, the hover underline, Menu's radius 10 and `--shadow-3`. Differing: the face's gap is 12
+where the spec has 8; the presenter row is 44 on touch and 32 on a pointer where it has 36; the reason
+row holds two lines of `--text-xs` (36.4) with no rule above it where it has 28 behind a rule; Menu's
+minimum width is 220 where it has 240; Menu portals to `document.body`, which is this app's root. All
+are the parts', and 32-B changes no part. Owed: Strand reconciles the correction 25 face and Menu with
+B9-SPEC, or the spec is read as the compile's.
+
+## G114. Lanes do not animate in (line 33)
+
+**Severity: low. Opened 25 September 2026 during handoff 32-B, filed under ruling 597. The number is
+assigned by this entry (ruling 638).**
+
+B9-SPEC line 33 has a lane appear with an 8px translate and a fade on `--dur-default` and `--ease`. It
+is not built: 32-B's items name no motion, the app carries none of the compile's reduced-motion block
+(G84), and an entrance transform under the arms' geometry reads would need its own settle. Owed: the
+lane entrance, with G84's reduced-motion answer, in a brief that names it.
