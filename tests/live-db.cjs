@@ -838,6 +838,28 @@ async function runLiveDbArms({ record, skip }) {
           " page " +
           (mine.ok ? JSON.stringify(page && page.viewer) : mine.code + " " + mine.message),
       );
+      // Addendum 4 item 1 (1121): the presenter line for a list of events is the pane's own. The
+      // member reads it for the event they just answered, beside event_page's own two values.
+      const presenters = await attempt(
+        client,
+        "select public.event_presenters(array[$1::uuid]) as p",
+        [eventId],
+      );
+      const line = presenters.ok && presenters.rows[0].p ? presenters.rows[0].p[eventId] : null;
+      record(
+        "Addendum 4 item 1 (1121): event_presenters answers an event's presenter and host exactly as event_page does",
+        !!page &&
+          !!line &&
+          !!line.presented_by &&
+          JSON.stringify(line.presented_by) === JSON.stringify(page.presented_by) &&
+          JSON.stringify(line.host) === JSON.stringify(page.host),
+        presenters.ok
+          ? JSON.stringify({
+              line,
+              page: page && { presented_by: page.presented_by, host: page.host },
+            })
+          : presenters.code + " " + presenters.message,
+      );
       await client.query("set local role anon");
       await client.query("select set_config('request.jwt.claims', '', true)");
       const pub = await attempt(client, "select public.event_public_page($1) as p", [slug]);
@@ -861,6 +883,16 @@ async function runLiveDbArms({ record, skip }) {
         "Brief 10 (1023): signed out cannot call the member projection",
         !refused.ok && refused.code === "42501",
         refused.ok ? "answered" : refused.code + " " + refused.message,
+      );
+      const anonPresenters = await attempt(
+        client,
+        "select public.event_presenters(array[$1::uuid]) as p",
+        [eventId],
+      );
+      record(
+        "Addendum 4 item 1 (1121): signed out cannot call event_presenters",
+        !anonPresenters.ok && anonPresenters.code === "42501",
+        anonPresenters.ok ? "answered" : anonPresenters.code + " " + anonPresenters.message,
       );
       await actAs(client, member.id);
       const media = await attempt(
