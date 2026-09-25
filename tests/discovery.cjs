@@ -2429,6 +2429,9 @@ async function runDiscoveryStep(browserType, bname, [w, h], theme) {
         id: location.pathname.split("/").pop(),
         top: body ? body.scrollTop : null,
         selected: !!c && c.top >= l.top - 1 && c.bottom <= l.bottom + 1,
+        // The selected ring is drawn 4 outside the face (1083): whole when it is inside the list.
+        ring: !!c && c.top - 4 >= l.top - 0.5 && c.bottom + 4 <= l.bottom + 0.5,
+        listScrolled: !!list && list.scrollTop > 0,
         own: !!body && body.scrollHeight > body.clientHeight,
         fits: !!section && section.getBoundingClientRect().bottom <= m.bottom + 1,
         controls,
@@ -2462,7 +2465,10 @@ async function runDiscoveryStep(browserType, bname, [w, h], theme) {
     const one = await read();
     record(
       tag + " Next once: the pane body at its top, Previous, Next and Back to Discovery in view",
-      one.id === E.stream.event_id && one.top === 0 && one.controls.every((c) => c.inView),
+      one.id === E.stream.event_id &&
+        one.top === 0 &&
+        one.controls.every((c) => c.inView) &&
+        one.ring,
       JSON.stringify(one),
     );
     // The body and the list both at their ends before the second step. With the pane bounded the
@@ -2472,15 +2478,24 @@ async function runDiscoveryStep(browserType, bname, [w, h], theme) {
       document.querySelector("[data-discovery] [data-pane-list]").scrollTop = 1e6;
     });
     await page.waitForTimeout(300);
+    // G85: this step reads Pane's own follow, so the surface's `scrollIntoView` is held still for it.
+    await page.evaluate(() => {
+      window.__siv = HTMLElement.prototype.scrollIntoView;
+      HTMLElement.prototype.scrollIntoView = function () {};
+    });
     await next(E.harvest.event_id);
     const two = await read();
+    await page.evaluate(() => {
+      HTMLElement.prototype.scrollIntoView = window.__siv;
+    });
     record(
       tag +
         " Next twice, from the body's and the list's ends: the body at its top, the controls and the open card in view",
       two.id === E.harvest.event_id &&
         two.top === 0 &&
         two.controls.every((c) => c.inView) &&
-        two.selected,
+        two.selected &&
+        two.listScrolled,
       JSON.stringify(two),
     );
     // Hidden, the list has no width to follow the open card in; Show list brings it back into view.
@@ -2496,7 +2511,7 @@ async function runDiscoveryStep(browserType, bname, [w, h], theme) {
     }
     record(
       tag + " Hide list, Next, Show list: the open card is in the list's view again (1083, G110)",
-      !!refollow && refollow.id === E.cloth.event_id && refollow.selected,
+      !!refollow && refollow.id === E.cloth.event_id && refollow.selected && refollow.ring,
       JSON.stringify(refollow),
     );
     // 688: Back to Discovery leaves the lanes where the member left them. The list column scrolls

@@ -5357,9 +5357,10 @@ on the lens row's height.
 **Severity: low. Opened 25 September 2026 during handoff 33-A item 2's comment sweep (763), filed
 under ruling 597. The number is assigned by this entry (ruling 638).**
 
-The sweep for the five changed parts also found two statements that predate correction 28 and name
-none of its parts: a code comment and a line in this register. They are left as they are, because the handoff's sweep reaches comments that
-assert a changed part's old behaviour:
+The sweep for the five changed parts also found two statements that predate correction 28: a code
+comment and a line in this register. Both give the shell's expanded rail width, which is AppShell's
+(1082), not a behaviour correction 28 changes in FacetRail. They are left as they are, because the
+handoff's sweep corrects what a changed part's old behaviour made false:
 - `src/lib/rail-store.ts:24` says the open rail is 260 at expanded. `AppShell` draws 280 (1082).
 - G87's item 8 says "1082's 280 is not in this tree", which is no longer so.
 
@@ -5382,10 +5383,13 @@ Correction 28's bounded list column has two properties that meet here:
 - Pane's `selectedKey` follow aligns the open card's top with the column's top (1083).
 
 The selected ring is a 4px `box-shadow` outside the face (`0 0 0 2px --bg, 0 0 0 4px --ink`). After
-a step, the ring's top is clipped by the column's edge. In a lens list at 1280 and 1440, the 680 card
-fills the 520 or 664 column, and the ring's sides are clipped too. It is the compile's behaviour, and
-the page does not pad around it (844). Owed: a Strand correction that leaves the ring's inset when
-the list follows the open card.
+a step, the ring's top was clipped by the column's edge. The page now gives each card's wrapper a
+4px `scroll-margin-block`. Discovery's own follow runs after Pane's and honours it, so the list
+settles with the whole ring in view; the step arm reads the ring. The sides are still the
+compile's. In a lens list at 1280 and 1440, the 680 card fills the 520 or 664 column, and the
+ring's sides are clipped. A lane's first card may lose its left band to the column's
+`overflow-x: hidden`. Owed: a Strand correction that leaves the ring's inset inside the bounded list
+column.
 
 ## G124. Arrow keys inside the Pane's toolbar step to another event
 

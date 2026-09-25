@@ -873,7 +873,9 @@ export function DiscoverySurface({
         key={lane + ":" + item.event_id}
         data-discovery-item={item.event_id}
         data-section={lane}
-        style={{ flex: "none", scrollSnapAlign: "start" }}
+        // The selected ring (1083) is drawn 4 outside the face. With the pane bounded, the list
+        // follows the open card to its column's top; this margin brings the ring into view with it.
+        style={{ flex: "none", scrollSnapAlign: "start", scrollMarginBlock: 4 }}
       >
         <PostCard
           presentation="discovery"
