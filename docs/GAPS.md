@@ -5128,3 +5128,24 @@ into the compile, the video frame with it, so the next re-sync does not reopen t
 
 Chat accepted the divergence as tracked on 25 September 2026, after `7d52411`'s run 348; the change goes
 to Strand in correction 28, after this PR merges.
+
+## G117. Run 350 passed the live Place check's "Near reads the place" with nothing to read — closed (1095)
+
+**Severity: low. Opened and closed 25 September 2026, after handoff 32-B merged as #64 on Chat's 1114
+read, filed under ruling 597. The number is assigned by this entry (ruling 638).**
+
+`tests/live-db.cjs`'s check "convene_places() answers grounded places by kind; a city narrows and Near
+reads the place; a malformed place is refused" passed on #64's enforcing run 350 (`pages.yml` id
+`36086569219`, head `48703c1`) without its Near clause ever reading a lane. The clause read Near only
+when the city's narrowing returned it, and held true otherwise. The narrowing returned no lanes at
+all, `narrowed []`: the fixture published one Accra event, and `20260924100000_p2_discovery_lanes`
+sets Near's floor in `private.convene_thresholds` to 2, so the lane stayed under its floor and the
+clause held on an empty premise. Under ruling 228 a clause that did not run is not a pass, and the
+1114 comment on #64 said so rather than let the green be read as coverage.
+
+Closed by this change. The fixture publishes a second Accra event under the same savepoint, so the
+city's Near lane meets its floor of 2 (lanes rank per section, so the two events also sit in Fresh
+without leaving Near). The check narrows on the fixture's own `city|ghana|accra` rather than whichever
+city sorts first, and requires the Near lane present with every item's reason naming Accra, so a floor
+raised above the fixture's two events now fails the check by name instead of passing it. The proof is
+the `live` job on this change's head.
