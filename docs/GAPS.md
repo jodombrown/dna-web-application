@@ -4881,7 +4881,7 @@ preview with a status word. The editor that calls it is Brief 8 Revision 4's dra
 without an approved prototype (ruling 62). Until it is, a host cannot change an alias from the app;
 the database's own trigger writes the first one.
 
-## G100. A Discovery card opens through a button, not a link (B9-SPEC line 26)
+## G100. A Discovery card opens through a button, not a link (B9-SPEC line 26) — closed (1134)
 
 **Severity: medium. Opened 24 September 2026 during handoff 32-B item 4, filed under ruling 597 and
 reported under 732 rather than worked around at the page. The number is assigned by this entry
@@ -4897,6 +4897,13 @@ through `onPreload`. It is the part's, not the page's: Chat ruled on 25 Septembe
 `onOpen` is a part defect and the part is not edited here. Owed: a Strand correction giving the
 discovery face an `href` it renders as the anchor across the whole face, which Discovery then
 passes as the member event path.
+
+**Closed 25 September 2026 by handoff 33-A (1134).** Correction 28 gives the discovery face `href`.
+The title renders as an anchor, and a cover inside it spans the face. The ellipsis, presenter and
+topic stand above the cover. A plain primary click calls `onOpen` and prevents the default; a
+modified or middle click is the browser's. Discovery passes the address `openEvent` navigates to,
+`/convene/events/{id}` with the lens's facets, so a new tab, a copied link and a middle click open
+the page a plain click shows. The plain click still opens the pane at expanded and the route below it.
 
 ## G101. The menu has no second line for Not this, so "Fewer like this in your lanes" is a toast
 
@@ -5084,7 +5091,7 @@ Profile's editor lands, and nothing on `/m/{handle}` shows or edits a home. A bu
 destination would be a dead control, so the row stays the homes in words beside the Filters trigger.
 Owed: the button, once Profile's homes land.
 
-## G113. The ported discovery face and Menu differ from B9-SPEC's card geometry (lines 26 and 27)
+## G113. The ported discovery face and Menu differ from B9-SPEC's card geometry (lines 26 and 27) — closed (1134)
 
 **Severity: low. Opened 25 September 2026 during handoff 32-B, filed under ruling 597. The number is
 assigned by this entry (ruling 638).**
@@ -5099,6 +5106,19 @@ minimum width is 220 where it has 240; Menu portals to `document.body`, which is
 are the parts', and 32-B changes no part. Owed: Strand reconciles the correction 25 face and Menu with
 B9-SPEC, or the spec is read as the compile's.
 
+**Closed 25 September 2026 by handoff 33-A (1134).** Correction 28 item 6 takes the face and the
+Menu to the spec, and the ports carry it:
+- The face's gap is 8.
+- The presenter row is 36 on a pointer and 44 on touch. That is 498's floor for a row of two
+  controls, which the extraction reports and 1134 accepts.
+- The reason row is one line in a 28 row behind a 1px `--line` rule, cut with an ellipsis.
+- Menu's minimum width is 240.
+
+No app override of any of these existed to remove. Discovery passes the face no gap, row or
+width beyond the lens list's 680. PostCard, Menu's only renderer, passes it no `style`. No stylesheet
+targets either part. Menu still portals to `document.body`, which is this app's frame root. G89's
+second menu, Profile's Visitor overflow, is not Strand's Menu and is outside this entry.
+
 ## G114. Lanes do not animate in (line 33)
 
 **Severity: low. Opened 25 September 2026 during handoff 32-B, filed under ruling 597. The number is
@@ -5109,7 +5129,7 @@ is not built: 32-B's items name no motion, the app carries none of the compile's
 (G84), and an entrance transform under the arms' geometry reads would need its own settle. Owed: the
 lane entrance, with G84's reduced-motion answer, in a brief that names it.
 
-## G115. The discovery face clamps its title on a `<button>`, which WebKit does not clamp (1087)
+## G115. The discovery face clamps its title on a `<button>`, which WebKit does not clamp (1087) — closed (1134)
 
 **Severity: low. Opened 25 September 2026 during handoff 32-B, filed under ruling 597. The number is
 assigned by this entry (ruling 638).**
@@ -5133,6 +5153,12 @@ surface then passes a string again, its span goes, and the Menu's name has the t
 
 Chat accepted the Menu's name as tracked on 25 September 2026, after `7d52411`'s run 348; the fix goes
 to Strand in correction 28, after this PR merges.
+
+**Closed 25 September 2026 by handoff 33-A (1134).** Correction 28 puts the two-line clamp on a
+`span` (`data-title-clamp`) inside the face's link or button, so no engine clamps a button. The h3
+still holds 55. Discovery's own span and its four declarations are gone, and it passes the title as a
+string again. With `href`, the ellipsis is named "More: {title}" and the Menu keeps "More: {title}".
+The clamp arm reads the part's span on both engines in the enforcing run, and G115 is proved there.
 
 ## G116. MediaBlock's ratioed image runs past its frame's edge on WebKit (1077, 1115)
 

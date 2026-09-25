@@ -25,9 +25,11 @@
 // to its strip, the card the pane shows is ringed (1083), and Previous and Next step through the lane
 // the card was opened from, in its visible order, past what the member dismissed (1044).
 //
-// A card opens through its title and its face (the discovery face has no link to open; a gap names
-// it). At expanded with a pointer, the face's preload warms the event route and the page's read
-// under the key EventSurface reads (1067). The read refetches on window focus and never live.
+// A card is a real link to the event's address across its whole face (1067; correction 28, G100): a
+// plain click opens the pane at expanded and the route below it, and a new tab, a copied link or a
+// middle click is the browser's. At expanded with a pointer, the face's preload warms the event route
+// and the page's read under the key EventSurface reads (1067). The read refetches on window focus and
+// never live.
 //
 // No digit renders except in a card's when line: the reason row is words (1096), the where line is a
 // format word and places, and there is no count anywhere.
@@ -206,16 +208,6 @@ const H2: CSSProperties = {
   color: "var(--ink)",
 };
 
-// G115 (1087): the discovery face clamps its title on the `<button>`, and WebKit lays a button out as
-// its own flex box, so the clamp never applies there and a long title runs to five lines. `title` is
-// a node, so the surface carries the same clamp on its own span until Strand moves it inside.
-const TITLE_CLAMP: CSSProperties = {
-  display: "-webkit-box",
-  WebkitLineClamp: 2,
-  WebkitBoxOrient: "vertical",
-  overflow: "hidden",
-};
-
 type SeeAll = { to: "/convene"; search: DiscoverySearch } | { lens: ConveneLensId };
 
 export function DiscoverySurface({
@@ -382,6 +374,10 @@ export function DiscoverySurface({
       replace,
       state: (prev) => ({ ...prev, origin, discoveryLane: lane }),
     });
+  // G100: the face's address is the location `openEvent` navigates to, facets and all, so the link a
+  // member copies or opens in a new tab is the page a plain click shows (1067).
+  const eventHref = (eventId: string) =>
+    router.buildLocation({ to: "/convene/events/$id", params: { id: eventId }, search }).href;
   // The pane closes to the lens it was opened from, with its facets (1063, 719). An event opened from
   // outside Discovery (the Feed's Event hook) closes to that origin by 1065's rule.
   const toOrigin = useBackToOrigin();
@@ -874,7 +870,13 @@ export function DiscoverySurface({
           c="convene"
           // B9-SPEC's lens bar: a lens but All is a vertical list of the same card at 680.
           style={lensList ? { width: "min(680px, 100%)" } : undefined}
-          title={typeof title === "string" ? <span style={TITLE_CLAMP}>{title}</span> : undefined}
+          // G115 (1087; correction 28): the part clamps the title on a span inside its link, so the
+          // title is the string itself and the ellipsis is named "More: {title}".
+          title={typeof title === "string" ? title : undefined}
+          // G100 (1067; correction 28): the face is a real link to the address the plain click
+          // navigates to, so a new tab, a copied link and a middle click open the event; a plain
+          // primary click is still `onOpen`, the pane at expanded and the route below it.
+          href={eventHref(item.event_id)}
           when={ev?.when || undefined}
           where={ev ? whereFor(ev) : undefined}
           presenter={(shown ? shown.name : post.author_name) || undefined}

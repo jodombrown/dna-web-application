@@ -19,7 +19,28 @@
 // (data-c, data-expanded, data-kicker, the footer's data-testids and aria-pressed, the handle line,
 // the clamp-gated body tap, Read more as a link, Show less) are kept under rulings 84, 105, 416 and
 // W54, and both faces read G42's --c-system rungs where the compile writes --line-strong and --ink-3.
-// No page passes `presentation` or `selected` in this port; binding them is 32-B's.
+// Only `src/components/dna/DiscoverySurface.tsx` passes `presentation="discovery"` and `selected`;
+// every other caller renders the feed face.
+//
+// Reconciled at compile v1790366257373061 (handoff 33-A, rulings 862 and 844): correction 28 with
+// correction 29's ask 1 folded in (1130), ratified under 1134; the dispositions are in
+// docs/strand-ports/v1790366257373061.md. Before the change this file equalled v1790279130697923
+// (whose PostCard is byte-equal to v1790212533284400's) but for the divergences named here. The feed
+// face is byte-equal across the two compiles and is unchanged. The discovery face takes: `href`
+// (G100, 1067), which renders the title as a real anchor carrying `data-card-open` with a
+// `data-card-cover` span at inset 0 spanning the face, so the face opens in a new tab, copies and
+// middle-clicks as a link; a plain primary click with no modifier and not already prevented calls
+// `onOpen` and prevents the default, and any other click is the browser's. With `href` the article
+// carries `data-href` and no click handler of its own, the presenter and the topic stand above the
+// cover (position relative, z-index 1) as the ellipsis already did, and the ellipsis is named
+// "{menuLabel}: {title}". The two-line clamp moves off the button onto a `data-title-clamp` span
+// inside the link or button (G115: WebKit does not clamp a button). Geometry (G113): gap 8, was 12;
+// presenter row 36 on pointer, was 32, and --target-primary on touch (498); the last row 28 behind a
+// 1px --line rule, one line cut with an ellipsis, was two lines of --text-xs with no rule. `going`
+// (the caller's sentence, shown only when `reason` is absent, marked `data-going`) and `onReport`
+// (the Menu ends with a rule and `reportLabel`, default "Report", `flag` icon, danger tone) are
+// correction 29's ask 1. The ellipsis and the Menu name append a title only when it is a string,
+// because this port's title may be a node; the compile concatenates whatever it is given.
 import {
   Fragment,
   useRef,
@@ -109,9 +130,25 @@ export type PostCardProps = {
   presenterSrc?: string | undefined;
   /** discovery: the topic, a Chip in the C; absent when null. */
   topic?: string | undefined;
-  /** discovery: DIA's reason in words (1096). Absent, the row holds its height empty. Never a number. */
+  /** discovery: DIA's reason in words (1096), one line in a 28 row behind a rule (correction 28).
+   *  Absent, the row holds its height empty. Never a number. */
   reason?: string | undefined;
-  /** discovery: the whole face opens the event; a press on a control does not. */
+  /** discovery, correction 29 ask 1 (folded into 28, 1130): the caller's going sentence, shown in
+   *  the last row when `reason` is absent; `reason` wins when both are passed. One line, cut with an
+   *  ellipsis. The part never composes names and never counts; an empty value holds the row. */
+  going?: string | undefined;
+  /** discovery, correction 29 ask 1: the Menu ends with a rule and Report, danger tone, `flag`
+   *  icon. Absent, neither (1097, 1129). */
+  onReport?: (() => void) | undefined;
+  /** discovery: Report's label. Default "Report". */
+  reportLabel?: string | undefined;
+  /** discovery, correction 28 (G100, 1067): the event's address. The title renders as a real anchor
+   *  with a cover spanning the face, so the face opens in a new tab, copies and middle-clicks; the
+   *  ellipsis, presenter and topic stand above the cover. The ellipsis is then named
+   *  "{menuLabel}: {title}". */
+  href?: string | undefined;
+  /** discovery: the whole face opens the event; a press on a control does not. With `href`, a plain
+   *  primary click calls it and prevents the default, for the caller's in-app navigation. */
   onOpen?: (() => void) | undefined;
   /** discovery: once, on pointer enter or focus. */
   onPreload?: (() => void) | undefined;
@@ -122,12 +159,13 @@ export type PostCardProps = {
   /** discovery: the ellipsis Menu's items; absent when they do not apply, never disabled (1102).
    *  No items, no control. */
   menu?: MenuProps["items"] | undefined;
-  /** discovery: the ellipsis control's accessible name. Default "More". */
+  /** discovery: the ellipsis control's accessible name, and with `href` and a string title,
+   *  "{menuLabel}: {title}". Default "More". */
   menuLabel?: string;
   /** discovery: false renders the Menu in place (scaled frames). Default true. */
   menuPortal?: boolean;
   /** discovery: overrides the detected input mode (44 control and 44 presenter row on touch; 36
-   *  and 32 on pointer; hover only on pointer). */
+   *  and 36 on pointer; hover only on pointer). */
   input?: Mode | undefined;
   style?: CSSProperties | undefined;
 };
@@ -560,24 +598,31 @@ function FeedFace({
   );
 }
 
-/** The discovery face (correction 25 §1: 1076 to 1079, 1087, 1096, 1097; Revision 6 ratified).
+/** The discovery face (correction 25 §1: 1076 to 1079, 1087, 1096, 1097; Revision 6 ratified;
+ *  correction 28: G100, G113, G115; correction 29's ask 1, 1130; ratified 1134).
  *  Fixed size: every region holds its height whatever the record carries, so a lane of cards is one
  *  height and nothing jumps as data arrives. In order and nothing else: media at 16:9, the flyer
  *  fitted by object-fit cover, the C glyph on --bg-sunken when there is none (never a collapsed
  *  frame); the one control, an ellipsis IconButton on the media's top right on a --surface ground
  *  with a 1px --line edge, 44 touch, 36 pointer, opening Menu with the caller's items (items absent
- *  when they do not apply, never disabled); title in the display face, clamped to two lines and
- *  holding two lines' height (1087); when, one line; where, one line; presenter (24 Avatar and name,
- *  onPresenter opens the profile) and topic (a Chip in the C, onTopic narrows) on one row; last,
- *  the reason row (1096): DIA's words, two lines held, empty and aria-hidden when there is no
- *  reason. No going row (1096), no Report (1097), no price, badge, count or number. The whole face
- *  opens the event (onOpen); a press on a control does not. onPreload fires once on pointer enter
- *  and on focus. Pointer hover underlines the title in --line-strong, drawn with longhands only so a
- *  re-render never mixes them with the shorthand (25 §7); the frame stays the C colour (rule 2).
- *  `input` overrides the detected input mode for proofs. The face never shrinks in a flex lane
- *  (flex: none, 25 §7). */
+ *  when they do not apply, never disabled) and, with `onReport`, a rule and Report last in the
+ *  danger tone with the `flag` icon (absent, neither); title in the display face, clamped to two
+ *  lines on a span inside the link or button and holding two lines' height (1087, G115); when, one
+ *  line; where, one line; presenter (24 Avatar and name, onPresenter opens the profile) and topic (a
+ *  Chip in the C, onTopic narrows) on one row, 36 on pointer and --target-primary on touch (498);
+ *  last, one row of 28 behind a 1px --line rule, one line cut with an ellipsis: DIA's words (1096),
+ *  else the caller's `going` sentence, empty and aria-hidden when there is neither. The part never
+ *  composes names or counts; no price, badge, count or number. The face sits at gap 8 (G113). The
+ *  whole face opens the event (onOpen); a press on a control does not. With `href` (G100, 1067) the
+ *  face is a real link: the title is an anchor and a cover inside it spans the face, the presenter
+ *  and topic stand above the cover with the ellipsis, a plain primary click calls onOpen and
+ *  prevents the default, and a modified or middle click is the browser's. onPreload fires once on
+ *  pointer enter and on focus. Pointer hover underlines the title in --line-strong, drawn with
+ *  longhands only so a re-render never mixes them with the shorthand (25 §7); the frame stays the C
+ *  colour (rule 2). `input` overrides the detected input mode for proofs. The face never shrinks in
+ *  a flex lane (flex: none, 25 §7). */
 const DISC_TITLE_H = "calc(2 * var(--display-s) * var(--display-s-lh))";
-const DISC_REASON_H = "calc(2 * var(--text-xs) * var(--text-xs-lh))";
+const DISC_REASON_H = 28;
 const DISC_LINE: CSSProperties = {
   fontSize: "var(--text-s)",
   lineHeight: "var(--text-s-lh)",
@@ -597,11 +642,15 @@ function DiscoveryFace({
   presenterSrc,
   topic,
   reason,
+  going,
   media,
+  href,
   onOpen,
   onPreload,
   onPresenter,
   onTopic,
+  onReport,
+  reportLabel = "Report",
   menu = [],
   menuLabel = "More",
   menuPortal = true,
@@ -625,23 +674,64 @@ function DiscoveryFace({
   const frame = c === "system" ? "var(--c-system)" : "var(--c-" + c + ")";
   const img = media ? (typeof media === "string" ? media : media.src) : undefined;
   const alt = media && typeof media === "object" ? media.alt || "" : "";
-  const hasMenu = (menu || []).some((it) => it && !("rule" in it && it.rule));
+  // Correction 29's ask 1: Report closes the caller's items behind a rule; absent, neither.
+  const items: MenuProps["items"] = onReport
+    ? [
+        ...(menu || []),
+        { rule: true },
+        { id: "report", label: reportLabel, icon: "flag", tone: "danger", onSelect: onReport },
+      ]
+    : menu;
+  const hasMenu = (items || []).some((it) => it && !("rule" in it && it.rule));
+  // `reason` wins; `going` fills the row only without one; an empty value holds the row.
+  const last = reason || going || "";
   const ctl = touch ? 44 : 36;
   const open = (e: MouseEvent<HTMLElement>) => {
     const t = e.target as Element | null;
     if (t && t.closest && t.closest("[data-card-control]")) return;
     if (onOpen) onOpen();
   };
-  const rowH = touch ? "var(--target-primary)" : 32;
+  // With `href`: a plain primary click is the caller's in-app navigation; a modified, middle or
+  // already-prevented click is the browser's (new tab, copy, middle-click).
+  const onLink = (e: MouseEvent<HTMLAnchorElement>) => {
+    if (
+      !onOpen ||
+      e.defaultPrevented ||
+      e.button !== 0 ||
+      e.metaKey ||
+      e.ctrlKey ||
+      e.shiftKey ||
+      e.altKey
+    )
+      return;
+    e.preventDefault();
+    onOpen();
+  };
+  const rowH = touch ? "var(--target-primary)" : 36;
+  // The presenter and the topic stand above the link's cover; without `href` there is no cover.
+  const above: CSSProperties | null = href ? { position: "relative", zIndex: 1 } : null;
+  const clamp: CSSProperties = {
+    display: "-webkit-box",
+    WebkitLineClamp: 2,
+    WebkitBoxOrient: "vertical",
+    overflow: "hidden",
+    textWrap: "pretty",
+    overflowWrap: "anywhere",
+    textDecorationLine: hot ? "underline" : "none",
+    textDecorationColor: "var(--line-strong)",
+    textDecorationThickness: 1,
+    textUnderlineOffset: 3,
+  };
   // The compile appends ": " + title; a title here may be a node, so only a string is appended.
-  const label = typeof title === "string" && title ? menuLabel + ": " + title : menuLabel;
+  const named = typeof title === "string" && title ? menuLabel + ": " + title : menuLabel;
   return (
     <article
       data-presentation="discovery"
       data-input={mode}
+      data-href={href ? "" : undefined}
       data-selected={selected ? "" : undefined}
       aria-current={selected ? "true" : undefined}
-      onClick={open}
+      onClick={href ? undefined : open}
       onMouseEnter={() => {
         if (touch) return;
         setHot(true);
@@ -659,13 +749,13 @@ function DiscoveryFace({
         padding: "var(--space-4)",
         display: "flex",
         flexDirection: "column",
-        gap: "var(--space-3)",
+        gap: "var(--space-2)",
         fontFamily: "var(--font-sans)",
         color: "var(--ink)",
         boxSizing: "border-box",
         width: "var(--lane-card-width)",
         flex: "none",
-        cursor: onOpen ? "pointer" : "default",
+        cursor: onOpen || href ? "pointer" : "default",
         ...style,
       }}
     >
@@ -715,7 +805,7 @@ function DiscoveryFace({
         >
           <IconButton
             name="ellipsis"
-            label={menuLabel}
+            label={href ? named : menuLabel}
             size={ctl}
             aria-haspopup="menu"
             aria-expanded={menuOpen}
@@ -729,8 +819,8 @@ function DiscoveryFace({
             open={menuOpen}
             onClose={() => setMenuOpen(false)}
             anchorRef={anchor}
-            items={menu}
-            label={label}
+            items={items}
+            label={named}
             input={mode}
             portal={menuPortal}
           />
@@ -746,30 +836,37 @@ function DiscoveryFace({
           lineHeight: "var(--display-s-lh)",
         }}
       >
-        <button
-          type="button"
-          data-card-open=""
-          onClick={(e) => {
-            e.stopPropagation();
-            if (onOpen) onOpen();
-          }}
-          style={{
-            all: "unset",
-            cursor: "pointer",
-            display: "-webkit-box",
-            WebkitLineClamp: 2,
-            WebkitBoxOrient: "vertical",
-            overflow: "hidden",
-            textWrap: "pretty",
-            overflowWrap: "anywhere",
-            textDecorationLine: hot ? "underline" : "none",
-            textDecorationColor: "var(--line-strong)",
-            textDecorationThickness: 1,
-            textUnderlineOffset: 3,
-          }}
-        >
-          {title}
-        </button>
+        {href ? (
+          <a
+            href={href}
+            data-card-open=""
+            onClick={onLink}
+            style={{ display: "block", color: "inherit", textDecoration: "none" }}
+          >
+            <span data-title-clamp="" style={clamp}>
+              {title}
+            </span>
+            <span
+              aria-hidden="true"
+              data-card-cover=""
+              style={{ position: "absolute", inset: 0, borderRadius: "inherit" }}
+            />
+          </a>
+        ) : (
+          <button
+            type="button"
+            data-card-open=""
+            onClick={(e) => {
+              e.stopPropagation();
+              if (onOpen) onOpen();
+            }}
+            style={{ all: "unset", cursor: "pointer", display: "block" }}
+          >
+            <span data-title-clamp="" style={clamp}>
+              {title}
+            </span>
+          </button>
+        )}
       </h3>
       <div data-row="when" style={DISC_LINE}>
         {when}
@@ -797,6 +894,7 @@ function DiscoveryFace({
             }}
             style={{
               all: "unset",
+              ...above,
               cursor: "pointer",
               display: "inline-flex",
               alignItems: "center",
@@ -818,7 +916,13 @@ function DiscoveryFace({
         {topic && (
           <span
             data-card-control=""
-            style={{ flex: "none", display: "inline-flex", alignItems: "center", minHeight: rowH }}
+            style={{
+              ...above,
+              flex: "none",
+              display: "inline-flex",
+              alignItems: "center",
+              minHeight: rowH,
+            }}
           >
             <Chip
               c={c === "system" ? undefined : c}
@@ -833,20 +937,31 @@ function DiscoveryFace({
       </div>
       <div
         data-row="reason"
-        aria-hidden={reason ? undefined : "true"}
+        data-going={!reason && going ? "" : undefined}
+        aria-hidden={last ? undefined : "true"}
         style={{
-          minHeight: DISC_REASON_H,
+          boxSizing: "border-box",
+          height: DISC_REASON_H,
+          flex: "none",
+          display: "flex",
+          alignItems: "center",
+          minWidth: 0,
+          borderTop: "var(--border-thin) solid var(--line)",
           fontSize: "var(--text-xs)",
           lineHeight: "var(--text-xs-lh)",
           color: "var(--ink-3)",
-          display: "-webkit-box",
-          WebkitLineClamp: 2,
-          WebkitBoxOrient: "vertical",
-          overflow: "hidden",
-          textWrap: "pretty",
         }}
       >
-        {reason || ""}
+        <span
+          style={{
+            minWidth: 0,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {last}
+        </span>
       </div>
     </article>
   );
