@@ -715,9 +715,10 @@ export function DiscoverySurface({
     const saved = postId ? (savedNow[postId] ?? !!data?.saved.has(postId)) : false;
     const going = !!data?.going.has(item.event_id);
     const hostId = ev?.hostId ?? "";
-    const presenter = post.author_name;
-    const canFollow =
-      post.author_kind === "member" && !!hostId && hostId !== member.id && !!presenter;
+    // 1121: the Follow item names the presenter as the pane does, and follows the host as it does.
+    const presenter = ev?.presenter?.name ?? post.author_name;
+    const presenterKind = ev?.presenter?.kind ?? post.author_kind;
+    const canFollow = presenterKind === "member" && !!hostId && hostId !== member.id && !!presenter;
     const following = hostId ? (followNow[hostId] ?? followedIds.has(hostId)) : false;
     const family = ev?.family ?? "";
     const topic = familyLabel(family);
@@ -830,6 +831,10 @@ export function DiscoverySurface({
     const title = post.fields["title"]?.value;
     const topic = familyLabel(ev?.family ?? null);
     const family = ev?.family ?? null;
+    // 1121: the presenter row reads the pane's presenter, name, face and handle from one record; a
+    // card the read answered nothing for keeps the author's line (416).
+    const shown = ev?.presenter;
+    const presenterHandle = shown ? shown.handle : post.author_handle;
     return (
       <div
         key={lane + ":" + item.event_id}
@@ -845,8 +850,8 @@ export function DiscoverySurface({
           title={typeof title === "string" ? <span style={TITLE_CLAMP}>{title}</span> : undefined}
           when={ev?.when || undefined}
           where={ev ? whereFor(ev) : undefined}
-          presenter={post.author_name || undefined}
-          presenterSrc={post.author_avatar}
+          presenter={(shown ? shown.name : post.author_name) || undefined}
+          presenterSrc={shown ? shown.avatar : post.author_avatar}
           topic={topic ?? undefined}
           reason={reasonFor(lane, item.reason)}
           media={post.media[0]}
@@ -855,9 +860,8 @@ export function DiscoverySurface({
           onOpen={() => openEvent(item.event_id, lane)}
           onPreload={expanded && !touch ? () => warmEvent(item.event_id) : undefined}
           onPresenter={
-            post.author_handle
-              ? () =>
-                  void navigate({ to: "/m/$handle", params: { handle: post.author_handle ?? "" } })
+            presenterHandle
+              ? () => void navigate({ to: "/m/$handle", params: { handle: presenterHandle } })
               : undefined
           }
           onTopic={

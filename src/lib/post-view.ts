@@ -41,6 +41,21 @@ export type EventView = {
   when: string;
   startsAt: string | null;
   places: string[];
+  /**
+   * Addendum 4 item 1 (674, 1079, 1121): the presenter line as the event pane names it, read from
+   * `event_presenters`: the latest published post's author, a member or a Space, else the host. The
+   * avatar is the pane's (a member presenter's own, otherwise the host's) and the handle is a member
+   * presenter's own. Null where the read answered nothing, and the line keeps the author's (416).
+   */
+  presenter: EventPresenterView | null;
+};
+
+export type EventPresenterView = {
+  kind: "member" | "space";
+  id: string;
+  name: string;
+  handle?: string | undefined;
+  avatar?: string | undefined;
 };
 
 export type EventSpeakerView = {
