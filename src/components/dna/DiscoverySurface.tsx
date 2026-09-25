@@ -237,7 +237,7 @@ export function DiscoverySurface({
   const expanded = tier === "expanded";
   const paneOpen = expanded && !!paneId;
   const openLane = useLocation({ select: (l) => l.state.discoveryLane });
-  const { scrolled } = useShellScroll();
+  const { scrolled, scrollerRef } = useShellScroll();
   const { share, copy, toast: shareToast } = useShare();
   const [toast, setToast] = useState<string | null>(null);
   const [browseOpen, setBrowseOpen] = useState(false);
@@ -658,8 +658,11 @@ export function DiscoverySurface({
           onClear={clearFacets}
           label="Filters"
           // G111 (correction 28): Clear all in the pinned heading row, so it stays in view as the
-          // axes scroll beneath it.
+          // axes scroll beneath it. The rail is its own scroller only when its height is bounded
+          // (25 §3), so it takes its column's height less the sticky inset it rests at, and the
+          // heading pins inside it rather than scrolling away with the column.
           clearPlacement="heading"
+          style={{ maxHeight: "calc(100% - var(--space-4))" }}
           headingAction={
             <IconButton
               name="panel-left-close"
@@ -1170,6 +1173,27 @@ export function DiscoverySurface({
   useLayoutEffect(() => {
     paneRoot.current?.querySelector<HTMLElement>("[data-pane-body]")?.scrollTo({ top: 0 });
   }, [paneId]);
+  // 688: the lanes stay where the member left them. With the pane bounded the feed column cannot
+  // scroll (its offset clamps to 0) and the list column scrolls instead, so the list column's offset
+  // is kept and handed to the feed column when the pane closes. Both hold the header row and then
+  // the lanes from the same top, so the offset carries over one for one.
+  const listTop = useRef(0);
+  useLayoutEffect(() => {
+    if (!paneOpen) {
+      const column = scrollerRef.current;
+      if (column && listTop.current > 0) column.scrollTop = listTop.current;
+      listTop.current = 0;
+      return;
+    }
+    const list = paneRoot.current?.querySelector<HTMLElement>("[data-pane-list]");
+    if (!list) return;
+    const keep = () => {
+      listTop.current = list.scrollTop;
+    };
+    keep();
+    list.addEventListener("scroll", keep, { passive: true });
+    return () => list.removeEventListener("scroll", keep);
+  }, [paneOpen, scrollerRef]);
 
   // The list follows the open card (1083): Pane's `selectedKey` brings it into the bounded list
   // column's view vertically, and a lane scrolls sideways, so it is brought into its lane's view here.
@@ -1227,13 +1251,14 @@ export function DiscoverySurface({
         data-lens={lens}
         data-pane-open="1"
         // The feed column is a flex column of a definite height, so this wrapper fills it and the
-        // pane's `height` of 100% is the column's own, less the 4 that keeps the ring in view.
+        // pane's `height` of 100% is the column's own, less this top. The top is the collapsed
+        // FacetRail strip's sticky inset, so rail, list and pane start level (the pane line).
         style={{
           flex: "1 1 0",
           minHeight: 0,
           display: "flex",
           flexDirection: "column",
-          paddingTop: 4,
+          paddingTop: "var(--space-4)",
         }}
       >
         {laneStyle}

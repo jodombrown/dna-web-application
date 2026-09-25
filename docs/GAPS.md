@@ -5086,10 +5086,24 @@ The height is not the spec's literal value. B9-SPEC Revision 2's pane line write
 the header less 88. In this shell the lens row, with its scope line, is 122.2 tall: 24 above an 82.2 bar
 and 16 below. The 88 allows for 64 of row and foot. So at 1280x800 the literal 648 overran the feed
 column (613.8, with a 24 foot) by 62, and the column scrolled beneath the pane. Discovery passes
-`height` 100% of a wrapper that fills the column. That makes the pane the frame less the header, the
-lens row and the canvas's 24 foot: 585.8 at 1280x800. The column's `scrollHeight` equals its
-`clientHeight` at every expanded width, so the list and the pane body scroll apart and nothing else
-does. Reported under 555; the spec's line is Chat's to restate.
+`height` 100% of a wrapper that fills the column. The wrapper's top is the collapsed FacetRail
+strip's sticky inset of 16, so rail, list and pane start level, as the pane line asks. That makes the
+pane the frame less the header, the lens row, that 16 and the canvas's 24 foot: 573.8 at 1280x800.
+The column's `scrollHeight` equals its `clientHeight` at every expanded width, so the list and the
+pane body scroll apart and nothing else does. Reported under 555, and carried as G121.
+
+Because the column cannot scroll while the pane is open, its offset clamps to 0. Ruling 688 keeps
+the lanes where the member left them, so Discovery keeps the list column's offset and hands it to
+the feed column when the pane closes. Both columns hold the header row and then the lanes from the
+same top.
+
+Measured on the local build at 1280 and 1920:
+- rail, list and pane all start at 202.2;
+- a card opened from the last lane, at a column offset of 3868 at 1280, closes back to 3868 with the
+  card in view.
+
+The width arm reads the level tops and the feed column still; the step arm reads 688 after Back to
+Discovery.
 
 ## G111. FacetRail's Clear all sits after the axes, not in the pinned heading row (line 20) — closed (1134)
 
@@ -5105,9 +5119,21 @@ expanded it scrolls away with the axes. At compact Discovery shows Clear all bes
 **Closed 25 September 2026 by handoff 33-A (1134).** Correction 28 item 5 adds
 `clearPlacement="heading"`, and Discovery passes it on the rail. Clear all sits in the pinned heading
 row, between the title and the collapse control, inside a polite status slot. It shows only while a
-facet is set and stays in view as the axes scroll. There is no foot line in the rail form. The
-compact Sheet keeps Clear all at its foot whatever the prop says, as compiled; G109 is not in this
-pass.
+facet is set. There is no foot line in the rail form. The compact Sheet keeps Clear all at its foot
+whatever the prop says, as compiled; G109 is not in this pass.
+
+The heading row pins only inside a rail that scrolls. The rail is its own scroller only when its
+caller bounds its height through `style` (25 §3), and Discovery had never bounded it. The rail grew to
+its content (1238 tall at 1280x800), the shell's left column scrolled instead, and the heading, with
+Clear all in it, scrolled away with the axes. That was the same at `d23c55f`. The outcome cannot hold
+without the bound, so Discovery now passes the rail `maxHeight: calc(100% - var(--space-4))`: its
+column's height less the sticky inset it rests at.
+
+Measured on the local build:
+- the rail scrolls itself (690 at 1280x800, 511 at 820x1180, 410 at 1920x1080);
+- the left column does not scroll;
+- Clear all sits 17 below the rail's top, where the extraction read 17.2, and a press there lands on
+  it.
 
 ## G112. The homes row is words, not a button to the profile's homes (line 11)
 
@@ -5297,8 +5323,10 @@ Discovery shares an event through two different addresses:
   public.
 
 So a member who copies a card's link from the browser gets one address, and one who presses Copy
-link gets another. Both open the event, but only one is the page. Owed: a ruling on the address
-Discovery's share path hands over, and one share path for the card, the pane and the page.
+link gets another. Both open the event, but only one is the page. The open pane shows both at once:
+its toolbar's Share hands over `/posts/{post id}`, and the event page's own Share row, inside the
+same pane, hands over the event's address. Owed: a ruling on the address Discovery's share path
+hands over, and one share path for the card, the pane and the page.
 
 ## G121. B9-SPEC Revision 2's pane height, frame less header less 88, overruns this shell's feed column
 
@@ -5313,7 +5341,8 @@ Measured on this shell at expanded:
 
 The literal height (648 at 1280x800) overran the 613.8 column by 62. The column scrolled beneath
 the pane and the pane's foot sat below the frame. Discovery gives the pane its column's own height
-(585.8 at 1280x800), and nothing but the list and the pane body scrolls. G110's closing note has the
+(573.8 at 1280x800, less the 16 that starts it level with the rail strip), and nothing but the
+list and the pane body scrolls. G110's closing note has the
 readings at every expanded width. Owed: the spec's line restated to the shell's lens row, or a ruling
 on the lens row's height.
 
@@ -5336,3 +5365,18 @@ replaces:
 - The seed's comment calls 1600 the widest width that arm runs, not the widest canvas.
 
 Owed: the two statements above restated, in a change that touches them.
+
+## G123. Pane's bounded list column clips the selected card's ring at its edges
+
+**Severity: low. Opened 25 September 2026 during handoff 33-A (G110), filed under ruling 597. The
+number is assigned by this entry (ruling 638).**
+
+Correction 28's bounded list column has two properties that meet here:
+- it is `overflow-y: auto` and `overflow-x: hidden`;
+- Pane's `selectedKey` follow aligns the open card's top with the column's top (1083).
+
+The selected ring is a 4px `box-shadow` outside the face (`0 0 0 2px --bg, 0 0 0 4px --ink`). After
+a step, the ring's top is clipped by the column's edge. In a lens list at 1280 and 1440, the 680 card
+fills the 520 or 664 column, and the ring's sides are clipped too. It is the compile's behaviour, and
+the page does not pad around it (844). Owed: a Strand correction that leaves the ring's inset when
+the list follows the open card.
