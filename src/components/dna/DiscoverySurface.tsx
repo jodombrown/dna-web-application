@@ -633,7 +633,13 @@ export function DiscoverySurface({
           value={railValue}
           label="Filters"
           expandLabel={paneOpen ? "Back to Discovery and show filters" : "Show filters"}
-          onExpand={paneOpen ? closeToDiscovery : () => setRailCollapsed(false)}
+          onExpand={() => {
+            // Item 3 (D6; 1094, 1111): the strip is the rail's own toggle. With the pane open it
+            // closes the pane and shows the filters, as its name says; the write is the member's
+            // toggle, never the pane's, and nothing is written when the rail is already open.
+            if (railCollapsed) setRailCollapsed(false);
+            if (paneOpen) closeToDiscovery();
+          }}
         />
       ) : (
         <FacetRail
@@ -656,7 +662,20 @@ export function DiscoverySurface({
     });
     // The rail reads the axes' sources and the current facets; listing those is enough.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [compact, railShut, paneOpen, band, touch, lists, familyRows, homes, places, lens, search]);
+  }, [
+    compact,
+    railShut,
+    railCollapsed,
+    paneOpen,
+    band,
+    touch,
+    lists,
+    familyRows,
+    homes,
+    places,
+    lens,
+    search,
+  ]);
   useEffect(() => {
     setRightRail(null);
   }, []);
