@@ -1,8 +1,7 @@
 // Generated from the canonical Supabase project (dgspjevjoblujcoljvkn) with the Supabase MCP
-// generate_typescript_types tool on the merge of #58 into handoff 31-A's branch, after both
-// handoffs' migrations were applied and recorded: 30-D's 20260922120000_p2_guest_path and
-// 20260922160000_r382_live_arms_guest_functions, and 31-A's 20260922150000_p2_discovery_schema and
-// 20260922150100_p2_discovery_projection.
+// generate_typescript_types tool on handoff 32-B's branch, after its four migrations were applied and
+// recorded: 20260924100000_p2_discovery_lanes, 20260924110000_p2_event_links,
+// 20260924120000_p2_home_ladders_and_rail and 20260924130000_p2_persona_comments.
 //
 // Nothing here is hand-written except this header and the `Views` helper at the end, which the
 // generator drops and every regeneration restores (`src/lib/feed.ts` reads it). The regeneration
@@ -12,34 +11,18 @@
 // file byte for byte, and `tests/migration-drift.cjs` reads it, so the generator returns it. Every
 // object the generator returns is explained by a migration in this tree, so nothing is left out.
 //
-// What 30-D adds here: `event_registrations.conversion_offered_at`, the once-only on-return offer
-// (1034); the table `guest_link_requests`, a hash of each requesting address with the event and the
-// time, which no client role reads or writes; and three functions: `guest_link_request` and
-// `guest_rsvp`, the guest's one write path, executable by the service role alone and called only by
-// the guest-rsvp Edge Function (1026); and `claim_guest_registrations`, which a signed-in member with
-// a confirmed address calls after sign-in to take their guest rows with their edges (1033).
-// 20260922160000 is a grant to `live_arms` and changes no type.
+// What 32-B adds here, replacing the entries `ccb81dc` wrote by hand from the files before the apply:
+// the tables `convene_lanes`, Discovery's nine lanes (1105), `event_aliases` and
+// `reserved_link_words` (1080, 1100, 1109), and `member_rail_state`, the rail's memory per member
+// per width band (1111); `events.custom_slug` and `events.short_code` (1080, 1081);
+// `discovery_dismissals`' section key, now on `convene_lanes`; and the functions `convene_places`
+// (1095), `event_alias_check` and `resolve_event_link` (1080, 1081, 1109), and `convene_discovery`
+// with `p_places` and `p_home_rung` (1095, 1110). 20260924130000 changes comments only and no type.
 //
-// What 31-A adds here: `events.family` (1037); the tables `convene_families`, `convene_lenses`,
-// `member_subscriptions`, `editors`, `convene_picks` and `discovery_dismissals`; and the functions
-// `convene_discovery`, Discovery's one read projection, and `set_subscription` and
-// `dismiss_discovery_item`, its two member write paths (1039, 1044).
-//
-// The private helpers of both handoffs (`private.guest_event`, `private.guest_mail_facts`,
-// `private.viewer_local_tz`, `private.convene_threshold`, `private.is_editor` and the table
-// `private.convene_thresholds`) are absent by design: the private schema is not exposed by
-// PostgREST, so the generator does not see it and no surface may reach it.
-
-// PROVISIONAL (handoff 32-B, Chat's condition on Addenda 1 to 3): the entries for
-// 20260924100000_p2_discovery_lanes, 20260924110000_p2_event_links and
-// 20260924120000_p2_home_ladders_and_rail are written by hand from those files, in the generator's
-// layout, because Chat applies the four 32-B migrations only once the surface is ready for its
-// enforcing run. They are `convene_lanes`, `event_aliases`, `reserved_link_words`,
-// `member_rail_state`, `events.custom_slug` and `events.short_code`, `discovery_dismissals`' section
-// key now on `convene_lanes`, and the functions `convene_places`, `event_alias_check`,
-// `resolve_event_link` and `convene_discovery` with `p_places` and `p_home_rung`.
-// 20260924130000_p2_persona_comments changes only comments and no type. The regeneration after the
-// apply replaces this whole file before the enforcing run starts, and this paragraph goes with it.
+// The private helpers (`private.event_alias_problem`, `private.new_event_alias`,
+// `private.new_short_code`, `private.new_event_slug`, and the trigger functions
+// `private.events_link_fields` and `private.events_alias_history`) are absent by design: the private
+// schema is not exposed by PostgREST, so the generator does not see it and no surface may reach it.
 
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
 
