@@ -4646,8 +4646,13 @@ and the list column becomes a scroller of its own: `overflow-y: auto`, with its 
 Discovery passes `height` with the pane open (G110), so `bringIntoView` now moves the column the
 list is in, and 1083's `selectedKey` follow acts vertically. The feed column no longer scrolls
 under the pane. The surface's `scrollIntoView` with `nearest` stays, for the lane's row, the one
-axis the Pane does not reach. The step arm scrolls the list column to its end, steps Next twice,
-and reads the open card inside the list column's box.
+axis the Pane does not reach.
+
+The width arm reads the list column as a scroller at all five expanded widths: `overflow-y: auto`,
+holding more than it shows. That read fails at `d23c55f`. The step arm scrolls the list column to
+its end, steps Next twice, and reads the open card inside the list column's box. That read passes at
+`d23c55f` too, because there the list column holds every card, so it guards the follow rather than
+proving it. Pane's follow and the surface's `nearest` both act on the bounded column.
 
 ## G86. A Sheet inside the Pane closes the Pane with it on Escape, because the app's modal Sheet never prevents the keydown
 
@@ -5078,7 +5083,7 @@ Discovery binds them with the pane open at expanded. It passes `paneWidth` 520, 
 (Hide or show the list, Copy link and Share, the latter two through `useShare` with the open event's
 post, 1097), and `listHidden`, which lasts while the pane is open. The list takes the rest of the width.
 Measured on the local build: pane 520 and list 520, 664, 808, 1096 and 1672 at 1280, 1440, 1600, 1920
-and 2560, which are the compile's own readings. Hide list reads the pane at 720, centred, with the list
+and 2560. At 1280, 1440, 1920 and 2560 these equal the compile's readings; the compile read no 1600. Hide list reads the pane at 720, centred, with the list
 hidden and inert. The page's own `data-pane-body` wrapper and its measured height are gone; the part's
 body is the scroller.
 
@@ -5318,8 +5323,8 @@ Discovery shares an event through two different addresses:
 - The card menu's Share and Copy link (1097) and the pane's Copy link and Share go through the
   Feed's `useShare`, which hands over `/posts/{post id}`, the Feed's expanded card. Handoff 33-A
   names that path for the pane.
-- The face's link (G100) is `/convene/events/{id}`, the event page B9-SPEC Revision 2's Routes line
-  names. The event page's own Share hands over that address, or `/e/{slug}` when the event is
+- The face's link (G100) is `/convene/events/{id}`, the member address B10-SPEC names and the tree
+  routes. B9-SPEC Revision 2's Routes line names it by slug instead; that is G125. The event page's own Share hands over that address, or `/e/{slug}` when the event is
   public.
 
 So a member who copies a card's link from the browser gets one address, and one who presses Copy
@@ -5343,16 +5348,17 @@ The literal height (648 at 1280x800) overran the 613.8 column by 62. The column 
 the pane and the pane's foot sat below the frame. Discovery gives the pane its column's own height
 (573.8 at 1280x800, less the 16 that starts it level with the rail strip), and nothing but the
 list and the pane body scrolls. G110's closing note has the
-readings at every expanded width. Owed: the spec's line restated to the shell's lens row, or a ruling
+1280x800 reading. The width arm reads the pane's foot on the canvas's foot at all five expanded
+widths. Owed: the spec's line restated to the shell's lens row, or a ruling
 on the lens row's height.
 
-## G122. Three comments outside correction 28's parts still describe the rail and the canvas before 1082 and 1123
+## G122. Two statements outside correction 28's parts still give the expanded rail as 260
 
 **Severity: low. Opened 25 September 2026 during handoff 33-A item 2's comment sweep (763), filed
 under ruling 597. The number is assigned by this entry (ruling 638).**
 
-The sweep for the five changed parts also found statements that predate correction 28 and name
-none of its parts. They are left as they are, because the handoff's sweep reaches comments that
+The sweep for the five changed parts also found two statements that predate correction 28 and name
+none of its parts: a code comment and a line in this register. They are left as they are, because the handoff's sweep reaches comments that
 assert a changed part's old behaviour:
 - `src/lib/rail-store.ts:24` says the open rail is 260 at expanded. `AppShell` draws 280 (1082).
 - G87's item 8 says "1082's 280 is not in this tree", which is no longer so.
@@ -5393,3 +5399,19 @@ who presses ArrowRight expecting the next tool gets the next event instead. A to
 arrow-key movement between its tools, and here the keys belong to the section. Both behaviours are
 the compile's, and Discovery binds them as ported (844). Owed: a Strand correction that lets the
 toolbar keep its arrow keys, or drops the toolbar role.
+
+## G125. B9-SPEC Revision 2 addresses the member event page by slug; B10-SPEC and the tree address it by id
+
+**Severity: low. Opened 25 September 2026 during handoff 33-A's review (G100), filed under ruling
+597. The number is assigned by this entry (ruling 638).**
+
+The two specs give the member event page different addresses:
+- B9-SPEC Revision 2's Routes line gives it as `/convene/events/{slug}`: "Slug: from the title,
+  editable in the hub … old slugs redirect permanently".
+- B10-SPEC, which owns the page, gives the member address as `/convene/events/{id}`, and the public
+  one as `/e/{slug}`.
+
+The tree follows B10-SPEC. The route's param is the event id, and `loadEventPage` refuses anything
+that is not a UUID. So the face's link (G100) and every Discovery navigation address the page by
+id. Nothing here changes it, since the route belongs to Brief 10. Owed: a ruling on which address
+the member page has, and B9-SPEC or B10-SPEC restated to it.

@@ -1224,9 +1224,22 @@ export function DiscoverySurface({
 
   // The list follows the open card (1083): Pane's `selectedKey` brings it into the bounded list
   // column's view vertically, and a lane scrolls sideways, so it is brought into its lane's view here.
-  // Hidden, the list has no width to follow in; Show list brings the open card back into view.
+  // Hidden, the list has no width to follow in. Shown again on the card it was hidden on, it keeps
+  // its place (correction 28's hidden list keeps its scroll); shown on another, reached by Previous
+  // or Next while it was hidden, it brings that card into view.
+  const hiddenOn = useRef<string | null>(null);
   useEffect(() => {
-    if (!paneOpen || !paneId || listHidden) return;
+    if (!paneOpen || !paneId) {
+      hiddenOn.current = null;
+      return;
+    }
+    if (listHidden) {
+      if (hiddenOn.current === null) hiddenOn.current = paneId;
+      return;
+    }
+    const was = hiddenOn.current;
+    hiddenOn.current = null;
+    if (was === paneId) return;
     // Compared as data, never built into a selector: the id is the route's own param.
     const el = Array.from(
       document.querySelectorAll<HTMLElement>("[data-discovery] [data-discovery-item]"),

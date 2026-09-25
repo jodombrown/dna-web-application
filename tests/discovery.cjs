@@ -1045,7 +1045,7 @@ async function runDiscovery(browserType, bname, [w, h], theme) {
     });
     record(
       tag +
-        " full: no right column (item 7), and the canvas the viewport's width, no maximum (B9-SPEC's expanded line, 1123)",
+        " full: no right column (item 7), and the canvas the viewport's width at every width this arm runs (1123; the width arm reads no maximum at 1920 and 2560)",
       (await page.locator('[data-scroller="right"]').count()) === 0 &&
         (tier === "compact" || canvas === w),
       "canvas " + canvas,
@@ -1191,13 +1191,15 @@ async function runDiscovery(browserType, bname, [w, h], theme) {
       going.map((x) => x.label).join(",") === expect.join(",") && going.every((x) => !x.disabled),
       going.map((x) => x.label + (x.disabled ? "(disabled)" : "")).join(","),
     );
-    record(
-      tag + " menu: the Menu is at least 240 wide, its declared minimum (G113)",
-      going.box.min === "240px" && going.box.width >= 239.5,
-      JSON.stringify(going.box),
-    );
     const plain = await readMenu(page, cardSel(E.loaded, "curated"));
     await closeMenu(page);
+    // G113: this menu's items are narrower than 240 by their words (217 at their own width), so its
+    // rendered width is the minimum: 240 now, 220 before correction 28.
+    record(
+      tag + " menu: a menu whose words are narrower renders at the 240 minimum (G113)",
+      plain.box.min === "240px" && Math.abs(plain.box.width - 240) <= 0.5,
+      JSON.stringify(plain.box),
+    );
     const other = await readMenu(page, cardSel(E.stream, "network"));
     await closeMenu(page);
     const undated = await readMenu(page, cardSel(E.undated, "fresh"));
@@ -2886,11 +2888,21 @@ async function runDiscoveryLink(browserType, bname, [w, h], theme) {
   const db = makeMockDb();
   const E = seedDiscovery(db);
   const { browser, page, errors } = await context(browserType, [w, h], theme, db);
-  // A modified or middle press may open a tab; each is closed as it opens.
+  // A modified or middle press may open a tab. Each is closed as it opens, and nothing it requests
+  // leaves the runner: only this page's requests go on to its mocks and to BASE.
   const opened = [];
   page.context().on("page", (p) => {
     opened.push(p);
     p.close().catch(() => undefined);
+  });
+  await page.context().route("**/*", (route) => {
+    let mine = false;
+    try {
+      mine = route.request().frame().page() === page;
+    } catch {
+      mine = false;
+    }
+    return mine ? route.fallback() : route.abort();
   });
   const card = cardSel(E.supper, "soon");
   try {
