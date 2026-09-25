@@ -4649,10 +4649,10 @@ under the pane. The surface's `scrollIntoView` with `nearest` stays, for the lan
 axis the Pane does not reach.
 
 The width arm reads the list column as a scroller at all five expanded widths: `overflow-y: auto`,
-holding more than it shows. That read fails at `d23c55f`. The step arm scrolls the list column to
-its end, steps Next twice, and reads the open card inside the list column's box. That read passes at
-`d23c55f` too, because there the list column holds every card, so it guards the follow rather than
-proving it. Pane's follow and the surface's `nearest` both act on the bounded column.
+holding more than it shows. The step arm holds the surface's `scrollIntoView` still, scrolls the list
+column to its end, steps Next twice, and requires the list column scrolled with the open card inside
+its box. So it reads Pane's own follow alone. Both reads fail at `d23c55f`, where the list column is
+not a scroller. The change is `174a55e`'s `height`, which Discovery passes.
 
 ## G86. A Sheet inside the Pane closes the Pane with it on Escape, because the app's modal Sheet never prevents the keydown
 
@@ -5089,8 +5089,9 @@ body is the scroller.
 
 The height is not the spec's literal value. B9-SPEC Revision 2's pane line writes it as the frame less
 the header less 88. In this shell the lens row, with its scope line, is 122.2 tall: 24 above an 82.2 bar
-and 16 below. The 88 allows for 64 of row and foot. So at 1280x800 the literal 648 overran the feed
-column (613.8, with a 24 foot) by 62, and the column scrolled beneath the pane. Discovery passes
+and 16 below. The 88 allows for 64 of row and foot. At 1280x800 the feed column below the lens row is
+613.8 with a 24 foot, leaving 589.8. The literal 648 is 58.2 more than that, so the column scrolled
+beneath the pane. Discovery passes
 `height` 100% of a wrapper that fills the column. The wrapper's top is the collapsed FacetRail
 strip's sticky inset of 16, so rail, list and pane start level, as the pane line asks. That makes the
 pane the frame less the header, the lens row, that 16 and the canvas's 24 foot: 573.8 at 1280x800.
@@ -5098,9 +5099,10 @@ The column's `scrollHeight` equals its `clientHeight` at every expanded width, s
 pane body scroll apart and nothing else does. Reported under 555, and carried as G121.
 
 Because the column cannot scroll while the pane is open, its offset clamps to 0. Ruling 688 keeps
-the lanes where the member left them, so Discovery keeps the list column's offset and hands it to
-the feed column when the pane closes. Both columns hold the header row and then the lanes from the
-same top.
+the lanes where the member left them. So Discovery keeps the card at the list column's top, with its
+distance from that top. When the pane closes, it scrolls the feed column to put the same card at the
+same distance (`355db02`). A raw offset would not carry over: a lens list's cards are
+`min(680px, 100%)`, shorter in the 520 list column than in the full one.
 
 Measured on the local build at 1280 and 1920:
 
@@ -5280,8 +5282,9 @@ The compile was measured in Chrome only. Under 1134 this entry closes only on a 
   `webkit-820x1180-dark` and `webkit-1280x800-light`. Each reads the Feed Convene card's one image
   at 16:9, filling its frame inside the edge.
 - That reading is evidence for `d417dbf` only (894). `355db02`, `8186a74` and `5080ce8` change
-  Discovery's scroll and ring code after it. `MediaBlock.tsx` has changed only in its comments since
-  `fb4ce12`, but the run that closes this entry is the enforcing run for the final head (556). Until
+  Discovery's scroll and ring code after it. `MediaBlock.tsx` has not changed since `fb4ce12`, whose
+  change to it was comments only, but the run that closes this entry is the enforcing run for the
+  final head (556). Until
   its `matrix (webkit)` job reads the same three cells, this entry stays open.
 - The video half is G119.
 
@@ -5367,8 +5370,9 @@ Measured on this shell at expanded:
 - the lens row is 122.2: 24 above an 82.2 LensBar with its scope line, and 16 below;
 - the feed column keeps a 24 foot.
 
-The literal height (648 at 1280x800) overran the 613.8 column by 62. The column scrolled beneath
-the pane and the pane's foot sat below the frame. Discovery gives the pane its column's own height
+The literal height (648 at 1280x800) is 58.2 more than the 589.8 the column gives below the lens
+row, inside its 24 foot. The column scrolled beneath the pane, and the pane's foot sat below the
+frame. Discovery gives the pane its column's own height
 (573.8 at 1280x800, less the 16 that starts it level with the rail strip), and nothing but the
 list and the pane body scrolls. G110's closing note has the
 1280x800 reading. The width arm reads the pane's foot on the canvas's foot at all five expanded
