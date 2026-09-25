@@ -1119,38 +1119,50 @@ export function DiscoverySurface({
         }
       : {};
 
-  // Item 4 (B9-SPEC line 14; 1083): the pane body scrolls on its own, apart from the list column,
-  // and holds the column's height less the pane's sticky offset and the column's foot, so the pane's
-  // cluster (Previous, Next, Back to Discovery) at its top right stays in view however far either
-  // scrolls. The height is the column's own, measured, because the lens row above it is content.
-  const paneBody = useRef<HTMLDivElement>(null);
-  const [paneHeight, setPaneHeight] = useState<number | null>(null);
-  useLayoutEffect(() => {
-    if (!paneOpen) return;
-    const body = paneBody.current;
-    const section = body?.parentElement;
-    const column = body?.closest<HTMLElement>('[data-scroller="feed"]');
-    if (!body || !section || !column) return;
-    const measure = () => {
-      const foot = parseFloat(getComputedStyle(column).paddingBottom) || 0;
-      const sec = getComputedStyle(section);
-      const stuck = parseFloat(sec.top) || 0;
-      const edges =
-        (parseFloat(sec.borderTopWidth) || 0) + (parseFloat(sec.borderBottomWidth) || 0);
-      setPaneHeight(Math.max(0, Math.floor(column.clientHeight - foot - stuck - edges)));
-    };
-    measure();
-    const ro = new ResizeObserver(measure);
-    ro.observe(column);
-    return () => ro.disconnect();
+  // G110 (B9-SPEC Revision 2's pane line; 1127, correction 28): the pane at 520 with the list
+  // taking the rest, bounded to the feed column's own height so the list column and the pane body
+  // each scroll on their own and the column itself never does. The spec writes that height as the
+  // frame less the header less 88; this shell's lens row, with its scope line, is 122 tall where
+  // that 88 allows for 64 of row and foot, so the literal value overran the column. The pane takes
+  // the column's own height instead (see the wrapper below), which is the frame less the header,
+  // the lens row and the canvas's foot, and holds at every expanded width.
+  //
+  // The toolbar (Hide or show the list, Copy link, Share) and the cluster (Previous event, Next
+  // event, Back to Discovery) share the pane's top row. Hide list keeps the list the same element,
+  // hidden and inert with its scroll kept, and centres the pane at 720; it lasts while the pane is
+  // open and resets when it closes. Copy link and Share are the card menu's own share path
+  // (`useShare`, 1097) with the open event's post, found in the lanes the projection answered or in
+  // the event page's read the pane already made, and absent when neither names one.
+  const [listHidden, setListHidden] = useState(false);
+  useEffect(() => {
+    if (!paneOpen) setListHidden(false);
   }, [paneOpen]);
+  const paneItem =
+    paneOpen && paneId
+      ? (data?.sections ?? []).flatMap((s) => s.items).find((i) => i.event_id === paneId)
+      : undefined;
+  // An observer only: EventSurface makes this read under the same key, and this never fetches.
+  const paneRead = useQuery({
+    queryKey: [EVENT_PAGE_KEY, member.id, paneId ?? ""],
+    queryFn: () => loadEventPage(paneId ?? ""),
+    enabled: false,
+  });
+  const panePostId = paneItem?.post.id ?? paneRead.data?.post?.id ?? null;
+  const paneTitleField = paneItem?.post.fields["title"]?.value;
+  const paneTitle =
+    (typeof paneTitleField === "string" ? paneTitleField : null) ??
+    paneRead.data?.event.title ??
+    undefined;
+
   // Previous and Next replace the event under the same pane, so the body starts each one at its top.
+  // The body is the part's own scroller (correction 28), reached from this surface's root.
+  const paneRoot = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
-    paneBody.current?.scrollTo({ top: 0 });
+    paneRoot.current?.querySelector<HTMLElement>("[data-pane-body]")?.scrollTo({ top: 0 });
   }, [paneId]);
 
-  // The list follows the open card (1083): Pane's `selectedKey` scrolls a list column this shell does
-  // not scroll (G85), and a lane scrolls sideways, so the card is brought into its lane's view here.
+  // The list follows the open card (1083): Pane's `selectedKey` brings it into the bounded list
+  // column's view vertically, and a lane scrolls sideways, so it is brought into its lane's view here.
   useEffect(() => {
     if (!paneOpen || !paneId) return;
     // Compared as data, never built into a selector: the id is the route's own param.
@@ -1178,7 +1190,7 @@ export function DiscoverySurface({
     </style>
   );
   // Medium and expanded: the homes line and the applied chips. With the pane open the row moves
-  // into the list column, so rail, list and pane start level (B9-SPEC line 14).
+  // into the list column, so rail, list and pane start level (B9-SPEC Revision 2's pane line).
   const headerRow =
     homesLine || chipRow ? (
       <div
@@ -1199,7 +1211,21 @@ export function DiscoverySurface({
 
   if (paneOpen)
     return (
-      <div data-discovery data-lens={lens} data-pane-open="1" style={{ paddingTop: 4 }}>
+      <div
+        ref={paneRoot}
+        data-discovery
+        data-lens={lens}
+        data-pane-open="1"
+        // The feed column is a flex column of a definite height, so this wrapper fills it and the
+        // pane's `height` of 100% is the column's own, less the 4 that keeps the ring in view.
+        style={{
+          flex: "1 1 0",
+          minHeight: 0,
+          display: "flex",
+          flexDirection: "column",
+          paddingTop: 4,
+        }}
+      >
         {laneStyle}
         <Pane
           tier="expanded"
@@ -1209,22 +1235,19 @@ export function DiscoverySurface({
               {body}
             </>
           }
+          title={paneTitle}
+          paneWidth={520}
+          height="100%"
+          listHidden={listHidden}
+          onToggleList={() => setListHidden((h) => !h)}
+          onCopyLink={panePostId ? () => void copy(panePostId) : undefined}
+          onShare={panePostId ? () => void share(panePostId) : undefined}
           onClose={closePane}
           closeLabel={"Back to " + (fromElsewhere ? toOrigin.origin.label : "Discovery")}
           selectedKey={paneId ?? undefined}
           {...stepping}
         >
-          <div
-            ref={paneBody}
-            data-pane-body
-            style={{
-              height: paneHeight ?? undefined,
-              overflowY: "auto",
-              overscrollBehavior: "contain",
-            }}
-          >
-            {pane}
-          </div>
+          {pane}
         </Pane>
         {toasts}
       </div>

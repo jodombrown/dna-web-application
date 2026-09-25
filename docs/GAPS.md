@@ -5018,7 +5018,7 @@ every Home rung through the Sheet.
 Owed: the contained Sheet takes `--z-sheet` itself (603), so a caller cannot reintroduce this by
 placing positioned content after it. Correction brief material with G30.
 
-## G110. Pane cannot take B9-SPEC's pane: the tracks, the height, the toolbar and Hide list (line 14)
+## G110. Pane cannot take B9-SPEC's pane: the tracks, the height, the toolbar and Hide list (line 14) — closed (1134)
 
 **Severity: medium. Opened 25 September 2026 during handoff 32-B, filed under ruling 597. The number
 is assigned by this entry (ruling 638).**
@@ -5042,6 +5042,25 @@ the pane takes the rest, measured on the local build at 680 at 1280, 824 at 1440
 keeping its 520; it has not been 520 on any build, which is this gap, so the arm proves what 1123
 asks of it (the list column holding a full 320 card, the pane inside the new edges) and the width is
 left to the Strand correction. Owed as before: the tracks, the toolbar and the hidden list.
+
+**Closed 25 September 2026 by handoff 33-A (1134).** Strand correction 28 gives `Pane` `paneWidth`,
+`height`, the toolbar handlers and `listHidden` (`docs/strand-ports/v1790366257373061.md`), and
+Discovery binds them with the pane open at expanded. It passes `paneWidth` 520, the three handlers
+(Hide or show the list, Copy link and Share, the latter two through `useShare` with the open event's
+post, 1097), and `listHidden`, which lasts while the pane is open. The list takes the rest of the width.
+Measured on the local build: pane 520 and list 520, 664, 808, 1096 and 1672 at 1280, 1440, 1600, 1920
+and 2560, which are the compile's own readings. Hide list reads the pane at 720, centred, with the list
+hidden and inert. The page's own `data-pane-body` wrapper and its measured height are gone; the part's
+body is the scroller.
+
+The height is not the spec's literal value. B9-SPEC Revision 2's pane line writes it as the frame less
+the header less 88. In this shell the lens row, with its scope line, is 122.2 tall: 24 above an 82.2 bar
+and 16 below. The 88 allows for 64 of row and foot. So at 1280x800 the literal 648 overran the feed
+column (613.8, with a 24 foot) by 62, and the column scrolled beneath the pane. Discovery passes
+`height` 100% of a wrapper that fills the column. That makes the pane the frame less the header, the
+lens row and the canvas's 24 foot: 585.8 at 1280x800. The column's `scrollHeight` equals its
+`clientHeight` at every expanded width, so the list and the pane body scroll apart and nothing else
+does. Reported under 555; the spec's line is Chat's to restate.
 
 ## G111. FacetRail's Clear all sits after the axes, not in the pinned heading row (line 20)
 
