@@ -5274,3 +5274,37 @@ G116 owed the one-cell frame for the ratioed image and the ratioed video. Strand
 mechanism WebKit resolved against the border box for the image in run 347. Nothing renders video
 (ruling 55), and no arm reads it, so nothing on a page shows it today. Owed: the video frame's poster
 in the same declared grid cell, in a Strand correction, before any surface renders video.
+
+## G120. Discovery's Copy link and Share hand over the post's address, where the face links to the event's
+
+**Severity: low. Opened 25 September 2026 during handoff 33-A (G100, G110), filed under ruling 597.
+The number is assigned by this entry (ruling 638).**
+
+Discovery shares an event through two different addresses:
+- The card menu's Share and Copy link (1097) and the pane's Copy link and Share go through the
+  Feed's `useShare`, which hands over `/posts/{post id}`, the Feed's expanded card. Handoff 33-A
+  names that path for the pane.
+- The face's link (G100) is `/convene/events/{id}`, the event page B9-SPEC Revision 2's Routes line
+  names. The event page's own Share hands over that address, or `/e/{slug}` when the event is
+  public.
+
+So a member who copies a card's link from the browser gets one address, and one who presses Copy
+link gets another. Both open the event, but only one is the page. Owed: a ruling on the address
+Discovery's share path hands over, and one share path for the card, the pane and the page.
+
+## G121. B9-SPEC Revision 2's pane height, frame less header less 88, overruns this shell's feed column
+
+**Severity: low. Opened 25 September 2026 during handoff 33-A (G110), filed under ruling 597. The
+number is assigned by this entry (ruling 638).**
+
+B9-SPEC Revision 2's pane line gives the open pane a height of the frame less the header less 88.
+Measured on this shell at expanded:
+- the header is 64;
+- the lens row is 122.2: 24 above an 82.2 LensBar with its scope line, and 16 below;
+- the feed column keeps a 24 foot.
+
+The literal height (648 at 1280x800) overran the 613.8 column by 62. The column scrolled beneath
+the pane and the pane's foot sat below the frame. Discovery gives the pane its column's own height
+(585.8 at 1280x800), and nothing but the list and the pane body scrolls. G110's closing note has the
+readings at every expanded width. Owed: the spec's line restated to the shell's lens row, or a ruling
+on the lens row's height.
