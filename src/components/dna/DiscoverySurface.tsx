@@ -1140,7 +1140,8 @@ export function DiscoverySurface({
   // frame less the header less 88; this shell's lens row, with its scope line, is 122 tall where
   // that 88 allows for 64 of row and foot, so the literal value overran the column. The pane takes
   // the column's own height instead (see the wrapper below), which is the frame less the header,
-  // the lens row and the canvas's foot, and holds at every expanded width.
+  // the lens row, the 16 that starts it level with the rail strip and the canvas's foot, and holds
+  // at every expanded width (G121).
   //
   // The toolbar (Hide or show the list, Copy link, Share) and the cluster (Previous event, Next
   // event, Back to Discovery) share the pane's top row. Hide list keeps the list the same element,
