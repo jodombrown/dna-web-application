@@ -5103,6 +5103,7 @@ the feed column when the pane closes. Both columns hold the header row and then 
 same top.
 
 Measured on the local build at 1280 and 1920:
+
 - rail, list and pane all start at 202.2;
 - a card opened from the last lane, at a column offset of 3868 at 1280, closes back to 3868 with the
   card in view.
@@ -5135,6 +5136,7 @@ without the bound, so Discovery now passes the rail `maxHeight: calc(100% - var(
 column's height less the sticky inset it rests at.
 
 Measured on the local build:
+
 - the rail scrolls itself (690 at 1280x800, 511 at 820x1180, 410 at 1920x1080);
 - the left column does not scroll;
 - Clear all sits 17 below the rail's top, where the extraction read 17.2, and a press there lands on
@@ -5168,6 +5170,7 @@ B9-SPEC, or the spec is read as the compile's.
 
 **Closed 25 September 2026 by handoff 33-A (1134).** Correction 28 item 6 takes the face and the
 Menu to the spec, and the ports carry it:
+
 - The face's gap is 8.
 - The presenter row is 36 on a pointer and 44 on touch. That is 498's floor for a row of two
   controls, which the extraction reports and 1134 accepts.
@@ -5256,6 +5259,7 @@ takes `minHeight: 0`. Those are the port's declarations in property, value and o
 layout "goes"; in the tree there was nothing to take away, because the compile adopted it (555).
 
 Two things this entry said are now contradicted or unmet:
+
 - **Chromium.** The extraction's item 7 read the former in-flow form overrunning its bottom edge in
   Chrome too, by 2.3 to 2.4px. That contradicts this entry's "on Chromium the boxes are the
   compile's own", which rested on run 347's arm passing on Chromium. The arm's tolerance or the
@@ -5268,6 +5272,7 @@ The compile was measured in Chrome only. Under 1134 this entry closes only on a 
 `matrix (webkit)` arm reading the image inside its frame at 390, 820 and 1280.
 
 **Closed 25 September 2026 by handoff 33-A (1134), on run 358.**
+
 - The run: `pages.yml` id `36190688999`, head `d417dbf`, `matrix (webkit)` job `108255195171`.
 - It read 6828 of 6828 checks, with none behind a web-process crash (G5) and none unclassified.
 - That includes Addendum 3 item E's mount-media arms at `webkit-390x844-light`,
@@ -5333,6 +5338,7 @@ in the same declared grid cell, in a Strand correction, before any surface rende
 The number is assigned by this entry (ruling 638).**
 
 Discovery shares an event through two different addresses:
+
 - The card menu's Share and Copy link (1097) and the pane's Copy link and Share go through the
   Feed's `useShare`, which hands over `/posts/{post id}`, the Feed's expanded card. Handoff 33-A
   names that path for the pane.
@@ -5353,6 +5359,7 @@ number is assigned by this entry (ruling 638).**
 
 B9-SPEC Revision 2's pane line gives the open pane a height of the frame less the header less 88.
 Measured on this shell at expanded:
+
 - the header is 64;
 - the lens row is 122.2: 24 above an 82.2 LensBar with its scope line, and 16 below;
 - the feed column keeps a 24 foot.
@@ -5374,11 +5381,13 @@ The sweep for the five changed parts also found two statements that predate corr
 comment and a line in this register. Both give the shell's expanded rail width, which is AppShell's
 (1082), not a behaviour correction 28 changes in FacetRail. They are left as they are, because the
 handoff's sweep corrects what a changed part's old behaviour made false:
+
 - `src/lib/rail-store.ts:24` says the open rail is 260 at expanded. `AppShell` draws 280 (1082).
 - G87's item 8 says "1082's 280 is not in this tree", which is no longer so.
 
 Two statements from the same sweep were corrected here, because they cite the spec this handoff
 replaces:
+
 - `tests/discovery.cjs`'s full-density check named the canvas "at most 1600" under the pre-1123
   line. It now reads the viewport's width with no maximum. At every width that arm runs, that is
   the value it has always compared.
@@ -5392,6 +5401,7 @@ Owed: the two statements above restated, in a change that touches them.
 number is assigned by this entry (ruling 638).**
 
 Correction 28's bounded list column has two properties that meet here:
+
 - it is `overflow-y: auto` and `overflow-x: hidden`;
 - Pane's `selectedKey` follow aligns the open card's top with the column's top (1083).
 
@@ -5406,8 +5416,7 @@ column.
 
 ## G124. Arrow keys inside the Pane's toolbar step to another event
 
-**Severity: low. Opened 25 September 2026 during handoff 33-A's review (G110), filed under ruling
-597. The number is assigned by this entry (ruling 638).**
+**Severity: low. Opened 25 September 2026 during handoff 33-A's review (G110), filed under ruling 597. The number is assigned by this entry (ruling 638).**
 
 Correction 28 puts a `role="toolbar"` (Hide or show the list, Copy link, Share) inside the pane's
 section. Since correction 23, that section's `onKeyDown` has mapped ArrowLeft and ArrowRight to
@@ -5419,10 +5428,10 @@ toolbar keep its arrow keys, or drops the toolbar role.
 
 ## G125. B9-SPEC Revision 2 addresses the member event page by slug; B10-SPEC and the tree address it by id
 
-**Severity: low. Opened 25 September 2026 during handoff 33-A's review (G100), filed under ruling
-597. The number is assigned by this entry (ruling 638).**
+**Severity: low. Opened 25 September 2026 during handoff 33-A's review (G100), filed under ruling 597. The number is assigned by this entry (ruling 638).**
 
 The two specs give the member event page different addresses:
+
 - B9-SPEC Revision 2's Routes line gives it as `/convene/events/{slug}`: "Slug: from the title,
   editable in the hub … old slugs redirect permanently".
 - B10-SPEC, which owns the page, gives the member address as `/convene/events/{id}`, and the public
