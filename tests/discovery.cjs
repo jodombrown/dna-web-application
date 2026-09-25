@@ -727,18 +727,27 @@ async function runDiscovery(browserType, bname, [w, h], theme) {
       geo.length > 0 && badGeo.length === 0,
       JSON.stringify(badGeo.slice(0, 2)),
     );
+    // The clamp is read wherever it sits: on the face's button, or on the surface's own node inside
+    // it (G115: WebKit lays a button out as its own flex box, so a clamp there is inert). Every
+    // two-line clamp in the title is lifted for one synchronous read and put back, so the long title
+    // shows it runs past two lines without them and holds two with them, on either engine.
     const clamp = await page.evaluate(
       (ids) => {
         const read = (id) => {
           const h3 = document.querySelector(`[data-discovery-item="${id}"] article h3`);
           const b = h3 && h3.querySelector("[data-card-open]");
           if (!h3 || !b) return null;
-          const cs = getComputedStyle(b);
-          return {
-            h3: Math.round(h3.getBoundingClientRect().height * 10) / 10,
-            clamp: cs.webkitLineClamp || cs.getPropertyValue("-webkit-line-clamp"),
-            clipped: b.scrollHeight > b.clientHeight + 1,
-          };
+          const height = () => Math.round(h3.getBoundingClientRect().height * 10) / 10;
+          const clamps = [b, ...b.querySelectorAll("*")].filter((e) => {
+            const cs = getComputedStyle(e);
+            return (cs.webkitLineClamp || cs.getPropertyValue("-webkit-line-clamp")) === "2";
+          });
+          const held = height();
+          const was = clamps.map((e) => e.style.getPropertyValue("-webkit-line-clamp"));
+          clamps.forEach((e) => e.style.setProperty("-webkit-line-clamp", "none"));
+          const free = height();
+          clamps.forEach((e, i) => e.style.setProperty("-webkit-line-clamp", was[i]));
+          return { h3: held, free, clamps: clamps.length, back: height() === held };
         };
         return { long: read(ids[0]), short: read(ids[1]) };
       },
@@ -748,8 +757,9 @@ async function runDiscovery(browserType, bname, [w, h], theme) {
       tag + " full: the title clamps to two lines and holds two lines' height (1087)",
       !!clamp.long &&
         !!clamp.short &&
-        clamp.long.clamp === "2" &&
-        clamp.long.clipped &&
+        clamp.long.clamps > 0 &&
+        clamp.long.free > clamp.long.h3 + 1 &&
+        clamp.long.back &&
         Math.abs(clamp.long.h3 - 55) <= 1 &&
         Math.abs(clamp.short.h3 - 55) <= 1,
       JSON.stringify(clamp),

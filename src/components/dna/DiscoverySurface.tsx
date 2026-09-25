@@ -198,6 +198,16 @@ const H2: CSSProperties = {
   color: "var(--ink)",
 };
 
+// G115 (1087): the discovery face clamps its title on the `<button>`, and WebKit lays a button out as
+// its own flex box, so the clamp never applies there and a long title runs to five lines. `title` is
+// a node, so the surface carries the same clamp on its own span until Strand moves it inside.
+const TITLE_CLAMP: CSSProperties = {
+  display: "-webkit-box",
+  WebkitLineClamp: 2,
+  WebkitBoxOrient: "vertical",
+  overflow: "hidden",
+};
+
 type SeeAll = { to: "/convene"; search: DiscoverySearch } | { lens: ConveneLensId };
 
 export function DiscoverySurface({
@@ -832,7 +842,7 @@ export function DiscoverySurface({
           c="convene"
           // B9-SPEC's lens bar: a lens but All is a vertical list of the same card at 680.
           style={lensList ? { width: "min(680px, 100%)" } : undefined}
-          title={typeof title === "string" ? title : undefined}
+          title={typeof title === "string" ? <span style={TITLE_CLAMP}>{title}</span> : undefined}
           when={ev?.when || undefined}
           where={ev ? whereFor(ev) : undefined}
           presenter={post.author_name || undefined}

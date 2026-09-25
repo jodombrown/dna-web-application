@@ -1257,6 +1257,23 @@ the arm crashed in two runs of two and then passed five of five. Run 59 went red
 not this one (`webkit-390x844-light-guest`, "Send me a link" disabled for 30s, no core), recorded as
 its own gap below.
 
+### Update, 25 September 2026: run 347 on `76af944`, the second job ruling 832 could not stand down
+
+Recorded under this entry's own rule, because it is a job ruling 832 cannot stand down. `pages.yml` run
+347 (id `36075579873`, job `107886270269`, head `76af944`, handoff 32-B) lost two web processes in
+`matrix (webkit)`: `webkit-390x844-dark-auth flows` and `webkit-1280x800-light-auth flows`, both in the
+sign-up flow waiting for `[data-testid="check-email"]`, both the over-count shape (29 against a declared
+28, the flow catch-all on the error path), both UNPROVEN under 228 and excluded from the count. The tail
+read `ruling 832 does NOT cover this run: 2 arms lost a web process`, the twentieth sighting's case a
+second time. Two cores (`core.eadedCompositor.*.sig11`, 155M and 174M), each extracted and not retained,
+no ruling 850 degradation, and both faulting threads are the table's path one turn shallower: fault
+`+0x588b98a`, `#1 +0x27b6be4`, the cycle `+0x27b76f4`, `+0x27b23f1`, `+0x27b555f` at 8x, 7x and 7x,
+entered at `+0x27b1885`, the table's frames from there to `clone3`, and none of the interlude runs 329,
+333 and 58 carried. Not the branch's: 32-B
+touches nothing in the auth flow or its arm. The job was red on its own account as well, for 25 failures
+that were the branch's (G115, G116), so the push that fixes those starts the next run and no re-run was
+spent.
+
 ## G6. Withdraw separated the two states ruling 214 joined — closed (ruling 229)
 
 **Opened and closed 9 September 2026, both inside Fix PR 01. Ruling 227 stated the requirement,
@@ -4847,8 +4864,7 @@ the former, a table served by `vocabularies()`, which `whereFor` reads too.
 
 ## G98. The composed OpenGraph image for a public event page is not built
 
-**Severity: low. Opened 24 September 2026 by handoff 32-B (Held 4, ruling 1113), filed under ruling
-597. The number is assigned by this entry (ruling 638).**
+**Severity: low. Opened 24 September 2026 by handoff 32-B (Held 4, ruling 1113), filed under ruling 597. The number is assigned by this entry (ruling 638).**
 
 `/e/{slug}` keeps the link-preview tags it has. The composed image ruling 1100 describes (the cover,
 the title, one line and the wordmark at 1.91:1) is its own handoff after 32-B under 1113, and nothing
@@ -5062,3 +5078,46 @@ B9-SPEC line 33 has a lane appear with an 8px translate and a fade on `--dur-def
 is not built: 32-B's items name no motion, the app carries none of the compile's reduced-motion block
 (G84), and an entrance transform under the arms' geometry reads would need its own settle. Owed: the
 lane entrance, with G84's reduced-motion answer, in a brief that names it.
+
+## G115. The discovery face clamps its title on a `<button>`, which WebKit does not clamp (1087)
+
+**Severity: low. Opened 25 September 2026 during handoff 32-B, filed under ruling 597. The number is
+assigned by this entry (ruling 638).**
+
+`matrix (webkit)` run 347 (`pages.yml` id `36075579873`, job `107886270269`, head `76af944`) failed
+Discovery's "the title clamps to two lines and holds two lines' height (1087)" at all 22 WebKit cells,
+and Chromium passed it at all 22: the long fixture title's `h3` measured 137.5, five lines of 27.5,
+with `-webkit-line-clamp` computed 2 and nothing clipped. `PostCard.tsx`'s discovery face sets the clamp
+(`display: -webkit-box`, `-webkit-line-clamp: 2`, `-webkit-box-orient: vertical`, `overflow: hidden`)
+on the title's `<button>`, and WebKit lays a button out as its own flex box whatever its `display`
+says, so the clamp never applies there. A lane's long titles run to full length and its cards lose
+B9-SPEC line 26's one fixed height; Safari shares that button layout, though no Safari device was read.
+
+32-B changes no part, and the face types `title` as a node, so `DiscoverySurface` passes its title
+inside a span carrying the same four declarations. The arm now lifts every two-line clamp in the title
+for one synchronous read and puts it back, and asserts the long title runs past two lines without them
+and holds 55 with them, wherever the clamp sits. The cost is the face's own: with a node title it names
+its Menu `More` where the compile names it `More:` and the title, because only a string is appended.
+The ellipsis control keeps `More`. Owed: Strand carries the clamp on a node inside the button; the
+surface then passes a string again, its span goes, and the Menu's name has the title back.
+
+## G116. MediaBlock's ratioed image runs past its frame's edge on WebKit (1077, 1115)
+
+**Severity: low. Opened 25 September 2026 during handoff 32-B, filed under ruling 597. The number is
+assigned by this entry (ruling 638).**
+
+The same run failed Addendum 3 item E's "Feed Convene card, one image: the frame 16:9, the image
+filling it inside the edge (1077, 1115)" at 390, 820 and 1280 on WebKit. The frame measured 16:9; the
+image measured 322x182, 580x327 and 724x408, the frame's full border-box height, 2px past the inside of
+its 1px edge and clipped by its `overflow: hidden`. Compile `v1790279130697923` sizes the ratioed image
+`width: 100%; height: 100%` in flow inside a border-box frame whose height comes from `aspect-ratio`,
+and WebKit resolves that `height: 100%` against the frame's border box rather than its content box.
+The ratioed galleries, whose tiles sit in declared `minmax(0,1fr)` grid rows, passed at the same widths
+in the same run.
+
+The port lays the one image out in one such cell, `minmax(0,1fr)` each way with `minHeight: 0` on the
+image: on Chromium the boxes are the compile's own, and on WebKit the cell is the mechanism the
+galleries passed on. It is recorded as a kept divergence in section 2 of
+`docs/strand-ports/v1790279130697923.md`, and nothing geometric is kept against the compile. The ratioed video frame carries the same mechanism (the poster in flow at `height: 100%`) and
+is not changed: nothing renders video (ruling 55) and no arm reads it. Owed: Strand takes the one-cell
+frame into the compile, the video frame with it, so the next re-sync does not reopen the divergence.
