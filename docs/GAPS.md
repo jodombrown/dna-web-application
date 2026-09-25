@@ -4503,6 +4503,12 @@ the first block's top against the control's bottom at every expanded width. Desi
 to this fix; if Strand later gives the Pane a reserved close row, the page's padding comes out with
 that port.
 
+Amended 25 September 2026 by handoff 33-A (1134). Correction 28 gives the Pane that row. With a tool
+handler passed, which Discovery always passes, the toolbar and the cluster share a bar above the pane
+body. The page's reserved padding would now be an empty band under the bar, so it comes out with this
+port, as this entry said it would, and the page keeps its own `16px` top. The pane arm still reads
+the first block below the close control.
+
 ## G79. At expanded the lanes lose their horizontal position when the pane opens and closes
 
 **Severity: low. Opened 23 September 2026 during handoff 31-D item 6, filed under ruling 597. The

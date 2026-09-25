@@ -163,14 +163,10 @@ export function EventSurface({
         maxWidth: "var(--content-max)",
         margin: "0 auto",
         boxSizing: "border-box",
+        // G78: inside Discovery's Pane the close control no longer floats over the page. Correction
+        // 28 gives the pane a top row of its own, the toolbar and the cluster, above the body this
+        // page scrolls in, so the page keeps its own padding and reserves nothing (1134).
         padding: compact ? "8px 0 130px" : "16px 0 96px",
-        // G78: inside Discovery's Pane the pane's close control sits absolutely at its top right, a
-        // --target-primary button inset by --space-2, with no row of its own (700). The page reserves
-        // that row, so its first block (the invitation notice, else the kicker) starts below the
-        // control instead of under it. The page, not Strand's Pane, carries the fix.
-        ...(inPane
-          ? { paddingTop: "calc(var(--space-2) + var(--target-primary) + var(--space-2))" }
-          : null),
       }}
     >
       {!inPane && <BackRow label={back.label} onClick={goBack} />}
