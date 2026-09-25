@@ -5101,6 +5101,9 @@ its Menu `More` where the compile names it `More:` and the title, because only a
 The ellipsis control keeps `More`. Owed: Strand carries the clamp on a node inside the button; the
 surface then passes a string again, its span goes, and the Menu's name has the title back.
 
+Chat accepted the Menu's name as tracked on 25 September 2026, after `7d52411`'s run 348; the fix goes
+to Strand in correction 28, after this PR merges.
+
 ## G116. MediaBlock's ratioed image runs past its frame's edge on WebKit (1077, 1115)
 
 **Severity: low. Opened 25 September 2026 during handoff 32-B, filed under ruling 597. The number is
@@ -5118,6 +5121,10 @@ in the same run.
 The port lays the one image out in one such cell, `minmax(0,1fr)` each way with `minHeight: 0` on the
 image: on Chromium the boxes are the compile's own, and on WebKit the cell is the mechanism the
 galleries passed on. It is recorded as a kept divergence in section 2 of
-`docs/strand-ports/v1790279130697923.md`, and nothing geometric is kept against the compile. The ratioed video frame carries the same mechanism (the poster in flow at `height: 100%`) and
-is not changed: nothing renders video (ruling 55) and no arm reads it. Owed: Strand takes the one-cell
-frame into the compile, the video frame with it, so the next re-sync does not reopen the divergence.
+`docs/strand-ports/v1790279130697923.md`, and nothing geometric is kept against the compile. The
+ratioed video frame carries the same mechanism (the poster in flow at `height: 100%`) and is not
+changed: nothing renders video (ruling 55) and no arm reads it. Owed: Strand takes the one-cell frame
+into the compile, the video frame with it, so the next re-sync does not reopen the divergence.
+
+Chat accepted the divergence as tracked on 25 September 2026, after `7d52411`'s run 348; the change goes
+to Strand in correction 28, after this PR merges.
