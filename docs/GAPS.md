@@ -5192,7 +5192,7 @@ is not built: 32-B's items name no motion, the app carries none of the compile's
 (G84), and an entrance transform under the arms' geometry reads would need its own settle. Owed: the
 lane entrance, with G84's reduced-motion answer, in a brief that names it.
 
-## G115. The discovery face clamps its title on a `<button>`, which WebKit does not clamp (1087) — closed (1134)
+## G115. The discovery face clamps its title on a `<button>`, which WebKit does not clamp (1087)
 
 **Severity: low. Opened 25 September 2026 during handoff 32-B, filed under ruling 597. The number is
 assigned by this entry (ruling 638).**
@@ -5217,16 +5217,17 @@ surface then passes a string again, its span goes, and the Menu's name has the t
 Chat accepted the Menu's name as tracked on 25 September 2026, after `7d52411`'s run 348; the fix goes
 to Strand in correction 28, after this PR merges.
 
-**Closed 25 September 2026 by handoff 33-A (1134).** Correction 28 puts the two-line clamp on a
+**Amended 25 September 2026 by handoff 33-A (1134).** Correction 28 puts the two-line clamp on a
 `span` (`data-title-clamp`) inside the face's link or button, so no engine clamps a button. The h3
 still holds 55. Discovery's own span and its four declarations are gone, and it passes the title as a
 string again. With `href`, the ellipsis is named "More: {title}" and the Menu keeps "More: {title}".
 Read on WebKit in run 358 (`matrix (webkit)` job `108255195171`, head `d417dbf`: 6828 of 6828).
 At every Discovery cell, the long title's clamp holds two lines at 55 and is the part's span inside
-the face's link, and the ellipsis reads "More: {title}". The enforcing run on the final head reads
-it again on both engines.
+the face's link, and the ellipsis reads "More: {title}". That reading is evidence for `d417dbf` only
+(894). `355db02`, `8186a74` and `5080ce8` change Discovery's scroll and ring code after it, so this
+entry stays open until the enforcing run for the final head reads the clamp on both engines (556).
 
-## G116. MediaBlock's ratioed image runs past its frame's edge on WebKit (1077, 1115) — closed (1134)
+## G116. MediaBlock's ratioed image runs past its frame's edge on WebKit (1077, 1115)
 
 **Severity: low. Opened 25 September 2026 during handoff 32-B, filed under ruling 597. The number is
 assigned by this entry (ruling 638).**
@@ -5271,15 +5272,17 @@ Two things this entry said are now contradicted or unmet:
 The compile was measured in Chrome only. Under 1134 this entry closes only on a green
 `matrix (webkit)` arm reading the image inside its frame at 390, 820 and 1280.
 
-**Closed 25 September 2026 by handoff 33-A (1134), on run 358.**
+**Amended 25 September 2026 by handoff 33-A (1134), with what run 358 read.**
 
 - The run: `pages.yml` id `36190688999`, head `d417dbf`, `matrix (webkit)` job `108255195171`.
 - It read 6828 of 6828 checks, with none behind a web-process crash (G5) and none unclassified.
 - That includes Addendum 3 item E's mount-media arms at `webkit-390x844-light`,
   `webkit-820x1180-dark` and `webkit-1280x800-light`. Each reads the Feed Convene card's one image
   at 16:9, filling its frame inside the edge.
-- `MediaBlock.tsx` has changed only in its comments since `fb4ce12`, so the reading holds for the
-  final head, whose enforcing run reads it again.
+- That reading is evidence for `d417dbf` only (894). `355db02`, `8186a74` and `5080ce8` change
+  Discovery's scroll and ring code after it. `MediaBlock.tsx` has changed only in its comments since
+  `fb4ce12`, but the run that closes this entry is the enforcing run for the final head (556). Until
+  its `matrix (webkit)` job reads the same three cells, this entry stays open.
 - The video half is G119.
 
 ## G117. Run 350 passed the live Place check's "Near reads the place" with nothing to read — closed (1095)
