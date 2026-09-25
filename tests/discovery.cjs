@@ -1698,9 +1698,10 @@ async function runDiscoveryFacets(browserType, bname, [w, h], theme) {
       await page.waitForURL((u) => !!u.searchParams.get("family"), { timeout: 10000 });
       await page.waitForTimeout(300);
       const clear = await page.evaluate((scope) => {
+        // The rail is its own scroller (25 §3), bounded by Discovery, and its column stays still.
         const nav = document.querySelector(scope);
-        const scroller = nav && nav.querySelector("[data-rail-scroller]");
-        if (scroller) scroller.scrollTop = scroller.scrollHeight;
+        const column = nav && nav.closest('[data-scroller="left"]');
+        if (nav) nav.scrollTop = nav.scrollHeight;
         const all = Array.from(nav ? nav.querySelectorAll("button") : []).filter(
           (b) => (b.textContent || "").trim() === "Clear all",
         );
@@ -1713,7 +1714,8 @@ async function runDiscoveryFacets(browserType, bname, [w, h], theme) {
           count: all.length,
           slot: !!b && !!b.closest("[data-clear-slot]"),
           pinned: !!pin,
-          scrolled: scroller ? Math.round(scroller.scrollTop) : null,
+          scrolled: nav ? Math.round(nav.scrollTop) : null,
+          column: column ? column.scrollHeight - column.clientHeight : null,
           top: r && n ? Math.round(r.top - n.top) : null,
           visible: !!hit && !!b && b.contains(hit),
         };
@@ -1728,7 +1730,13 @@ async function runDiscoveryFacets(browserType, bname, [w, h], theme) {
       record(
         tag +
           " Clear all: one, in the rail's pinned heading row, in view after the axes scroll, and it clears (G111)",
-        clear.count === 1 && clear.slot && clear.pinned && clear.visible && cleared,
+        clear.count === 1 &&
+          clear.slot &&
+          clear.pinned &&
+          clear.scrolled > 0 &&
+          clear.column === 0 &&
+          clear.visible &&
+          cleared,
         JSON.stringify({ ...clear, cleared }),
       );
     }
@@ -2473,6 +2481,25 @@ async function runDiscoveryStep(browserType, bname, [w, h], theme) {
         two.selected,
       JSON.stringify(two),
     );
+    // 688: Back to Discovery leaves the lanes where the member left them. The list column scrolls
+    // while the pane is open (G110), so its place is the one the feed column takes back.
+    const kept = await page.evaluate(() => {
+      const list = document.querySelector("[data-discovery] [data-pane-list]");
+      list.scrollTop = Math.min(900, list.scrollHeight - list.clientHeight);
+      return Math.round(list.scrollTop);
+    });
+    await page.waitForTimeout(200);
+    await page.locator('[data-pane-cluster] button[aria-label="Back to Discovery"]').click();
+    await page.waitForURL((u) => u.pathname === "/convene", { timeout: 10000 });
+    await page.waitForTimeout(500);
+    const back = await page.evaluate(() =>
+      Math.round(document.querySelector('[data-scroller="feed"]').scrollTop),
+    );
+    record(
+      tag + " Back to Discovery: the lanes where the list column left them (688)",
+      kept > 0 && Math.abs(back - kept) <= 2,
+      `list ${kept}, column after ${back}`,
+    );
 
     record(tag + " no page errors", errors.length === 0, errors.join(" | ").slice(0, 300));
   } catch (e) {
@@ -2672,6 +2699,7 @@ async function runDiscoveryWidth(browserType, bname, [w, h], theme) {
         const l = list.getBoundingClientRect();
         const s = section.getBoundingClientRect();
         const m = main.getBoundingClientRect();
+        const strip = document.querySelector('[data-scroller="left"] nav[aria-label="Filters"]');
         const ls = getComputedStyle(list);
         const tool = document.querySelector('[data-pane-toolbar] [data-tool="list"]');
         return {
@@ -2681,7 +2709,7 @@ async function runDiscoveryWidth(browserType, bname, [w, h], theme) {
           gap: parseFloat(getComputedStyle(grid).columnGap) || 0,
           left: r1(s.left - g.left),
           right: r1(g.right - s.right),
-          tops: [r1(l.top), r1(s.top)],
+          tops: [r1(l.top), r1(s.top), strip ? r1(strip.getBoundingClientRect().top) : null],
           foot: [
             r1(s.bottom),
             r1(m.bottom - (parseFloat(getComputedStyle(main).paddingBottom) || 0)),
@@ -2704,12 +2732,14 @@ async function runDiscoveryWidth(browserType, bname, [w, h], theme) {
     const open = await tracks();
     record(
       tag +
-        " pane (G110): 520 at the right, the list the rest less the gap, level, the column still, the foot on the canvas's",
+        " pane (G110): 520 at the right, the list the rest less the gap, rail, list and pane level, the column still, the foot on the canvas's",
       !!open &&
         Math.abs(open.pane - 520) <= 0.5 &&
         Math.abs(open.list - (open.content - 520 - open.gap)) <= 0.5 &&
         open.right <= 0.5 &&
         Math.abs(open.tops[0] - open.tops[1]) <= 0.5 &&
+        open.tops[2] !== null &&
+        Math.abs(open.tops[0] - open.tops[2]) <= 0.5 &&
         open.column[0] <= open.column[1] &&
         open.listScrolls &&
         Math.abs(open.foot[0] - open.foot[1]) <= 1 &&
@@ -2717,8 +2747,9 @@ async function runDiscoveryWidth(browserType, bname, [w, h], theme) {
       JSON.stringify(open),
     );
 
-    // Hide list: 720, centred, the list the same element, hidden and inert with its scroll kept;
-    // Show list returns the pane to 520.
+    // Hide list: 720, centred, the list the same element, hidden and inert; Show list returns the
+    // pane to 520 and the list where it was. (While hidden, scroll anchoring may move the list's
+    // offset as its header row wraps at no width; the member reads it only once it is shown.)
     let hidden = null;
     let shown = null;
     if (open && open.tool) {
@@ -2747,13 +2778,17 @@ async function runDiscoveryWidth(browserType, bname, [w, h], theme) {
         hidden.hidden.aria === "true" &&
         hidden.hidden.visibility === "hidden" &&
         hidden.hidden.probe === "kept" &&
-        hidden.hidden.top === hidden.kept &&
         hidden.kept > 0 &&
         hidden.tool === "Show list" &&
         !!shown &&
         Math.abs(shown.pane - 520) <= 0.5 &&
+        shown.hidden.probe === "kept" &&
+        Math.abs(shown.hidden.top - hidden.kept) <= 2 &&
         shown.tool === "Hide list",
-      JSON.stringify({ hidden, shown: shown && { pane: shown.pane, tool: shown.tool } }),
+      JSON.stringify({
+        hidden,
+        shown: shown && { pane: shown.pane, tool: shown.tool, top: shown.hidden.top },
+      }),
     );
 
     // Copy link and Share: the card menu's own path (useShare, 1097), with the open event's post.
@@ -2871,12 +2906,28 @@ async function runDiscoveryLink(browserType, bname, [w, h], theme) {
       JSON.stringify(face),
     );
 
-    // A modified press and a middle press are the browser's: this page stays on Discovery.
+    // A modified press and a middle press are the browser's: this page stays on Discovery. Each is
+    // a press at the media's centre, which lands on the link's cover (the check above), so the
+    // cover is what receives it, as it does a pointer's.
+    const atMedia = await page.evaluate((sel) => {
+      const cover = document.querySelector(`${sel} [data-card-cover]`);
+      const media = document.querySelector(`${sel} [data-media]`);
+      if (!cover || !media) return null;
+      const c = cover.getBoundingClientRect();
+      const m = media.getBoundingClientRect();
+      return { x: m.left + m.width / 2 - c.left, y: m.top + m.height / 2 - c.top };
+    }, card);
+    const press = (opts) =>
+      atMedia
+        ? page
+            .locator(`${card} [data-card-cover]`)
+            .click({ position: atMedia, timeout: 5000, ...opts })
+        : Promise.resolve();
     const before = page.url();
-    await page.locator(`${card} [data-media]`).click({ modifiers: ["ControlOrMeta"] });
+    await press({ modifiers: ["ControlOrMeta"] });
     await page.waitForTimeout(600);
     const afterModified = page.url();
-    await page.locator(`${card} [data-media]`).click({ button: "middle" });
+    await press({ button: "middle" });
     await page.waitForTimeout(600);
     const still = {
       modified: afterModified,
@@ -2888,13 +2939,18 @@ async function runDiscoveryLink(browserType, bname, [w, h], theme) {
     record(
       tag +
         " a modified press and a middle press on the face open no pane and leave this page (G100)",
-      still.modified === before && still.middle === before && still.pane === 0 && still.page === 0,
+      !!atMedia &&
+        still.modified === before &&
+        still.middle === before &&
+        still.pane === 0 &&
+        still.page === 0,
       JSON.stringify(still),
     );
 
     // A plain press on the media lands in the link: the event at its address, in the pane at
     // expanded and as its own route below it (1023, 1063).
-    await page.locator(`${card} [data-media]`).click();
+    if (atMedia) await press({});
+    else await page.locator(`${card} [data-media]`).click({ timeout: 5000 });
     await page.waitForURL((u) => u.pathname === "/convene/events/" + E.supper.event_id, {
       timeout: 10000,
     });
