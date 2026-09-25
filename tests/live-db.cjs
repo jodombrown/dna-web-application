@@ -1344,7 +1344,39 @@ async function runLiveDbArms({ record, skip }) {
         donation.ok ? "answered" : failed(donation),
       );
       // 1095: Place's options are grounded places, and the projection takes one and refuses a
-      // malformed id.
+      // malformed id. The project's own upcoming events carry no city (run 349 read one option,
+      // `country|ghana`), so the owner publishes an in-person event in Accra under a savepoint, as
+      // Convene Pass 1 does, and the arm rolls back to that savepoint after its reads, so every
+      // later check reads the project as it is.
+      await client.query("savepoint places_fixture");
+      const placeStarts = new Date(Date.now() + 10 * 86400e3);
+      placeStarts.setUTCHours(18, 0, 0, 0);
+      const fixture = await attempt(client, "select public.publish_post($1::jsonb) as id", [
+        JSON.stringify({
+          verb: "convene",
+          body: "Place arm (1095). Rolled back by the same run.",
+          author_kind: "member",
+          author_id: owner.id,
+          audience: "everyone",
+          host_context: "live-checks",
+          fields: {
+            "convene.title": "Place arm supper",
+            "convene.format": "in_person",
+            "convene.when": "in ten days at 18:00",
+            "convene.starts_at": placeStarts.toISOString(),
+            "convene.timezone": "Africa/Accra",
+            "convene.place_id": "live-arms-place",
+            "convene.place_name": "Front Room",
+            "convene.city": "Accra",
+            "convene.region": "Greater Accra",
+            "convene.country": "Ghana",
+            "convene.lng": "-0.1747",
+            "convene.lat": "5.5559",
+            "convene.price_nature": "free",
+            "convene.delivery_intent": "In person at Front Room, Accra.",
+          },
+        }),
+      ]);
       const places = await ask("select public.convene_places() as d");
       const opts = places.ok && Array.isArray(places.d) ? places.d : [];
       const wellFormed = opts.every((o) => {
@@ -1375,9 +1407,11 @@ async function runLiveDbArms({ record, skip }) {
         client,
         "select public.convene_discovery('all', null, null, null, null, null, array['town|x'])",
       );
+      await client.query("rollback to savepoint places_fixture");
       record(
         "Handoff 32-B (1095): convene_places() answers grounded places by kind; a city narrows and Near reads the place; a malformed place is refused",
-        places.ok &&
+        fixture.ok &&
+          places.ok &&
           opts.length > 0 &&
           wellFormed &&
           !!narrowed &&
@@ -1385,9 +1419,10 @@ async function runLiveDbArms({ record, skip }) {
           nearPlace &&
           !malformed.ok &&
           malformed.code === "22023",
-        (places.ok
-          ? opts.length + " option(s), first " + JSON.stringify(opts[0])
-          : failed(places)) +
+        (fixture.ok ? "" : "publish_post refused: " + failed(fixture) + "; ") +
+          (places.ok
+            ? opts.length + " option(s), city " + JSON.stringify(city || null)
+            : failed(places)) +
           " narrowed " +
           (narrowed
             ? narrowed.ok
