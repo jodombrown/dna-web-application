@@ -5161,7 +5161,7 @@ city sorts first, and requires the Near lane present with every item's reason na
 raised above the fixture's two events now fails the check by name instead of passing it. The proof is
 the `live` job on this change's head.
 
-## G118. B9-SPEC line 23 still names See all on This weekend and Join from anywhere
+## G118. B9-SPEC line 23 still names See all on This weekend and Join from anywhere — closed (1132)
 
 **Severity: low. Opened 25 September 2026 during #66 (handoff 32-B, Addendum 4 item 2), filed under
 ruling 597. The number is assigned by this entry (ruling 638).**
@@ -5172,3 +5172,8 @@ Join from anywhere, as this change builds it, so Happening soon is the one lane 
 facet and the four relationship lanes switch lens. Line 13 is amended in this change because Addendum
 5 asks for it; neither addendum names line 23, so it stays as Chat wrote it. Owed: line 23 restated
 to 1112 and 1122.
+
+**Closed 25 September 2026 by handoff 33-A item 4.** B9-SPEC Revision 2 (1132) replaces
+`docs/convene/B9-SPEC.md` byte for byte. Its Lanes section says See all once: "Happening soon applies
+`when`; relationship lanes switch lens; This weekend (1112), Join from anywhere (1122), Browse and
+Filling up carry none." Nothing in the page changes: the surface already built 1112 and 1122.
