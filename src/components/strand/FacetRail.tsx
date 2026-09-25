@@ -1,10 +1,16 @@
-// Strand `components/dna/FacetRail.jsx`, first ported at compile v1789885868097915 (ruling 851) and
+// Strand `components/dna/FacetRail.jsx`, first ported at compile v1789885868097915 (ruling 851),
 // reconciled at compile v1790212533284400 (handoff 32-A, rulings 862 and 844) with correction 24
-// §1 to §4 (1055, 1060) and correction 25 §3 (663, 1102). The .jsx and the bundle agree byte for
-// byte; the dispositions are in docs/strand-ports/v1790212533284400.md.
+// §1 to §4 (1055, 1060) and correction 25 §3 (663, 1102), carried unchanged through
+// v1790279130697923 (the part's source hash is 971dbd85bcfd at both), and reconciled at compile
+// v1790366257373061 (handoff 33-A; correction 28, ratified 1134) with its items 4 and 5 (G102,
+// G111). Before that change the port equalled v1790279130697923's part except for the two things
+// below that the app's own tree decides. The archive's .jsx and the bundle agree on every line
+// correction 28 touches; the dispositions are in docs/strand-ports/v1790366257373061.md, and
+// those for corrections 24 and 25 in docs/strand-ports/v1790212533284400.md.
 //
 // Rulings the compiled part cites in its own doc comment: 561, 586, 589, 102, 79, 687, 688, 725,
-// 1055, 1060 and 1102.
+// 944, 1055, 1060, 663, 1085 and 1102. Correction 28's lines cite gaps (G102, G109, G111) and no
+// ruling.
 // Filters for a list surface. At expanded it is a sticky rail in its own column; at medium the same
 // rail; at compact it is a trigger plus the same body inside a Sheet, which is a rendering and not a
 // mode. `mode="single"` is one selection across the rail, exposed through `onChange` as
@@ -21,13 +27,20 @@
 // `combobox`), the facets rendering only; an axis with ladders is the ladder part whatever `display`
 // says. The rail form is its own scroller, and its heading is sticky at the scroller's top on
 // --surface with a --line hairline once the axes have scrolled under it.
+// Correction 28 (1134): a `checklist` axis may set `columns: 2`, and its rows then lay in two grid
+// columns once the checklist is 150 wide and in one below (G102). `clearPlacement="heading"` moves
+// Clear all from the body's foot into the pinned heading row, between the title and
+// `headingAction`, in the rail form only: the compact Sheet keeps it at the foot, and single mode
+// has it in neither place (G111; G109 is not in that pass). A caller that passes neither prop
+// renders exactly what it rendered at v1790279130697923.
 //
-// Four of those change what an existing caller renders with no new prop, and are ported because
-// ruling 844 gives the compile a size and a padding and no app ruling keeps the old values: the
-// chip's padding, line height, wrap and max width (24 §2; G75 is this app's own ask for it), which
-// take a one-line chip from 36 to 39.75 rather than holding 36 as 24 §2 says; the heading pin, whose
-// transparent 1px bottom border moves the axes down 1px at rest where 25 §3 says nothing moves; the
-// nav as its own scroller; and the data-axis-id, data-display, data-select and data-option markers.
+// Four of correction 24's and 25's changes alter what an existing caller renders with no new
+// prop, and are ported because ruling 844 gives the compile a size and a padding and no app ruling
+// keeps the old values: the chip's padding, line height, wrap and max width (24 §2; G75 is this
+// app's own ask for it), which take a one-line chip from 36 to 39.75 rather than holding 36 as
+// 24 §2 says; the heading pin, whose transparent 1px bottom border moves the axes down 1px at rest
+// where 25 §3 says nothing moves; the nav as its own scroller; and the data-axis-id, data-display,
+// data-select and data-option markers.
 //
 // Two things the app's own tree decides rather than the compile:
 //   - The compact rendering goes through this repository's `Sheet` as `variant="sheet"` (ruling 618:
@@ -43,8 +56,9 @@
 //     because 24 §2's taller chips push the lower axes past a sheet that has none. The pinned
 //     header's own geometry and its Close control are the Sheet's and arrive with G30.
 //
-// Bound by `DiscoverySurface` (handoff 31-B) in all three forms. No page passes `headingAction`,
-// an axis `select`, `ladders` or `display` in this port; binding them is 32-B's.
+// Bound by `DiscoverySurface` (handoff 31-B) in all three forms, which since 32-B passes
+// `headingAction`, an axis `select`, `ladders` and every `display`. Handoff 33-A item 3 has it pass
+// `columns: 2` on Topics (G102) and `clearPlacement="heading"` (G111); this file binds neither.
 import { useState, type CSSProperties, type KeyboardEvent, type ReactNode } from "react";
 import { Button } from "./Button";
 import { Icon } from "./Icon";
@@ -89,6 +103,9 @@ export type FacetAxis = {
   noMatch?: string | undefined;
   removeLabel?: string | undefined;
   fieldIcon?: string | undefined;
+  /** Correction 28, G102. checklist only: 2 lays the rows in two columns once the checklist is 150
+   *  wide or wider, one below. Absent (or 1), one column. */
+  columns?: 1 | 2 | undefined;
 };
 
 /** Selected option ids per axis. An axis with nothing selected carries no key. */
@@ -112,9 +129,14 @@ export type FacetRailProps = {
   trigger?: ((p: { open: boolean; onOpen: () => void; label: string }) => ReactNode) | undefined;
   onExpand?: (() => void) | undefined;
   expandLabel?: string;
-  /** G72 (correction 24): the caller's control on the rail's heading line, right of the label (944's
-   *  "Collapse browse"). Rail form only. Absent, the heading holds its label alone. */
+  /** G72 (correction 24): the caller's control at the right of the rail's heading line (944's
+   *  "Collapse browse"). Rail form only. Absent, the heading holds its label, and the Clear all
+   *  slot when `clearPlacement` is "heading". */
   headingAction?: ReactNode;
+  /** G111 (correction 28): rail form only. "heading" puts Clear all (shown only when any facet is
+   *  set) in the pinned heading row, between the label and `headingAction`. Default "foot". The
+   *  compact Sheet keeps it at the body's foot either way. */
+  clearPlacement?: "foot" | "heading" | undefined;
 };
 
 const CHIP = (on: boolean, parked?: boolean): CSSProperties => ({
@@ -157,6 +179,7 @@ export function FacetRail({
   onExpand,
   expandLabel = "Show " + label.toLowerCase(),
   headingAction,
+  clearPlacement = "foot",
 }: FacetRailProps) {
   // Declared before the collapsed return: DiscoverySurface swaps one instance between `collapsed`
   // and `facets`, so a hook after that return would change the hook count on the swap.
@@ -402,7 +425,21 @@ export function FacetRail({
                 onChange={(v) => (v ? set({ ...axis, select: "single" }, v) : clearAxis(axis))}
               />
             ) : disp === "checklist" ? (
-              <div style={{ display: "flex", flexDirection: "column" }}>
+              // G102: each track is at least half of 150 less the gap and never less than half the
+              // checklist less the gap, so the second column opens at 150 and a third never does.
+              <div
+                data-columns={axis.columns === 2 ? "2" : undefined}
+                style={
+                  axis.columns === 2
+                    ? {
+                        display: "grid",
+                        gridTemplateColumns:
+                          "repeat(auto-fill, minmax(max(calc((150px - var(--space-2)) / 2), calc((100% - var(--space-2)) / 2)), 1fr))",
+                        columnGap: "var(--space-2)",
+                      }
+                    : { display: "flex", flexDirection: "column" }
+                }
+              >
                 {(axis.options || []).map((o) => {
                   const on = isOn(axis.id, o.id);
                   return (
@@ -487,7 +524,9 @@ export function FacetRail({
           </div>
         );
       })}
-      {!railSingle && (
+      {/* G111: under `clearPlacement="heading"` the rail form draws Clear all in its heading row
+          instead; the compact Sheet keeps it here. */}
+      {!railSingle && (clearPlacement !== "heading" || tier === "compact") && (
         <div aria-live="polite" role="status" style={{ minHeight: 0 }}>
           {any && (
             <Button variant="ghost" size="sm" onClick={() => onClear?.()}>
@@ -524,7 +563,9 @@ export function FacetRail({
           // display renders in it" relies on, so the part draws the two as this repository's other
           // Sheet callers with a scroller do: the heading in a row that does not scroll, the axes in
           // a body that does. At rest nothing moves, and the axes the chips' 24 §2 height pushes
-          // past the sheet stay reachable.
+          // past the sheet stay reachable. This heading row is the stand-in for Strand's Sheet
+          // title, which carries no Clear all, so it never takes G111's slot: whatever
+          // `clearPlacement` says, Clear all stays at the body's foot here (28 item 5).
           <Sheet open onClose={() => onOpenChange?.(false)} variant="sheet" label={label} contained>
             <div style={{ flex: "none", padding: "var(--space-5) var(--space-5) 0" }}>
               <h2
@@ -617,6 +658,22 @@ export function FacetRail({
           >
             {label}
           </h2>
+          {/* G111: the live region is drawn whenever the placement asks for it, empty until a
+              facet is set, as the foot's is, so filling it is announced. */}
+          {!railSingle && clearPlacement === "heading" && (
+            <div
+              aria-live="polite"
+              role="status"
+              data-clear-slot=""
+              style={{ flex: "none", display: "flex", alignItems: "center" }}
+            >
+              {any && (
+                <Button variant="ghost" size="sm" onClick={() => onClear?.()}>
+                  Clear all
+                </Button>
+              )}
+            </div>
+          )}
           {headingAction && (
             <div
               data-heading-action

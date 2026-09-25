@@ -4916,7 +4916,7 @@ shows Not this alone. Discovery says the sentence as the toast that confirms the
 reading and not a drawing. Owed: a ruling that the toast is the place, or a Menu correction for an
 item's second line.
 
-## G102. Topics cannot render in two columns at 150 and up (B9-SPEC line 20)
+## G102. Topics cannot render in two columns at 150 and up (B9-SPEC line 20) — closed (1134)
 
 **Severity: low. Opened 24 September 2026 during handoff 32-B item 2, filed under ruling 597 and
 reported under 732. The number is assigned by this entry (ruling 638).**
@@ -4925,6 +4925,14 @@ Item 2 and B9-SPEC line 20 ask for the Topics checklist in two columns at 150 an
 one flex column of 44 rows (correction 25 §3), the compile draws one column, and 32-B changes no part,
 so Topics renders in one column at every width, as Chat ruled it stays on 25 September 2026. Owed: a Strand correction for a checklist's columns,
 with the width the second column begins at.
+
+**Closed 25 September 2026 by handoff 33-A (1134).** Correction 28 item 4 lets a checklist axis set
+`columns: 2`. The part lays its rows in a grid whose tracks are never narrower than half of 150 less
+the gap, so the second column begins at a checklist of exactly 150. With `--border-thin` at 1px here,
+that is a 192 rail, where the extraction read 192.4 in a browser whose edge measured 1.2. Discovery
+sets it on Topics. The medium rail's 240 gives a checklist of 198 and the expanded rail's 280 gives
+238, so both show two columns. The compact Sheet shares the body and shows two as well, as the
+compile does.
 
 ## G103. Format is a single segment, so format=online,hybrid shows as Online
 
@@ -5069,7 +5077,7 @@ lens row and the canvas's 24 foot: 585.8 at 1280x800. The column's `scrollHeight
 `clientHeight` at every expanded width, so the list and the pane body scroll apart and nothing else
 does. Reported under 555; the spec's line is Chat's to restate.
 
-## G111. FacetRail's Clear all sits after the axes, not in the pinned heading row (line 20)
+## G111. FacetRail's Clear all sits after the axes, not in the pinned heading row (line 20) — closed (1134)
 
 **Severity: low. Opened 25 September 2026 during handoff 32-B, filed under ruling 597. The number is
 assigned by this entry (ruling 638).**
@@ -5079,6 +5087,13 @@ collapse control in the G72 slot, and scrolls the axes beneath. The ported `Face
 and the collapse control and renders Clear all in a status line after the last axis, so at medium and
 expanded it scrolls away with the axes. At compact Discovery shows Clear all beside the applied chips
 (line 11). Owed: a Strand correction moving Clear all into the heading row.
+
+**Closed 25 September 2026 by handoff 33-A (1134).** Correction 28 item 5 adds
+`clearPlacement="heading"`, and Discovery passes it on the rail. Clear all sits in the pinned heading
+row, between the title and the collapse control, inside a polite status slot. It shows only while a
+facet is set and stays in view as the axes scroll. There is no foot line in the rail form. The
+compact Sheet keeps Clear all at its foot whatever the prop says, as compiled; G109 is not in this
+pass.
 
 ## G112. The homes row is words, not a button to the profile's homes (line 11)
 

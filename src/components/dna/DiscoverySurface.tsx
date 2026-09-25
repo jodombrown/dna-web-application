@@ -1,8 +1,10 @@
 // Brief 9, Convene Pass 2: the Discovery Dashboard, rebuilt to the ruled set (handoff 32-B items 1 to
 // 7 with Addenda 1 to 3; rulings 581, 632, 650, 688, 1044, 1063 to 1068, 1076 to 1079, 1082, 1083,
-// 1087, 1092 to 1097, 1099, 1105 to 1107, 1110 to 1112), on the parts handoff 32-A ported and changes
-// none of: PostCard's discovery face, Menu, FacetRail's displays and ladders, Input's combobox and
-// Pane's stepping.
+// 1087, 1092 to 1097, 1099, 1105 to 1107, 1110 to 1112), on the parts handoff 32-A ported: PostCard's
+// discovery face, Menu, FacetRail's displays and ladders, Input's combobox and Pane's stepping. Handoff
+// 33-A binds what Strand correction 28 added to them (1134): the face's link (G100) and its own title
+// clamp (G115), the pane at 520 with its height, toolbar and hidden list (G110, 1127), Topics in two
+// columns (G102) and Clear all in the rail's heading row (G111).
 //
 // One read projection and one write path per surface (CLAUDE.md): everything this surface shows comes
 // through `loadDiscovery` (the cards are the Feed's own views, hydrated by post id inside it, 660) and
@@ -436,8 +438,8 @@ export function DiscoverySurface({
       ? "While you are in " + nearCity
       : (laneRows.find((l) => l.value === id)?.name ?? null);
 
-  // Filters (item 2, 1095, 1110; B9-SPEC line 20): Format, Price, When, Topics, Home, Place, in that
-  // order; no count.
+  // Filters (item 2, 1095, 1110; B9-SPEC Revision 2's Filters line): Format, Price, When, Topics,
+  // Home, Place, in that order; no count.
   const ladders: FacetLadder[] = (homes ?? []).flatMap((h) => {
     const w = homeWord(h);
     if (!w) return [];
@@ -483,6 +485,8 @@ export function DiscoverySurface({
       label: "Topics",
       icon: "hash",
       display: "checklist",
+      // G102 (correction 28): two columns once the checklist is 150 wide, which both rails are.
+      columns: 2,
       options: familyRows.map((f) => ({ id: f.value, label: f.label })),
     },
     ...(ladders.length
@@ -653,6 +657,9 @@ export function DiscoverySurface({
           onChange={onRail}
           onClear={clearFacets}
           label="Filters"
+          // G111 (correction 28): Clear all in the pinned heading row, so it stays in view as the
+          // axes scroll beneath it.
+          clearPlacement="heading"
           headingAction={
             <IconButton
               name="panel-left-close"
