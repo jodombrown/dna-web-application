@@ -54,9 +54,9 @@ export * from "./VerbRow";
 // Convene Pass 1 (ruling 673): the Segment part, the Composer its first caller.
 export * from "./Segment";
 // Strand re-sync to compile v1789885868097915 (handoff 29-A item 3, ruling 851): the two parts the
-// compile carries and this tree did not. Neither is bound by a page yet.
+// compile carries and this tree did not. Discovery binds both (handoffs 31-B, 32-B and 33-A).
 export * from "./FacetRail";
 export * from "./Pane";
 // Strand compile v1790212533284400 (handoff 32-A, correction 25 §2, ruling 1102): Menu, the list of
-// acts a card's ellipsis summons. It reads --z-menu (1103). No page binds it yet; 32-B does.
+// acts a card's ellipsis summons. It reads --z-menu (1103). PostCard's discovery face renders it.
 export * from "./Menu";

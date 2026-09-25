@@ -4622,7 +4622,7 @@ border. 29-A's token comparison read `:root` and dark only, which is why nothing
 here: handoff 32-A item 3 moves no token but `--z-menu`. Owed: a ruling on carrying base.css's block
 into strand.css.
 
-## G85. Pane scrolls its list column, and in this shell the list column is not a scroller
+## G85. Pane scrolls its list column, and in this shell the list column is not a scroller — closed (1134)
 
 **Severity: low today, medium once 32-B binds `selectedKey`. Opened 24 September 2026 during handoff
 32-A, filed under ruling 597. The number is assigned by this entry (ruling 638).**
@@ -4640,6 +4640,14 @@ Next, and the list follow is inert as this entry says. So the surface brings the
 in its own lane (`scrollIntoView` with `nearest` on both axes, keyed on the lane and the event), which
 moves the centre column and the lane's row, the two scrollers this shell has. The workaround is the
 page's, and it goes when Pane follows the nearest scrolling ancestor.
+
+**Closed 25 September 2026 by handoff 33-A (1134).** Correction 28's `height` bounds the Pane's grid,
+and the list column becomes a scroller of its own: `overflow-y: auto`, with its overscroll contained.
+Discovery passes `height` with the pane open (G110), so `bringIntoView` now moves the column the
+list is in, and 1083's `selectedKey` follow acts vertically. The feed column no longer scrolls
+under the pane. The surface's `scrollIntoView` with `nearest` stays, for the lane's row, the one
+axis the Pane does not reach. The step arm scrolls the list column to its end, steps Next twice,
+and reads the open card inside the list column's box.
 
 ## G86. A Sheet inside the Pane closes the Pane with it on Escape, because the app's modal Sheet never prevents the keydown
 
@@ -5308,3 +5316,23 @@ the pane and the pane's foot sat below the frame. Discovery gives the pane its c
 (585.8 at 1280x800), and nothing but the list and the pane body scrolls. G110's closing note has the
 readings at every expanded width. Owed: the spec's line restated to the shell's lens row, or a ruling
 on the lens row's height.
+
+## G122. Three comments outside correction 28's parts still describe the rail and the canvas before 1082 and 1123
+
+**Severity: low. Opened 25 September 2026 during handoff 33-A item 2's comment sweep (763), filed
+under ruling 597. The number is assigned by this entry (ruling 638).**
+
+The sweep for the five changed parts also found statements that predate correction 28 and name
+none of its parts. They are left as they are, because the handoff's sweep reaches comments that
+assert a changed part's old behaviour:
+- `src/lib/rail-store.ts:24` says the open rail is 260 at expanded. `AppShell` draws 280 (1082).
+- G87's item 8 says "1082's 280 is not in this tree", which is no longer so.
+
+Two statements from the same sweep were corrected here, because they cite the spec this handoff
+replaces:
+- `tests/discovery.cjs`'s full-density check named the canvas "at most 1600" under the pre-1123
+  line. It now reads the viewport's width with no maximum. At every width that arm runs, that is
+  the value it has always compared.
+- The seed's comment calls 1600 the widest width that arm runs, not the widest canvas.
+
+Owed: the two statements above restated, in a change that touches them.

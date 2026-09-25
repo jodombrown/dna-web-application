@@ -343,7 +343,8 @@ function readLens(page, selector, tabs) {
 /** Handoff 32-B's rail (item 2; 1095, 1110): Format, Price and When as segments, Topics as a
  *  checklist, Home as ladders and Place as a combobox, in that order; every control inside its
  *  bound (the nav in the rail form, the Sheet's scrolling body at compact) and nothing scrolling
- *  sideways. The rail form's heading holds its label and the one Collapse filters action. */
+ *  sideways. The rail form's heading holds its label, the Clear all slot (G111, empty until a facet
+ *  is set) and the one Collapse filters action. */
 const RAIL_32B = [
   "format:segment",
   "price:segment",
@@ -409,7 +410,7 @@ function readDiscoveryCards(page, scope, ringed = null, lensList = false) {
           why.push("not the discovery face");
         if (s.querySelector("article[data-c]")) why.push("a feed face");
         // A lane's card is 320; a lens list's is the same card at 680, or the column when narrower
-        // (B9-SPEC's lens bar section).
+        // (handoff 32-B; B9-SPEC Revision 2's lens grid, 1125, is 1131's first handoff).
         const wide = lensList ? Math.min(680, s.parentElement.clientWidth) : 320;
         if (a && Math.abs(a.getBoundingClientRect().width - wide) > 0.6)
           why.push("width " + a.getBoundingClientRect().width + " for " + wide);
@@ -744,8 +745,9 @@ async function runMountComposer(bt, bname, [w, h], theme, route) {
 }
 
 /**
- * Discovery as handoff 32-B binds it (items 2, 4 and 7): 32-B passes the props 32-A ported, so this
- * arm reads that configuration rather than 92fbdc3's. The LensBar's five lenses with no trailing
+ * Discovery as handoffs 32-B (items 2, 4 and 7) and 33-A (G100, G102, G110, G111) bind it: it passes
+ * the props 32-A ported and those correction 28 added, so this arm reads that configuration rather
+ * than 92fbdc3's. The LensBar's five lenses with no trailing
  * seat on the 52 track; every card the discovery face; at compact the Sheet's six axes in their
  * displays, its body reaching the last, and the header's bar once scrolled; above compact the
  * collapsed 64 strip at first load, then the opened rail's axes inside the nav with the heading's
@@ -791,7 +793,7 @@ async function runMountConvene(bt, bname, [w, h], theme, path) {
       record(
         tag +
           (lensArm
-            ? " PostCard: every card the discovery face in a vertical list at 680, media 16:9, none ringed (B9-SPEC)"
+            ? " PostCard: every card the discovery face in a vertical list at 680, media 16:9, none ringed (32-B)"
             : " PostCard: every card the discovery face at 320, media 16:9, none ringed (32-B)"),
         cards.ok,
         cards.detail,
@@ -894,7 +896,8 @@ async function runMountConvene(bt, bname, [w, h], theme, path) {
 }
 
 /** /convene/events/$id at expanded: Discovery with the event page in its Pane (1047). A cold arrival
- *  carries no lane, so the pane steps nowhere and shows its one close control (1083). */
+ *  carries no lane, so the pane steps nowhere: its cluster is the one close control (1083), beside
+ *  the toolbar correction 28 adds (Hide list, and Copy link and Share with the event's post; G110). */
 async function runMountEvent(bt, bname, [w, h], theme) {
   const tag = `${bname}-${w}x${h}-${theme}-mount-event`;
   const tabs = VOCAB.convene_lenses.length;
@@ -927,7 +930,9 @@ async function runMountEvent(bt, bname, [w, h], theme) {
         if (grid.getAttribute("data-pane-open") !== "true")
           why.push("open " + grid.getAttribute("data-pane-open"));
         if (grid.children[0] !== list) why.push("list is not the first child");
-        if (tracks[0] !== "360px" || !(parseFloat(tracks[1]) > 0))
+        // Correction 28 (G110, 1127): Discovery passes paneWidth 520, so the pane is the 520 track
+        // and the list takes the rest.
+        if (tracks[1] !== "520px" || !(parseFloat(tracks[0]) > 0))
           why.push("tracks " + g.gridTemplateColumns);
         if (
           section.tagName !== "SECTION" ||
@@ -947,7 +952,7 @@ async function runMountEvent(bt, bname, [w, h], theme) {
       });
       record(
         tag +
-          " Pane: open, the 360 list track, one close control and no step pair on a cold arrival",
+          " Pane: open, the 520 pane track, one close control and no step pair on a cold arrival",
         pane.ok,
         pane.detail,
       );

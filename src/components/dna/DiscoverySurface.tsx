@@ -602,7 +602,7 @@ export function DiscoverySurface({
         label="Convene lens"
         // Item 7 and B9-SPEC's tiers: labels always and icons at every tier. At compact the five
         // words and glyphs do not fit five equal seats, so there each seat hugs its word and the
-        // bar's root is `max-content` in a row that scrolls sideways (B9-SPEC line 11): nothing is
+        // bar's root is `max-content` in a row that scrolls sideways (B9-SPEC's compact line): nothing is
         // squeezed and the page does not pan.
         width={compact ? "content" : "fill"}
         labels="always"
@@ -875,7 +875,8 @@ export function DiscoverySurface({
         <PostCard
           presentation="discovery"
           c="convene"
-          // B9-SPEC's lens bar: a lens but All is a vertical list of the same card at 680.
+          // Handoff 32-B's lens list: a lens but All is a vertical list of the same card at 680.
+          // B9-SPEC Revision 2's grid at --lane-card-width (1125) is 1131's first handoff.
           style={lensList ? { width: "min(680px, 100%)" } : undefined}
           // G115 (1087; correction 28): the part clamps the title on a span inside its link, so the
           // title is the string itself and the ellipsis is named "More: {title}".
@@ -1056,8 +1057,8 @@ export function DiscoverySurface({
     </div>
   );
 
-  // A lens (693, 1105): its one lane as a vertical list of the same card at 680 (B9-SPEC), or the
-  // EmptyState.
+  // A lens (693, 1105): its one lane as a vertical list of the same card at 680 (handoff 32-B;
+  // B9-SPEC Revision 2's grid, 1125, is 1131's first handoff), or the EmptyState.
   const lensLane: DiscoveryLaneId | null = lens === "all" ? null : lens;
   const lensSection = lensLane ? sections.find((s) => s.section === lensLane) : undefined;
   const lensView = lensLane ? (
@@ -1273,7 +1274,7 @@ export function DiscoverySurface({
         <>
           <div
             data-lens-anchor
-            // B9-SPEC line 11: the lens bar's row scrolls sideways at compact; the page never does.
+            // B9-SPEC's compact line: the lens bar's row scrolls sideways at compact; the page never does.
             style={{
               visibility: scrolled ? "hidden" : "visible",
               minHeight: 64,
@@ -1287,7 +1288,7 @@ export function DiscoverySurface({
           </div>
           <div
             data-first-row
-            // B9-SPEC line 11: one row of the homes and the Filters trigger. FacetRail's compact
+            // B9-SPEC's compact line: one row of the homes and the Filters trigger. FacetRail's compact
             // Sheet is `contained`: absolute, with no z-index of its own, so the discovery faces
             // after this row (each `position: relative`) painted over it. A flex item's z-index
             // lifts the row, Sheet and all, above the lanes without becoming the Sheet's containing
@@ -1327,7 +1328,7 @@ export function DiscoverySurface({
               )}
             />
           </div>
-          {/* B9-SPEC line 11: the applied chips and Clear all, only when a facet is set. */}
+          {/* B9-SPEC's compact line: the applied chips and Clear all, only when a facet is set. */}
           {chipRow && (
             <div
               data-applied-row

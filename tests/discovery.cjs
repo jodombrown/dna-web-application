@@ -52,7 +52,7 @@
 //                  format=online, one value, with Online lit.
 //   rail           item 3 (D6; 1094, 1111): the pane takes the rail's width, closing it returns the
 //                  rail to the member's last choice, and only the member's toggle writes.
-//   step           item 4 (B9-SPEC line 14): two Next presses leave the pane body at its top with
+//   step           item 4 (B9-SPEC's pane line): two Next presses leave the pane body at its top with
 //                  the cluster in view, the list and the body scrolling apart.
 //   homes          item 5 (1110, 928): Home between Topics and Place, a ladder for each of two homes.
 //   width          item 8 (1123): the canvas and the header on 5% and 95% of the viewport, the Feed
@@ -397,7 +397,7 @@ function fullDensity(E) {
       weekend: [E.supper, E.tema].map((e) =>
         item(e, { kind: "weekend", starts_at: e.starts_at, mode: e.mode }),
       ),
-      // Five, so the lane still scrolls sideways at 1600, where the canvas is widest (B9-SPEC 13).
+      // Five, so the lane still scrolls sideways at 1600, the widest this arm runs (1123: no maximum).
       online: [E.readers, E.stream, E.harvest, E.cloth, E.table].map((e) =>
         item(e, { kind: "online", starts_at: e.starts_at, mode: e.mode }),
       ),
@@ -590,11 +590,19 @@ async function laneIds(page) {
 
 const cardSel = (e, lane) => `[data-discovery-item="${e.event_id}"][data-section="${lane}"]`;
 
-/** Opens a card's menu and answers its entries in order: labels, "|" for a rule, and any disabled. */
+/**
+ * Opens a card's menu and answers its entries in order: labels, "|" for a rule, and any disabled.
+ * The answer also carries the menu's rendered width and its declared minimum (G113). The ellipsis is
+ * found by its name's first word: with the face's link it reads "More: {title}" (G115).
+ */
 async function readMenu(page, card) {
-  await page.locator(`${card} button[aria-label="More"]`).click();
+  await page.locator(`${card} button[aria-label^="More"]`).click();
   const menu = page.locator('[role="menu"][data-menu]');
   await menu.waitFor({ timeout: 10000 });
+  const box = await menu.evaluate((m) => ({
+    width: Math.round(m.getBoundingClientRect().width * 10) / 10,
+    min: getComputedStyle(m).minWidth,
+  }));
   const read = await menu.evaluate((m) =>
     Array.from(m.children).map((c) =>
       c.getAttribute("role") === "separator"
@@ -608,7 +616,7 @@ async function readMenu(page, card) {
           },
     ),
   );
-  return read;
+  return Object.assign(read, { box });
 }
 
 async function closeMenu(page) {
@@ -620,7 +628,7 @@ async function closeMenu(page) {
 }
 
 async function menuSelect(page, card, label) {
-  await page.locator(`${card} button[aria-label="More"]`).click();
+  await page.locator(`${card} button[aria-label^="More"]`).click();
   const menu = page.locator('[role="menu"][data-menu]');
   await menu.waitFor({ timeout: 10000 });
   await menu.getByRole("menuitem", { name: label, exact: true }).click();
@@ -756,10 +764,10 @@ async function runDiscovery(browserType, bname, [w, h], theme) {
       geo.length > 0 && badGeo.length === 0,
       JSON.stringify(badGeo.slice(0, 2)),
     );
-    // The clamp is read wherever it sits: on the face's button, or on the surface's own node inside
-    // it (G115: WebKit lays a button out as its own flex box, so a clamp there is inert). Every
-    // two-line clamp in the title is lifted for one synchronous read and put back, so the long title
-    // shows it runs past two lines without them and holds two with them, on either engine.
+    // The clamp is read wherever it sits (correction 28 puts it on a span inside the face's link,
+    // G115). Every two-line clamp in the title is lifted for one synchronous read and put back, so
+    // the long title shows it runs past two lines without them and holds two with them, on either
+    // engine.
     const clamp = await page.evaluate(
       (ids) => {
         const read = (id) => {
@@ -792,6 +800,80 @@ async function runDiscovery(browserType, bname, [w, h], theme) {
         Math.abs(clamp.long.h3 - 55) <= 1 &&
         Math.abs(clamp.short.h3 - 55) <= 1,
       JSON.stringify(clamp),
+    );
+    // Handoff 33-A (correction 28, 1134). G115: the title's one clamp is the part's own span inside
+    // the face's link, with none of the page's, so the title is a string again and the ellipsis is
+    // named with it.
+    const own = await page.evaluate((id) => {
+      const art = document.querySelector(`[data-discovery-item="${id}"] article`);
+      const h3 = art && art.querySelector("h3");
+      if (!h3) return null;
+      const clamps = [h3, ...h3.querySelectorAll("*")].filter((e) => {
+        const cs = getComputedStyle(e);
+        return (cs.webkitLineClamp || cs.getPropertyValue("-webkit-line-clamp")) === "2";
+      });
+      const more = art.querySelector('button[aria-haspopup="menu"]');
+      return {
+        clamps: clamps.map(
+          (e) =>
+            e.tagName.toLowerCase() +
+            (e.hasAttribute("data-title-clamp") ? "[data-title-clamp]" : "") +
+            (e.parentElement && e.parentElement.matches("a[data-card-open]") ? " in the link" : ""),
+        ),
+        label: more ? more.getAttribute("aria-label") : null,
+        title: (h3.textContent || "").trim(),
+      };
+    }, E.harvest.event_id);
+    record(
+      tag +
+        " full: the title's one clamp is the part's span inside the face's link, and the ellipsis reads More: {title} (G115)",
+      !!own &&
+        own.clamps.length === 1 &&
+        own.clamps[0] === "span[data-title-clamp] in the link" &&
+        own.label === "More: " + own.title,
+      JSON.stringify(own),
+    );
+    // G113: every face at the compile's geometry, which is the spec's: gap 8, the presenter row 36 on
+    // a pointer and 44 on touch (498), the last row 28 behind a 1px --line rule, on one line.
+    const faceGeo = await page.evaluate(() => {
+      const probe = document.createElement("div");
+      probe.style.color = "var(--line)";
+      document.body.appendChild(probe);
+      const line = getComputedStyle(probe).color;
+      probe.remove();
+      const h = (el) => (el ? Math.round(el.getBoundingClientRect().height * 10) / 10 : null);
+      return Array.from(
+        document.querySelectorAll('[data-discovery-item] article[data-presentation="discovery"]'),
+      ).map((a) => {
+        const reason = a.querySelector('[data-row="reason"]');
+        const rs = reason && getComputedStyle(reason);
+        const text =
+          reason && reason.firstElementChild && getComputedStyle(reason.firstElementChild);
+        return {
+          input: a.getAttribute("data-input"),
+          gap: getComputedStyle(a).rowGap,
+          presenter: h(a.querySelector('[data-row="presenter"]')),
+          reason: h(reason),
+          rule: rs
+            ? `${rs.borderTopWidth} ${rs.borderTopStyle} ${rs.borderTopColor === line}`
+            : null,
+          oneLine: !!text && text.whiteSpace === "nowrap" && text.textOverflow === "ellipsis",
+        };
+      });
+    });
+    const offGeo = faceGeo.filter(
+      (f) =>
+        f.gap !== "8px" ||
+        Math.abs(f.presenter - (f.input === "touch" ? 44 : 36)) > 0.5 ||
+        Math.abs(f.reason - 28) > 0.5 ||
+        f.rule !== "1px solid true" ||
+        !f.oneLine,
+    );
+    record(
+      tag +
+        " full: every face at gap 8, its presenter row 36 on a pointer and 44 on touch, its last row 28 behind a 1px --line rule on one line (G113)",
+      faceGeo.length > 0 && offGeo.length === 0,
+      JSON.stringify({ faces: faceGeo.length, off: offGeo.slice(0, 2) }),
     );
     const reasons = await page.evaluate(() => {
       const out = {};
@@ -922,7 +1004,7 @@ async function runDiscovery(browserType, bname, [w, h], theme) {
         ).length,
         trailing: !!(t.parentElement && t.parentElement.querySelector("[data-lensbar-trailing]")),
         row: !!t.closest("[data-lensbar-row]"),
-        // B9-SPEC line 11: at compact the row scrolls sideways inside its anchor, whole.
+        // B9-SPEC's compact line: at compact the row scrolls sideways inside its anchor, whole.
         inRow: compact
           ? (() => {
               const a = t.closest("[data-lens-anchor]");
@@ -934,13 +1016,13 @@ async function runDiscovery(browserType, bname, [w, h], theme) {
           : true,
       };
     }, tier === "compact");
-    // Item 7 and B9-SPEC line 11: labels and icons at every tier; at compact in a row that scrolls
+    // Item 7 and B9-SPEC's compact line: labels and icons at every tier; at compact in a row that scrolls
     // sideways, each seat whole (the page's own overflow is the noOverflow check below).
     const shorts = VOCAB.convene_lenses.map((l) => l.short).join("|");
     record(
       tag +
         (tier === "compact"
-          ? " compact: the LensBar's five lenses with labels and icons in a sideways row, none clipped (B9-SPEC 11)"
+          ? " compact: the LensBar's five lenses with labels and icons in a sideways row, none clipped (B9-SPEC's compact line)"
           : " full: the LensBar's five lenses with labels and icons, no seat after them (1093)"),
       !!bar &&
         bar.mode === "labels" &&
@@ -962,9 +1044,10 @@ async function runDiscovery(browserType, bname, [w, h], theme) {
       return c ? Math.round(c.getBoundingClientRect().width) : null;
     });
     record(
-      tag + " full: no right column (item 7), and the canvas at most 1600 (B9-SPEC 13)",
+      tag +
+        " full: no right column (item 7), and the canvas the viewport's width, no maximum (B9-SPEC's expanded line, 1123)",
       (await page.locator('[data-scroller="right"]').count()) === 0 &&
-        (tier === "compact" || canvas === Math.min(w, 1600)),
+        (tier === "compact" || canvas === w),
       "canvas " + canvas,
     );
 
@@ -977,7 +1060,7 @@ async function runDiscovery(browserType, bname, [w, h], theme) {
         expand: !!(nav && nav.querySelector('button[aria-label="Show filters"]')),
         axes: nav ? nav.querySelectorAll("[data-axis-id]").length : 0,
         canvas: document.querySelector("[data-canvas]")?.getAttribute("data-rail") ?? null,
-        // B9-SPEC line 11: one row of the homes and the Filters trigger; no chips row until set.
+        // B9-SPEC's compact line: one row of the homes and the Filters trigger; no chips row until set.
         pill: !!document.querySelector(
           '[data-discovery] [data-first-row] [data-homes-line] ~ [data-testid="filters"]',
         ),
@@ -1001,7 +1084,8 @@ async function runDiscovery(browserType, bname, [w, h], theme) {
     // Item 2 (1095, 1110): the facet set and its order, each axis in its display with its words.
     const scope = await openRail(page, tier);
     const axes = await readAxes(page, scope);
-    // B9-SPEC lines 12, 13 and 20: the rail 240 open at medium and 280 at expanded, headed Filters.
+    // B9-SPEC's medium, expanded and Filters lines: the rail 240 open at medium and 280 at expanded,
+    // headed Filters.
     const railWidth = await page.evaluate(
       (sel) => Math.round(document.querySelector(sel).getBoundingClientRect().width),
       scope,
@@ -1107,6 +1191,11 @@ async function runDiscovery(browserType, bname, [w, h], theme) {
       going.map((x) => x.label).join(",") === expect.join(",") && going.every((x) => !x.disabled),
       going.map((x) => x.label + (x.disabled ? "(disabled)" : "")).join(","),
     );
+    record(
+      tag + " menu: the Menu is at least 240 wide, its declared minimum (G113)",
+      going.box.min === "240px" && going.box.width >= 239.5,
+      JSON.stringify(going.box),
+    );
     const plain = await readMenu(page, cardSel(E.loaded, "curated"));
     await closeMenu(page);
     const other = await readMenu(page, cardSel(E.stream, "network"));
@@ -1150,7 +1239,7 @@ async function runDiscovery(browserType, bname, [w, h], theme) {
           right: document.querySelectorAll('[data-scroller="right"]').length,
           lanes: document.querySelectorAll("[data-discovery] [data-lanes] [data-lane]").length,
           back: document.querySelectorAll("[data-event-page] [data-back-row]").length,
-          // B9-SPEC line 14: the header row moves into the list column with the pane open.
+          // B9-SPEC's pane line: the header row moves into the list column with the pane open.
           header: !!document.querySelector("[data-pane-list] [data-header-row] [data-homes-line]"),
           ring: Array.from(
             document.querySelectorAll("[data-discovery-item] article[data-selected]"),
@@ -1203,7 +1292,8 @@ async function runDiscovery(browserType, bname, [w, h], theme) {
         endNext === "true" && endPrev === "true",
         `next end ${endNext}, previous end ${endPrev}`,
       );
-      // G78: the page reserves the pane's close row, so its first block starts below the control.
+      // G78: the close control sits in the pane's own top row with the toolbar (correction 28),
+      // above the body, so the page's first block starts below it with no row the page reserves.
       const g78 = await page.evaluate(() => {
         const close = document.querySelector('button[aria-label="Back to Discovery"]');
         const firstBlock = document.querySelector("[data-event-page]")?.firstElementChild;
@@ -1435,7 +1525,7 @@ async function runDiscoveryFacets(browserType, bname, [w, h], theme) {
     // The heading is the URL's; the cards are the answer's, which lands after it.
     await lanesUntil(page, (ids) => ids.length > 0 && ids.every((id) => accraIds.has(id)));
     const inAccra = await laneItems(page);
-    // B9-SPEC line 11: at compact, the applied chips and Clear all once a facet is set.
+    // B9-SPEC's compact line: at compact, the applied chips and Clear all once a facet is set.
     const appliedRow =
       tier !== "compact" ||
       ((await page.locator("[data-applied-row] [data-applied-facets]").innerText()).includes(
@@ -1451,7 +1541,7 @@ async function runDiscoveryFacets(browserType, bname, [w, h], theme) {
     record(
       tag +
         " place: the lanes narrow to Accra and Near reads While you are in Accra (1095)" +
-        (tier === "compact" ? ", the chip and Clear all shown (B9-SPEC 11)" : ""),
+        (tier === "compact" ? ", the chip and Clear all shown (B9-SPEC's compact line)" : ""),
       strays.length === 0 &&
         Object.keys(inAccra).includes("near") &&
         !Object.keys(inAccra).includes("fresh") &&
@@ -1575,6 +1665,74 @@ async function runDiscoveryFacets(browserType, bname, [w, h], theme) {
       /\.ics$/.test(file),
       file,
     );
+
+    // Handoff 33-A (correction 28, 1134). G102: Topics lays its rows in two columns once its
+    // checklist is 150 wide, in the rail and in the compact Sheet alike.
+    await openDiscovery(page);
+    scope = await openRail(page, tier);
+    const topics = await page.evaluate((scope) => {
+      const boxes = Array.from(
+        document.querySelectorAll(`${scope} [data-axis-id="family"] [role="checkbox"]`),
+      ).map((b) => b.getBoundingClientRect());
+      const list = document.querySelector(`${scope} [data-axis-id="family"] [data-columns]`);
+      return {
+        rows: boxes.length,
+        lefts: [...new Set(boxes.map((b) => Math.round(b.left)))].sort((a, b) => a - b),
+        width: list ? Math.round(list.getBoundingClientRect().width * 10) / 10 : null,
+        columns: list ? getComputedStyle(list).gridTemplateColumns.split(" ").length : null,
+      };
+    }, scope);
+    record(
+      tag + " Topics: its checklist 150 or wider, its rows in two columns (G102)",
+      topics.rows > 1 &&
+        topics.lefts.length === 2 &&
+        topics.columns === 2 &&
+        topics.width !== null &&
+        topics.width >= 150,
+      JSON.stringify(topics),
+    );
+    // G111: in the rail, Clear all is in the pinned heading row and stays in view once the axes have
+    // scrolled beneath it, and nothing is at the foot; it clears. The compact Sheet keeps its foot.
+    if (tier !== "compact") {
+      await page.locator(`${scope} [data-axis-id="family"] [role="checkbox"]`).first().click();
+      await page.waitForURL((u) => !!u.searchParams.get("family"), { timeout: 10000 });
+      await page.waitForTimeout(300);
+      const clear = await page.evaluate((scope) => {
+        const nav = document.querySelector(scope);
+        const scroller = nav && nav.querySelector("[data-rail-scroller]");
+        if (scroller) scroller.scrollTop = scroller.scrollHeight;
+        const all = Array.from(nav ? nav.querySelectorAll("button") : []).filter(
+          (b) => (b.textContent || "").trim() === "Clear all",
+        );
+        const b = all[0];
+        const pin = b && b.closest("[data-heading-pin]");
+        const r = b && b.getBoundingClientRect();
+        const n = nav && nav.getBoundingClientRect();
+        const hit = r && document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+        return {
+          count: all.length,
+          slot: !!b && !!b.closest("[data-clear-slot]"),
+          pinned: !!pin,
+          scrolled: scroller ? Math.round(scroller.scrollTop) : null,
+          top: r && n ? Math.round(r.top - n.top) : null,
+          visible: !!hit && !!b && b.contains(hit),
+        };
+      }, scope);
+      if (clear.count === 1)
+        await page
+          .locator(`${scope} button`, { hasText: "Clear all" })
+          .click({ timeout: 5000 })
+          .catch(() => undefined);
+      await page.waitForTimeout(400);
+      const cleared = !new URL(page.url()).searchParams.get("family");
+      record(
+        tag +
+          " Clear all: one, in the rail's pinned heading row, in view after the axes scroll, and it clears (G111)",
+        clear.count === 1 && clear.slot && clear.pinned && clear.visible && cleared,
+        JSON.stringify({ ...clear, cleared }),
+      );
+    }
+    await closeRail(page, tier);
 
     // 1111: the rail's state per member per band, read on load and written on toggle only.
     if (tier === "compact") {
@@ -1781,10 +1939,11 @@ const PANE_VIEWPORTS = [
   [[1280, 800], "light"],
   [[1600, 1000], "dark"],
 ];
-/** Item 8's widths (1123). */
+/** Item 8's widths (1123), with 1600: handoff 33-A reads G110's pane at all five (1127). */
 const WIDTH_VIEWPORTS = [
   [[1280, 800], "light"],
   [[1440, 900], "dark"],
+  [[1600, 1000], "light"],
   [[1920, 1080], "light"],
   [[2560, 1440], "dark"],
 ];
@@ -2250,9 +2409,16 @@ async function runDiscoveryStep(browserType, bname, [w, h], theme) {
             b.contains(hit),
         };
       });
+      // G85: with the pane bounded the list column is its own scroller, and the open card is
+      // brought into its view (Pane's selectedKey, 1083).
+      const list = document.querySelector("[data-discovery] [data-pane-list]");
+      const card = list && list.querySelector("article[data-selected]");
+      const l = list && list.getBoundingClientRect();
+      const c = card && card.getBoundingClientRect();
       return {
         id: location.pathname.split("/").pop(),
         top: body ? body.scrollTop : null,
+        selected: !!c && c.top >= l.top - 1 && c.bottom <= l.bottom + 1,
         own: !!body && body.scrollHeight > body.clientHeight,
         fits: !!section && section.getBoundingClientRect().bottom <= m.bottom + 1,
         controls,
@@ -2275,7 +2441,7 @@ async function runDiscoveryStep(browserType, bname, [w, h], theme) {
     await page.waitForTimeout(400);
     const open = await read();
     record(
-      tag + " the pane fits the list column and its body scrolls on its own (B9-SPEC line 14)",
+      tag + " the pane fits the list column and its body scrolls on its own (B9-SPEC's pane line)",
       open.own && open.fits && open.controls.every((c) => c.inView),
       JSON.stringify(open),
     );
@@ -2289,18 +2455,22 @@ async function runDiscoveryStep(browserType, bname, [w, h], theme) {
       one.id === E.stream.event_id && one.top === 0 && one.controls.every((c) => c.inView),
       JSON.stringify(one),
     );
-    // The body and the list both at their ends before the second step.
+    // The body and the list both at their ends before the second step. With the pane bounded the
+    // list column is its own scroller (correction 28, G110); the feed column does not scroll.
     await page.evaluate(() => {
       document.querySelector("[data-discovery] [data-pane-body]").scrollTop = 1e6;
-      document.querySelector('[data-scroller="feed"]').scrollTop = 1e6;
+      document.querySelector("[data-discovery] [data-pane-list]").scrollTop = 1e6;
     });
     await page.waitForTimeout(300);
     await next(E.harvest.event_id);
     const two = await read();
     record(
       tag +
-        " Next twice, from the body's and the list's ends: the body at its top, the controls in view",
-      two.id === E.harvest.event_id && two.top === 0 && two.controls.every((c) => c.inView),
+        " Next twice, from the body's and the list's ends: the body at its top, the controls and the open card in view",
+      two.id === E.harvest.event_id &&
+        two.top === 0 &&
+        two.controls.every((c) => c.inView) &&
+        two.selected,
       JSON.stringify(two),
     );
 
@@ -2401,9 +2571,25 @@ async function runDiscoveryWidth(browserType, bname, [w, h], theme) {
   const tag = `${bname}-${w}x${h}-${theme}-discovery-width`;
   M.armStart(tag);
   const db = makeMockDb();
-  seedDiscovery(db);
+  const E = seedDiscovery(db);
   const { browser, page, errors } = await context(browserType, [w, h], theme, db);
   const near = (a, b) => a != null && Math.abs(a - b) <= 1;
+  // G110's Copy link and Share (1097): what each hands over, read without a clipboard or a share
+  // sheet, which a headless engine may refuse.
+  await page.addInitScript(() => {
+    window.__copied = [];
+    window.__shared = [];
+    try {
+      Object.defineProperty(navigator, "clipboard", {
+        configurable: true,
+        value: { writeText: async (t) => void window.__copied.push(t) },
+      });
+      Object.defineProperty(navigator, "share", {
+        configurable: true,
+        value: async (d) => void window.__shared.push(d && d.url),
+      });
+    } catch {}
+  });
   try {
     await signIn(page);
     await openDiscovery(page);
@@ -2432,46 +2618,163 @@ async function runDiscoveryWidth(browserType, bname, [w, h], theme) {
       `scrollWidth ${e.scroll} viewport ${e.vw}`,
     );
 
-    // The pane at 1280 and 1920: inside the new edges, beside at least one full 320 card.
-    if (w === 1280 || w === 1920) {
-      await page.locator("[data-discovery-item] [data-card-open]").first().click();
-      await page.waitForSelector('[data-discovery][data-pane-open="1"] [data-event-page]', {
-        timeout: 20000,
-      });
-      await page.waitForTimeout(500);
-      const pane = await page.evaluate(() => {
-        const list = document.querySelector("[data-pane-list]");
-        const l = list ? list.getBoundingClientRect() : null;
-        const section = document.querySelector('[data-pane-open="true"] > section');
-        const s = section ? section.getBoundingClientRect() : null;
-        const cards = list
-          ? Array.from(list.querySelectorAll("[data-discovery-item] article")).map((a) =>
-              a.getBoundingClientRect(),
-            )
-          : [];
-        const whole = cards.filter(
-          (c) => Math.round(c.width) === 320 && c.left >= l.left - 0.5 && c.right <= l.right + 0.5,
-        );
+    // The pane at every width: inside the new edges, beside at least one full 320 card.
+    await page.locator(`${cardSel(E.supper, "soon")} [data-card-open]`).click();
+    await page.waitForSelector('[data-discovery][data-pane-open="1"] [data-event-page]', {
+      timeout: 20000,
+    });
+    await page.waitForTimeout(500);
+    const pane = await page.evaluate(() => {
+      const list = document.querySelector("[data-pane-list]");
+      const l = list ? list.getBoundingClientRect() : null;
+      const section = document.querySelector('[data-pane-open="true"] > section');
+      const s = section ? section.getBoundingClientRect() : null;
+      const cards = list
+        ? Array.from(list.querySelectorAll("[data-discovery-item] article")).map((a) =>
+            a.getBoundingClientRect(),
+          )
+        : [];
+      const whole = cards.filter(
+        (c) => Math.round(c.width) === 320 && c.left >= l.left - 0.5 && c.right <= l.right + 0.5,
+      );
+      return {
+        list: l && [Math.round(l.left), Math.round(l.right)],
+        pane: s && [Math.round(s.left), Math.round(s.right)],
+        whole: whole.length,
+        scroll: Math.max(document.documentElement.scrollWidth, document.body.scrollWidth),
+        vw: document.documentElement.clientWidth,
+      };
+    });
+    record(
+      tag +
+        " pane open: the list column holds a full 320 card, the pane inside 95%, no page scroll",
+      pane.whole > 0 &&
+        !!pane.pane &&
+        pane.pane[1] <= Math.round(ninetyFive) + 1 &&
+        !!pane.list &&
+        pane.list[0] >= Math.round(five) - 1 &&
+        pane.scroll <= pane.vw,
+      JSON.stringify(pane),
+    );
+
+    // Handoff 33-A, G110 (B9-SPEC Revision 2's pane line, 1127; correction 28): the pane 520 at the
+    // right and the list the rest, both starting level, each scrolling on its own and the feed
+    // column not at all, the pane's foot on the canvas's foot (G121 records why that is the height).
+    const tracks = () =>
+      page.evaluate(() => {
+        const r1 = (n) => Math.round(n * 10) / 10;
+        const grid = document.querySelector('[data-discovery] [data-pane-open="true"]');
+        const list = grid && grid.querySelector(":scope > [data-pane-list]");
+        const section = list && list.nextElementSibling;
+        const main = document.querySelector('[data-canvas] [data-scroller="feed"]');
+        if (!grid || !list || !section || !main) return null;
+        const g = grid.getBoundingClientRect();
+        const l = list.getBoundingClientRect();
+        const s = section.getBoundingClientRect();
+        const m = main.getBoundingClientRect();
+        const ls = getComputedStyle(list);
+        const tool = document.querySelector('[data-pane-toolbar] [data-tool="list"]');
         return {
-          list: l && [Math.round(l.left), Math.round(l.right)],
-          pane: s && [Math.round(s.left), Math.round(s.right)],
-          whole: whole.length,
-          scroll: Math.max(document.documentElement.scrollWidth, document.body.scrollWidth),
-          vw: document.documentElement.clientWidth,
+          content: r1(g.width),
+          list: r1(l.width),
+          pane: r1(s.width),
+          gap: parseFloat(getComputedStyle(grid).columnGap) || 0,
+          left: r1(s.left - g.left),
+          right: r1(g.right - s.right),
+          tops: [r1(l.top), r1(s.top)],
+          foot: [
+            r1(s.bottom),
+            r1(m.bottom - (parseFloat(getComputedStyle(main).paddingBottom) || 0)),
+          ],
+          column: [main.scrollHeight, main.clientHeight],
+          listScrolls: ls.overflowY === "auto" && list.scrollHeight > list.clientHeight,
+          hidden: {
+            inert: list.inert === true || list.hasAttribute("inert"),
+            aria: list.getAttribute("aria-hidden"),
+            visibility: ls.visibility,
+            probe: list.getAttribute("data-probe"),
+            top: Math.round(list.scrollTop),
+          },
+          tool: tool ? tool.getAttribute("aria-label") : null,
+          tools: Array.from(document.querySelectorAll("[data-pane-toolbar] button")).map((b) =>
+            b.getAttribute("aria-label"),
+          ),
         };
       });
-      record(
-        tag +
-          " pane open: the list column holds a full 320 card, the pane inside 95%, no page scroll",
-        pane.whole > 0 &&
-          !!pane.pane &&
-          pane.pane[1] <= Math.round(ninetyFive) + 1 &&
-          !!pane.list &&
-          pane.list[0] >= Math.round(five) - 1 &&
-          pane.scroll <= pane.vw,
-        JSON.stringify(pane),
+    const open = await tracks();
+    record(
+      tag +
+        " pane (G110): 520 at the right, the list the rest less the gap, level, the column still, the foot on the canvas's",
+      !!open &&
+        Math.abs(open.pane - 520) <= 0.5 &&
+        Math.abs(open.list - (open.content - 520 - open.gap)) <= 0.5 &&
+        open.right <= 0.5 &&
+        Math.abs(open.tops[0] - open.tops[1]) <= 0.5 &&
+        open.column[0] <= open.column[1] &&
+        open.listScrolls &&
+        Math.abs(open.foot[0] - open.foot[1]) <= 1 &&
+        open.tools.join(",") === "Hide list,Copy link,Share",
+      JSON.stringify(open),
+    );
+
+    // Hide list: 720, centred, the list the same element, hidden and inert with its scroll kept;
+    // Show list returns the pane to 520.
+    let hidden = null;
+    let shown = null;
+    if (open && open.tool) {
+      await page.evaluate(() => {
+        const list = document.querySelector("[data-discovery] [data-pane-list]");
+        list.setAttribute("data-probe", "kept");
+        list.scrollTop = 300;
+      });
+      const kept = await page.evaluate(() =>
+        Math.round(document.querySelector("[data-discovery] [data-pane-list]").scrollTop),
       );
+      await page.locator('[data-pane-toolbar] [data-tool="list"]').click();
+      await page.waitForTimeout(400);
+      hidden = { ...(await tracks()), kept };
+      await page.locator('[data-pane-toolbar] [data-tool="list"]').click();
+      await page.waitForTimeout(400);
+      shown = await tracks();
     }
+    record(
+      tag +
+        " pane (G110): Hide list centres the pane at 720, the list the same element, hidden, inert and where it was; Show list returns 520",
+      !!hidden &&
+        Math.abs(hidden.pane - 720) <= 0.5 &&
+        Math.abs(hidden.left - hidden.right) <= 1 &&
+        hidden.hidden.inert &&
+        hidden.hidden.aria === "true" &&
+        hidden.hidden.visibility === "hidden" &&
+        hidden.hidden.probe === "kept" &&
+        hidden.hidden.top === hidden.kept &&
+        hidden.kept > 0 &&
+        hidden.tool === "Show list" &&
+        !!shown &&
+        Math.abs(shown.pane - 520) <= 0.5 &&
+        shown.tool === "Hide list",
+      JSON.stringify({ hidden, shown: shown && { pane: shown.pane, tool: shown.tool } }),
+    );
+
+    // Copy link and Share: the card menu's own path (useShare, 1097), with the open event's post.
+    let handed = null;
+    if (open && open.tools.includes("Copy link") && open.tools.includes("Share")) {
+      await page.locator('[data-pane-toolbar] [data-tool="copy"]').click();
+      await page.locator('[data-pane-toolbar] [data-tool="share"]').click();
+      await page.waitForTimeout(300);
+      handed = await page.evaluate(() => ({ copied: window.__copied, shared: window.__shared }));
+    }
+    const postPath = "/posts/" + E.supper.post_id;
+    record(
+      tag +
+        " pane (G110): Copy link and Share hand over the open event's post, the card menu's path (1097)",
+      !!handed &&
+        handed.copied.length === 1 &&
+        new URL(handed.copied[0]).pathname === postPath &&
+        handed.shared.length === 1 &&
+        new URL(handed.shared[0]).pathname === postPath,
+      JSON.stringify(handed),
+    );
 
     // Every other surface keeps its caps: the Feed at 1920 is still its 1440 columns.
     if (w === 1920) {
@@ -2494,7 +2797,131 @@ async function runDiscoveryWidth(browserType, bname, [w, h], theme) {
   }
 }
 
-/** Addendum 4's and 5's arms and their cells, in item order, for tests/matrix.cjs to run. */
+/**
+ * Handoff 33-A, G100 (1067; correction 28): the discovery face is a real link across its whole face.
+ * Its title is an anchor to the address a plain click navigates to, a cover spans the face, and the
+ * presenter, topic and ellipsis stand above it. A modified or middle press is the browser's and
+ * opens no pane; a plain press on the media opens the event, the pane at expanded and the route below.
+ */
+async function runDiscoveryLink(browserType, bname, [w, h], theme) {
+  const tag = `${bname}-${w}x${h}-${theme}-discovery-link`;
+  M.armStart(tag);
+  const tier = tierOf(w);
+  const db = makeMockDb();
+  const E = seedDiscovery(db);
+  const { browser, page, errors } = await context(browserType, [w, h], theme, db);
+  // A modified or middle press may open a tab; each is closed as it opens.
+  const opened = [];
+  page.context().on("page", (p) => {
+    opened.push(p);
+    p.close().catch(() => undefined);
+  });
+  const card = cardSel(E.supper, "soon");
+  try {
+    await signIn(page);
+    await openDiscovery(page);
+    await page.locator(card).scrollIntoViewIfNeeded();
+    const face = await page.evaluate((sel) => {
+      const art = document.querySelector(`${sel} article[data-presentation="discovery"]`);
+      const a = art && art.querySelector("a[data-card-open][href]");
+      const cover = a && a.querySelector("[data-card-cover]");
+      if (!art || !a || !cover) return { link: !!a, cover: !!cover };
+      const at = (el) => {
+        if (!el) return null;
+        const r = el.getBoundingClientRect();
+        return document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+      };
+      const inside = (el) => {
+        const hit = at(el);
+        return !!hit && el.contains(hit);
+      };
+      const edge = parseFloat(getComputedStyle(art).borderTopWidth) || 0;
+      const ar = art.getBoundingClientRect();
+      const cr = cover.getBoundingClientRect();
+      const media = art.querySelector("[data-media]");
+      return {
+        href: a.getAttribute("href"),
+        target: a.getAttribute("target"),
+        anchors: art.querySelectorAll("a[href]").length,
+        cover: [Math.round(cr.width * 10) / 10, Math.round(cr.height * 10) / 10],
+        inner: [
+          Math.round((ar.width - 2 * edge) * 10) / 10,
+          Math.round((ar.height - 2 * edge) * 10) / 10,
+        ],
+        media: !!media && a.contains(at(media)),
+        presenter: inside(art.querySelector('[data-row="presenter"] button')),
+        topic: inside(art.querySelector('[data-row="presenter"] [data-card-control] button')),
+        ellipsis: inside(art.querySelector('button[aria-haspopup="menu"]')),
+      };
+    }, card);
+    const href = face.href ? new URL(face.href, BASE) : null;
+    record(
+      tag +
+        " the face is one link to the event's address, its cover across the face, the presenter, topic and ellipsis above it (G100)",
+      !!href &&
+        href.pathname === "/convene/events/" + E.supper.event_id &&
+        face.target === null &&
+        face.anchors === 1 &&
+        Math.abs(face.cover[0] - face.inner[0]) <= 1 &&
+        Math.abs(face.cover[1] - face.inner[1]) <= 1 &&
+        face.media &&
+        face.presenter &&
+        face.topic &&
+        face.ellipsis,
+      JSON.stringify(face),
+    );
+
+    // A modified press and a middle press are the browser's: this page stays on Discovery.
+    const before = page.url();
+    await page.locator(`${card} [data-media]`).click({ modifiers: ["ControlOrMeta"] });
+    await page.waitForTimeout(600);
+    const afterModified = page.url();
+    await page.locator(`${card} [data-media]`).click({ button: "middle" });
+    await page.waitForTimeout(600);
+    const still = {
+      modified: afterModified,
+      middle: page.url(),
+      pane: await page.locator('[data-discovery][data-pane-open="1"]').count(),
+      page: await page.locator("[data-event-page]").count(),
+      tabs: opened.length,
+    };
+    record(
+      tag +
+        " a modified press and a middle press on the face open no pane and leave this page (G100)",
+      still.modified === before && still.middle === before && still.pane === 0 && still.page === 0,
+      JSON.stringify(still),
+    );
+
+    // A plain press on the media lands in the link: the event at its address, in the pane at
+    // expanded and as its own route below it (1023, 1063).
+    await page.locator(`${card} [data-media]`).click();
+    await page.waitForURL((u) => u.pathname === "/convene/events/" + E.supper.event_id, {
+      timeout: 10000,
+    });
+    await page.waitForSelector("[data-event-page]", { timeout: 20000 });
+    const landed = new URL(page.url());
+    record(
+      tag +
+        (tier === "expanded"
+          ? " a plain press on the face opens the event in the pane, at the link's address (G100, 1063)"
+          : " a plain press on the face opens the event's route, at the link's address (G100, 1023)"),
+      !!href &&
+        landed.pathname + landed.search === href.pathname + href.search &&
+        (tier === "expanded"
+          ? (await page.locator('[data-discovery][data-pane-open="1"]').count()) === 1
+          : (await page.locator("[data-event-page] [data-back-row]").count()) === 1),
+      landed.pathname + landed.search,
+    );
+
+    record(tag + " no page errors", errors.length === 0, errors.join(" | ").slice(0, 300));
+  } catch (e) {
+    record(tag + " flow", false, String(e).slice(0, 400));
+  } finally {
+    await browser.close();
+  }
+}
+
+/** Addendum 4's and 5's arms and their cells, in item order, then handoff 33-A's link arm (G100). */
 const FOLLOWUP_ARMS = [
   [runDiscoveryPresenter, FOLLOWUP_VIEWPORTS],
   [runDiscoveryOnline, FOLLOWUP_VIEWPORTS],
@@ -2502,6 +2929,7 @@ const FOLLOWUP_ARMS = [
   [runDiscoveryStep, PANE_VIEWPORTS],
   [runDiscoveryHomes, FOLLOWUP_VIEWPORTS],
   [runDiscoveryWidth, WIDTH_VIEWPORTS],
+  [runDiscoveryLink, FOLLOWUP_VIEWPORTS],
 ];
 
 module.exports = {
