@@ -666,15 +666,23 @@ export function DiscoverySurface({
         scope={lensScope}
         c="convene"
         label="Convene lens"
-        // Item 7 and B9-SPEC's tiers: labels always and icons at every tier. At compact the five
-        // words and glyphs do not fit five equal seats, so there each seat hugs its word and the
-        // bar's root is `max-content` in a row that scrolls sideways (B9-SPEC's compact line): nothing is
-        // squeezed and the page does not pan.
-        width={compact ? "content" : "fill"}
+        // Item 7 and B9-SPEC's tiers: labels always and icons at every tier, and each seat sized to
+        // its own word at every tier, never stretched across the row (1145). At compact the bar's
+        // root is `max-content` in a row that scrolls sideways (B9-SPEC's compact line): nothing is
+        // squeezed and the page does not pan. At medium and expanded its row is the shell's lens
+        // row, `[data-layout-top]`, and the root is `min-content`, which is the track's own width
+        // because no seat wraps, capped at the row and centred in it by its inline margins. The
+        // scope line is the root's own and wraps to that width, so it stays under the bar's start
+        // edge and never widens the root past the track to pull the bar off centre.
+        width="content"
         labels="always"
         icons
         collapsed={inContent ? scrolled : undefined}
-        style={compact ? { width: "max-content", maxWidth: "none" } : undefined}
+        style={
+          compact
+            ? { width: "max-content", maxWidth: "none" }
+            : { width: "min-content", marginInline: "auto" }
+        }
       />
     ) : null;
 

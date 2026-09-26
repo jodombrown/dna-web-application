@@ -3860,6 +3860,24 @@ refused by the type until it does. Both are one line; neither is this PR's to ch
 tablist `flex: 0 1 auto` with the seat at `margin-left: auto`, so the reflow this entry describes would
 also slide the seat. No caller passes `trailing` or `content`.
 
+**Amended 26 September 2026 by handoff 33-A Addendum 2 (1145).** A caller now passes `content`, so
+the reflow this entry predicts is live, and the severity line's "low, because no caller passes it"
+does not hold: by that line's own clause the entry is **medium**. It has been since handoff 32-B
+gave Discovery's compact bar `content` (G104), which is also when 32-A's "No caller passes ...
+`content`" stopped being true; B9-SPEC Revision 5's Lens bar line now makes it `width="content"` at
+every tier, the bar centred in the shell's lens row at medium and expanded. Measured in Chromium at
+820 and 1280, selecting Communities from All makes its seat 1.19 wider and All's 0.55 narrower, so
+the bar grows 0.64 and, being centred, moves both its edges: every seat shifts, Communities' start
+by 0.86, where on `f19af1f` the same selection moved no seat at either width. At 390 it moves
+Communities' start by 0.55 and every seat after it, and the bar's end, by 0.64, the same on
+`f19af1f` as after this change. The size is recorded beside the severity and does not lower it: the
+slide is under 1.2 with these five words, against the up to 79 G48 quotes from the prototype, but
+the mechanism is G48's, selection as a layout input, and it grows with the active label's length.
+The two ways out above are unchanged and still not the caller's: a constant active weight is
+LENS_BAR_SPEC's, and `LensBar.tsx` is a Strand part (844). Its comments at lines 42, 156 and 366
+still say every caller passes `fill` and none passes `content`; that has been false at compact since
+32-B and is now false at every tier, and it is left for the part's next change under 844.
+
 ## G55. Nothing in the harness proves that a file under `public/strand/icons/` serves from the deployment
 
 **Severity: low. No icon is missing today and every surface that draws one renders correctly across
@@ -5010,6 +5028,14 @@ header slot: `AppHeader` renders the registered bar `compact`, which forces icon
 member scrolls past 72 the words go. And B9-SPEC line 13 centres the expanded lens row "with the
 scope line", where LensBar draws its scope line from the start of the track. Both are the parts'.
 Owed: a Strand correction for AppHeader's slot to carry labels, and for LensBar's scope alignment.
+
+**Amended 26 September 2026 by handoff 33-A Addendum 2 (1145).** At medium and expanded the bar is
+now `width="content"` and centred in the shell's lens row, `[data-layout-top]`, by its caller alone:
+Discovery gives LensBar's root `width: min-content`, which is the track's own width because no seat
+wraps, and inline margins of `auto`. The scope line is the root's own, so it now starts 4 inside the
+centred track's start edge rather than the row's, and wraps to the track's width rather than widening
+the root past it. Its alignment within the track is still the part's, as above. The compact bar and
+the header slot are unchanged.
 
 ## G105. Place's kind word is matched as the member types
 

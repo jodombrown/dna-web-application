@@ -1527,6 +1527,65 @@ async function runDiscoveryFacets(browserType, bname, [w, h], theme) {
       JSON.stringify(sent.map((c) => c.p_price)),
     );
 
+    // 1145 (B9-SPEC Revision 5's Lens bar line): at medium and expanded each seat is its own label's
+    // width, never an equal share, and the bar sits centred in its row, the shell's lens row, never
+    // stretched across it. Read from the boxes and computed styles: each seat against its word, its
+    // glyph, the gap between them, its padding and its border (floored at its min-width); the track
+    // against the row's content box, narrower than it and centred on it within 1.
+    if (tier !== "compact") {
+      const lensRow = await page.evaluate(() => {
+        const t = document.querySelector(
+          '[data-layout-top] [role="tablist"][aria-label="Convene lens"]',
+        );
+        const row = t && t.closest("[data-layout-top]");
+        if (!row) return null;
+        const px = (v) => parseFloat(v) || 0;
+        const r = (n) => Math.round(n * 1000) / 1000;
+        const rb = row.getBoundingClientRect();
+        const rs = getComputedStyle(row);
+        const left = rb.left + px(rs.borderLeftWidth) + px(rs.paddingLeft);
+        const right = rb.right - px(rs.borderRightWidth) - px(rs.paddingRight);
+        const tb = t.getBoundingClientRect();
+        const seats = Array.from(t.querySelectorAll('[role="tab"]')).map((x) => {
+          const cs = getComputedStyle(x);
+          const word = x.querySelector(":scope > span:not([aria-hidden])");
+          const glyph = x.querySelector(':scope > span[aria-hidden="true"]');
+          const label = word ? word.getBoundingClientRect().width : 0;
+          const ico = glyph ? glyph.getBoundingClientRect().width + px(cs.columnGap) : 0;
+          const own =
+            label +
+            ico +
+            px(cs.paddingLeft) +
+            px(cs.paddingRight) +
+            px(cs.borderLeftWidth) +
+            px(cs.borderRightWidth);
+          return {
+            id: x.getAttribute("data-lens"),
+            seat: r(x.getBoundingClientRect().width),
+            own: r(Math.max(px(cs.minWidth), own)),
+            label: r(label),
+          };
+        });
+        return {
+          row: [r(left), r(right)],
+          bar: [r(tb.left), r(tb.right)],
+          centre: r((tb.left + tb.right) / 2 - (left + right) / 2),
+          scroll: [t.scrollWidth, t.clientWidth],
+          seats,
+        };
+      });
+      record(
+        tag +
+          " lens bar: each seat its own label's width, the bar centred in its row and narrower than it (1145)",
+        !!lensRow &&
+          lensRow.seats.length === VOCAB.convene_lenses.length &&
+          lensRow.seats.every((s) => s.label > 0 && Math.abs(s.seat - s.own) <= 1) &&
+          lensRow.bar[1] - lensRow.bar[0] < lensRow.row[1] - lensRow.row[0] - 1 &&
+          Math.abs(lensRow.centre) <= 1,
+        JSON.stringify(lensRow),
+      );
+    }
+
     // Place (1095): typed, offered by kind, picked, narrowing, and removed as a chip.
     await openDiscovery(page);
     let scope = await openRail(page, tier);
