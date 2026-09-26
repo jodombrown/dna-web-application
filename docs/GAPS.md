@@ -5595,7 +5595,7 @@ changes.
 
 ---
 
-## G126. The branch alias answered 404 on every route for about ninety minutes, across two deployments of one build, and cleared on its own (G20 recurred)
+## G126. The branch alias answered 404 on every route for about ninety minutes, across two deployments of one build, and cleared on its own (G20 recurred) — closed (1154)
 
 **Severity: medium. It blocks the exit check, not the build. Opened 26 September 2026 during handoff 33-A (PR #67), filed under ruling 597. The number is assigned by this entry (ruling 638). Left open: G20's next step is a harness change outside handoff 33-A.**
 
@@ -5667,6 +5667,21 @@ enforcing run has started (556).
 Owed as a separate reading: whether the per-deployment host also answered 404 in this entry's
 window, the third unread item above. It is still unread. This change decides which host later runs
 read, and it does not answer what `5797cc2d`'s and `e18f60ee`'s hosts answered on 25 September.
+
+**Closed 26 September 2026 on run 374 (handoff 33-D item 0, 1154).**
+
+- Run 374 is `pages.yml` id `36257756375`, on `53a2f4a`, handoff 33-B's final head. It is the only
+  run on that branch and the first on 1141's setup, and it read green on both engines against the
+  deployment's own host.
+- The deploy job's 1141 step passed. The live job and both matrix jobs each opened with the same
+  Host tested line: `https://043c2208.dna-web-application.pages.dev`, the deployment that run
+  uploaded, built from `53a2f4a`. No job read the branch alias.
+- `matrix (chromium)` job `108447813774` read 6842 of 6842, and `matrix (webkit)` job
+  `108447813801` read 6842 of 6842. Each had none behind a web-process crash (G5) and none
+  unclassified. `live` job `108447813800` read 162 of 162 with its three standing unproven arms.
+- Still unread, and not answered by this closure: whether the per-deployment hosts `5797cc2d` and
+  `e18f60ee` also answered 404 in this entry's window on 25 September. Run 374 reads a later
+  deployment's own host. It says nothing about what those two hosts answered then.
 
 ---
 
