@@ -1691,6 +1691,9 @@ deployment, not the branch, not the alias truncation, and not the build. If it r
 first, and only if a second deployment 404s the same way pass `matrix.yml`'s `base_url` the
 deployment URL (`https://<hash>.dna-web-application.pages.dev`) instead of the alias.
 
+It recurred on 25 September on run 361, across two deployments of one build, and cleared on its
+own. G126 records it.
+
 ---
 
 ## G21. WebKit runs only in CI, and design pass 01 proved that costs defects
@@ -5448,3 +5451,48 @@ The tree follows B10-SPEC. The route's param is the event id, and `loadEventPage
 that is not a UUID. So the face's link (G100) and every Discovery navigation address the page by
 id. Nothing here changes it, since the route belongs to Brief 10. Owed: a ruling on which address
 the member page has, and B9-SPEC or B10-SPEC restated to it.
+
+---
+
+## G126. The branch alias answered 404 on every route for about ninety minutes, across two deployments of one build, and cleared on its own (G20 recurred)
+
+**Severity: medium. It blocks the exit check, not the build. Opened 26 September 2026 during handoff 33-A (PR #67), filed under ruling 597. The number is assigned by this entry (ruling 638). Left open: G20's next step is a harness change outside handoff 33-A.**
+
+What the runs read, on `claude/new-session-n9rnpi` at `5a09009`, all times UTC:
+
+- **Run 361, attempt 1** (`36196856971`). Deploy `5797cc2d` finished at 22:29:18. Ruling 217's gate
+  read every path 200 from 22:29:31 to 22:29:35. Both matrix jobs then ran with no failure until,
+  between 22:33:22 and 22:33:30, both stopped at once, on different arms: chromium at
+  `820x1180-shell` (arm 529) and webkit at `820x1180-light` (arm 453). From then on every page open
+  timed out at 20 to 30 s. That covered `/sign-in`'s email field and the signed-out profile at
+  `/m/thandiwe-dube` alike, and the page-error checks read "Failed to load resource: the server
+  responded with a status of 404". Both jobs reached the 60-minute limit and were cancelled at
+  23:29.
+- **Run 361, attempt 2**, deploy included. This was the one re-run, and G20's "redeploy first".
+  Deploy `e18f60ee` finished at 23:46:35. The gate polls each path 12 times, 10 s apart. It read
+  404 on every poll of `/sign-in`, `/connect`, `/reset`, `/reset/new`, `/password`, `/welcome` and
+  `/where`, from 23:46:47 to 23:59:43. It then read 200 on the first poll of every later path, from
+  `/relationship` at 00:00:03 through `/.well-known/security.txt`. All three jobs failed at the gate
+  with nothing tested.
+
+Neither the tree nor a swap between builds explains a 404:
+
+- No workflow run deployed to the branch between 22:29:18 and 23:46:35.
+- The builds of runs 359, 360 and 361 differ only in tests, docs and one comment.
+
+Two deployments of one build answered 404 on routes, and the second cleared between two polls with
+nothing done. That places the fault on Cloudflare's side of the alias, not in the build or the tree.
+
+That is inference. This container's proxy denies `pages.dev` and the artifact storage, so three
+things are unread:
+
+- which resource the matrix's 404 named;
+- whether static files served through the window, which was G20's shape;
+- whether the per-deployment host answered 404 along with the alias.
+
+G20's instruction for this case is "only if a second deployment 404s the same way pass
+`matrix.yml`'s `base_url` the deployment URL", and a second deployment did. `pages.yml` sets `BASE`
+to `pages-deployment-alias-url || deployment-url`, so every push-triggered job reads the alias.
+Owed: a ruling on whether the push-triggered jobs read the per-deployment host, which 811 already
+names for each deployment, instead of the alias. That is a harness change, and handoff 33-A does not
+make it.
