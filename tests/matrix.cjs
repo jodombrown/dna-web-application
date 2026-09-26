@@ -2614,8 +2614,11 @@ async function shot(page, name) {
   await page.screenshot({ path: path.join(OUT, name + ".png"), fullPage: false });
 }
 
-async function signIn(page) {
-  await page.goto(BASE + "/sign-in", { waitUntil: "networkidle" });
+// `base` is the origin to sign in on. Every caller but one passes none and signs in on BASE, as it
+// always has; handoff 33-A Addendum 2 item 4's identity arm (tests/discovery.cjs) also signs in on
+// its reference build's origin, in a second context of the same browser.
+async function signIn(page, base = BASE) {
+  await page.goto(base + "/sign-in", { waitUntil: "networkidle" });
   await page.fill('input[type="email"]', "member@test.invalid");
   await page.fill('input[type="password"]', "x");
   await page.click('button[type="submit"]');

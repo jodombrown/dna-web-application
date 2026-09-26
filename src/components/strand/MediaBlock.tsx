@@ -1,6 +1,7 @@
-// Ported from Strand components/dna/MediaBlock.jsx at compile v1790279130697923 (corrections 26 and
-// 27; rulings 1115, 1117, 1118). Video and audio kinds are kept for parity with the system; the
-// composer never produces them (ruling 55).
+// Ported from Strand components/dna/MediaBlock.jsx; reconciled at compile v1790366257373061
+// (correction 28, ratified 1134), after corrections 26 and 27 (rulings 1115, 1117, 1118) at
+// v1790279130697923. Video and audio kinds are kept for parity with the system; the composer never
+// produces them (ruling 55).
 //
 // Correction 26 (1115): `ratio` fixes the frame of image, gallery and video. With it, an image fills
 // its frame (object-fit: cover, no 420 cap) and a gallery declares its rows so the tiles fill the
@@ -8,9 +9,15 @@
 // Link and audio ignore it. Absent, image, video, link and audio run the code they ran before.
 // Correction 27 (1118): the gallery without a ratio declares the same rows and `minHeight: 0` on each
 // image, so three and four images fill the 16/10 frame instead of spilling past it; two images keep
-// every box size. Two divergences are kept from the compile, both below: 439's guard on a non-web
-// link, and the ratioed image laid out in one grid cell so it keeps the compile's boxes on WebKit
-// (G116). docs/strand-ports/v1790279130697923.md is the record.
+// every box size.
+// Correction 28 (item 7, G116; 1134): the compile lays the ratioed image out in one declared grid
+// cell, `minmax(0,1fr)` by `minmax(0,1fr)` with `minHeight: 0` on the image, as the ratioed galleries
+// are. That is the layout this port carried as a divergence at v1790279130697923, and its
+// declarations were already the compile's in property, value and order, so no declaration changed:
+// the divergence is now the compile's own form and is no longer kept. The ratioed video frame is not
+// in correction 28 (its poster stays in flow at `height: 100%`, as compiled), so G116's video half
+// is not in this compile. The one divergence kept from the compile is 439's guard on a non-web link,
+// below. docs/strand-ports/v1790366257373061.md holds the dispositions.
 import type { CSSProperties } from "react";
 import { Icon } from "./Icon";
 
@@ -23,10 +30,11 @@ export type MediaBlockProps = {
   domain?: string | undefined;
   duration?: string | undefined;
   /** Fixes the media frame to a ratio, in CSS aspect-ratio form ("16/9"). Ruling 1115. image: the
-   *  frame holds the ratio and the image fills it (object-fit: cover; no 420 cap). gallery: replaces
-   *  16/10; tiles fill one row (two images) or two equal rows (three or four). video: replaces 16/9.
-   *  link and audio ignore it. Absent, image, video, link and audio render as before, and a gallery
-   *  declares the same rows inside its 16/10 frame (correction 27, 1118). */
+   *  frame holds the ratio and the image fills it (object-fit: cover; no 420 cap), laid out as one
+   *  declared grid cell (correction 28, G116). gallery: replaces 16/10; tiles fill one row (two
+   *  images) or two equal rows (three or four). video: replaces 16/9. link and audio ignore it.
+   *  Absent, image, video, link and audio render as before, and a gallery declares the same rows
+   *  inside its 16/10 frame (correction 27, 1118). */
   ratio?: string | undefined;
   style?: CSSProperties | undefined;
 };
@@ -52,10 +60,10 @@ export function MediaBlock({
     background: "var(--bg-sunken)",
     ...style,
   };
-  // G116: the compile sizes this image `height: 100%` in flow, and WebKit resolves that against the
-  // border box of a border-box aspect-ratio frame, so the image ran the frame's 2px edge past its
-  // inside. One `minmax(0,1fr)` cell, the ratio gallery's own rows, gives the compile's boxes on both
-  // engines.
+  // Correction 28 (G116): one declared grid cell, so the image's height resolves against the grid
+  // area inside the frame's 1px edge. The former in-flow `height: 100%` ran past that edge on WebKit
+  // (run 347) and, by the extraction's item 7, in Chrome by 2.3 to 2.4px. The compile was measured in
+  // Chrome only; G116 closes on a green `matrix (webkit)` arm reading the image inside its frame.
   if (kind === "image" && ratio)
     return (
       <div

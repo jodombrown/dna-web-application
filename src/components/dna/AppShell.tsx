@@ -279,8 +279,8 @@ export function AppShell({
                 (wide && rightRail ? " 320px" : ""),
               gridTemplateRows: "auto minmax(0, 1fr)",
               columnGap: 24,
-              // B9-SPEC line 13 as 1123 rules it: at expanded the canvas has no maximum width and a
-              // gutter of 5% of the viewport each side; medium keeps line 12's 32.
+              // B9-SPEC's expanded line as 1123 rules it: at expanded the canvas has no maximum width and a
+              // gutter of 5% of the viewport each side; medium keeps its medium line's 32.
               padding: expanded ? "0 5vw" : "0 32px",
               overflow: "hidden",
             }}
@@ -305,9 +305,9 @@ export function AppShell({
                 gridRow: 2,
                 display: "flex",
                 flexDirection: "column",
-                // B9-SPEC line 13: the canvas's 24 at the foot at expanded. Below it the column
+                // B9-SPEC's expanded line: the canvas's 24 at the foot at expanded. Below it the column
                 // keeps the shell's clearance of the fixed Pulse dock, which is 65 tall at medium,
-                // where line 12's 64 would put the last row's edge beneath it.
+                // where the medium line's 64 would put the last row's edge beneath it.
                 padding: "0 0 " + (expanded ? "24px" : bottomPad),
               }}
             >

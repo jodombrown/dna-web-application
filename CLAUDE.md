@@ -146,6 +146,8 @@ byte-identically, md5 and all, under `20260913220047`. That trades one drift row
 manufactures exactly the divergence ruling 444's arm exists to catch, and the only way back is hand
 editing `supabase_migrations.schema_migrations`, which is what PASS-01 was written about.
 
+A handoff that names a migration's md5 states two values, each labelled: the raw md5 of the file's bytes, and the drift form, the md5 of the text with its trailing whitespace trimmed from the end, which is what `tests/migration-drift.cjs` compares against the project's recorded statements.
+
 Between that paste and the merge, the project records a version the branch has no file for, and the
 drift arm reads `FAIL … recorded on the project, no file in the tree` and exits 1. That is not an
 `EMPTY` row: the arm reaches `EMPTY` only at `if (!row.n)`, a recorded row whose `statements` array is
@@ -206,6 +208,8 @@ When a stacked PR's base merges, the child's base is retargeted by hand and veri
 itself, because a child still pointing at a base that has merged or gone reports a diff and an
 enforcing subject that are not the change under review, and 556's question — what head did this run
 describe — has the same wrong answer.
+
+A PR is merged only after Chat has read its final head and its green enforcing run (ruling 1114); Code marks a PR ready for review only when told to, and never describes a run as proof before that run has finished.
 
 An unpushed commit in a stood-down session is lost (ruling 1086). A session's commits live only in its
 container until they reach the remote, and standing the session down releases the container, so work
@@ -330,6 +334,14 @@ Discovery is `/convene`; `/convene/events/{id}` at expanded is Brief 10's page i
 An item opened from a list carries its origin in router history state (1063, 1065); the pane closes and the Back row returns to that origin, and cards open through real links that preload on hover intent at expanded (1067).
 
 Every Convene card's media measures 16:9 at every width, one image or several, cropped with `object-fit: cover`: Discovery's card and the Feed's Convene card alike (1077).
+
+The presenter line on a Discovery card, the card's menu and a Feed Convene post reads `public.event_presenters`, and no second name lookup is made in TypeScript; author lines stay under 416 (1121).
+
+`member_rail_state` is written only by the member's own rail toggle, never by the pane and never on load, and the `compact` band is never written (1111).
+
+An event's alias and short code are written only through `events.custom_slug` under its triggers, and `/e/{alias}` and `/x/{code}` resolve through `resolve_event_link`; no client ever looks up `event_aliases` (1108, 1109, 1100).
+
+Discovery's canvas at expanded runs to 5vw gutters with no maximum width; every other surface keeps its cap (1123).
 
 ## Convene's guest path and emails (handoff 30-D, rulings 1002, 1026, 1029, 1033, 1035)
 

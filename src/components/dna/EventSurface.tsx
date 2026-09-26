@@ -9,20 +9,22 @@
 // absent (508, 645); the past block not built, so a past event renders the past when line and
 // `This event has happened.` and no attestation block.
 //
-// At every tier this is SPEC's medium layout: one column at --content-max inside the shell's own
-// scroller, and a Back row that names the page the member arrived from (1065, handoff 31-D): the
-// origin record in history state (src/lib/origin.ts), and Discovery when there is none, because the
-// page lives under Discovery's route (1047) and Discovery is Convene's front door (628). Arrived from
-// that origin in this history, the row goes back, so the router restores the column and the lanes;
-// otherwise it navigates to the origin's route and search. At expanded the page is the content of
-// Brief 9's Pane on Discovery (1047, handoff 31-B), where the pane's own `Back to Discovery` replaces
-// the Back row.
+// Below expanded this is SPEC's medium layout at both tiers: one column at --content-max inside the
+// shell's own scroller, and a Back row that names the page the member arrived from (1065, handoff
+// 31-D): the origin record in history state (src/lib/origin.ts), and Discovery when there is none,
+// because the page lives under Discovery's route (1047) and Discovery is Convene's front door (628).
+// Arrived from that origin in this history, the row goes back, so the router restores the column and
+// the lanes; otherwise it navigates to the origin's route and search. At expanded the page is the
+// content of Brief 9's Pane on Discovery (1047, handoff 31-B) and scrolls in the pane's body. The
+// pane's own `Back to Discovery` replaces the Back row, and the column carries no --content-max cap:
+// it is the pane body's width, the cover spans it edge to edge and everything else sits --space-5
+// inside it on both sides (1143).
 //
 // Guardrail 1: no number renders. The going names arrive only at five or more rows, chosen by the
 // projection; nothing here counts anything for display.
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useState, type CSSProperties } from "react";
 import { Avatar } from "@/components/strand/Avatar";
 import { BackRow } from "@/components/strand/BackRow";
 import { Button } from "@/components/strand/Button";
@@ -34,10 +36,9 @@ import { Toast } from "@/components/strand/Toast";
 import type { Member } from "@/lib/auth";
 import {
   downloadIcs,
+  eventShareUrl,
   isFollowing,
   loadEventPage,
-  memberEventPath,
-  publicEventPath,
   setFollow,
   type EventInvitation,
   type EventPage,
@@ -69,6 +70,20 @@ export const EVENT_PAGE_KEY = "event-page";
 
 /** The quiet line a cancelled page ends on: the card's own sentence (src/lib/feed.ts), not a new one. */
 const CANCELLED_SURVIVES = "If you had said you were going, you were told by email.";
+
+/**
+ * 1143: the cover in Discovery's Pane. It runs back out through the frame's --space-5 sides to the
+ * pane body's edges, and it is squared: the pane's rounded corners hold the toolbar row above the
+ * body, so the cover's edges meet only straight ones, the bar's hairline above and the pane's
+ * border at each side. Its own side borders go, so no side reads as a doubled rule; the top and
+ * bottom hairlines stay against the surface.
+ */
+const PANE_COVER: CSSProperties = {
+  marginInline: "calc(-1 * var(--space-5))",
+  borderRadius: 0,
+  borderLeft: "none",
+  borderRight: "none",
+};
 
 type Images = { cover?: string | undefined; avatars: Record<string, string> };
 
@@ -106,7 +121,9 @@ export function EventSurface({
   /**
    * Handoff 31-B item 12: rendered as the content of Discovery's Pane at expanded (688, 1047), where
    * the pane's own close control (`Back to Discovery`, 700) is the way back, so the page's Back row
-   * is omitted. Nothing else about the page changes inside the pane.
+   * is omitted. The pane body is unpadded, so the page also carries its own inset there (1143):
+   * the cover edge to edge, everything else --space-5 in from each side, and no --content-max cap,
+   * since the pane is the bound. Nothing else about the page changes inside the pane.
    */
   inPane?: boolean | undefined;
 }) {
@@ -160,17 +177,17 @@ export function EventSurface({
         flexDirection: "column",
         gap: 20,
         width: "100%",
-        maxWidth: "var(--content-max)",
+        // 1143: in the pane the pane is the bound (520, or 720 with the list hidden), so the cover
+        // can reach its edges; the standalone page keeps --content-max.
+        maxWidth: inPane ? "none" : "var(--content-max)",
         margin: "0 auto",
         boxSizing: "border-box",
-        padding: compact ? "8px 0 130px" : "16px 0 96px",
-        // G78: inside Discovery's Pane the pane's close control sits absolutely at its top right, a
-        // --target-primary button inset by --space-2, with no row of its own (700). The page reserves
-        // that row, so its first block (the invitation notice, else the kicker) starts below the
-        // control instead of under it. The page, not Strand's Pane, carries the fix.
-        ...(inPane
-          ? { paddingTop: "calc(var(--space-2) + var(--target-primary) + var(--space-2))" }
-          : null),
+        // G78: inside Discovery's Pane the close control no longer floats over the page. Correction
+        // 28 gives the pane a top row of its own, the toolbar and the cluster, above the body this
+        // page scrolls in, so the page keeps its own top and bottom and reserves nothing (1134).
+        // The pane body is unpadded, so in the pane the page carries its own sides, --space-5, and
+        // every state inherits them; the cover alone runs back out to the pane's edges (1143).
+        padding: compact ? "8px 0 130px" : inPane ? "16px var(--space-5) 96px" : "16px 0 96px",
       }}
     >
       {!inPane && <BackRow label={back.label} onClick={goBack} />}
@@ -247,7 +264,7 @@ export function EventSurface({
   const where = placeWord(ev.mode, page.place);
   const invited = page.invitations.filter((i) => i.status === "invited");
   const origin = typeof window !== "undefined" ? window.location.origin : "";
-  const shareUrl = origin + (ev.public ? publicEventPath(ev.slug) : memberEventPath(ev.id));
+  const shareUrl = eventShareUrl(origin, ev);
 
   const state = ev.cancelled
     ? "cancelled"
@@ -284,9 +301,17 @@ export function EventSurface({
           </div>
         ))}
 
-      {/* 2. Cover: absent when cancelled. */}
+      {/* 2. Cover: absent when cancelled. In the pane it spans the pane body edge to edge (1143). */}
       {!ev.cancelled && images.data?.cover && (
-        <MediaBlock kind="image" src={images.data.cover} alt="" />
+        <MediaBlock
+          // Keyed on the place, so a page that settles into the pane after its first render mounts
+          // a fresh frame rather than patching MediaBlock's `border` shorthand with side longhands.
+          key={inPane ? "pane" : "page"}
+          kind="image"
+          src={images.data.cover}
+          alt=""
+          style={inPane ? PANE_COVER : undefined}
+        />
       )}
 
       {/* 3. Kicker and title. */}

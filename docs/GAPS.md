@@ -1691,6 +1691,9 @@ deployment, not the branch, not the alias truncation, and not the build. If it r
 first, and only if a second deployment 404s the same way pass `matrix.yml`'s `base_url` the
 deployment URL (`https://<hash>.dna-web-application.pages.dev`) instead of the alias.
 
+It recurred on 25 September on run 361, across two deployments of one build, and cleared on its
+own. G126 records it.
+
 ---
 
 ## G21. WebKit runs only in CI, and design pass 01 proved that costs defects
@@ -3857,6 +3860,24 @@ refused by the type until it does. Both are one line; neither is this PR's to ch
 tablist `flex: 0 1 auto` with the seat at `margin-left: auto`, so the reflow this entry describes would
 also slide the seat. No caller passes `trailing` or `content`.
 
+**Amended 26 September 2026 by handoff 33-A Addendum 2 (1145).** A caller now passes `content`, so
+the reflow this entry predicts is live, and the severity line's "low, because no caller passes it"
+does not hold: by that line's own clause the entry is **medium**. It has been since handoff 32-B
+gave Discovery's compact bar `content` (G104), which is also when 32-A's "No caller passes ...
+`content`" stopped being true; B9-SPEC Revision 5's Lens bar line now makes it `width="content"` at
+every tier, the bar centred in the shell's lens row at medium and expanded. Measured in Chromium at
+820 and 1280, selecting Communities from All makes its seat 1.19 wider and All's 0.55 narrower, so
+the bar grows 0.64 and, being centred, moves both its edges: every seat shifts, Communities' start
+by 0.86, where on `f19af1f` the same selection moved no seat at either width. At 390 it moves
+Communities' start by 0.55 and every seat after it, and the bar's end, by 0.64, the same on
+`f19af1f` as after this change. The size is recorded beside the severity and does not lower it: the
+slide is under 1.2 with these five words, against the up to 79 G48 quotes from the prototype, but
+the mechanism is G48's, selection as a layout input, and it grows with the active label's length.
+The two ways out above are unchanged and still not the caller's: a constant active weight is
+LENS_BAR_SPEC's, and `LensBar.tsx` is a Strand part (844). Its comments at lines 42, 156 and 366
+still say every caller passes `fill` and none passes `content`; that has been false at compact since
+32-B and is now false at every tier, and it is left for the part's next change under 844.
+
 ## G55. Nothing in the harness proves that a file under `public/strand/icons/` serves from the deployment
 
 **Severity: low. No icon is missing today and every surface that draws one renders correctly across
@@ -4503,6 +4524,27 @@ the first block's top against the control's bottom at every expanded width. Desi
 to this fix; if Strand later gives the Pane a reserved close row, the page's padding comes out with
 that port.
 
+Amended 25 September 2026 by handoff 33-A (1134). Correction 28 gives the Pane that row. With a tool
+handler passed, which Discovery always passes, the toolbar and the cluster share a bar above the pane
+body. The page's reserved padding would now be an empty band under the bar, so it comes out with this
+port, as this entry said it would, and the page keeps its own `16px` top. The pane arm still reads
+the first block below the close control.
+
+**Amended 26 September 2026 by handoff 33-A Addendum 2 (1143).** Correction 28's pane body is
+unpadded and the page's frame pads no sides, so at 520 the invitation notice, the title, the body
+and the cover all ran to the pane's border. The addendum reads the pane before #67 as padding its
+body with `--space-6`; the tree at `d23c55f` does not: that Pane's `--space-6` is its own Loading
+line's padding, and Discovery's `data-pane-body` wrapper was unpadded, so the page's sides were
+zero then too, hidden at 1440 and wider only by `--content-max` centring the page in a wider pane.
+`Pane.tsx` stays unchanged (844) and the page carries the inset, only with `inPane`: the frame
+pads `--space-5` on both sides and drops its `--content-max` cap, since the pane (520, or 720 with
+the list hidden) is the bound, so every state, loading, error, not found and cancelled included,
+sits inside it. The cover alone runs back out to the pane body's edges, squared and without side
+borders: the pane's rounded corners hold the toolbar row above the body, so the cover meets only
+straight edges. The top and bottom stay as the previous amendment left them, and the standalone
+page is unchanged. The width arm reads the cover on the body's content box and the kicker, the
+title and the date row `--space-5` inside it, with the list shown and hidden, at all five widths.
+
 ## G79. At expanded the lanes lose their horizontal position when the pane opens and closes
 
 **Severity: low. Opened 23 September 2026 during handoff 31-D item 6, filed under ruling 597. The
@@ -4616,7 +4658,7 @@ border. 29-A's token comparison read `:root` and dark only, which is why nothing
 here: handoff 32-A item 3 moves no token but `--z-menu`. Owed: a ruling on carrying base.css's block
 into strand.css.
 
-## G85. Pane scrolls its list column, and in this shell the list column is not a scroller
+## G85. Pane scrolls its list column, and in this shell the list column is not a scroller — closed (1134)
 
 **Severity: low today, medium once 32-B binds `selectedKey`. Opened 24 September 2026 during handoff
 32-A, filed under ruling 597. The number is assigned by this entry (ruling 638).**
@@ -4634,6 +4676,19 @@ Next, and the list follow is inert as this entry says. So the surface brings the
 in its own lane (`scrollIntoView` with `nearest` on both axes, keyed on the lane and the event), which
 moves the centre column and the lane's row, the two scrollers this shell has. The workaround is the
 page's, and it goes when Pane follows the nearest scrolling ancestor.
+
+**Closed 25 September 2026 by handoff 33-A (1134).** Correction 28's `height` bounds the Pane's grid,
+and the list column becomes a scroller of its own: `overflow-y: auto`, with its overscroll contained.
+Discovery passes `height` with the pane open (G110), so `bringIntoView` now moves the column the
+list is in, and 1083's `selectedKey` follow acts vertically. The feed column no longer scrolls
+under the pane. The surface's `scrollIntoView` with `nearest` stays, for the lane's row, the one
+axis the Pane does not reach.
+
+The width arm reads the list column as a scroller at all five expanded widths: `overflow-y: auto`,
+holding more than it shows. The step arm holds the surface's `scrollIntoView` still, scrolls the list
+column to its end, steps Next twice, and requires the list column scrolled with the open card inside
+its box. So it reads Pane's own follow alone. Both reads fail at `d23c55f`, where the list column is
+not a scroller. The change is `174a55e`'s `height`, which Discovery passes.
 
 ## G86. A Sheet inside the Pane closes the Pane with it on Escape, because the app's modal Sheet never prevents the keydown
 
@@ -4881,7 +4936,7 @@ preview with a status word. The editor that calls it is Brief 8 Revision 4's dra
 without an approved prototype (ruling 62). Until it is, a host cannot change an alias from the app;
 the database's own trigger writes the first one.
 
-## G100. A Discovery card opens through a button, not a link (B9-SPEC line 26)
+## G100. A Discovery card opens through a button, not a link (B9-SPEC line 26) — closed (1134)
 
 **Severity: medium. Opened 24 September 2026 during handoff 32-B item 4, filed under ruling 597 and
 reported under 732 rather than worked around at the page. The number is assigned by this entry
@@ -4898,6 +4953,13 @@ through `onPreload`. It is the part's, not the page's: Chat ruled on 25 Septembe
 discovery face an `href` it renders as the anchor across the whole face, which Discovery then
 passes as the member event path.
 
+**Closed 25 September 2026 by handoff 33-A (1134).** Correction 28 gives the discovery face `href`.
+The title renders as an anchor, and a cover inside it spans the face. The ellipsis, presenter and
+topic stand above the cover. A plain primary click calls `onOpen` and prevents the default; a
+modified or middle click is the browser's. Discovery passes the address `openEvent` navigates to,
+`/convene/events/{id}` with the lens's facets, so a new tab, a copied link and a middle click open
+the page a plain click shows. The plain click still opens the pane at expanded and the route below it.
+
 ## G101. The menu has no second line for Not this, so "Fewer like this in your lanes" is a toast
 
 **Severity: low. Opened 24 September 2026 during handoff 32-B item 5, filed under ruling 597. The
@@ -4909,7 +4971,7 @@ shows Not this alone. Discovery says the sentence as the toast that confirms the
 reading and not a drawing. Owed: a ruling that the toast is the place, or a Menu correction for an
 item's second line.
 
-## G102. Topics cannot render in two columns at 150 and up (B9-SPEC line 20)
+## G102. Topics cannot render in two columns at 150 and up (B9-SPEC line 20) — closed (1134)
 
 **Severity: low. Opened 24 September 2026 during handoff 32-B item 2, filed under ruling 597 and
 reported under 732. The number is assigned by this entry (ruling 638).**
@@ -4918,6 +4980,27 @@ Item 2 and B9-SPEC line 20 ask for the Topics checklist in two columns at 150 an
 one flex column of 44 rows (correction 25 §3), the compile draws one column, and 32-B changes no part,
 so Topics renders in one column at every width, as Chat ruled it stays on 25 September 2026. Owed: a Strand correction for a checklist's columns,
 with the width the second column begins at.
+
+**Closed 25 September 2026 by handoff 33-A (1134).** Correction 28 item 4 lets a checklist axis set
+`columns: 2`. The part lays its rows in a grid whose tracks are never narrower than half of 150 less
+the gap, so the second column begins at a checklist of exactly 150. With `--border-thin` at 1px here,
+that is a 192 rail, where the extraction read 192.4 in a browser whose edge measured 1.2. Discovery
+sets it on Topics. The medium rail's 240 gives a checklist of 198 and the expanded rail's 280 gives
+238, so both show two columns. The compact Sheet shares the body and shows two as well, as the
+compile does.
+
+**Amended 26 September 2026 by handoff 33-A Addendum 2 (1144).** Two columns wrapped the labels in
+the rail: at 1280 and 1440 the 238 checklist's tracks were 115 and four of the nine rows ran to three
+lines (65.3 tall), and at 820 the 198 checklist's were 95 and four ran to four lines (87), so the rows
+read as running into each other. B9-SPEC Revision 5's Filters line makes Topics one column in the
+FacetRail and keeps two only in the compact Filters Sheet. Strand's `columns` stays as built (844):
+Discovery's one axes list carries no `columns` on Topics, and the Sheet's FacetRail takes that list
+with `columns: 2` set on Topics alone, so no axis is listed twice. The facets arm's G102 check is
+changed in place and its count is unchanged: in the rail at 820, 1280 and 1440 it reads one column,
+from the checklist's computed layout and its rows' lefts, and each row's bottom at or above the next
+row's top; in the Sheet at 390 it reads two columns, the checklist 350 wide and its tracks 171.
+On `f19af1f` it fails at the three rail cells, a grid of two tracks with each odd row beside the next.
+The width the second column begins at, above, now governs the Sheet alone.
 
 ## G103. Format is a single segment, so format=online,hybrid shows as Online
 
@@ -4945,6 +5028,14 @@ header slot: `AppHeader` renders the registered bar `compact`, which forces icon
 member scrolls past 72 the words go. And B9-SPEC line 13 centres the expanded lens row "with the
 scope line", where LensBar draws its scope line from the start of the track. Both are the parts'.
 Owed: a Strand correction for AppHeader's slot to carry labels, and for LensBar's scope alignment.
+
+**Amended 26 September 2026 by handoff 33-A Addendum 2 (1145).** At medium and expanded the bar is
+now `width="content"` and centred in the shell's lens row, `[data-layout-top]`, by its caller alone:
+Discovery gives LensBar's root `width: min-content`, which is the track's own width because no seat
+wraps, and inline margins of `auto`. The scope line is the root's own, so it now starts 4 inside the
+centred track's start edge rather than the row's, and wraps to the track's width rather than widening
+the root past it. Its alignment within the track is still the part's, as above. The compact bar and
+the header slot are unchanged.
 
 ## G105. Place's kind word is matched as the member types
 
@@ -5018,7 +5109,7 @@ every Home rung through the Sheet.
 Owed: the contained Sheet takes `--z-sheet` itself (603), so a caller cannot reintroduce this by
 placing positioned content after it. Correction brief material with G30.
 
-## G110. Pane cannot take B9-SPEC's pane: the tracks, the height, the toolbar and Hide list (line 14)
+## G110. Pane cannot take B9-SPEC's pane: the tracks, the height, the toolbar and Hide list (line 14) — closed (1134)
 
 **Severity: medium. Opened 25 September 2026 during handoff 32-B, filed under ruling 597. The number
 is assigned by this entry (ruling 638).**
@@ -5043,7 +5134,43 @@ keeping its 520; it has not been 520 on any build, which is this gap, so the arm
 asks of it (the list column holding a full 320 card, the pane inside the new edges) and the width is
 left to the Strand correction. Owed as before: the tracks, the toolbar and the hidden list.
 
-## G111. FacetRail's Clear all sits after the axes, not in the pinned heading row (line 20)
+**Closed 25 September 2026 by handoff 33-A (1134).** Strand correction 28 gives `Pane` `paneWidth`,
+`height`, the toolbar handlers and `listHidden` (`docs/strand-ports/v1790366257373061.md`), and
+Discovery binds them with the pane open at expanded. It passes `paneWidth` 520, the three handlers
+(Hide or show the list, Copy link and Share, the latter two through `useShare` with the open event's
+post, 1097), and `listHidden`, which lasts while the pane is open. The list takes the rest of the width.
+Measured on the local build: pane 520 and list 520, 664, 808, 1096 and 1672 at 1280, 1440, 1600, 1920
+and 2560. At 1280, 1440, 1920 and 2560 these equal the compile's readings; the compile read no 1600. Hide list reads the pane at 720, centred, with the list
+hidden and inert. The page's own `data-pane-body` wrapper and its measured height are gone; the part's
+body is the scroller.
+
+The height is not the spec's literal value. B9-SPEC Revision 2's pane line writes it as the frame less
+the header less 88. In this shell the lens row, with its scope line, is 122.2 tall: 24 above an 82.2 bar
+and 16 below. The 88 allows for 64 of row and foot. At 1280x800 the feed column below the lens row is
+613.8 with a 24 foot, leaving 589.8. The literal 648 is 58.2 more than that, so the column scrolled
+beneath the pane. Discovery passes
+`height` 100% of a wrapper that fills the column. The wrapper's top is the collapsed FacetRail
+strip's sticky inset of 16, so rail, list and pane start level, as the pane line asks. That makes the
+pane the frame less the header, the lens row, that 16 and the canvas's 24 foot: 573.8 at 1280x800.
+The column's `scrollHeight` equals its `clientHeight` at every expanded width, so the list and the
+pane body scroll apart and nothing else does. Reported under 555, and carried as G121.
+
+Because the column cannot scroll while the pane is open, its offset clamps to 0. Ruling 688 keeps
+the lanes where the member left them. So Discovery keeps the card at the list column's top, with its
+distance from that top. When the pane closes, it scrolls the feed column to put the same card at the
+same distance (`355db02`). A raw offset would not carry over: a lens list's cards are
+`min(680px, 100%)`, shorter in the 520 list column than in the full one.
+
+Measured on the local build at 1280 and 1920:
+
+- rail, list and pane all start at 202.2;
+- a card opened from the last lane, at a column offset of 3868 at 1280, closes back to 3868 with the
+  card in view.
+
+The width arm reads the level tops and the feed column still; the step arm reads 688 after Back to
+Discovery.
+
+## G111. FacetRail's Clear all sits after the axes, not in the pinned heading row (line 20) — closed (1134)
 
 **Severity: low. Opened 25 September 2026 during handoff 32-B, filed under ruling 597. The number is
 assigned by this entry (ruling 638).**
@@ -5053,6 +5180,26 @@ collapse control in the G72 slot, and scrolls the axes beneath. The ported `Face
 and the collapse control and renders Clear all in a status line after the last axis, so at medium and
 expanded it scrolls away with the axes. At compact Discovery shows Clear all beside the applied chips
 (line 11). Owed: a Strand correction moving Clear all into the heading row.
+
+**Closed 25 September 2026 by handoff 33-A (1134).** Correction 28 item 5 adds
+`clearPlacement="heading"`, and Discovery passes it on the rail. Clear all sits in the pinned heading
+row, between the title and the collapse control, inside a polite status slot. It shows only while a
+facet is set. There is no foot line in the rail form. The compact Sheet keeps Clear all at its foot
+whatever the prop says, as compiled; G109 is not in this pass.
+
+The heading row pins only inside a rail that scrolls. The rail is its own scroller only when its
+caller bounds its height through `style` (25 §3), and Discovery had never bounded it. The rail grew to
+its content (1238 tall at 1280x800), the shell's left column scrolled instead, and the heading, with
+Clear all in it, scrolled away with the axes. That was the same at `d23c55f`. The outcome cannot hold
+without the bound, so Discovery now passes the rail `maxHeight: calc(100% - var(--space-4))`: its
+column's height less the sticky inset it rests at.
+
+Measured on the local build:
+
+- the rail scrolls itself (690 at 1280x800, 511 at 820x1180, 410 at 1920x1080);
+- the left column does not scroll;
+- Clear all sits 17 below the rail's top, where the extraction read 17.2, and a press there lands on
+  it.
 
 ## G112. The homes row is words, not a button to the profile's homes (line 11)
 
@@ -5065,7 +5212,7 @@ Profile's editor lands, and nothing on `/m/{handle}` shows or edits a home. A bu
 destination would be a dead control, so the row stays the homes in words beside the Filters trigger.
 Owed: the button, once Profile's homes land.
 
-## G113. The ported discovery face and Menu differ from B9-SPEC's card geometry (lines 26 and 27)
+## G113. The ported discovery face and Menu differ from B9-SPEC's card geometry (lines 26 and 27) — closed (1134)
 
 **Severity: low. Opened 25 September 2026 during handoff 32-B, filed under ruling 597. The number is
 assigned by this entry (ruling 638).**
@@ -5080,6 +5227,20 @@ minimum width is 220 where it has 240; Menu portals to `document.body`, which is
 are the parts', and 32-B changes no part. Owed: Strand reconciles the correction 25 face and Menu with
 B9-SPEC, or the spec is read as the compile's.
 
+**Closed 25 September 2026 by handoff 33-A (1134).** Correction 28 item 6 takes the face and the
+Menu to the spec, and the ports carry it:
+
+- The face's gap is 8.
+- The presenter row is 36 on a pointer and 44 on touch. That is 498's floor for a row of two
+  controls, which the extraction reports and 1134 accepts.
+- The reason row is one line in a 28 row behind a 1px `--line` rule, cut with an ellipsis.
+- Menu's minimum width is 240.
+
+No app override of any of these existed to remove. Discovery passes the face no gap, row or
+width beyond the lens list's 680. PostCard, Menu's only renderer, passes it no `style`. No stylesheet
+targets either part. Menu still portals to `document.body`, which is this app's frame root. G89's
+second menu, Profile's Visitor overflow, is not Strand's Menu and is outside this entry.
+
 ## G114. Lanes do not animate in (line 33)
 
 **Severity: low. Opened 25 September 2026 during handoff 32-B, filed under ruling 597. The number is
@@ -5090,7 +5251,7 @@ is not built: 32-B's items name no motion, the app carries none of the compile's
 (G84), and an entrance transform under the arms' geometry reads would need its own settle. Owed: the
 lane entrance, with G84's reduced-motion answer, in a brief that names it.
 
-## G115. The discovery face clamps its title on a `<button>`, which WebKit does not clamp (1087)
+## G115. The discovery face clamps its title on a `<button>`, which WebKit does not clamp (1087) — closed (1134)
 
 **Severity: low. Opened 25 September 2026 during handoff 32-B, filed under ruling 597. The number is
 assigned by this entry (ruling 638).**
@@ -5115,7 +5276,28 @@ surface then passes a string again, its span goes, and the Menu's name has the t
 Chat accepted the Menu's name as tracked on 25 September 2026, after `7d52411`'s run 348; the fix goes
 to Strand in correction 28, after this PR merges.
 
-## G116. MediaBlock's ratioed image runs past its frame's edge on WebKit (1077, 1115)
+**Amended 25 September 2026 by handoff 33-A (1134).** Correction 28 puts the two-line clamp on a
+`span` (`data-title-clamp`) inside the face's link or button, so no engine clamps a button. The h3
+still holds 55. Discovery's own span and its four declarations are gone, and it passes the title as a
+string again. With `href`, the ellipsis is named "More: {title}" and the Menu keeps "More: {title}".
+Read on WebKit in run 358 (`matrix (webkit)` job `108255195171`, head `d417dbf`: 6828 of 6828).
+At every Discovery cell, the long title's clamp holds two lines at 55 and is the part's span inside
+the face's link, and the ellipsis reads "More: {title}". That reading is evidence for `d417dbf` only
+(894). `355db02`, `8186a74` and `5080ce8` change Discovery's scroll and ring code after it, so this
+entry stays open until the enforcing run for the final head reads the clamp on both engines (556).
+
+**Closed 26 September 2026 on run 367 (handoff 33-A Addendum 1 item 4, 1134).**
+
+- Run 367 is `pages.yml` id `36216830840`, on head `af43dfd`, the final head.
+- It passed on both engines: `matrix (webkit)` job `108334523577` read 6834 of 6834, and
+  `matrix (chromium)` job `108334523523` read 6834 of 6834. Each had none behind a web-process
+  crash (G5) and none unclassified.
+- At all 22 Discovery cells on each engine, it read the long title's clamp holding two lines at 55,
+  as the part's span inside the face's link, and the ellipsis reading "More: {title}".
+- The run on this closure's own commit, which changes only this register, is the enforcing run
+  (556), in the order Chat approved.
+
+## G116. MediaBlock's ratioed image runs past its frame's edge on WebKit (1077, 1115) — closed (1134)
 
 **Severity: low. Opened 25 September 2026 during handoff 32-B, filed under ruling 597. The number is
 assigned by this entry (ruling 638).**
@@ -5140,6 +5322,50 @@ into the compile, the video frame with it, so the next re-sync does not reopen t
 Chat accepted the divergence as tracked on 25 September 2026, after `7d52411`'s run 348; the change goes
 to Strand in correction 28, after this PR merges.
 
+Amended 25 September 2026 by handoff 33-A (1134). Correction 28 item 7 takes the one-cell frame into
+the compile. The frame declares `display: grid` and `minmax(0,1fr)` by `minmax(0,1fr)`, and the image
+takes `minHeight: 0`. Those are the port's declarations in property, value and order, so
+`MediaBlock.tsx` changes only its comments. The divergence becomes the compile's own form, and
+`docs/strand-ports/v1790366257373061.md` records it as present. Handoff 33-A said the app's grid-cell
+layout "goes"; in the tree there was nothing to take away, because the compile adopted it (555).
+
+Two things this entry said are now contradicted or unmet:
+
+- **Chromium.** The extraction's item 7 read the former in-flow form overrunning its bottom edge in
+  Chrome too, by 2.3 to 2.4px. That contradicts this entry's "on Chromium the boxes are the
+  compile's own", which rested on run 347's arm passing on Chromium. The arm's tolerance or the
+  readout browser's 1.2 edge may account for the difference; it is not read here.
+- **Video.** The compile took the image and not the video frame. The ratioed video's poster is still
+  in flow at `height: 100%`, so the video half this entry owed is not in `v1790366257373061` and is
+  carried as G119.
+
+The compile was measured in Chrome only. Under 1134 this entry closes only on a green
+`matrix (webkit)` arm reading the image inside its frame at 390, 820 and 1280.
+
+**Amended 25 September 2026 by handoff 33-A (1134), with what run 358 read.**
+
+- The run: `pages.yml` id `36190688999`, head `d417dbf`, `matrix (webkit)` job `108255195171`.
+- It read 6828 of 6828 checks, with none behind a web-process crash (G5) and none unclassified.
+- That includes Addendum 3 item E's mount-media arms at `webkit-390x844-light`,
+  `webkit-820x1180-dark` and `webkit-1280x800-light`. Each reads the Feed Convene card's one image
+  at 16:9, filling its frame inside the edge.
+- That reading is evidence for `d417dbf` only (894). `355db02`, `8186a74` and `5080ce8` change
+  Discovery's scroll and ring code after it. `MediaBlock.tsx` has not changed since `fb4ce12`, whose
+  change to it was comments only, but the run that closes this entry is the enforcing run for the
+  final head (556). Until
+  its `matrix (webkit)` job reads the same three cells, this entry stays open.
+- The video half is G119.
+
+**Closed 26 September 2026 on run 367 (handoff 33-A Addendum 1 item 4, 1134).**
+
+- Run 367's `matrix (webkit)` job `108334523577`, on head `af43dfd`, read 6834 of 6834, with none
+  behind a web-process crash (G5) and none unclassified.
+- It ran Addendum 3 item E's mount-media arm at `webkit-390x844-light`, `webkit-820x1180-dark` and
+  `webkit-1280x800-light`. At each, it read the Feed Convene card's one image at 16:9, filling its
+  frame inside the edge.
+- The video half stays open as G119.
+- The run on this closure's own commit is the enforcing run (556).
+
 ## G117. Run 350 passed the live Place check's "Near reads the place" with nothing to read — closed (1095)
 
 **Severity: low. Opened and closed 25 September 2026, after handoff 32-B merged as #64 on Chat's 1114
@@ -5161,7 +5387,7 @@ city sorts first, and requires the Near lane present with every item's reason na
 raised above the fixture's two events now fails the check by name instead of passing it. The proof is
 the `live` job on this change's head.
 
-## G118. B9-SPEC line 23 still names See all on This weekend and Join from anywhere
+## G118. B9-SPEC line 23 still names See all on This weekend and Join from anywhere — closed (1132)
 
 **Severity: low. Opened 25 September 2026 during #66 (handoff 32-B, Addendum 4 item 2), filed under
 ruling 597. The number is assigned by this entry (ruling 638).**
@@ -5172,3 +5398,540 @@ Join from anywhere, as this change builds it, so Happening soon is the one lane 
 facet and the four relationship lanes switch lens. Line 13 is amended in this change because Addendum
 5 asks for it; neither addendum names line 23, so it stays as Chat wrote it. Owed: line 23 restated
 to 1112 and 1122.
+
+**Closed 25 September 2026 by handoff 33-A item 4.** B9-SPEC Revision 2 (1132) replaces
+`docs/convene/B9-SPEC.md` byte for byte. Its Lanes section says See all once: "Happening soon applies
+`when`; relationship lanes switch lens; This weekend (1112), Join from anywhere (1122), Browse and
+Filling up carry none." Nothing in the page changes: the surface already built 1112 and 1122.
+
+## G119. MediaBlock's ratioed video frame keeps the in-flow height that ran past the edge on WebKit
+
+**Severity: low. Opened 25 September 2026 during handoff 33-A item 2, filed under ruling 597. The
+number is assigned by this entry (ruling 638).**
+
+G116 owed the one-cell frame for the ratioed image and the ratioed video. Strand correction 28
+(`v1790366257373061`) took the image and not the video. The video frame is still
+`aspect-ratio: {ratio || 16/9}` on a border-box frame with its poster in flow at `height: 100%`: the
+mechanism WebKit resolved against the border box for the image in run 347. Nothing renders video
+(ruling 55), and no arm reads it, so nothing on a page shows it today. Owed: the video frame's poster
+in the same declared grid cell, in a Strand correction, before any surface renders video.
+
+## G120. Discovery's Copy link and Share hand over the post's address, where the face links to the event's — closed (1140)
+
+**Severity: low. Opened 25 September 2026 during handoff 33-A (G100, G110), filed under ruling 597.
+The number is assigned by this entry (ruling 638).**
+
+Discovery shares an event through two different addresses:
+
+- The card menu's Share and Copy link (1097) and the pane's Copy link and Share go through the
+  Feed's `useShare`, which hands over `/posts/{post id}`, the Feed's expanded card. Handoff 33-A
+  names that path for the pane.
+- The face's link (G100) is `/convene/events/{id}`, the member address B10-SPEC names and the tree
+  routes. B9-SPEC Revision 2's Routes line names it by slug instead; that is G125. The event page's own Share hands over that address, or `/e/{slug}` when the event is
+  public.
+
+So a member who copies a card's link from the browser gets one address, and one who presses Copy
+link gets another. Both open the event, but only one is the page. The open pane shows both at once:
+its toolbar's Share hands over `/posts/{post id}`, and the event page's own Share row, inside the
+same pane, hands over the event's address. Owed: a ruling on the address Discovery's share path
+hands over, and one share path for the card, the pane and the page.
+
+**Closed 26 September 2026 by handoff 33-A Addendum 1 item 2.** Ruling 1140 has Copy link and Share
+on a Convene event, in Discovery's pane toolbar and the card menu, hand over the event's public
+address under `/e/`, never `/posts/{post id}`. B9-SPEC states it in the toolbar and the menu, since
+Revision 3. The event page's rule is now one function, `eventShareUrl` in `src/lib/event-page.ts`,
+and the event page's Share row and Discovery's four controls all call it:
+
+- The event facts come from the event page's own read, `event_page` under EventSurface's query
+  key, never a second read and never a TypeScript derivation of `public` (1028).
+- An event with a public page hands over `/e/{slug}` on this origin. One with none hands over the
+  member address, `/convene/events/{id}`, which is what the event page's own Share hands over in
+  the same case. A read that fails or answers nothing hands over the member address too, the one
+  address that always opens the event, and one that has already failed hands it over inside the
+  press.
+- Both menu items and both toolbar controls are present for every event.
+- A read already cached is used inside the press, because a share sheet and, on WebKit, a clipboard
+  write need its activation. The pane's page is cached once the pane has loaded it. A card's is
+  cached by hover intent at expanded (1067), or once the read its ellipsis's press starts has
+  answered. A press made before then waits for that read's first answer, never for the retries
+  EventSurface's query makes, and the harness stubs both APIs, so no arm reads activation. That is
+  G131.
+
+This closes the first of the two things the entry owed; the second, one share path for the card,
+the pane and the page, stays open as G130. Discovery's four controls and the Feed's `share(id)` go
+through `useShare`, with one toast and one fallback, and the Feed still hands over the post's
+address. The event page's own sheet keeps its own copy and share: its share hands over
+`{ title, url }` and shows nothing when the share is refused, where `useShare` hands over `{ url }`
+and shows the address as its toast. So in the open pane the toolbar's Share and Share via in the
+page's own sheet hand over one address in two payloads.
+
+The width arm reads the pane's Copy link and Share at all five expanded widths, and the link arm
+reads the card menu's at 390x844 and 1280x800, with one seeded event's page not public. Read in
+Chromium, the width arm's check at 1280x800 and the link arm's two at both cells fail on `8d9dfd3`,
+whose four controls hand over `/posts/{post id}`, and on `d23c55f`, whose menu hands over the same
+and whose pane has no toolbar.
+
+## G121. B9-SPEC Revision 2's pane height, frame less header less 88, overruns this shell's feed column — closed (1136)
+
+**Severity: low. Opened 25 September 2026 during handoff 33-A (G110), filed under ruling 597. The
+number is assigned by this entry (ruling 638).**
+
+B9-SPEC Revision 2's pane line gives the open pane a height of the frame less the header less 88.
+Measured on this shell at expanded:
+
+- the header is 64;
+- the lens row is 122.2: 24 above an 82.2 LensBar with its scope line, and 16 below;
+- the feed column keeps a 24 foot.
+
+The literal height (648 at 1280x800) is 58.2 more than the 589.8 the column gives below the lens
+row, inside its 24 foot. The column scrolled beneath the pane, and the pane's foot sat below the
+frame. Discovery gives the pane its column's own height
+(573.8 at 1280x800, less the 16 that starts it level with the rail strip), and nothing but the
+list and the pane body scrolls. G110's closing note has the
+1280x800 reading. The width arm reads the pane's foot on the canvas's foot at all five expanded
+widths. Owed: the spec's line restated to the shell's lens row, or a ruling
+on the lens row's height.
+
+**Closed 26 September 2026 by handoff 33-A Addendum 1 item 1.** Ruling 1136 gives the open pane the
+feed column's own height less the 16 that starts it level with the rail, which is what Discovery
+already does. B9-SPEC Revision 3 (sha256 `4bcc45c781d4fc38671a64b780c3e01785dbbb60fead72b629913b44a5558c7c`)
+replaces the spec byte for byte and states that line. Revision 4 (sha256
+`9949c0bbaf62c93fe25d3e1413155bc588a3bb82595ee579cda88d5fa02e6d96`), Chat's correction the same evening,
+replaces Revision 3 and keeps that line. Read on this branch's build of `8d9dfd3` in
+Chromium at 1280x800, 1440x900 and 1600x1000:
+
+- the pane is 573.8, 673.8 and 773.8 tall, from 202.2, level with the rail strip;
+- its foot is the feed column's content foot, the viewport less the column's 24.
+
+The two comments that cited this entry now cite 1136.
+
+## G122. Two statements outside correction 28's parts still give the expanded rail as 260
+
+**Severity: low. Opened 25 September 2026 during handoff 33-A item 2's comment sweep (763), filed
+under ruling 597. The number is assigned by this entry (ruling 638).**
+
+The sweep for the five changed parts also found two statements that predate correction 28: a code
+comment and a line in this register. Both give the shell's expanded rail width, which is AppShell's
+(1082), not a behaviour correction 28 changes in FacetRail. They are left as they are, because the
+handoff's sweep corrects what a changed part's old behaviour made false:
+
+- `src/lib/rail-store.ts:24` says the open rail is 260 at expanded. `AppShell` draws 280 (1082).
+- G87's item 8 says "1082's 280 is not in this tree", which is no longer so.
+
+Two statements from the same sweep were corrected here, because they cite the spec this handoff
+replaces:
+
+- `tests/discovery.cjs`'s full-density check named the canvas "at most 1600" under the pre-1123
+  line. It now reads the viewport's width with no maximum. At every width that arm runs, that is
+  the value it has always compared.
+- The seed's comment calls 1600 the widest width that arm runs, not the widest canvas.
+
+Owed: the two statements above restated, in a change that touches them.
+
+## G123. Pane's bounded list column clips the selected card's ring at its edges
+
+**Severity: low. Opened 25 September 2026 during handoff 33-A (G110), filed under ruling 597. The
+number is assigned by this entry (ruling 638).**
+
+Correction 28's bounded list column has two properties that meet here:
+
+- it is `overflow-y: auto` and `overflow-x: hidden`;
+- Pane's `selectedKey` follow aligns the open card's top with the column's top (1083).
+
+The selected ring is a 4px `box-shadow` outside the face (`0 0 0 2px --bg, 0 0 0 4px --ink`). After
+a step, the ring's top was clipped by the column's edge. The page now gives each card's wrapper a
+4px `scroll-margin-block`. Discovery's own follow runs after Pane's and honours it, so the list
+settles with the whole ring in view; the step arm reads the ring. The sides are still the
+compile's. In a lens list at 1280 and 1440, the 680 card fills the 520 or 664 column, and the
+ring's sides are clipped. A lane's first card may lose its left band to the column's
+`overflow-x: hidden`. Owed: a Strand correction that leaves the ring's inset inside the bounded list
+column.
+
+**Amended 26 September 2026 (handoff 33-A Addendum 1, the review of item 3).** The ring's bottom is
+cut at a list's end as well. In a lens list at 1280x800 (`/convene/network`), Next onto the last
+card leaves the list at its end: scrollTop 538, with a scrollHeight of 1112 in a 573.8 column. The
+card runs from 64.4 to 574.3, and the column has no foot padding. So the face is cut by 0.5 and the
+ring's bottom band is outside the column. It reads the same on `8d9dfd3`, with Pane's key held
+(G128), and after a step taken with the list hidden. The same Strand correction owes the bottom.
+
+## G124. Arrow keys inside the Pane's toolbar step to another event
+
+**Severity: low. Opened 25 September 2026 during handoff 33-A's review (G110), filed under ruling 597. The number is assigned by this entry (ruling 638).**
+
+Correction 28 puts a `role="toolbar"` (Hide or show the list, Copy link, Share) inside the pane's
+section. Since correction 23, that section's `onKeyDown` has mapped ArrowLeft and ArrowRight to
+Previous and Next event whenever the target is not editable (1083). A keyboard member on Hide list
+who presses ArrowRight expecting the next tool gets the next event instead. A toolbar announces
+arrow-key movement between its tools, and here the keys belong to the section. Both behaviours are
+the compile's, and Discovery binds them as ported (844). Owed: a Strand correction that lets the
+toolbar keep its arrow keys, or drops the toolbar role.
+
+## G125. B9-SPEC Revision 2 addresses the member event page by slug; B10-SPEC and the tree address it by id — closed (1137)
+
+**Severity: low. Opened 25 September 2026 during handoff 33-A's review (G100), filed under ruling 597. The number is assigned by this entry (ruling 638).**
+
+The two specs give the member event page different addresses:
+
+- B9-SPEC Revision 2's Routes line gives it as `/convene/events/{slug}`: "Slug: from the title,
+  editable in the hub … old slugs redirect permanently".
+- B10-SPEC, which owns the page, gives the member address as `/convene/events/{id}`, and the public
+  one as `/e/{slug}`.
+
+The tree follows B10-SPEC. The route's param is the event id, and `loadEventPage` refuses anything
+that is not a UUID. So the face's link (G100) and every Discovery navigation address the page by
+id. Nothing here changes it, since the route belongs to Brief 10. Owed: a ruling on which address
+the member page has, and B9-SPEC or B10-SPEC restated to it.
+
+**Closed 26 September 2026 by handoff 33-A Addendum 1 item 1.** Ruling 1137 addresses the member
+event page by id, `/convene/events/{id}`, as the tree and B10-SPEC do; the readable, shareable
+address is the public one under `/e/`. B9-SPEC Revision 3's Routes line says so. Nothing in the tree
+changes.
+
+---
+
+## G126. The branch alias answered 404 on every route for about ninety minutes, across two deployments of one build, and cleared on its own (G20 recurred)
+
+**Severity: medium. It blocks the exit check, not the build. Opened 26 September 2026 during handoff 33-A (PR #67), filed under ruling 597. The number is assigned by this entry (ruling 638). Left open: G20's next step is a harness change outside handoff 33-A.**
+
+What the runs read, on `claude/new-session-n9rnpi` at `5a09009`, all times UTC:
+
+- **Run 361, attempt 1** (`36196856971`). Deploy `5797cc2d` finished at 22:29:18. Ruling 217's gate
+  read every path 200 from 22:29:31 to 22:29:35. Both matrix jobs then ran with no failure until,
+  between 22:33:22 and 22:33:30, both stopped at once, on different arms: chromium at
+  `820x1180-shell` (arm 529) and webkit at `820x1180-light` (arm 453). From then on every page open
+  timed out at 20 to 30 s. That covered `/sign-in`'s email field and the signed-out profile at
+  `/m/thandiwe-dube` alike, and the page-error checks read "Failed to load resource: the server
+  responded with a status of 404". Both jobs reached the 60-minute limit and were cancelled at
+  23:29.
+- **Run 361, attempt 2**, deploy included. This was the one re-run, and G20's "redeploy first".
+  Deploy `e18f60ee` finished at 23:46:35. The gate polls each path 12 times, 10 s apart. It read
+  404 on every poll of `/sign-in`, `/connect`, `/reset`, `/reset/new`, `/password`, `/welcome` and
+  `/where`, from 23:46:47 to 23:59:43. It then read 200 on the first poll of every later path, from
+  `/relationship` at 00:00:03 through `/.well-known/security.txt`. All three jobs failed at the gate
+  with nothing tested.
+
+Neither the tree nor a swap between builds explains a 404:
+
+- No workflow run deployed to the branch between 22:29:18 and 23:46:35.
+- The builds of runs 359, 360 and 361 differ only in tests, docs and one comment.
+
+Two deployments of one build answered 404 on routes, and the second cleared between two polls with
+nothing done. That places the fault on Cloudflare's side of the alias, not in the build or the tree.
+
+That is inference. This container's proxy denies `pages.dev` and the artifact storage, so three
+things are unread:
+
+- which resource the matrix's 404 named;
+- whether static files served through the window, which was G20's shape;
+- whether the per-deployment host answered 404 along with the alias.
+
+G20's instruction for this case is "only if a second deployment 404s the same way pass
+`matrix.yml`'s `base_url` the deployment URL", and a second deployment did. `pages.yml` sets `BASE`
+to `pages-deployment-alias-url || deployment-url`, so every push-triggered job reads the alias.
+Owed: a ruling on whether the push-triggered jobs read the per-deployment host, which 811 already
+names for each deployment, instead of the alias. That is a harness change, and handoff 33-A does not
+make it.
+
+---
+
+## G127. The rail column's foot at expanded is 48, where B9-SPEC's canvas foot is 24
+
+**Severity: low. Opened 26 September 2026 during handoff 33-A Addendum 1 item 3 (Chat's read of `5a09009`), filed under ruling 597. The number is assigned by this entry (ruling 638).**
+
+B9-SPEC's expanded line gives the canvas "padding 24 at top and foot". AppShell draws that foot as
+each column's own bottom padding:
+
+- the feed column's is 24 at expanded (`src/components/dna/AppShell.tsx:311`);
+- the rail column's is 48 (`:328` and `:342`), and no comment or ruling gives a reason for it.
+
+The rail's foot was read against the pane's foot on this branch's build of `8d9dfd3`. The reads
+were in Chromium at 1280x800, 1440x900 and 1600x1000, and two independent re-readings upheld them.
+
+- **Pane open, the list shown or hidden.** The rail is its collapsed strip, which is content-sized
+  at 411 (`max-height: none`) and runs from 202.2 to 613.2 at all three heights. The pane's foot is
+  the feed column's content foot: 776, 876 and 976, the viewport less 24. So the rail's foot is
+  162.8, 262.8 and 362.8 above the pane's. The rail column's own content foot is 752, 852 and 952,
+  the viewport less 48, which is 24 above the pane's.
+- **Pane closed, the rail open.** The rail sits at its bound, `max-height: calc(100% - 16px)`:
+  549.8, 649.8 and 749.8 tall, with its content overflowing. Its foot is the rail column's content
+  foot, 24 above the lanes' foot.
+- Rail, list and pane start level at 202.2 in every state.
+
+Wherever the rail reaches its bound, its foot sits 24 above the feed column's. With the pane open,
+the rail is the strip and ends where its content does, so the 48 does not show. Owed: a ruling on
+whether the rail column takes the canvas's 24 at expanded, or the spec names the rail's 48.
+
+---
+
+## G128. Pane's `selectedKey` follow runs while the list is hidden, and writes the hidden list's scroll
+
+**Severity: low. Opened 26 September 2026 during handoff 33-A Addendum 1 item 3 (Chat's read of `5a09009`), filed under ruling 597. The number is assigned by this entry (ruling 638).**
+
+Correction 28 says the hidden list keeps its scroll (the extraction, line 17: "The list slot stays
+the same element, hidden and inert, and keeps its scroll"). The bundle's follow
+(`docs/strand/v1790366257373061/_ds_bundle.js:3154-3157`, ported at
+`src/components/strand/Pane.tsx:246-250`) runs on every new `selectedKey` with no `listHidden`
+check. `bringIntoView` then sets `scrollTop += box.top - c.top`, and the hidden list is still laid
+out, at no width, on its 0px track. So a step taken while the list is hidden writes its scroll
+against that layout.
+
+Read in Chromium on this branch's build of `8d9dfd3`, and upheld by two independent re-readings:
+
+- At 1280x800, Hide list moves the list from 1936 to 2107. That is scroll anchoring on the 0px
+  track, and Show list reverses it.
+- A Next while hidden then writes 2107 to 150. A setter trap on the list's `scrollTop` caught
+  `bringIntoView`, called from the follow effect, once per step and nothing else. 1440 and 1600
+  read the same.
+- Discovery's own refollow on Show list covers steps that end on another card. It does not cover
+  steps that return to the card the list was hidden on (Next, then Previous). Show list then left
+  the list at 150, with the open card 61 above the column's top, out of view and without its ring.
+
+Discovery now holds the key it passes Pane at the open event the list was hidden on, until the list
+is shown (`hiddenKey` in `DiscoverySurface.tsx`). A step while hidden therefore writes nothing, and
+Show list follows only when the open event changed. The step arm reads the hidden list's scroll
+across a Next: on `8d9dfd3` it fails (4266 to 1185 at 1280, 4066 to 1185 at 1600), and with the
+held key it holds. One outcome differs from `8d9dfd3`: hide on a card, step away, step back to it
+and show, and the list is where it was hidden. That is "scroll kept"; if the member had scrolled the
+open card out of view before hiding, it stays out of view.
+
+The part is unchanged (844). A caller that passes the open item as `selectedKey` together with
+`listHidden`, the compile's own usage, still writes the hidden list's scroll. Owed: a Strand
+correction that guards the follow on `listHidden`, after which Discovery's held key goes.
+
+---
+
+## G129. Back then Forward to an event reached by a step reopens the pane with its list scrolled away from the open card
+
+**Severity: low. Opened 26 September 2026 during the review of handoff 33-A Addendum 1 item 3, filed under ruling 597. The number is assigned by this entry (ruling 638).**
+
+This was read in Chromium at 1280x800. It reads identically on this branch's build of `8d9dfd3` and
+on the build that holds Pane's key (G128), with the list shown throughout:
+
+- With the list arranged at 1936, Next follows to 85, and the open card sits at 4.0 with its ring.
+- Browser Back leaves the pane, and browser Forward reopens it with a new list element. Pane's mount
+  follow writes 0 to 89, and Discovery's refollow writes 89 to 85.
+- A later write then sets 1936, the offset from before the step. The open card ends at -1847, out of
+  view.
+
+The last write came from the router's bundle (`Match-*.js`, through a `Set.forEach`).
+`scrollToTopSelectors` in `src/router.tsx:26-30` names the feed, left and right scrollers, not
+`[data-pane-list]`. So this reads as the router's element scroll restoration copying a remembered
+offset onto the list column. That mechanism is inferred from the call stack and was not read in the
+router's source (555). It is the class of copy-forward CLAUDE.md records under W58 and ruling 552.
+Owed: the mechanism read in the router, and the list column's offset settled after the router's
+restoration or excluded from it.
+
+---
+
+## G130. The event page's Share sheet keeps its own share and copy, apart from Discovery's `useShare`
+
+**Severity: low. Opened 26 September 2026 during the review of handoff 33-A Addendum 1 item 2 (G120), filed under ruling 597. The number is assigned by this entry (ruling 638).**
+
+G120 owed two things: a ruling on the address Discovery's share path hands over, and one share path
+for the card, the pane and the page. Ruling 1140 settled the address, and `eventShareUrl` builds it
+for all three. The share path is still two:
+
+- Discovery's card menu and pane toolbar go through the Feed's `useShare`
+  (`src/components/dna/FeedSurface.tsx:38`). Its share calls `navigator.share({ url })`, or copies
+  where the browser has no share. A share that throws, a dismissed sheet included, shows the address
+  as its toast.
+- The event page's own sheet (`src/components/dna/EventShareSheet.tsx:61-75`) copies with the same
+  toast. Its Share via calls `navigator.share({ title, url })`, is offered only where the browser
+  has a share, and shows nothing when the share throws.
+
+So at expanded, with the pane open, the toolbar's Share and Share via in the sheet that the page's
+Share row opens, in the same pane, hand over one address, with and without the event's title, and a
+dismissed share toasts in one and not the other. Neither is ruled: 1140 names the address, and
+neither B9-SPEC nor B10-SPEC section 4 names the payload or what a refused share shows. Owed: a
+ruling on one share path for the card, the pane and the page, with its payload and what a refused
+share shows.
+
+---
+
+## G131. A card menu's Share or Copy link selected before the event page's read answers hands over after an await
+
+**Severity: low. Opened 26 September 2026 during the review of handoff 33-A Addendum 1 item 2 (G120), filed under ruling 597. The number is assigned by this entry (ruling 638).**
+
+Under 1140 the card menu hands over the address the event page builds from its own read,
+`event_page`, and Discovery's items carry no slug and no public flag. So `handOver`
+(`src/components/dna/DiscoverySurface.tsx:419`) uses the page from the query cache inside the press
+when it is there. A read that has already failed, or is paused offline, hands over the member
+address inside the press. Otherwise the press waits for the read's first answer, starting the read
+if none is running. The pane's page is cached once the pane has loaded it; its toolbar is drawn as
+it opens, so a press on it before that waits too. A card's is cached by hover intent at expanded
+(1067), or by the read that the press on its ellipsis starts (`warmMenu`), once that read answers. A
+select made inside that round trip takes the awaited path.
+
+A scratch probe, not an arm, read this on this change's build in Chromium, against the harness's
+`event_page` mock, which answers in 120 ms. A hand-over counted as in the press when it ran before a
+`setTimeout(0)` the press set, and `window.event` agreed in every case:
+
+- At 390x844, a click select made 0 ms after the menu appeared was awaited for Share and Copy link
+  on both events read, and three of four were at 50 ms. From 100 ms on, every one ran in the press.
+  A tap select at 0 ms was awaited once in four.
+- At 1280x800, hover intent had not always answered by the press: at 0 and 50 ms, seven of eight
+  were awaited, and from 100 ms on every one ran in the press.
+- A keyboard select, Enter on the ellipsis and then Enter on the item, was awaited at both widths.
+  The read starts at the click that Enter makes.
+- The pane's Copy link and Share ran in the press at 1280x800.
+
+Every hand-over was the right address. The link arm's `menuSelect` selects as soon as the menu opens,
+so its presses can take either path; it reads the address, which both paths share. Chromium kept
+the press's activation across these awaits: `navigator.userActivation.isActive` read true at every
+awaited hand-over, at 390x844 and 1280x800.
+
+The review of this change read the pane with `event_page` failing, in Chromium at 1280x800. As
+first written, `handOver` awaited the read through `fetchQuery`, which joins a read already running
+together with its retries: EventSurface's query retries a failed read three times on the default
+client, 1, 2 and 4 seconds apart. So Share and Copy link, pressed as the toolbar was drawn, handed
+over the member address 7355 and 7357 ms after the press, after four reads. Chromium no longer read
+the press's activation, and a share stub that refuses without it was refused, so `useShare` showed
+the address as its toast. `handOver` now waits for the running read's first answer through the
+query cache, and hands over at the first failure. Re-read on the rebuilt build:
+
+- The review's own sequence handed over the member address inside the press, for Share and for
+  Copy link, after one read. The first attempt had already failed when the toolbar was pressed.
+- A second scratch probe had `event_page` answer 1500 ms after each request, failing or not, and
+  pressed while the first attempt was still running. In the pane at 1280x800, and on the card menu
+  at 390x844 selected as soon as the menu opened, every hand-over came 4 or 5 ms after that first
+  attempt answered. It was the member address when the attempt failed and `/e/{slug}` when it
+  answered, with activation still read at 1.1 to 1.4 seconds after the press.
+
+A wait of one attempt still outlives the press on a slow network. On WebKit a share sheet and a
+clipboard write need the press's gesture, and whether the gesture survives a network await is
+unread here: WebKit is not installed (G21), and the harness stubs both APIs, so no arm reads
+activation. Where the call is refused, `useShare` shows the address as its toast. Owed: a hand-over
+that keeps the press's activation when the read has not answered, read on WebKit. For Copy link, a
+`navigator.clipboard.write` of a `ClipboardItem` whose text is a promise is the usual form for a
+write whose text is not yet known. That form is unread here. Share has no such form, so its address
+would have to be known at the press.
+
+A wait is dropped once a later press overtakes it: a press of the same control, or a press on
+another event. So a late answer cannot write over a later copy, or open a sheet, after the member has
+moved on, and a Copy link followed by a Share on the same event hands over both. The third review
+found the late overwrite before the merge. The first fix counted every press together, and on the
+deployed preview, where the read had not answered, the link arm's Share dropped its Copy link
+(`copied: []` at 390x844 and 1280x800 on `757149e`). Holding the read for 1500 ms reproduced that
+locally at 390x844, and the rule above passes the same sequence. A Share on one event held behind its
+read, followed by a Copy link on another, no longer opens the first event's sheet.
+
+## G132. The card menu's Add to calendar waits out the event page read's retries when that read is failing
+
+**Severity: low. Opened 26 September 2026 during the review of handoff 33-A Addendum 1 item 2 (G120), filed under ruling 597. The number is assigned by this entry (ruling 638).**
+
+The card menu's Add to calendar (1097, `src/components/dna/DiscoverySurface.tsx:862`) reads the
+event page through `qc.fetchQuery` under EventSurface's key. `fetchQuery` joins a read of that key
+that is already running, together with the three retries EventSurface's query makes on the default
+client, 1, 2 and 4 seconds apart; its own `retry: false` does not reach a read it joins. So with the
+pane open on an event whose `event_page` is failing, that event's card menu shows "The calendar file
+could not be made." about seven seconds after Add to calendar is pressed.
+
+A scratch probe, not an arm, read it in Chromium at 1280x800 against the harness's mock, with the
+pane open on a going, dated event and its card's menu pressed as soon as it opened. The toast came
+6969 ms after the press on this change's build and 7078 ms after it on `8d9dfd3`, each after three
+more reads of the page. With the read answering, the file downloaded 66 and 69 ms after the press.
+The item predates G120, and this change leaves it as it was. G131 records the same join in Share and
+Copy link, where `handOver` now waits for the running read's first answer only. Owed: the calendar
+item waits for the running read's first answer too, or a ruling that the wait stands.
+
+## G133. A Cloudflare Workers Builds check, connected outside the tree, was red on every commit it built — closed
+
+**Severity: medium while it stood. It failed no job in `pages.yml` and deployed nothing, but it put a
+red check on every commit it built, and a build of it that succeeded would have been a second deploy
+path for this repository that no brief names. Opened 26 September 2026 during handoff 33-A Addendum 2
+(PR #67), filed under ruling 597. The number is assigned by this entry (ruling 638).**
+
+What was read, on `claude/new-session-n9rnpi`, all times UTC:
+
+- A check named `Workers Builds: dna-web-application`, posted by Cloudflare's Workers Builds git
+  integration, failed on `52f9263` (check run `108367334289`, 08:03) and on `9289db8`
+  (`108367804518`, 08:06). Each completed in under a second, with no output text. Its build log was
+  on the Cloudflare dashboard only, which the session could not open, so why it failed is not read.
+- The check-suite notice for `b7baabf`, at 07:03, listed no third-party suite, and the integration's
+  first comment on #67 arrived at 08:02. Nothing under `.github/` or in the build config changed.
+- It built a Worker script named `dna-web-application` (id `f6c4bdf92bab4f0f8a29549e7e9ceffc`), which
+  the account then held. This repository is a Pages project: `wrangler.jsonc` sets
+  `pages_build_output_dir: "dist"`, Nitro's `cloudflare-pages` preset emits `dist/_worker.js`, and
+  `pages.yml` deploys with `wrangler pages deploy dist`. A Workers build of this tree has no Worker
+  entry to deploy, which fits an immediate failure but is inferred, not read.
+- The PR's commits since `b7baabf` touch Discovery's and the event page's source, tests and docs
+  only; `bun run build` passes locally and `pages.yml`'s deploy job was green on `b7baabf` (run 369).
+
+**Closed 26 September 2026, before handoff 33-A's final head.** The founder deleted the Worker
+`dna-web-application`, which had been created at 07:37 UTC (00:37 Pacific) that day with Workers
+Builds connected to this repository. Chat read the account afterwards and found no Workers, and this
+session's own read of the account (the Cloudflare Workers list) returned none, count 0. The Pages
+project `pages.yml` deploys is the one deploy path. The check's absence on the final head is read in
+PR #67's report; a Workers Builds check that still posts there is named there and stops the PR.
+
+## G134. Moving from Discovery to the Feed inside the app leaves the Feed with no header lens below expanded
+
+**Severity: low. Opened 26 September 2026 during the review of handoff 33-A Addendum 2 item 4
+(1145), filed under ruling 597. The number is assigned by this entry (ruling 638).**
+
+Below expanded, once the shell's scroller is past 72 (`SCROLL_SWAP_PX`), the header takes the
+LensBar that the surface on screen registered in `src/lib/header-lens-store.ts`
+(`src/components/dna/AppShell.tsx:189`). The Feed reached from Discovery inside the app shows none.
+Its own bar is hidden once scrolled, as it always is, and the header keeps the composer entry. So
+nothing on screen lets the member change the Feed's lens until they scroll back up.
+
+A scratch probe, not an arm, read this in Chromium at 390x844 and 820x1180. It ran on `9289db8` and
+on `f19af1f`, with identical results on both, so the defect predates item 4:
+
+- **Home control** (`goHome`, `AppShell.tsx:150`), pressed on `/convene` scrolled to 200. On the
+  Feed scrolled to 200, the header reads `data-centre="compose"` and holds no LensBar.
+- **In-app Back.** `/feed`, then `/convene` through the router, then `history.back()`: the same
+  result.
+- **Direct load.** `/feed` loaded directly and scrolled to 200 reads `data-centre="lens"` with the
+  header's LensBar visible.
+- **Another lens.** After either move, choosing another lens on the Feed and scrolling again brings
+  the header's LensBar back.
+
+The store keeps whatever was set last, and both surfaces clear it on unmount (`FeedSurface.tsx:244`,
+`DiscoverySurface.tsx:787`). The shell renders FeedSurface from `useLocation`'s pathname next to the
+`<Outlet />` (`src/routes/_shell.tsx:37`, `:116` and `:117`). The probe counted React commits
+through a devtools-hook stub. On every move, the Feed's lens anchor entered the DOM three or four
+commits before Discovery's root left it, 11 to 54 ms earlier. So the Feed registers
+(`FeedSurface.tsx:237`) and then Discovery clears the slot. The Feed's effect depends on
+`[view.kind, lens, navigate]`, and none of these change after the move, so it never registers again.
+A change of lens re-runs it, which is why choosing another lens restores the header's bar. Why the
+router moves the pathname a few commits before it swaps the outlet is not traced.
+
+At expanded the header never takes a lens, so nothing is missing there. The lens-identity arm cannot
+see this defect: every read it makes starts from a page load, and the defect is identical on both
+builds.
+
+Owed: the Feed keeps its header lens after any in-app move from Discovery, and an arm reads the
+header after that move below expanded.
+
+## G135. A local `wrangler pages dev` dies under the suites' load, and a port another process holds answers in its place
+
+**Severity: low. It touches no deployment and no CI job: CI reads the deployed Pages build and never
+runs `wrangler pages dev`. It costs local proof, which CLAUDE.md names as the only local command that
+proves anything about the worker. Opened 26 September 2026 during handoff 33-A Addendum 2 (PR #67),
+filed under ruling 597. The number is assigned by this entry (ruling 638).**
+
+What was read, on this session's container, with `wrangler` 4.129.0 serving `dist` copies on
+`127.0.0.1` ports while Playwright drove them:
+
+- Servers died on their own during or between suite runs, at intervals of roughly fifteen to forty
+  minutes. The logs end with workerd's
+  `kj/async-io-unix.c++:186: disconnected: ::write(...): Broken pipe` and "wrangler command errored",
+  or with an empty `✘ [ERROR]`, or, once, with esbuild's service deadlocking ("all goroutines are
+  asleep"). No cause beyond those lines was traced.
+- A dead server's port can be taken by another process started for another purpose, and `curl`'s
+  200 from `/convene` then describes that process's build. Here a reference server of `f19af1f`,
+  started by a parallel agent on the port a head build had failed to bind, answered until it died
+  at 08:11 UTC. Every suite before then read `f19af1f`'s geometry and failed the head's new checks,
+  and the head's server, restarted on the freed port, served every suite after it. The same collision happened once earlier
+  in the session, on another port.
+- The harness never passed on either: every check it could not read failed, and ruling 292's count
+  check named each arm that emitted fewer checks than it declares.
+
+What held the local proof for PR #67: a probe reads which build a port serves, by reading an element
+that differs between builds (here `data-lensbar-width` on Discovery's lens bar), before and after
+every suite; only runs bracketed by two such reads were counted.
+
+Owed: nothing in the product. A local runner that checks the served build before it counts a run,
+or a pinned `wrangler` that holds under load, would stop the next session from reading a red that is
+not the change's.

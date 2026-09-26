@@ -1,8 +1,10 @@
 // Brief 9, Convene Pass 2: the Discovery Dashboard, rebuilt to the ruled set (handoff 32-B items 1 to
 // 7 with Addenda 1 to 3; rulings 581, 632, 650, 688, 1044, 1063 to 1068, 1076 to 1079, 1082, 1083,
-// 1087, 1092 to 1097, 1099, 1105 to 1107, 1110 to 1112), on the parts handoff 32-A ported and changes
-// none of: PostCard's discovery face, Menu, FacetRail's displays and ladders, Input's combobox and
-// Pane's stepping.
+// 1087, 1092 to 1097, 1099, 1105 to 1107, 1110 to 1112), on the parts handoff 32-A ported: PostCard's
+// discovery face, Menu, FacetRail's displays and ladders, Input's combobox and Pane's stepping. Handoff
+// 33-A binds what Strand correction 28 added to them (1134): the face's link (G100) and its own title
+// clamp (G115), the pane at 520 with its height, toolbar and hidden list (G110, 1127), Topics in two
+// columns in the compact Sheet only (G102, 1144) and Clear all in the rail's heading row (G111).
 //
 // One read projection and one write path per surface (CLAUDE.md): everything this surface shows comes
 // through `loadDiscovery` (the cards are the Feed's own views, hydrated by post id inside it, 660) and
@@ -25,13 +27,15 @@
 // to its strip, the card the pane shows is ringed (1083), and Previous and Next step through the lane
 // the card was opened from, in its visible order, past what the member dismissed (1044).
 //
-// A card opens through its title and its face (the discovery face has no link to open; a gap names
-// it). At expanded with a pointer, the face's preload warms the event route and the page's read
-// under the key EventSurface reads (1067). The read refetches on window focus and never live.
+// A card is a real link to the event's address across its whole face (1067; correction 28, G100): a
+// plain click opens the pane at expanded and the route below it, and a new tab, a copied link or a
+// middle click is the browser's. At expanded with a pointer, the face's preload warms the event route
+// and the page's read under the key EventSurface reads (1067). The read refetches on window focus and
+// never live.
 //
 // No digit renders except in a card's when line: the reason row is words (1096), the where line is a
 // format word and places, and there is no count anywhere.
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient, type QueryState } from "@tanstack/react-query";
 import { useLocation, useNavigate, useRouter } from "@tanstack/react-router";
 import {
   useEffect,
@@ -91,7 +95,7 @@ import {
   type FacetLists,
 } from "@/lib/discovery-search";
 import { setFollowing } from "@/lib/connect";
-import { downloadIcs, loadEventPage } from "@/lib/event-page";
+import { downloadIcs, eventShareUrl, loadEventPage, type EventPage } from "@/lib/event-page";
 import { setSaved } from "@/lib/feed";
 import { setHeaderLens } from "@/lib/header-lens-store";
 import { useBackToOrigin, type Origin } from "@/lib/origin";
@@ -206,16 +210,6 @@ const H2: CSSProperties = {
   color: "var(--ink)",
 };
 
-// G115 (1087): the discovery face clamps its title on the `<button>`, and WebKit lays a button out as
-// its own flex box, so the clamp never applies there and a long title runs to five lines. `title` is
-// a node, so the surface carries the same clamp on its own span until Strand moves it inside.
-const TITLE_CLAMP: CSSProperties = {
-  display: "-webkit-box",
-  WebkitLineClamp: 2,
-  WebkitBoxOrient: "vertical",
-  overflow: "hidden",
-};
-
 type SeeAll = { to: "/convene"; search: DiscoverySearch } | { lens: ConveneLensId };
 
 export function DiscoverySurface({
@@ -243,8 +237,8 @@ export function DiscoverySurface({
   const expanded = tier === "expanded";
   const paneOpen = expanded && !!paneId;
   const openLane = useLocation({ select: (l) => l.state.discoveryLane });
-  const { scrolled } = useShellScroll();
-  const { share, copy, toast: shareToast } = useShare();
+  const { scrolled, scrollerRef } = useShellScroll();
+  const { shareUrl, copyUrl, toast: shareToast } = useShare();
   const [toast, setToast] = useState<string | null>(null);
   const [browseOpen, setBrowseOpen] = useState(false);
   const [dismissed, setDismissed] = useState<ReadonlySet<string>>(new Set());
@@ -382,6 +376,10 @@ export function DiscoverySurface({
       replace,
       state: (prev) => ({ ...prev, origin, discoveryLane: lane }),
     });
+  // G100: the face's address is the location `openEvent` navigates to, facets and all, so the link a
+  // member copies or opens in a new tab is the page a plain click shows (1067).
+  const eventHref = (eventId: string) =>
+    router.buildLocation({ to: "/convene/events/$id", params: { id: eventId }, search }).href;
   // The pane closes to the lens it was opened from, with its facets (1063, 719). An event opened from
   // outside Discovery (the Feed's Event hook) closes to that origin by 1065's rule.
   const toOrigin = useBackToOrigin();
@@ -391,15 +389,78 @@ export function DiscoverySurface({
       : navigate({ to: "/convene/$lens", params: { lens }, search, resetScroll: false }));
   const fromElsewhere = !!toOrigin.arrivedFrom && toOrigin.arrivedFrom.to === "/feed";
   const closePane = fromElsewhere ? toOrigin.go : closeToDiscovery;
+  // The event page's one read, under EventSurface's key.
+  const pageKey = (eventId: string) => [EVENT_PAGE_KEY, member.id, eventId];
+  const warmPage = (eventId: string) =>
+    void qc.prefetchQuery({
+      queryKey: pageKey(eventId),
+      queryFn: () => loadEventPage(eventId),
+      staleTime: 30_000,
+    });
   // 1067: preload at expanded with a pointer warms the event route and the page's one read under
   // EventSurface's key, so the pane opens with data. Never at compact or medium, never on touch.
   const warmEvent = (eventId: string) => {
     void router.preloadRoute({ to: "/convene/events/$id", params: { id: eventId }, search });
-    void qc.prefetchQuery({
-      queryKey: [EVENT_PAGE_KEY, member.id, eventId],
-      queryFn: () => loadEventPage(eventId),
-      staleTime: 30_000,
+    warmPage(eventId);
+  };
+  // 1140, G120: Share and Copy link, in the card's menu and the pane's toolbar, hand over the address
+  // the event page's own Share hands over, built by `eventShareUrl` from that page's read: the public
+  // page under /e/ when event_page says there is one (1028), and the member page, which always opens
+  // the event, when there is none or the read fails or answers nothing. A share sheet and, on WebKit,
+  // a clipboard write need the press's activation, so a read already cached is used inside the press:
+  // the pane's page once the pane has loaded it, and a card's by hover intent at expanded (1067), or
+  // once the read its ellipsis's press starts (`warmMenu`) has answered. A read that has failed, or
+  // is paused offline, hands over the member address inside the press. A press made while the read
+  // runs waits for its first answer only, and the gesture may not survive that wait (G131). A wait
+  // is dropped once a later press overtakes it: one of the same control, or one on another event. So
+  // a late answer never writes over a later copy or opens a sheet the member has moved past, while a
+  // Copy link followed by a Share on the same event hands over both.
+  const handPresses = useRef<{ kind: "copy" | "share"; eventId: string }[]>([]);
+  const handOver = (eventId: string, kind: "copy" | "share") => {
+    const to = kind === "copy" ? copyUrl : shareUrl;
+    const seq = handPresses.current.push({ kind, eventId }) - 1;
+    const overtaken = () =>
+      handPresses.current.slice(seq + 1).some((p) => p.kind === kind || p.eventId !== eventId);
+    const give = (page: EventPage | null) =>
+      void to(eventShareUrl(window.location.origin, page?.event ?? { id: eventId }));
+    // The read's answer so far: its page; null once an attempt has failed or none is running;
+    // undefined while its first attempt runs.
+    const answer = (s: QueryState<EventPage | null> | undefined) =>
+      s?.data !== undefined
+        ? s.data
+        : s?.fetchStatus === "fetching" && !s.fetchFailureCount
+          ? undefined
+          : null;
+    const key = pageKey(eventId);
+    const was = qc.getQueryState<EventPage | null>(key);
+    if (
+      was?.data === undefined &&
+      !was?.fetchFailureCount &&
+      (was?.fetchStatus ?? "idle") === "idle"
+    )
+      warmPage(eventId);
+    const cache = qc.getQueryCache();
+    const query = cache.find<EventPage | null>({ queryKey: key, exact: true });
+    const now = answer(query?.state);
+    if (now !== undefined) return give(now);
+    // Never `fetchQuery` here: it joins a read already running, and EventSurface's query retries a
+    // failed read three times, which held the hand-over about seven seconds past the press (G131).
+    const stop = cache.subscribe(({ query: q, type }) => {
+      if (overtaken()) return stop();
+      if (q !== query) return;
+      const then = type === "removed" ? null : answer(q.state);
+      if (then === undefined) return;
+      stop();
+      give(then);
     });
+  };
+  // The press that opens a card's menu starts the page's read, at every tier, so the menu's Share and
+  // Copy link find it cached once it answers, one event_page round trip after the press (G131). Read
+  // on the card's wrapper from the ellipsis's own `aria-haspopup`, because the part names no callback
+  // for its menu opening (844).
+  const warmMenu = (eventId: string) => (e: { target: EventTarget }) => {
+    if (e.target instanceof Element && e.target.closest('[aria-haspopup="menu"]'))
+      warmPage(eventId);
   };
 
   const dismiss = async (item: DiscoveryItem, lane: DiscoveryLaneId) => {
@@ -440,8 +501,8 @@ export function DiscoverySurface({
       ? "While you are in " + nearCity
       : (laneRows.find((l) => l.value === id)?.name ?? null);
 
-  // Filters (item 2, 1095, 1110; B9-SPEC line 20): Format, Price, When, Topics, Home, Place, in that
-  // order; no count.
+  // Filters (item 2, 1095, 1110; B9-SPEC Revision 2's Filters line): Format, Price, When, Topics,
+  // Home, Place, in that order; no count.
   const ladders: FacetLadder[] = (homes ?? []).flatMap((h) => {
     const w = homeWord(h);
     if (!w) return [];
@@ -487,6 +548,8 @@ export function DiscoverySurface({
       label: "Topics",
       icon: "hash",
       display: "checklist",
+      // 1144: one column in the FacetRail, where two wrapped its labels to three and four lines; the
+      // compact Sheet's two columns (G102) are `sheetAxes` below.
       options: familyRows.map((f) => ({ id: f.value, label: f.label })),
     },
     ...(ladders.length
@@ -509,6 +572,9 @@ export function DiscoverySurface({
       })),
     },
   ];
+  // B9-SPEC Revision 5's Filters line (1144): the compact Sheet's axes are the rail's with Topics in
+  // two columns (G102), derived here so the axes are listed once.
+  const sheetAxes = axes.map((a) => (a.id === "family" ? { ...a, columns: 2 as const } : a));
   const railValue: FacetValue = {};
   for (const k of ["format", "price", "when", "family", "place"] as const)
     if (lists[k].length) railValue[k] = [...lists[k]];
@@ -600,15 +666,23 @@ export function DiscoverySurface({
         scope={lensScope}
         c="convene"
         label="Convene lens"
-        // Item 7 and B9-SPEC's tiers: labels always and icons at every tier. At compact the five
-        // words and glyphs do not fit five equal seats, so there each seat hugs its word and the
-        // bar's root is `max-content` in a row that scrolls sideways (B9-SPEC line 11): nothing is
-        // squeezed and the page does not pan.
-        width={compact ? "content" : "fill"}
+        // Item 7 and B9-SPEC's tiers: labels always and icons at every tier, and each seat sized to
+        // its own word at every tier, never stretched across the row (1145). At compact the bar's
+        // root is `max-content` in a row that scrolls sideways (B9-SPEC's compact line): nothing is
+        // squeezed and the page does not pan. At medium and expanded its row is the shell's lens
+        // row, `[data-layout-top]`, and the root is `min-content`, which is the track's own width
+        // because no seat wraps, capped at the row and centred in it by its inline margins. The
+        // scope line is the root's own and wraps to that width, so it stays under the bar's start
+        // edge and never widens the root past the track to pull the bar off centre.
+        width="content"
         labels="always"
         icons
         collapsed={inContent ? scrolled : undefined}
-        style={compact ? { width: "max-content", maxWidth: "none" } : undefined}
+        style={
+          compact
+            ? { width: "max-content", maxWidth: "none" }
+            : { width: "min-content", marginInline: "auto" }
+        }
       />
     ) : null;
 
@@ -657,6 +731,12 @@ export function DiscoverySurface({
           onChange={onRail}
           onClear={clearFacets}
           label="Filters"
+          // G111 (correction 28): Clear all in the pinned heading row, so it stays in view as the
+          // axes scroll beneath it. The rail is its own scroller only when its height is bounded
+          // (25 §3), so it takes its column's height less the sticky inset it rests at, and the
+          // heading pins inside it rather than scrolling away with the column.
+          clearPlacement="heading"
+          style={{ maxHeight: "calc(100% - var(--space-4))" }}
           headingAction={
             <IconButton
               name="panel-left-close"
@@ -751,17 +831,18 @@ export function DiscoverySurface({
     const topic = familyLabel(family);
     const subscribed = family ? (subscribedNow[family] ?? subscribedFamilies.has(family)) : false;
     return [
-      !!postId && {
+      // 1140: an event always has an address, so both are always present.
+      {
         id: "share",
         label: "Share",
         icon: "share",
-        onSelect: () => void share(postId),
+        onSelect: () => handOver(item.event_id, "share"),
       },
-      !!postId && {
+      {
         id: "copy",
         label: "Copy link",
         icon: "link",
-        onSelect: () => void copy(postId),
+        onSelect: () => handOver(item.event_id, "copy"),
       },
       !!postId && {
         id: "save",
@@ -867,14 +948,25 @@ export function DiscoverySurface({
         key={lane + ":" + item.event_id}
         data-discovery-item={item.event_id}
         data-section={lane}
-        style={{ flex: "none", scrollSnapAlign: "start" }}
+        // The selected ring (1083) is drawn 4 outside the face. With the pane bounded, the list
+        // follows the open card to its column's top; this margin brings the ring into view with it.
+        style={{ flex: "none", scrollSnapAlign: "start", scrollMarginBlock: 4 }}
+        onPointerDownCapture={warmMenu(item.event_id)}
+        onClickCapture={warmMenu(item.event_id)}
       >
         <PostCard
           presentation="discovery"
           c="convene"
-          // B9-SPEC's lens bar: a lens but All is a vertical list of the same card at 680.
+          // Handoff 32-B's lens list: a lens but All is a vertical list of the same card at 680.
+          // B9-SPEC Revision 2's grid at --lane-card-width (1125) is 1131's first handoff.
           style={lensList ? { width: "min(680px, 100%)" } : undefined}
-          title={typeof title === "string" ? <span style={TITLE_CLAMP}>{title}</span> : undefined}
+          // G115 (1087; correction 28): the part clamps the title on a span inside its link, so the
+          // title is the string itself and the ellipsis is named "More: {title}".
+          title={typeof title === "string" ? title : undefined}
+          // G100 (1067; correction 28): the face is a real link to the address the plain click
+          // navigates to, so a new tab, a copied link and a middle click open the event; a plain
+          // primary click is still `onOpen`, the pane at expanded and the route below it.
+          href={eventHref(item.event_id)}
           when={ev?.when || undefined}
           where={ev ? whereFor(ev) : undefined}
           presenter={(shown ? shown.name : post.author_name) || undefined}
@@ -1047,8 +1139,8 @@ export function DiscoverySurface({
     </div>
   );
 
-  // A lens (693, 1105): its one lane as a vertical list of the same card at 680 (B9-SPEC), or the
-  // EmptyState.
+  // A lens (693, 1105): its one lane as a vertical list of the same card at 680 (handoff 32-B;
+  // B9-SPEC Revision 2's grid, 1125, is 1131's first handoff), or the EmptyState.
   const lensLane: DiscoveryLaneId | null = lens === "all" ? null : lens;
   const lensSection = lensLane ? sections.find((s) => s.section === lensLane) : undefined;
   const lensView = lensLane ? (
@@ -1119,40 +1211,117 @@ export function DiscoverySurface({
         }
       : {};
 
-  // Item 4 (B9-SPEC line 14; 1083): the pane body scrolls on its own, apart from the list column,
-  // and holds the column's height less the pane's sticky offset and the column's foot, so the pane's
-  // cluster (Previous, Next, Back to Discovery) at its top right stays in view however far either
-  // scrolls. The height is the column's own, measured, because the lens row above it is content.
-  const paneBody = useRef<HTMLDivElement>(null);
-  const [paneHeight, setPaneHeight] = useState<number | null>(null);
-  useLayoutEffect(() => {
-    if (!paneOpen) return;
-    const body = paneBody.current;
-    const section = body?.parentElement;
-    const column = body?.closest<HTMLElement>('[data-scroller="feed"]');
-    if (!body || !section || !column) return;
-    const measure = () => {
-      const foot = parseFloat(getComputedStyle(column).paddingBottom) || 0;
-      const sec = getComputedStyle(section);
-      const stuck = parseFloat(sec.top) || 0;
-      const edges =
-        (parseFloat(sec.borderTopWidth) || 0) + (parseFloat(sec.borderBottomWidth) || 0);
-      setPaneHeight(Math.max(0, Math.floor(column.clientHeight - foot - stuck - edges)));
-    };
-    measure();
-    const ro = new ResizeObserver(measure);
-    ro.observe(column);
-    return () => ro.disconnect();
-  }, [paneOpen]);
-  // Previous and Next replace the event under the same pane, so the body starts each one at its top.
-  useLayoutEffect(() => {
-    paneBody.current?.scrollTo({ top: 0 });
-  }, [paneId]);
-
-  // The list follows the open card (1083): Pane's `selectedKey` scrolls a list column this shell does
-  // not scroll (G85), and a lane scrolls sideways, so the card is brought into its lane's view here.
+  // G110 (B9-SPEC's pane line; 1127, 1136, correction 28): the pane at 520 with the list taking
+  // the rest, bounded to the feed column's own height less the 16 that starts it level with the
+  // rail strip (1136), so the list column and the pane body each scroll on their own and the column
+  // itself never does. That height is the frame less the header, the lens row, the 16 and the
+  // canvas's foot (see the wrapper below), and it holds at every expanded width.
+  //
+  // The toolbar (Hide or show the list, Copy link, Share) and the cluster (Previous event, Next
+  // event, Back to Discovery) share the pane's top row. Hide list keeps the list the same element,
+  // hidden and inert with its scroll kept, and centres the pane at 720; it lasts while the pane is
+  // open and resets when it closes. Copy link and Share are the card menu's own (`handOver`, 1140,
+  // G120): the open event's address as its page builds it, from the read the pane already made, so
+  // they are present for every event the pane opens.
+  const [listHidden, setListHidden] = useState(false);
   useEffect(() => {
-    if (!paneOpen || !paneId) return;
+    if (!paneOpen) setListHidden(false);
+  }, [paneOpen]);
+  // The open event when the list was hidden, which Pane follows (1083) until it is shown again.
+  // Pane follows its key hidden or not, and the hidden list is laid out at no width, so following
+  // the open event there would write the list's scroll on every step; held, a step writes nothing
+  // (correction 28's scroll kept), and Show list follows only if the open event changed.
+  const [hiddenKey, setHiddenKey] = useState<string | null>(null);
+  const paneItem =
+    paneOpen && paneId
+      ? (data?.sections ?? []).flatMap((s) => s.items).find((i) => i.event_id === paneId)
+      : undefined;
+  // An observer only: EventSurface makes this read under the same key, and this never fetches.
+  const paneRead = useQuery({
+    queryKey: [EVENT_PAGE_KEY, member.id, paneId ?? ""],
+    queryFn: () => loadEventPage(paneId ?? ""),
+    enabled: false,
+  });
+  const paneTitleField = paneItem?.post.fields["title"]?.value;
+  // The pane and its toolbar are named by the event; until its title is known, by "Event".
+  const paneTitle =
+    (typeof paneTitleField === "string" ? paneTitleField : null) ??
+    paneRead.data?.event.title ??
+    "Event";
+
+  // Previous and Next replace the event under the same pane, so the body starts each one at its top.
+  // The body is the part's own scroller (correction 28), reached from this surface's root.
+  const paneRoot = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    paneRoot.current?.querySelector<HTMLElement>("[data-pane-body]")?.scrollTo({ top: 0 });
+  }, [paneId]);
+  // 688: the lanes stay where the member left them. With the pane bounded the feed column cannot
+  // scroll (its offset clamps to 0) and the list column scrolls instead. So the card at the list
+  // column's top is kept, with its distance from that top, and when the pane closes the feed column
+  // is scrolled to put the same card at the same distance. A card, not an offset: a lens list's
+  // cards are `min(680px, 100%)`, narrower and so shorter in the list column than in the full one.
+  // While the list is hidden its layout has no width, so the place it was hidden at is the one kept.
+  const listAnchor = useRef<{ item: string; section: string; at: number } | null>(null);
+  const hiddenNow = useRef(listHidden);
+  hiddenNow.current = listHidden;
+  useLayoutEffect(() => {
+    if (!paneOpen) {
+      const column = scrollerRef.current;
+      const kept = listAnchor.current;
+      listAnchor.current = null;
+      if (!column || !kept) return;
+      const el = Array.from(column.querySelectorAll<HTMLElement>("[data-discovery-item]")).find(
+        (e) => e.dataset["discoveryItem"] === kept.item && e.dataset["section"] === kept.section,
+      );
+      if (el)
+        column.scrollTop +=
+          el.getBoundingClientRect().top - column.getBoundingClientRect().top - kept.at;
+      return;
+    }
+    const list = paneRoot.current?.querySelector<HTMLElement>("[data-pane-list]");
+    if (!list) return;
+    const keep = () => {
+      if (hiddenNow.current) return;
+      if (list.scrollTop <= 0) {
+        listAnchor.current = null;
+        return;
+      }
+      const top = list.getBoundingClientRect().top;
+      const first = Array.from(list.querySelectorAll<HTMLElement>("[data-discovery-item]")).find(
+        (e) => e.getBoundingClientRect().bottom > top,
+      );
+      listAnchor.current = first
+        ? {
+            item: first.dataset["discoveryItem"] ?? "",
+            section: first.dataset["section"] ?? "",
+            at: first.getBoundingClientRect().top - top,
+          }
+        : null;
+    };
+    keep();
+    list.addEventListener("scroll", keep, { passive: true });
+    return () => list.removeEventListener("scroll", keep);
+  }, [paneOpen, scrollerRef]);
+
+  // The list follows the open card (1083): Pane's `selectedKey` brings it into the bounded list
+  // column's view vertically, its face at the column's top, where the ring drawn 4 outside it is cut,
+  // and a lane scrolls sideways, so it is brought into view here, ring and lane both.
+  // Hidden, the list has no width to follow in. Shown again on the card it was hidden on, it keeps
+  // its place (correction 28's hidden list keeps its scroll); shown on another, reached by Previous
+  // or Next while it was hidden, it brings that card into view.
+  const hiddenOn = useRef<string | null>(null);
+  useEffect(() => {
+    if (!paneOpen || !paneId) {
+      hiddenOn.current = null;
+      return;
+    }
+    if (listHidden) {
+      if (hiddenOn.current === null) hiddenOn.current = paneId;
+      return;
+    }
+    const was = hiddenOn.current;
+    hiddenOn.current = null;
+    if (was === paneId) return;
     // Compared as data, never built into a selector: the id is the route's own param.
     const el = Array.from(
       document.querySelectorAll<HTMLElement>("[data-discovery] [data-discovery-item]"),
@@ -1161,7 +1330,7 @@ export function DiscoverySurface({
         e.dataset["discoveryItem"] === paneId && (!openLane || e.dataset["section"] === openLane),
     );
     el?.scrollIntoView({ block: "nearest", inline: "nearest" });
-  }, [paneOpen, paneId, openLane]);
+  }, [paneOpen, paneId, openLane, listHidden]);
 
   const toasts = (
     <>
@@ -1178,7 +1347,7 @@ export function DiscoverySurface({
     </style>
   );
   // Medium and expanded: the homes line and the applied chips. With the pane open the row moves
-  // into the list column, so rail, list and pane start level (B9-SPEC line 14).
+  // into the list column, so rail, list and pane start level (B9-SPEC Revision 2's pane line).
   const headerRow =
     homesLine || chipRow ? (
       <div
@@ -1199,7 +1368,22 @@ export function DiscoverySurface({
 
   if (paneOpen)
     return (
-      <div data-discovery data-lens={lens} data-pane-open="1" style={{ paddingTop: 4 }}>
+      <div
+        ref={paneRoot}
+        data-discovery
+        data-lens={lens}
+        data-pane-open="1"
+        // The feed column is a flex column of a definite height, so this wrapper fills it and the
+        // pane's `height` of 100% is the column's own, less this top. The top is the collapsed
+        // FacetRail strip's sticky inset, so rail, list and pane start level (the pane line).
+        style={{
+          flex: "1 1 0",
+          minHeight: 0,
+          display: "flex",
+          flexDirection: "column",
+          paddingTop: "var(--space-4)",
+        }}
+      >
         {laneStyle}
         <Pane
           tier="expanded"
@@ -1209,22 +1393,22 @@ export function DiscoverySurface({
               {body}
             </>
           }
+          title={paneTitle}
+          paneWidth={520}
+          height="100%"
+          listHidden={listHidden}
+          onToggleList={() => {
+            setHiddenKey(paneId);
+            setListHidden((h) => !h);
+          }}
+          onCopyLink={paneId ? () => handOver(paneId, "copy") : undefined}
+          onShare={paneId ? () => handOver(paneId, "share") : undefined}
           onClose={closePane}
           closeLabel={"Back to " + (fromElsewhere ? toOrigin.origin.label : "Discovery")}
-          selectedKey={paneId ?? undefined}
+          selectedKey={(listHidden ? hiddenKey : paneId) ?? undefined}
           {...stepping}
         >
-          <div
-            ref={paneBody}
-            data-pane-body
-            style={{
-              height: paneHeight ?? undefined,
-              overflowY: "auto",
-              overscrollBehavior: "contain",
-            }}
-          >
-            {pane}
-          </div>
+          {pane}
         </Pane>
         {toasts}
       </div>
@@ -1241,7 +1425,7 @@ export function DiscoverySurface({
         <>
           <div
             data-lens-anchor
-            // B9-SPEC line 11: the lens bar's row scrolls sideways at compact; the page never does.
+            // B9-SPEC's compact line: the lens bar's row scrolls sideways at compact; the page never does.
             style={{
               visibility: scrolled ? "hidden" : "visible",
               minHeight: 64,
@@ -1255,7 +1439,7 @@ export function DiscoverySurface({
           </div>
           <div
             data-first-row
-            // B9-SPEC line 11: one row of the homes and the Filters trigger. FacetRail's compact
+            // B9-SPEC's compact line: one row of the homes and the Filters trigger. FacetRail's compact
             // Sheet is `contained`: absolute, with no z-index of its own, so the discovery faces
             // after this row (each `position: relative`) painted over it. A flex item's z-index
             // lifts the row, Sheet and all, above the lanes without becoming the Sheet's containing
@@ -1272,7 +1456,7 @@ export function DiscoverySurface({
             {homesLine ?? <span />}
             <FacetRail
               tier="compact"
-              axes={axes}
+              axes={sheetAxes}
               value={railValue}
               onChange={onRail}
               onClear={clearFacets}
@@ -1295,7 +1479,7 @@ export function DiscoverySurface({
               )}
             />
           </div>
-          {/* B9-SPEC line 11: the applied chips and Clear all, only when a facet is set. */}
+          {/* B9-SPEC's compact line: the applied chips and Clear all, only when a facet is set. */}
           {chipRow && (
             <div
               data-applied-row

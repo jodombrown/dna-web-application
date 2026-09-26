@@ -52,13 +52,19 @@
 //                  format=online, one value, with Online lit.
 //   rail           item 3 (D6; 1094, 1111): the pane takes the rail's width, closing it returns the
 //                  rail to the member's last choice, and only the member's toggle writes.
-//   step           item 4 (B9-SPEC line 14): two Next presses leave the pane body at its top with
+//   step           item 4 (B9-SPEC's pane line): two Next presses leave the pane body at its top with
 //                  the cluster in view, the list and the body scrolling apart.
 //   homes          item 5 (1110, 928): Home between Topics and Place, a ladder for each of two homes.
 //   width          item 8 (1123): the canvas and the header on 5% and 95% of the viewport, the Feed
-//                  still 1440 at 1920, no page scroll, and the pane beside a full 320 card.
+//                  still 1440 at 1920, no page scroll, and the pane beside a full 320 card; in
+//                  the pane, list shown and hidden, the event page's cover on the body's edges
+//                  and its text --space-5 inside them (1143).
+//   lens-identity  Addendum 2 item 4 (1145): every LensBar but the one in Discovery's lens row, and
+//                  that row's box, identical to f19af1f's build read in the same run (REF_BASE).
 //
 // Usage: BASE=https://<preview>.dna-web-application.pages.dev SPECIAL=discovery node tests/matrix.cjs
+const fs = require("fs");
+const path = require("path");
 const M = require("./matrix.cjs");
 const { seedAttend, seedAttendCard, publicPage } = require("./event.cjs");
 
@@ -397,7 +403,7 @@ function fullDensity(E) {
       weekend: [E.supper, E.tema].map((e) =>
         item(e, { kind: "weekend", starts_at: e.starts_at, mode: e.mode }),
       ),
-      // Five, so the lane still scrolls sideways at 1600, where the canvas is widest (B9-SPEC 13).
+      // Five, so the lane still scrolls sideways at 1600, the widest this arm runs (1123: no maximum).
       online: [E.readers, E.stream, E.harvest, E.cloth, E.table].map((e) =>
         item(e, { kind: "online", starts_at: e.starts_at, mode: e.mode }),
       ),
@@ -590,11 +596,19 @@ async function laneIds(page) {
 
 const cardSel = (e, lane) => `[data-discovery-item="${e.event_id}"][data-section="${lane}"]`;
 
-/** Opens a card's menu and answers its entries in order: labels, "|" for a rule, and any disabled. */
+/**
+ * Opens a card's menu and answers its entries in order: labels, "|" for a rule, and any disabled.
+ * The answer also carries the menu's rendered width and its declared minimum (G113). The ellipsis is
+ * found by its name's first word: with the face's link it reads "More: {title}" (G115).
+ */
 async function readMenu(page, card) {
-  await page.locator(`${card} button[aria-label="More"]`).click();
+  await page.locator(`${card} button[aria-label^="More"]`).click();
   const menu = page.locator('[role="menu"][data-menu]');
   await menu.waitFor({ timeout: 10000 });
+  const box = await menu.evaluate((m) => ({
+    width: Math.round(m.getBoundingClientRect().width * 10) / 10,
+    min: getComputedStyle(m).minWidth,
+  }));
   const read = await menu.evaluate((m) =>
     Array.from(m.children).map((c) =>
       c.getAttribute("role") === "separator"
@@ -608,7 +622,7 @@ async function readMenu(page, card) {
           },
     ),
   );
-  return read;
+  return Object.assign(read, { box });
 }
 
 async function closeMenu(page) {
@@ -620,11 +634,61 @@ async function closeMenu(page) {
 }
 
 async function menuSelect(page, card, label) {
-  await page.locator(`${card} button[aria-label="More"]`).click();
+  await page.locator(`${card} button[aria-label^="More"]`).click();
   const menu = page.locator('[role="menu"][data-menu]');
   await menu.waitFor({ timeout: 10000 });
   await menu.getByRole("menuitem", { name: label, exact: true }).click();
   await menu.waitFor({ state: "detached", timeout: 10000 }).catch(() => undefined);
+}
+
+/**
+ * Copy link and Share read without a clipboard or a share sheet, which a headless engine may refuse
+ * (G110, 1140): each stub keeps the URL it is handed in `window.__copied` or `window.__shared`. The
+ * stubs stand in for the APIs that need the press's activation, so no arm reads activation (G131).
+ */
+function stubHandOver(page) {
+  return page.addInitScript(() => {
+    window.__copied = [];
+    window.__shared = [];
+    try {
+      Object.defineProperty(navigator, "clipboard", {
+        configurable: true,
+        value: { writeText: async (t) => void window.__copied.push(t) },
+      });
+      Object.defineProperty(navigator, "share", {
+        configurable: true,
+        value: async (d) => void window.__shared.push(d && d.url),
+      });
+    } catch {}
+  });
+}
+
+/** What `act` hands over through those stubs: emptied first, read once they hold `copied` and
+ *  `shared` URLs or after 5s, because a press whose page is not cached reads it first (1140). */
+async function handedOver(page, act, { copied = 0, shared = 0 }) {
+  await page.evaluate(() => {
+    window.__copied = [];
+    window.__shared = [];
+  });
+  await act();
+  await page
+    .waitForFunction(
+      (n) => window.__copied.length >= n.copied && window.__shared.length >= n.shared,
+      { copied, shared },
+      { timeout: 5000 },
+    )
+    .catch(() => undefined);
+  return page.evaluate(() => ({ copied: window.__copied, shared: window.__shared }));
+}
+
+/** Whether `url` is `path` on the origin under test. */
+function onPath(url, path) {
+  try {
+    const u = new URL(url);
+    return u.origin === new URL(BASE).origin && u.pathname === path;
+  } catch {
+    return false;
+  }
 }
 
 /** The text of the surface and its columns with every card's when line taken out. */
@@ -756,10 +820,10 @@ async function runDiscovery(browserType, bname, [w, h], theme) {
       geo.length > 0 && badGeo.length === 0,
       JSON.stringify(badGeo.slice(0, 2)),
     );
-    // The clamp is read wherever it sits: on the face's button, or on the surface's own node inside
-    // it (G115: WebKit lays a button out as its own flex box, so a clamp there is inert). Every
-    // two-line clamp in the title is lifted for one synchronous read and put back, so the long title
-    // shows it runs past two lines without them and holds two with them, on either engine.
+    // The clamp is read wherever it sits (correction 28 puts it on a span inside the face's link,
+    // G115). Every two-line clamp in the title is lifted for one synchronous read and put back, so
+    // the long title shows it runs past two lines without them and holds two with them, on either
+    // engine.
     const clamp = await page.evaluate(
       (ids) => {
         const read = (id) => {
@@ -792,6 +856,80 @@ async function runDiscovery(browserType, bname, [w, h], theme) {
         Math.abs(clamp.long.h3 - 55) <= 1 &&
         Math.abs(clamp.short.h3 - 55) <= 1,
       JSON.stringify(clamp),
+    );
+    // Handoff 33-A (correction 28, 1134). G115: the title's one clamp is the part's own span inside
+    // the face's link, with none of the page's, so the title is a string again and the ellipsis is
+    // named with it.
+    const own = await page.evaluate((id) => {
+      const art = document.querySelector(`[data-discovery-item="${id}"] article`);
+      const h3 = art && art.querySelector("h3");
+      if (!h3) return null;
+      const clamps = [h3, ...h3.querySelectorAll("*")].filter((e) => {
+        const cs = getComputedStyle(e);
+        return (cs.webkitLineClamp || cs.getPropertyValue("-webkit-line-clamp")) === "2";
+      });
+      const more = art.querySelector('button[aria-haspopup="menu"]');
+      return {
+        clamps: clamps.map(
+          (e) =>
+            e.tagName.toLowerCase() +
+            (e.hasAttribute("data-title-clamp") ? "[data-title-clamp]" : "") +
+            (e.parentElement && e.parentElement.matches("a[data-card-open]") ? " in the link" : ""),
+        ),
+        label: more ? more.getAttribute("aria-label") : null,
+        title: (h3.textContent || "").trim(),
+      };
+    }, E.harvest.event_id);
+    record(
+      tag +
+        " full: the title's one clamp is the part's span inside the face's link, and the ellipsis reads More: {title} (G115)",
+      !!own &&
+        own.clamps.length === 1 &&
+        own.clamps[0] === "span[data-title-clamp] in the link" &&
+        own.label === "More: " + own.title,
+      JSON.stringify(own),
+    );
+    // G113: every face at the compile's geometry, which is the spec's: gap 8, the presenter row 36 on
+    // a pointer and 44 on touch (498), the last row 28 behind a 1px --line rule, on one line.
+    const faceGeo = await page.evaluate(() => {
+      const probe = document.createElement("div");
+      probe.style.color = "var(--line)";
+      document.body.appendChild(probe);
+      const line = getComputedStyle(probe).color;
+      probe.remove();
+      const h = (el) => (el ? Math.round(el.getBoundingClientRect().height * 10) / 10 : null);
+      return Array.from(
+        document.querySelectorAll('[data-discovery-item] article[data-presentation="discovery"]'),
+      ).map((a) => {
+        const reason = a.querySelector('[data-row="reason"]');
+        const rs = reason && getComputedStyle(reason);
+        const text =
+          reason && reason.firstElementChild && getComputedStyle(reason.firstElementChild);
+        return {
+          input: a.getAttribute("data-input"),
+          gap: getComputedStyle(a).rowGap,
+          presenter: h(a.querySelector('[data-row="presenter"]')),
+          reason: h(reason),
+          rule: rs
+            ? `${rs.borderTopWidth} ${rs.borderTopStyle} ${rs.borderTopColor === line}`
+            : null,
+          oneLine: !!text && text.whiteSpace === "nowrap" && text.textOverflow === "ellipsis",
+        };
+      });
+    });
+    const offGeo = faceGeo.filter(
+      (f) =>
+        f.gap !== "8px" ||
+        Math.abs(f.presenter - (f.input === "touch" ? 44 : 36)) > 0.5 ||
+        Math.abs(f.reason - 28) > 0.5 ||
+        f.rule !== "1px solid true" ||
+        !f.oneLine,
+    );
+    record(
+      tag +
+        " full: every face at gap 8, its presenter row 36 on a pointer and 44 on touch, its last row 28 behind a 1px --line rule on one line (G113)",
+      faceGeo.length > 0 && offGeo.length === 0,
+      JSON.stringify({ faces: faceGeo.length, off: offGeo.slice(0, 2) }),
     );
     const reasons = await page.evaluate(() => {
       const out = {};
@@ -922,7 +1060,7 @@ async function runDiscovery(browserType, bname, [w, h], theme) {
         ).length,
         trailing: !!(t.parentElement && t.parentElement.querySelector("[data-lensbar-trailing]")),
         row: !!t.closest("[data-lensbar-row]"),
-        // B9-SPEC line 11: at compact the row scrolls sideways inside its anchor, whole.
+        // B9-SPEC's compact line: at compact the row scrolls sideways inside its anchor, whole.
         inRow: compact
           ? (() => {
               const a = t.closest("[data-lens-anchor]");
@@ -934,13 +1072,13 @@ async function runDiscovery(browserType, bname, [w, h], theme) {
           : true,
       };
     }, tier === "compact");
-    // Item 7 and B9-SPEC line 11: labels and icons at every tier; at compact in a row that scrolls
+    // Item 7 and B9-SPEC's compact line: labels and icons at every tier; at compact in a row that scrolls
     // sideways, each seat whole (the page's own overflow is the noOverflow check below).
     const shorts = VOCAB.convene_lenses.map((l) => l.short).join("|");
     record(
       tag +
         (tier === "compact"
-          ? " compact: the LensBar's five lenses with labels and icons in a sideways row, none clipped (B9-SPEC 11)"
+          ? " compact: the LensBar's five lenses with labels and icons in a sideways row, none clipped (B9-SPEC's compact line)"
           : " full: the LensBar's five lenses with labels and icons, no seat after them (1093)"),
       !!bar &&
         bar.mode === "labels" &&
@@ -962,9 +1100,10 @@ async function runDiscovery(browserType, bname, [w, h], theme) {
       return c ? Math.round(c.getBoundingClientRect().width) : null;
     });
     record(
-      tag + " full: no right column (item 7), and the canvas at most 1600 (B9-SPEC 13)",
+      tag +
+        " full: no right column (item 7), and the canvas the viewport's width at every width this arm runs (1123; the width arm reads no maximum at 1920 and 2560)",
       (await page.locator('[data-scroller="right"]').count()) === 0 &&
-        (tier === "compact" || canvas === Math.min(w, 1600)),
+        (tier === "compact" || canvas === w),
       "canvas " + canvas,
     );
 
@@ -977,7 +1116,7 @@ async function runDiscovery(browserType, bname, [w, h], theme) {
         expand: !!(nav && nav.querySelector('button[aria-label="Show filters"]')),
         axes: nav ? nav.querySelectorAll("[data-axis-id]").length : 0,
         canvas: document.querySelector("[data-canvas]")?.getAttribute("data-rail") ?? null,
-        // B9-SPEC line 11: one row of the homes and the Filters trigger; no chips row until set.
+        // B9-SPEC's compact line: one row of the homes and the Filters trigger; no chips row until set.
         pill: !!document.querySelector(
           '[data-discovery] [data-first-row] [data-homes-line] ~ [data-testid="filters"]',
         ),
@@ -1001,7 +1140,8 @@ async function runDiscovery(browserType, bname, [w, h], theme) {
     // Item 2 (1095, 1110): the facet set and its order, each axis in its display with its words.
     const scope = await openRail(page, tier);
     const axes = await readAxes(page, scope);
-    // B9-SPEC lines 12, 13 and 20: the rail 240 open at medium and 280 at expanded, headed Filters.
+    // B9-SPEC's medium, expanded and Filters lines: the rail 240 open at medium and 280 at expanded,
+    // headed Filters.
     const railWidth = await page.evaluate(
       (sel) => Math.round(document.querySelector(sel).getBoundingClientRect().width),
       scope,
@@ -1109,6 +1249,13 @@ async function runDiscovery(browserType, bname, [w, h], theme) {
     );
     const plain = await readMenu(page, cardSel(E.loaded, "curated"));
     await closeMenu(page);
+    // G113: this menu's items are narrower than 240 by their words (217 at their own width), so its
+    // rendered width is the minimum: 240 now, 220 before correction 28.
+    record(
+      tag + " menu: a menu whose words are narrower renders at the 240 minimum (G113)",
+      plain.box.min === "240px" && Math.abs(plain.box.width - 240) <= 0.5,
+      JSON.stringify(plain.box),
+    );
     const other = await readMenu(page, cardSel(E.stream, "network"));
     await closeMenu(page);
     const undated = await readMenu(page, cardSel(E.undated, "fresh"));
@@ -1150,7 +1297,7 @@ async function runDiscovery(browserType, bname, [w, h], theme) {
           right: document.querySelectorAll('[data-scroller="right"]').length,
           lanes: document.querySelectorAll("[data-discovery] [data-lanes] [data-lane]").length,
           back: document.querySelectorAll("[data-event-page] [data-back-row]").length,
-          // B9-SPEC line 14: the header row moves into the list column with the pane open.
+          // B9-SPEC's pane line: the header row moves into the list column with the pane open.
           header: !!document.querySelector("[data-pane-list] [data-header-row] [data-homes-line]"),
           ring: Array.from(
             document.querySelectorAll("[data-discovery-item] article[data-selected]"),
@@ -1203,7 +1350,8 @@ async function runDiscovery(browserType, bname, [w, h], theme) {
         endNext === "true" && endPrev === "true",
         `next end ${endNext}, previous end ${endPrev}`,
       );
-      // G78: the page reserves the pane's close row, so its first block starts below the control.
+      // G78: the close control sits in the pane's own top row with the toolbar (correction 28),
+      // above the body, so the page's first block starts below it with no row the page reserves.
       const g78 = await page.evaluate(() => {
         const close = document.querySelector('button[aria-label="Back to Discovery"]');
         const firstBlock = document.querySelector("[data-event-page]")?.firstElementChild;
@@ -1383,6 +1531,65 @@ async function runDiscoveryFacets(browserType, bname, [w, h], theme) {
       JSON.stringify(sent.map((c) => c.p_price)),
     );
 
+    // 1145 (B9-SPEC Revision 5's Lens bar line): at medium and expanded each seat is its own label's
+    // width, never an equal share, and the bar sits centred in its row, the shell's lens row, never
+    // stretched across it. Read from the boxes and computed styles: each seat against its word, its
+    // glyph, the gap between them, its padding and its border (floored at its min-width); the track
+    // against the row's content box, narrower than it and centred on it within 1.
+    if (tier !== "compact") {
+      const lensRow = await page.evaluate(() => {
+        const t = document.querySelector(
+          '[data-layout-top] [role="tablist"][aria-label="Convene lens"]',
+        );
+        const row = t && t.closest("[data-layout-top]");
+        if (!row) return null;
+        const px = (v) => parseFloat(v) || 0;
+        const r = (n) => Math.round(n * 1000) / 1000;
+        const rb = row.getBoundingClientRect();
+        const rs = getComputedStyle(row);
+        const left = rb.left + px(rs.borderLeftWidth) + px(rs.paddingLeft);
+        const right = rb.right - px(rs.borderRightWidth) - px(rs.paddingRight);
+        const tb = t.getBoundingClientRect();
+        const seats = Array.from(t.querySelectorAll('[role="tab"]')).map((x) => {
+          const cs = getComputedStyle(x);
+          const word = x.querySelector(":scope > span:not([aria-hidden])");
+          const glyph = x.querySelector(':scope > span[aria-hidden="true"]');
+          const label = word ? word.getBoundingClientRect().width : 0;
+          const ico = glyph ? glyph.getBoundingClientRect().width + px(cs.columnGap) : 0;
+          const own =
+            label +
+            ico +
+            px(cs.paddingLeft) +
+            px(cs.paddingRight) +
+            px(cs.borderLeftWidth) +
+            px(cs.borderRightWidth);
+          return {
+            id: x.getAttribute("data-lens"),
+            seat: r(x.getBoundingClientRect().width),
+            own: r(Math.max(px(cs.minWidth), own)),
+            label: r(label),
+          };
+        });
+        return {
+          row: [r(left), r(right)],
+          bar: [r(tb.left), r(tb.right)],
+          centre: r((tb.left + tb.right) / 2 - (left + right) / 2),
+          scroll: [t.scrollWidth, t.clientWidth],
+          seats,
+        };
+      });
+      record(
+        tag +
+          " lens bar: each seat its own label's width, the bar centred in its row and narrower than it (1145)",
+        !!lensRow &&
+          lensRow.seats.length === VOCAB.convene_lenses.length &&
+          lensRow.seats.every((s) => s.label > 0 && Math.abs(s.seat - s.own) <= 1) &&
+          lensRow.bar[1] - lensRow.bar[0] < lensRow.row[1] - lensRow.row[0] - 1 &&
+          Math.abs(lensRow.centre) <= 1,
+        JSON.stringify(lensRow),
+      );
+    }
+
     // Place (1095): typed, offered by kind, picked, narrowing, and removed as a chip.
     await openDiscovery(page);
     let scope = await openRail(page, tier);
@@ -1435,7 +1642,7 @@ async function runDiscoveryFacets(browserType, bname, [w, h], theme) {
     // The heading is the URL's; the cards are the answer's, which lands after it.
     await lanesUntil(page, (ids) => ids.length > 0 && ids.every((id) => accraIds.has(id)));
     const inAccra = await laneItems(page);
-    // B9-SPEC line 11: at compact, the applied chips and Clear all once a facet is set.
+    // B9-SPEC's compact line: at compact, the applied chips and Clear all once a facet is set.
     const appliedRow =
       tier !== "compact" ||
       ((await page.locator("[data-applied-row] [data-applied-facets]").innerText()).includes(
@@ -1451,7 +1658,7 @@ async function runDiscoveryFacets(browserType, bname, [w, h], theme) {
     record(
       tag +
         " place: the lanes narrow to Accra and Near reads While you are in Accra (1095)" +
-        (tier === "compact" ? ", the chip and Clear all shown (B9-SPEC 11)" : ""),
+        (tier === "compact" ? ", the chip and Clear all shown (B9-SPEC's compact line)" : ""),
       strays.length === 0 &&
         Object.keys(inAccra).includes("near") &&
         !Object.keys(inAccra).includes("fresh") &&
@@ -1575,6 +1782,105 @@ async function runDiscoveryFacets(browserType, bname, [w, h], theme) {
       /\.ics$/.test(file),
       file,
     );
+
+    // Ruling 1144 (B9-SPEC Revision 5's Filters line, amending G102): in the FacetRail, medium and
+    // expanded, Topics is one column, each row's bottom at or above the next row's top; only the
+    // compact Sheet keeps two columns, its checklist 150 or wider. The columns are the checklist's
+    // computed layout and where its rows sit, never the prop the caller passed.
+    await openDiscovery(page);
+    scope = await openRail(page, tier);
+    const topics = await page.evaluate((scope) => {
+      const rows = Array.from(
+        document.querySelectorAll(`${scope} [data-axis-id="family"] [role="checkbox"]`),
+      );
+      const boxes = rows.map((b) => b.getBoundingClientRect());
+      const list = rows[0] ? rows[0].parentElement : null;
+      const cs = list ? getComputedStyle(list) : null;
+      const r = (n) => Math.round(n * 10) / 10;
+      return {
+        rows: boxes.length,
+        lefts: [...new Set(boxes.map((b) => Math.round(b.left)))].sort((a, b) => a - b),
+        width: list ? r(list.getBoundingClientRect().width) : null,
+        layout: cs ? cs.display + " " + cs.flexDirection + " " + cs.gridTemplateColumns : null,
+        columns: !cs
+          ? null
+          : cs.display === "grid"
+            ? cs.gridTemplateColumns.split(" ").length
+            : cs.display === "flex" && cs.flexDirection === "column"
+              ? 1
+              : null,
+        heights: boxes.map((b) => r(b.height)),
+        // How far each row's bottom runs past the next row's top, in document order.
+        overrun: boxes.slice(1).map((b, i) => r(boxes[i].bottom - b.top)),
+      };
+    }, scope);
+    const inSheet = tier === "compact";
+    record(
+      tag +
+        (inSheet
+          ? " Topics: two columns in the compact Sheet, its checklist 150 or wider (1144, G102)"
+          : " Topics: one column in the FacetRail, no row running into the next (1144)"),
+      topics.rows > 1 &&
+        (inSheet
+          ? topics.lefts.length === 2 &&
+            topics.columns === 2 &&
+            topics.width !== null &&
+            topics.width >= 150
+          : topics.lefts.length === 1 &&
+            topics.columns === 1 &&
+            topics.overrun.every((d) => d <= 0)),
+      JSON.stringify(topics),
+    );
+    // G111: in the rail, Clear all is in the pinned heading row and stays in view once the axes have
+    // scrolled beneath it, and nothing is at the foot; it clears. The compact Sheet keeps its foot.
+    if (tier !== "compact") {
+      await page.locator(`${scope} [data-axis-id="family"] [role="checkbox"]`).first().click();
+      await page.waitForURL((u) => !!u.searchParams.get("family"), { timeout: 10000 });
+      await page.waitForTimeout(300);
+      const clear = await page.evaluate((scope) => {
+        // The rail is its own scroller (25 §3), bounded by Discovery, and its column stays still.
+        const nav = document.querySelector(scope);
+        const column = nav && nav.closest('[data-scroller="left"]');
+        if (nav) nav.scrollTop = nav.scrollHeight;
+        const all = Array.from(nav ? nav.querySelectorAll("button") : []).filter(
+          (b) => (b.textContent || "").trim() === "Clear all",
+        );
+        const b = all[0];
+        const pin = b && b.closest("[data-heading-pin]");
+        const r = b && b.getBoundingClientRect();
+        const n = nav && nav.getBoundingClientRect();
+        const hit = r && document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+        return {
+          count: all.length,
+          slot: !!b && !!b.closest("[data-clear-slot]"),
+          pinned: !!pin,
+          scrolled: nav ? Math.round(nav.scrollTop) : null,
+          column: column ? column.scrollHeight - column.clientHeight : null,
+          top: r && n ? Math.round(r.top - n.top) : null,
+          visible: !!hit && !!b && b.contains(hit),
+        };
+      }, scope);
+      if (clear.count === 1)
+        await page
+          .locator(`${scope} button`, { hasText: "Clear all" })
+          .click({ timeout: 5000 })
+          .catch(() => undefined);
+      await page.waitForTimeout(400);
+      const cleared = !new URL(page.url()).searchParams.get("family");
+      record(
+        tag +
+          " Clear all: one, in the rail's pinned heading row, in view after the axes scroll, and it clears (G111)",
+        clear.count === 1 &&
+          clear.slot &&
+          clear.pinned &&
+          clear.scrolled > 0 &&
+          clear.column === 0 &&
+          clear.visible &&
+          cleared,
+        JSON.stringify({ ...clear, cleared }),
+      );
+    }
+    await closeRail(page, tier);
 
     // 1111: the rail's state per member per band, read on load and written on toggle only.
     if (tier === "compact") {
@@ -1781,10 +2087,11 @@ const PANE_VIEWPORTS = [
   [[1280, 800], "light"],
   [[1600, 1000], "dark"],
 ];
-/** Item 8's widths (1123). */
+/** Item 8's widths (1123), with 1600: handoff 33-A reads G110's pane at all five (1127). */
 const WIDTH_VIEWPORTS = [
   [[1280, 800], "light"],
   [[1440, 900], "dark"],
+  [[1600, 1000], "light"],
   [[1920, 1080], "light"],
   [[2560, 1440], "dark"],
 ];
@@ -1889,7 +2196,7 @@ function presenterRow(page, card) {
 }
 
 /** Opens a card and answers the event page's presenter block: the name after "Presented by". */
-async function openAndReadPresenter(page, card) {
+async function openAndReadPresenter(page, card, { photo = false } = {}) {
   await page.locator(`${card} [data-card-open]`).click();
   await page.waitForSelector(
     '[data-event-page][data-event-state="loaded"] [data-event-presenter]',
@@ -1897,6 +2204,15 @@ async function openAndReadPresenter(page, card) {
       timeout: 20000,
     },
   );
+  // The page's photos come from a second read after the page (EventSurface's `images`), so a page
+  // already cached, by hover intent (1067) or by the press on a card's ellipsis (1140), is loaded a
+  // commit before its presenter's photo is drawn. A presenter who has a photo is read once it is.
+  if (photo)
+    await page
+      .waitForSelector('[data-event-page][data-event-state="loaded"] [data-event-presenter] img', {
+        timeout: 5000,
+      })
+      .catch(() => undefined);
   return page.evaluate(() => {
     const block = document.querySelector("[data-event-page] [data-event-presenter]");
     const img = block && block.querySelector("img");
@@ -1929,7 +2245,7 @@ async function runDiscoveryPresenter(browserType, bname, [w, h], theme) {
     const guildRow = await presenterRow(page, guild);
     const guildMenu = (await readMenu(page, guild)).map((x) => x.label);
     await closeMenu(page);
-    const pane = await openAndReadPresenter(page, veiled);
+    const pane = await openAndReadPresenter(page, veiled, { photo: true });
     await openDiscovery(page);
     const guildPane = await openAndReadPresenter(page, guild);
 
@@ -2250,9 +2566,19 @@ async function runDiscoveryStep(browserType, bname, [w, h], theme) {
             b.contains(hit),
         };
       });
+      // G85: with the pane bounded the list column is its own scroller, and the open card is
+      // brought into its view (Pane's selectedKey, 1083).
+      const list = document.querySelector("[data-discovery] [data-pane-list]");
+      const card = list && list.querySelector("article[data-selected]");
+      const l = list && list.getBoundingClientRect();
+      const c = card && card.getBoundingClientRect();
       return {
         id: location.pathname.split("/").pop(),
         top: body ? body.scrollTop : null,
+        selected: !!c && c.top >= l.top - 1 && c.bottom <= l.bottom + 1,
+        // The selected ring is drawn 4 outside the face (1083): whole when it is inside the list.
+        ring: !!c && c.top - 4 >= l.top - 0.5 && c.bottom + 4 <= l.bottom + 0.5,
+        listScrolled: !!list && list.scrollTop > 0,
         own: !!body && body.scrollHeight > body.clientHeight,
         fits: !!section && section.getBoundingClientRect().bottom <= m.bottom + 1,
         controls,
@@ -2275,7 +2601,7 @@ async function runDiscoveryStep(browserType, bname, [w, h], theme) {
     await page.waitForTimeout(400);
     const open = await read();
     record(
-      tag + " the pane fits the list column and its body scrolls on its own (B9-SPEC line 14)",
+      tag + " the pane fits the list column and its body scrolls on its own (B9-SPEC's pane line)",
       open.own && open.fits && open.controls.every((c) => c.inView),
       JSON.stringify(open),
     );
@@ -2286,22 +2612,120 @@ async function runDiscoveryStep(browserType, bname, [w, h], theme) {
     const one = await read();
     record(
       tag + " Next once: the pane body at its top, Previous, Next and Back to Discovery in view",
-      one.id === E.stream.event_id && one.top === 0 && one.controls.every((c) => c.inView),
+      one.id === E.stream.event_id &&
+        one.top === 0 &&
+        one.controls.every((c) => c.inView) &&
+        one.ring,
       JSON.stringify(one),
     );
-    // The body and the list both at their ends before the second step.
+    // The body and the list both at their ends before the second step. With the pane bounded the
+    // list column is its own scroller (correction 28, G110); the feed column does not scroll.
     await page.evaluate(() => {
       document.querySelector("[data-discovery] [data-pane-body]").scrollTop = 1e6;
-      document.querySelector('[data-scroller="feed"]').scrollTop = 1e6;
+      document.querySelector("[data-discovery] [data-pane-list]").scrollTop = 1e6;
     });
     await page.waitForTimeout(300);
+    // G85: this step reads Pane's own follow, so the surface's `scrollIntoView` is held still for it.
+    await page.evaluate(() => {
+      window.__siv = HTMLElement.prototype.scrollIntoView;
+      HTMLElement.prototype.scrollIntoView = function () {};
+    });
     await next(E.harvest.event_id);
     const two = await read();
+    await page.evaluate(() => {
+      HTMLElement.prototype.scrollIntoView = window.__siv;
+    });
     record(
       tag +
-        " Next twice, from the body's and the list's ends: the body at its top, the controls in view",
-      two.id === E.harvest.event_id && two.top === 0 && two.controls.every((c) => c.inView),
+        " Next twice, from the body's and the list's ends: the body at its top, the controls and the open card in view",
+      two.id === E.harvest.event_id &&
+        two.top === 0 &&
+        two.controls.every((c) => c.inView) &&
+        two.selected &&
+        two.listScrolled,
       JSON.stringify(two),
+    );
+    // Hidden, the list has no width to follow the open card in, so a step taken then leaves its
+    // scroll where it is (correction 28: the same element, inert, its scroll kept), read on the
+    // element itself (930); Show list brings the open card back into view. The list is taken to its
+    // end first, away from the open card, so a follow while hidden would have somewhere to move it.
+    let refollow = null;
+    let hiddenScroll = null;
+    const listTool = page.locator('[data-pane-toolbar] [data-tool="list"]');
+    const listTop = () =>
+      page.evaluate(
+        () =>
+          Math.round(document.querySelector("[data-discovery] [data-pane-list]").scrollTop * 10) /
+          10,
+      );
+    if ((await listTool.count()) === 1) {
+      await page.evaluate(() => {
+        document.querySelector("[data-discovery] [data-pane-list]").scrollTop = 1e6;
+      });
+      await page.waitForTimeout(300);
+      await listTool.click();
+      await page.waitForTimeout(300);
+      const before = await listTop();
+      await next(E.cloth.event_id);
+      hiddenScroll = { before, after: await listTop() };
+      await listTool.click();
+      await page.waitForTimeout(500);
+      refollow = await read();
+    }
+    record(
+      tag +
+        " Hide list, Next, Show list: the step leaves the hidden list's scroll where it was, and the open card is in the list's view again (1083, G110, correction 28)",
+      !!refollow &&
+        !!hiddenScroll &&
+        Math.abs(hiddenScroll.after - hiddenScroll.before) <= 1 &&
+        refollow.id === E.cloth.event_id &&
+        refollow.selected &&
+        refollow.ring,
+      JSON.stringify({ hiddenScroll, refollow }),
+    );
+    // 688: Back to Discovery leaves the lanes where the member left them. The list column scrolls
+    // while the pane is open (G110), so the card at its top goes back to the same distance from the
+    // feed column's top once the pane has closed.
+    const kept = await page.evaluate(() => {
+      const list = document.querySelector("[data-discovery] [data-pane-list]");
+      list.scrollTop = Math.min(900, list.scrollHeight - list.clientHeight);
+      const top = list.getBoundingClientRect().top;
+      const first = Array.from(list.querySelectorAll("[data-discovery-item]")).find(
+        (e) => e.getBoundingClientRect().bottom > top,
+      );
+      return {
+        scrolled: Math.round(list.scrollTop),
+        item: first ? first.getAttribute("data-discovery-item") : null,
+        section: first ? first.getAttribute("data-section") : null,
+        at: first ? Math.round(first.getBoundingClientRect().top - top) : null,
+      };
+    });
+    await page.waitForTimeout(200);
+    await page.locator('[data-pane-cluster] button[aria-label="Back to Discovery"]').click();
+    await page.waitForURL((u) => u.pathname === "/convene", { timeout: 10000 });
+    await page.waitForTimeout(500);
+    const back = await page.evaluate((k) => {
+      const column = document.querySelector('[data-scroller="feed"]');
+      const el = Array.from(document.querySelectorAll("[data-discovery-item]")).find(
+        (e) =>
+          e.getAttribute("data-discovery-item") === k.item &&
+          e.getAttribute("data-section") === k.section,
+      );
+      return {
+        column: Math.round(column.scrollTop),
+        at: el
+          ? Math.round(el.getBoundingClientRect().top - column.getBoundingClientRect().top)
+          : null,
+      };
+    }, kept);
+    record(
+      tag + " Back to Discovery: the lanes where the list column left them (688)",
+      kept.scrolled > 0 &&
+        kept.item !== null &&
+        back.column > 0 &&
+        back.at !== null &&
+        Math.abs(back.at - kept.at) <= 2,
+      JSON.stringify({ kept, back }),
     );
 
     record(tag + " no page errors", errors.length === 0, errors.join(" | ").slice(0, 300));
@@ -2401,9 +2825,11 @@ async function runDiscoveryWidth(browserType, bname, [w, h], theme) {
   const tag = `${bname}-${w}x${h}-${theme}-discovery-width`;
   M.armStart(tag);
   const db = makeMockDb();
-  seedDiscovery(db);
+  const E = seedDiscovery(db);
   const { browser, page, errors } = await context(browserType, [w, h], theme, db);
   const near = (a, b) => a != null && Math.abs(a - b) <= 1;
+  // G110's Copy link and Share: what each hands over (1140, G120).
+  await stubHandOver(page);
   try {
     await signIn(page);
     await openDiscovery(page);
@@ -2432,46 +2858,230 @@ async function runDiscoveryWidth(browserType, bname, [w, h], theme) {
       `scrollWidth ${e.scroll} viewport ${e.vw}`,
     );
 
-    // The pane at 1280 and 1920: inside the new edges, beside at least one full 320 card.
-    if (w === 1280 || w === 1920) {
-      await page.locator("[data-discovery-item] [data-card-open]").first().click();
-      await page.waitForSelector('[data-discovery][data-pane-open="1"] [data-event-page]', {
-        timeout: 20000,
-      });
-      await page.waitForTimeout(500);
-      const pane = await page.evaluate(() => {
-        const list = document.querySelector("[data-pane-list]");
-        const l = list ? list.getBoundingClientRect() : null;
-        const section = document.querySelector('[data-pane-open="true"] > section');
-        const s = section ? section.getBoundingClientRect() : null;
-        const cards = list
-          ? Array.from(list.querySelectorAll("[data-discovery-item] article")).map((a) =>
-              a.getBoundingClientRect(),
-            )
-          : [];
-        const whole = cards.filter(
-          (c) => Math.round(c.width) === 320 && c.left >= l.left - 0.5 && c.right <= l.right + 0.5,
-        );
+    // The pane at every width: inside the new edges, beside at least one full 320 card.
+    await page.locator(`${cardSel(E.supper, "soon")} [data-card-open]`).click();
+    await page.waitForSelector('[data-discovery][data-pane-open="1"] [data-event-page]', {
+      timeout: 20000,
+    });
+    await page.waitForTimeout(500);
+    const pane = await page.evaluate(() => {
+      const list = document.querySelector("[data-pane-list]");
+      const l = list ? list.getBoundingClientRect() : null;
+      const section = document.querySelector('[data-pane-open="true"] > section');
+      const s = section ? section.getBoundingClientRect() : null;
+      const cards = list
+        ? Array.from(list.querySelectorAll("[data-discovery-item] article")).map((a) =>
+            a.getBoundingClientRect(),
+          )
+        : [];
+      const whole = cards.filter(
+        (c) => Math.round(c.width) === 320 && c.left >= l.left - 0.5 && c.right <= l.right + 0.5,
+      );
+      return {
+        list: l && [Math.round(l.left), Math.round(l.right)],
+        pane: s && [Math.round(s.left), Math.round(s.right)],
+        whole: whole.length,
+        scroll: Math.max(document.documentElement.scrollWidth, document.body.scrollWidth),
+        vw: document.documentElement.clientWidth,
+      };
+    });
+    record(
+      tag +
+        " pane open: the list column holds a full 320 card, the pane inside 95%, no page scroll",
+      pane.whole > 0 &&
+        !!pane.pane &&
+        pane.pane[1] <= Math.round(ninetyFive) + 1 &&
+        !!pane.list &&
+        pane.list[0] >= Math.round(five) - 1 &&
+        pane.scroll <= pane.vw,
+      JSON.stringify(pane),
+    );
+
+    // Handoff 33-A, G110 (B9-SPEC's pane line, 1127, 1136; correction 28): the pane 520 at the right
+    // and the list the rest, both starting level, each scrolling on its own and the feed column not
+    // at all, the pane's foot on the canvas's foot (1136: the column's own height less the 16).
+    const tracks = () =>
+      page.evaluate(() => {
+        const r1 = (n) => Math.round(n * 10) / 10;
+        const grid = document.querySelector('[data-discovery] [data-pane-open="true"]');
+        const list = grid && grid.querySelector(":scope > [data-pane-list]");
+        const section = list && list.nextElementSibling;
+        const main = document.querySelector('[data-canvas] [data-scroller="feed"]');
+        if (!grid || !list || !section || !main) return null;
+        const g = grid.getBoundingClientRect();
+        const l = list.getBoundingClientRect();
+        const s = section.getBoundingClientRect();
+        const m = main.getBoundingClientRect();
+        const strip = document.querySelector('[data-scroller="left"] nav[aria-label="Filters"]');
+        const ls = getComputedStyle(list);
+        const tool = document.querySelector('[data-pane-toolbar] [data-tool="list"]');
         return {
-          list: l && [Math.round(l.left), Math.round(l.right)],
-          pane: s && [Math.round(s.left), Math.round(s.right)],
-          whole: whole.length,
-          scroll: Math.max(document.documentElement.scrollWidth, document.body.scrollWidth),
-          vw: document.documentElement.clientWidth,
+          content: r1(g.width),
+          list: r1(l.width),
+          pane: r1(s.width),
+          gap: parseFloat(getComputedStyle(grid).columnGap) || 0,
+          left: r1(s.left - g.left),
+          right: r1(g.right - s.right),
+          tops: [r1(l.top), r1(s.top), strip ? r1(strip.getBoundingClientRect().top) : null],
+          foot: [
+            r1(s.bottom),
+            r1(m.bottom - (parseFloat(getComputedStyle(main).paddingBottom) || 0)),
+          ],
+          column: [main.scrollHeight, main.clientHeight],
+          listScrolls: ls.overflowY === "auto" && list.scrollHeight > list.clientHeight,
+          hidden: {
+            inert: list.inert === true || list.hasAttribute("inert"),
+            aria: list.getAttribute("aria-hidden"),
+            visibility: ls.visibility,
+            probe: list.getAttribute("data-probe"),
+            top: Math.round(list.scrollTop),
+          },
+          tool: tool ? tool.getAttribute("aria-label") : null,
+          tools: Array.from(document.querySelectorAll("[data-pane-toolbar] button")).map((b) =>
+            b.getAttribute("aria-label"),
+          ),
         };
       });
-      record(
-        tag +
-          " pane open: the list column holds a full 320 card, the pane inside 95%, no page scroll",
-        pane.whole > 0 &&
-          !!pane.pane &&
-          pane.pane[1] <= Math.round(ninetyFive) + 1 &&
-          !!pane.list &&
-          pane.list[0] >= Math.round(five) - 1 &&
-          pane.scroll <= pane.vw,
-        JSON.stringify(pane),
+    // Handoff 33-A Addendum 2 (1143): Pane's body is unpadded, so the event page carries its own
+    // inset. The cover's box meets the body's content box at both sides; the kicker, the title and
+    // the date row sit --space-5 inside it, the token read off the page. Each side is the gap from
+    // the content box's edge to the element's, so the cover reads [0,0] and the text [20,20].
+    const inset = () =>
+      page.evaluate(() => {
+        const r1 = (n) => Math.round(n * 10) / 10;
+        const body = document.querySelector("[data-discovery] [data-pane-body]");
+        const ep = body && body.querySelector("[data-event-page]");
+        if (!ep) return null;
+        const bs = getComputedStyle(body);
+        const b = body.getBoundingClientRect();
+        const left = b.left + body.clientLeft + (parseFloat(bs.paddingLeft) || 0);
+        const right =
+          b.left + body.clientLeft + body.clientWidth - (parseFloat(bs.paddingRight) || 0);
+        const sides = (el) => {
+          if (!el) return null;
+          const x = el.getBoundingClientRect();
+          return [r1(x.left - left), r1(right - x.right)];
+        };
+        const img = ep.querySelector(':scope > div > img[src*="post-media"]');
+        return {
+          body: [r1(left), r1(right)],
+          space5: parseFloat(
+            getComputedStyle(document.documentElement).getPropertyValue("--space-5"),
+          ),
+          cover: sides(img && img.parentElement),
+          kicker: sides(ep.querySelector("[data-event-kicker]")),
+          title: sides(ep.querySelector("[data-event-title]")),
+          when: sides(ep.querySelector('[data-fact="when"]')),
+        };
+      });
+    const insetHolds = (i) =>
+      !!i &&
+      i.space5 > 0 &&
+      !!i.cover &&
+      i.cover.every((s) => Math.abs(s) <= 0.5) &&
+      [i.kicker, i.title, i.when].every(
+        (el) => !!el && el.every((s) => Math.abs(s - i.space5) <= 0.5),
       );
+    // The seeded page carries a cover (Brief 10's loaded page, `seed/loaded.jpg`); wait for it.
+    await page
+      .waitForSelector('[data-pane-body] [data-event-page] > div > img[src*="post-media"]', {
+        timeout: 10000,
+      })
+      .catch(() => {});
+    const insetShown = await inset();
+    const open = await tracks();
+    record(
+      tag +
+        " pane (G110): 520 at the right, the list the rest less the gap, rail, list and pane level, the column still, the foot on the canvas's",
+      !!open &&
+        Math.abs(open.pane - 520) <= 0.5 &&
+        Math.abs(open.list - (open.content - 520 - open.gap)) <= 0.5 &&
+        open.right <= 0.5 &&
+        Math.abs(open.tops[0] - open.tops[1]) <= 0.5 &&
+        open.tops[2] !== null &&
+        Math.abs(open.tops[0] - open.tops[2]) <= 0.5 &&
+        open.column[0] <= open.column[1] &&
+        open.listScrolls &&
+        Math.abs(open.foot[0] - open.foot[1]) <= 1 &&
+        open.tools.join(",") === "Hide list,Copy link,Share",
+      JSON.stringify(open),
+    );
+
+    // Hide list: 720, centred, the list the same element, hidden and inert; Show list returns the
+    // pane to 520 and the list where it was. (While hidden, scroll anchoring may move the list's
+    // offset as its header row wraps at no width; the member reads it only once it is shown.)
+    let hidden = null;
+    let shown = null;
+    let insetHidden = null;
+    if (open && open.tool) {
+      await page.evaluate(() => {
+        const list = document.querySelector("[data-discovery] [data-pane-list]");
+        list.setAttribute("data-probe", "kept");
+        list.scrollTop = 300;
+      });
+      const kept = await page.evaluate(() =>
+        Math.round(document.querySelector("[data-discovery] [data-pane-list]").scrollTop),
+      );
+      await page.locator('[data-pane-toolbar] [data-tool="list"]').click();
+      await page.waitForTimeout(400);
+      hidden = { ...(await tracks()), kept };
+      insetHidden = await inset();
+      await page.locator('[data-pane-toolbar] [data-tool="list"]').click();
+      await page.waitForTimeout(400);
+      shown = await tracks();
     }
+    record(
+      tag +
+        " pane (G110): Hide list centres the pane at 720, the list the same element, hidden, inert and where it was; Show list returns 520",
+      !!hidden &&
+        Math.abs(hidden.pane - 720) <= 0.5 &&
+        Math.abs(hidden.left - hidden.right) <= 1 &&
+        hidden.hidden.inert &&
+        hidden.hidden.aria === "true" &&
+        hidden.hidden.visibility === "hidden" &&
+        hidden.hidden.probe === "kept" &&
+        hidden.kept > 0 &&
+        hidden.tool === "Show list" &&
+        !!shown &&
+        Math.abs(shown.pane - 520) <= 0.5 &&
+        shown.hidden.probe === "kept" &&
+        Math.abs(shown.hidden.top - hidden.kept) <= 2 &&
+        shown.tool === "Hide list",
+      JSON.stringify({
+        hidden,
+        shown: shown && { pane: shown.pane, tool: shown.tool, top: shown.hidden.top },
+      }),
+    );
+    record(
+      tag +
+        " pane (1143): the event page's cover spans the pane body edge to edge and the kicker, the title and the date row sit --space-5 inside it, list shown and hidden",
+      insetHolds(insetShown) && insetHolds(insetHidden),
+      JSON.stringify({ shown: insetShown, hidden: insetHidden }),
+    );
+
+    // Copy link and Share: the open event's public address under /e/, as its page builds it and
+    // the card menu hands it over (1140, G120). The seeded page is public, its slug "discovery-{id}".
+    let handed = null;
+    if (open && open.tools.includes("Copy link") && open.tools.includes("Share"))
+      handed = await handedOver(
+        page,
+        async () => {
+          await page.locator('[data-pane-toolbar] [data-tool="copy"]').click();
+          await page.locator('[data-pane-toolbar] [data-tool="share"]').click();
+        },
+        { copied: 1, shared: 1 },
+      );
+    const publicPath = "/e/discovery-" + E.supper.event_id;
+    record(
+      tag +
+        " pane (G110): Copy link and Share hand over the open event's public address under /e/, as its page builds it (1140, G120)",
+      !!handed &&
+        handed.copied.length === 1 &&
+        onPath(handed.copied[0], publicPath) &&
+        handed.shared.length === 1 &&
+        onPath(handed.shared[0], publicPath),
+      JSON.stringify(handed),
+    );
 
     // Every other surface keeps its caps: the Feed at 1920 is still its 1440 columns.
     if (w === 1920) {
@@ -2494,7 +3104,769 @@ async function runDiscoveryWidth(browserType, bname, [w, h], theme) {
   }
 }
 
-/** Addendum 4's and 5's arms and their cells, in item order, for tests/matrix.cjs to run. */
+/**
+ * Handoff 33-A, G100 (1067; correction 28): the discovery face is a real link across its whole face.
+ * Its title is an anchor to the address a plain click navigates to, a cover spans the face, and the
+ * presenter, topic and ellipsis stand above it. A modified or middle press is the browser's and
+ * opens no pane; a plain press on the media opens the event, the pane at expanded and the route below.
+ * Addendum 1 item 2 (1140, G120): the card menu's Copy link and Share hand over the event's public
+ * address under /e/, and for an event with no public page the member address, as the event page does.
+ */
+async function runDiscoveryLink(browserType, bname, [w, h], theme) {
+  const tag = `${bname}-${w}x${h}-${theme}-discovery-link`;
+  M.armStart(tag);
+  const tier = tierOf(w);
+  const db = makeMockDb();
+  const E = seedDiscovery(db);
+  // 1140: one event with no public page, as event_page answers it (1028), before any page loads.
+  db.attend.pages[E.madina.event_id].event.public = false;
+  const { browser, page, errors } = await context(browserType, [w, h], theme, db);
+  await stubHandOver(page);
+  // A modified or middle press may open a tab. Each is closed as it opens, and nothing it requests
+  // leaves the runner: only this page's requests go on to its mocks and to BASE.
+  const opened = [];
+  page.context().on("page", (p) => {
+    opened.push(p);
+    p.close().catch(() => undefined);
+  });
+  await page.context().route("**/*", (route) => {
+    let mine = false;
+    try {
+      mine = route.request().frame().page() === page;
+    } catch {
+      mine = false;
+    }
+    return mine ? route.fallback() : route.abort();
+  });
+  const card = cardSel(E.supper, "soon");
+  try {
+    await signIn(page);
+    await openDiscovery(page);
+    await page.locator(card).scrollIntoViewIfNeeded();
+    const face = await page.evaluate((sel) => {
+      const art = document.querySelector(`${sel} article[data-presentation="discovery"]`);
+      const a = art && art.querySelector("a[data-card-open][href]");
+      const cover = a && a.querySelector("[data-card-cover]");
+      if (!art || !a || !cover) return { link: !!a, cover: !!cover };
+      const at = (el) => {
+        if (!el) return null;
+        const r = el.getBoundingClientRect();
+        return document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+      };
+      const inside = (el) => {
+        const hit = at(el);
+        return !!hit && el.contains(hit);
+      };
+      const edge = parseFloat(getComputedStyle(art).borderTopWidth) || 0;
+      const ar = art.getBoundingClientRect();
+      const cr = cover.getBoundingClientRect();
+      const media = art.querySelector("[data-media]");
+      return {
+        href: a.getAttribute("href"),
+        target: a.getAttribute("target"),
+        anchors: art.querySelectorAll("a[href]").length,
+        cover: [Math.round(cr.width * 10) / 10, Math.round(cr.height * 10) / 10],
+        inner: [
+          Math.round((ar.width - 2 * edge) * 10) / 10,
+          Math.round((ar.height - 2 * edge) * 10) / 10,
+        ],
+        media: !!media && a.contains(at(media)),
+        presenter: inside(art.querySelector('[data-row="presenter"] button')),
+        topic: inside(art.querySelector('[data-row="presenter"] [data-card-control] button')),
+        ellipsis: inside(art.querySelector('button[aria-haspopup="menu"]')),
+      };
+    }, card);
+    const href = face.href ? new URL(face.href, BASE) : null;
+    record(
+      tag +
+        " the face is one link to the event's address, its cover across the face, the presenter, topic and ellipsis above it (G100)",
+      !!href &&
+        href.pathname === "/convene/events/" + E.supper.event_id &&
+        face.target === null &&
+        face.anchors === 1 &&
+        Math.abs(face.cover[0] - face.inner[0]) <= 1 &&
+        Math.abs(face.cover[1] - face.inner[1]) <= 1 &&
+        face.media &&
+        face.presenter &&
+        face.topic &&
+        face.ellipsis,
+      JSON.stringify(face),
+    );
+
+    // A modified press and a middle press are the browser's: this page stays on Discovery. Each is
+    // a press at the media's centre, which lands on the link's cover (the check above), so the
+    // cover is what receives it, as it does a pointer's.
+    const atMedia = await page.evaluate((sel) => {
+      const cover = document.querySelector(`${sel} [data-card-cover]`);
+      const media = document.querySelector(`${sel} [data-media]`);
+      if (!cover || !media) return null;
+      const c = cover.getBoundingClientRect();
+      const m = media.getBoundingClientRect();
+      return { x: m.left + m.width / 2 - c.left, y: m.top + m.height / 2 - c.top };
+    }, card);
+    // Without a cover (before correction 28) the press goes to the media itself, as a pointer's
+    // would, so the check reads what that face does with a modified press.
+    const press = (opts) =>
+      (atMedia
+        ? page
+            .locator(`${card} [data-card-cover]`)
+            .click({ position: atMedia, timeout: 5000, ...opts })
+        : page.locator(`${card} [data-media]`).click({ timeout: 5000, ...opts })
+      ).catch(() => undefined);
+    const before = page.url();
+    await press({ modifiers: ["ControlOrMeta"] });
+    await page.waitForTimeout(600);
+    const afterModified = page.url();
+    await press({ button: "middle" });
+    await page.waitForTimeout(600);
+    const still = {
+      modified: afterModified,
+      middle: page.url(),
+      pane: await page.locator('[data-discovery][data-pane-open="1"]').count(),
+      page: await page.locator("[data-event-page]").count(),
+      tabs: opened.length,
+    };
+    record(
+      tag +
+        " a modified press and a middle press on the face open no pane and leave this page (G100)",
+      still.modified === before && still.middle === before && still.pane === 0 && still.page === 0,
+      JSON.stringify(still),
+    );
+
+    // A plain press on the media lands in the link: the event at its address, in the pane at
+    // expanded and as its own route below it (1023, 1063).
+    await press({});
+    await page.waitForURL((u) => u.pathname === "/convene/events/" + E.supper.event_id, {
+      timeout: 10000,
+    });
+    await page.waitForSelector("[data-event-page]", { timeout: 20000 });
+    const landed = new URL(page.url());
+    record(
+      tag +
+        (tier === "expanded"
+          ? " a plain press on the face opens the event in the pane, at the link's address (G100, 1063)"
+          : " a plain press on the face opens the event's route, at the link's address (G100, 1023)"),
+      !!href &&
+        landed.pathname + landed.search === href.pathname + href.search &&
+        (tier === "expanded"
+          ? (await page.locator('[data-discovery][data-pane-open="1"]').count()) === 1
+          : (await page.locator("[data-event-page] [data-back-row]").count()) === 1),
+      landed.pathname + landed.search,
+    );
+
+    // 1140, G120: the card menu's Copy link, then Share from the menu reopened, read through the
+    // harness's stubs. The seeded page is public, its slug "discovery-{id}". `menuSelect` selects as
+    // soon as the menu opens, which can be before the read the ellipsis's press started has answered,
+    // so a press here may take the awaited path (G131); both paths hand over one address, and the
+    // arm reads the address.
+    await openDiscovery(page);
+    const menuHanded = await handedOver(
+      page,
+      async () => {
+        await menuSelect(page, card, "Copy link");
+        await menuSelect(page, card, "Share");
+      },
+      { copied: 1, shared: 1 },
+    );
+    const publicPath = "/e/discovery-" + E.supper.event_id;
+    record(
+      tag +
+        " the card menu's Copy link and Share hand over the event's public address under /e/, as its page builds it (1140, G120)",
+      menuHanded.copied.length === 1 &&
+        onPath(menuHanded.copied[0], publicPath) &&
+        menuHanded.shared.length === 1 &&
+        onPath(menuHanded.shared[0], publicPath),
+      JSON.stringify(menuHanded),
+    );
+
+    // An event with no public page: the member address, which is what its page's own Share hands over.
+    const memberHanded = await handedOver(
+      page,
+      () => menuSelect(page, cardSel(E.madina, "soon"), "Copy link"),
+      { copied: 1 },
+    );
+    record(
+      tag +
+        " for an event with no public page, the card menu's Copy link hands over the member address, as its page does (1140, G120)",
+      memberHanded.copied.length === 1 &&
+        onPath(memberHanded.copied[0], "/convene/events/" + E.madina.event_id),
+      JSON.stringify(memberHanded),
+    );
+
+    record(tag + " no page errors", errors.length === 0, errors.join(" | ").slice(0, 300));
+  } catch (e) {
+    record(tag + " flow", false, String(e).slice(0, 400));
+  } finally {
+    await browser.close();
+  }
+}
+
+// ---------------------------------------------------------------------------------------------------
+// Handoff 33-A Addendum 2 item 4 (1145) changes one LensBar call, Discovery's own. Every other lens
+// bar the app draws must come out of that change exactly as it went in, so this arm reads each of
+// them on the head under test (BASE) and on the reference build (LENS_REF_BASE) in the same browser
+// and the same run, and compares every coordinate. Two origins rather than a stored fixture, because
+// a label's width is the runner's fonts' and a fixture captured anywhere else would not match.
+//
+// The mounts, as the tree holds them (555; every `LensBar` in src/):
+//   own bar      a surface's LensBar in its own column: FeedSurface's in [data-lens-anchor],
+//                ConnectSurface's in [data-testid="lens-bar-wrap"], and Discovery's own at compact
+//                in its [data-lens-anchor], which is the only width item 4 leaves it there.
+//   header slot  AppHeader's compact LensBar, taken below expanded once the shell's scroller is past
+//                72 by whichever surface registered one (header-lens-store.ts): the Feed while its
+//                list shows, Discovery at compact only. Connect registers none.
+//   lens row     the shell's [data-layout-top], which only Discovery fills (setShellLayout, lanes
+//                mode), at medium and expanded. The ROW's box is compared; the bar inside it is
+//                item 4's subject, changed by design, and is read and reported but never compared.
+// Each surface is read at every one of the three slots against LENS_ID_MOUNTS, the table of where the
+// tree draws a bar: a slot it fills must hold a drawn bar on both builds, so a read with none is
+// unproven (228) and never a pass, and a slot it leaves empty is recorded as absent on both builds,
+// never skipped. Each check's name is written from the same table, so it names what it compared at
+// its tier and nothing it did not. Each is read at its top and again with the shell's scroller
+// at LENS_ID_SCROLL, past the 72 the header swap waits for; Discovery also at the lens whose scope
+// line is longest, the line item 4's `min-content` root could rewrap and so change the row's height.
+// Nothing else reaches a LensBar: /posts/:id opened from the Feed is the Feed's own mount (the shell
+// renders FeedSurface beneath it) and landed on directly renders none and clears the header slot;
+// /convene/{lens} and /convene/events/:id at expanded are Discovery's; no other surface registers a
+// header lens or fills the lens row.
+
+/**
+ * The reference build: f19af1f's own Pages deployment, the PR head before Addendum 2, whose app and
+ * tests equal af43dfd's. A per-deployment URL is immutable, so every run reads the same build.
+ * REF_BASE overrides it (a local server of that build, where pages.dev is out of reach), and the
+ * override must serve f19af1f's build: nothing on the page names its commit, and a build's asset
+ * names carry its environment as well as its source, so the arm cannot check it. The tell a reader
+ * has is the detail's "bar in the lens row", moved at medium and expanded against f19af1f. Move it
+ * only when a later ruling names a new reference, for instance once item 4 has merged and a later
+ * change must leave these bars as item 4 left them; the constant is the build every bar is held to.
+ */
+const LENS_REF_BASE = process.env.REF_BASE || "https://5cb1cdca.dna-web-application.pages.dev";
+const LENS_REF_NAME = "f19af1f";
+/** One cell per tier: compact, medium and expanded, both themes between them. */
+const LENS_ID_VIEWPORTS = [
+  [[390, 844], "light"],
+  [[820, 1180], "dark"],
+  [[1280, 800], "light"],
+];
+/**
+ * Absolute boxes in CSS px. The two builds run in one browser on one machine with one font set, and
+ * nothing around these bars differs between them, so the same layout gives the same floats: three
+ * runs per cell read a spread of 0 on every coordinate, on each build and between them. 0.01 is
+ * the margin over that, and it sits under the 1/64 px both engines lay boxes out in, so a change to
+ * layout moves some coordinate past it; only a transform finer than 0.01 would not.
+ */
+const LENS_ID_TOLERANCE = 0.01;
+/** The shell's scroller position for the second read: past the header swap's 72 (SCROLL_SWAP_PX). */
+const LENS_ID_SCROLL = 200;
+/** The Discovery lens with the longest scope line, from the vocabulary rather than a literal. */
+const LENS_ID_LONG_SCOPE = VOCAB.convene_lenses
+  .filter((l) => DISCOVERY_LENSES.includes(l.value))
+  .reduce((a, b) => (b.scope.length > a.scope.length ? b : a)).value;
+
+/** Runs in the page: every LensBar box in each of the three slots, and the shell's scroll. */
+function readLensSlots() {
+  const box = (el) => {
+    if (!el) return null;
+    const b = el.getBoundingClientRect();
+    return { x: b.x, y: b.y, w: b.width, h: b.height };
+  };
+  // The text itself, not the block holding it: a Range over the block's contents gives one rect per
+  // line box the text lays out in, and their union. The block spans the scope's full width whatever
+  // its words do, so letter-spacing, weight or a face at the same line height move only these.
+  const text = (el) => {
+    if (!el) return null;
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    const lines = Array.from(range.getClientRects())
+      .filter((b) => b.width > 0 && b.height > 0)
+      .map((b) => ({ x: b.x, y: b.y, w: b.width, h: b.height }));
+    if (!lines.length) return null;
+    const x = Math.min(...lines.map((b) => b.x));
+    const y = Math.min(...lines.map((b) => b.y));
+    const r = Math.max(...lines.map((b) => b.x + b.w));
+    const btm = Math.max(...lines.map((b) => b.y + b.h));
+    return { box: { x, y, w: r - x, h: btm - y }, lines };
+  };
+  const bar = (root) => {
+    const tablist = root.querySelector('[role="tablist"]');
+    const scope = root.querySelector(":scope > [data-lens-scope]");
+    return {
+      mode: root.getAttribute("data-lens-bar"),
+      visibility: getComputedStyle(root).visibility,
+      root: box(root),
+      tablist: box(tablist),
+      name: tablist ? tablist.getAttribute("aria-label") : null,
+      seats: tablist
+        ? Array.from(tablist.querySelectorAll('[role="tab"]')).map((s) => {
+            const word = s.querySelector(":scope > span:not([aria-hidden])");
+            return {
+              id: s.getAttribute("data-lens"),
+              on: s.getAttribute("aria-selected"),
+              seat: box(s),
+              glyph: box(s.querySelector(':scope > [aria-hidden="true"]')),
+              label: box(word),
+              word: word ? word.textContent : null,
+            };
+          })
+        : [],
+      scope: scope
+        ? {
+            open: scope.getAttribute("data-open"),
+            box: box(scope),
+            block: box(scope.firstElementChild),
+            text: text(scope.firstElementChild),
+            words: scope.textContent,
+          }
+        : null,
+    };
+  };
+  const header = document.querySelector("header[data-app-header]");
+  const headerBar = header && header.querySelector(".strand-lens");
+  const row = document.querySelector("[data-layout-top]");
+  const rowBar = row && row.querySelector(".strand-lens");
+  const own = Array.from(document.querySelectorAll(".strand-lens")).filter(
+    (el) => !el.closest("header[data-app-header]") && !el.closest("[data-layout-top]"),
+  );
+  const sc = document.querySelector('[data-scroller="feed"]');
+  return {
+    scrollTop: sc ? sc.scrollTop : null,
+    header: headerBar ? { centre: header.getAttribute("data-centre"), bar: bar(headerBar) } : null,
+    row: row ? { box: box(row), bar: rowBar ? bar(rowBar) : null } : null,
+    own: own.map(bar),
+  };
+}
+
+/** Every numeric leaf of `a` against `b` within the tolerance and every other leaf equal. */
+function lensDiff(a, b, tol = LENS_ID_TOLERANCE) {
+  const out = { n: 0, max: 0, diffs: [] };
+  const walk = (x, y, p) => {
+    if (typeof x === "number" && typeof y === "number") {
+      out.n++;
+      const d = Math.abs(x - y);
+      if (d > out.max) out.max = d;
+      if (d > tol) out.diffs.push([p, x, y]);
+    } else if (Array.isArray(x) && Array.isArray(y)) {
+      if (x.length !== y.length) out.diffs.push([p + ".length", x.length, y.length]);
+      for (let i = 0; i < Math.min(x.length, y.length); i++) walk(x[i], y[i], `${p}[${i}]`);
+    } else if (x && y && typeof x === "object" && typeof y === "object") {
+      for (const k of new Set([...Object.keys(x), ...Object.keys(y)]))
+        walk(x[k], y[k], p ? p + "." + k : k);
+    } else if (x !== y) out.diffs.push([p, x, y]);
+  };
+  walk(a, b, "");
+  return out;
+}
+
+/** A LensBar that is drawn: a root with a box and at least one seat, each with its lens and box. */
+function lensDrawn(bar) {
+  return (
+    !!bar &&
+    !!bar.root &&
+    bar.root.w > 0 &&
+    bar.root.h > 0 &&
+    bar.seats.length > 0 &&
+    bar.seats.every((s) => !!s.id && !!s.seat && s.seat.w > 0 && s.seat.h > 0)
+  );
+}
+
+/**
+ * The three slots. `pick` is what is compared: every box of the bars in the surface's own column,
+ * every box of the header's bar, and the lens row's own box, never the bar in it (1145 moves that
+ * bar by design). `drawn` is whether the slot holds a drawn LensBar, the row counting only with its
+ * bar. `says` is the slot in a check's name, compared and then absent.
+ */
+const LENS_SLOTS = [
+  {
+    key: "own",
+    name: "own bar",
+    pick: (r) => (r.own.length ? r.own : null),
+    drawn: (r) => r.own.length > 0 && r.own.every(lensDrawn),
+    says: ["its own LensBar", "its own column"],
+  },
+  {
+    key: "header",
+    name: "header slot",
+    pick: (r) => r.header,
+    drawn: (r) => !!r.header && lensDrawn(r.header.bar),
+    says: ["the header slot's (once scrolled past 72)", "the header slot"],
+  },
+  {
+    key: "row",
+    name: "lens row",
+    pick: (r) => (r.row ? r.row.box : null),
+    drawn: (r) => !!r.row && lensDrawn(r.row.bar),
+    says: ["the box of the shell's lens row (not the bar in it, 1145's subject)", "the lens row"],
+  },
+];
+
+/**
+ * Where f19af1f's tree draws a LensBar, per surface, tier and read (the mounts above, 555), and so
+ * where this arm requires one on both builds. A slot the table fills that holds no bar on either
+ * build compares nothing, and says so as unproven (228) rather than "absent on both"; a slot the
+ * table leaves empty must be empty on both, so a bar that turns up there on both says the table or
+ * the reference is not f19af1f's. Discovery's `scope` read is at its top, so it follows `top`.
+ */
+const LENS_ID_MOUNTS = {
+  Feed: (tier, state) => ({
+    own: true,
+    header: state === "scrolled" && tier !== "expanded",
+    row: false,
+  }),
+  Discovery: (tier, state) => ({
+    own: tier === "compact",
+    header: state === "scrolled" && tier === "compact",
+    row: tier !== "compact",
+  }),
+  Connect: () => ({ own: true, header: false, row: false }),
+};
+
+/** A check's name from the table, so it says exactly what it compares at its tier and no more. */
+function lensCheckName(tag, s, tier) {
+  const states = s.also ? ["top", "scrolled", "scope"] : ["top", "scrolled"];
+  const mounts = states.map((state) => LENS_ID_MOUNTS[s.name](tier, state));
+  const held = LENS_SLOTS.filter((slot) => mounts.some((m) => m[slot.key]));
+  const none = LENS_SLOTS.filter((slot) => !held.includes(slot));
+  const list = (xs, and) =>
+    xs.length < 2 ? xs.join("") : xs.slice(0, -1).join(", ") + ` ${and} ` + xs[xs.length - 1];
+  const bars = held.some((slot) => slot.key !== "row");
+  return (
+    `${tag} ${s.name}: ${list(
+      held.map((slot) => slot.says[0]),
+      "and",
+    )} identical to ${LENS_REF_NAME}'s${bars ? ", box for box" : ""}` +
+    (held.some((slot) => slot.key === "row") ? ", with a LensBar in the row on both builds" : "") +
+    (none.length
+      ? `; no LensBar in ${list(
+          none.map((slot) => slot.says[1]),
+          "or",
+        )} on either build`
+      : "") +
+    `; ${s.also ? "top, scrolled and on the longest scope line" : "top and scrolled"} (1145)`
+  );
+}
+
+/** One slot of one read on the two builds, both present: identical within the tolerance or not. */
+function compareSlot(head, ref) {
+  const d = lensDiff(head, ref);
+  return d.diffs.length
+    ? {
+        ok: false,
+        n: d.n,
+        said: `differs at ${d.diffs.length} of ${d.n}`,
+        diffs: d.diffs.slice(0, 6),
+      }
+    : { ok: true, n: d.n, said: `identical, ${d.n} values, max |d| ${+d.max.toFixed(4)}` };
+}
+
+/** One slot against the table: drawn on both and identical where it is mounted, empty on both where not. */
+function judgeSlot(slot, mounted, h, r) {
+  const onHead = slot.drawn(h);
+  const onRef = slot.drawn(r);
+  if (mounted) {
+    if (!onHead && !onRef)
+      return {
+        ok: false,
+        n: 0,
+        said: `unproven (228): no LensBar here on either build, where ${LENS_REF_NAME}'s tree draws one`,
+      };
+    if (!onRef)
+      return {
+        ok: false,
+        n: 0,
+        said: `unproven (228): ${LENS_REF_NAME} draws no LensBar here and the head does`,
+      };
+    if (!onHead)
+      return { ok: false, n: 0, said: `the head draws no LensBar here and ${LENS_REF_NAME} does` };
+    return compareSlot(slot.pick(h), slot.pick(r));
+  }
+  const hasHead = slot.pick(h) != null;
+  const hasRef = slot.pick(r) != null;
+  if (!hasHead && !hasRef)
+    return { ok: true, n: 0, said: "absent on both, where the tree mounts none" };
+  return {
+    ok: false,
+    n: 0,
+    said:
+      `present on ${hasHead && hasRef ? "both builds" : hasHead ? "the head only" : LENS_REF_NAME + " only"}` +
+      ` where ${LENS_REF_NAME}'s tree mounts none: the head, the reference or this arm's table is not what it says`,
+  };
+}
+
+/**
+ * One surface's reads on the two builds, slot by slot and state by state, against the table. A read
+ * that did not settle, or a scroll that stopped short of the header swap, proves nothing about the
+ * slot it was meant to exercise, so either fails the check rather than passing it on a partial read;
+ * and a surface that compared no value at all is unproven (228) whatever its slots said.
+ */
+function judgeSurface(name, tier, head, ref) {
+  const detail = {};
+  let ok = true;
+  let compared = 0;
+  for (const state of Object.keys(head)) {
+    const h = head[state];
+    const r = ref[state];
+    const s = (detail[state] = {});
+    if (!r) {
+      ok = false;
+      s.read = `${LENS_REF_NAME} has no ${state} read`;
+      continue;
+    }
+    if (h.unsettled || r.unsettled) {
+      ok = false;
+      s.settled = `no: head ${!h.unsettled}, ${LENS_REF_NAME} ${!r.unsettled}`;
+    }
+    if (state === "scrolled" && !(h.scrollTop > 72 && r.scrollTop > 72)) {
+      ok = false;
+      s.scroll = `short of the 72 swap: head ${h.scrollTop}, ${LENS_REF_NAME} ${r.scrollTop}`;
+    } else if (Math.abs(h.scrollTop - r.scrollTop) > LENS_ID_TOLERANCE) {
+      ok = false;
+      s.scroll = `head ${h.scrollTop}, ${LENS_REF_NAME} ${r.scrollTop}`;
+    }
+    const mounts = LENS_ID_MOUNTS[name](tier, state);
+    for (const slot of LENS_SLOTS) {
+      const c = judgeSlot(slot, mounts[slot.key], h, r);
+      if (!c.ok) ok = false;
+      compared += c.n;
+      s[slot.name] = c.diffs ? c.said + " " + JSON.stringify(c.diffs) : c.said;
+    }
+    // Item 4's own subject, reported so a reader can see the row held while the bar in it moved.
+    if (h.row && h.row.bar && r.row && r.row.bar) {
+      const d = lensDiff(h.row.bar, r.row.bar);
+      s["bar in the lens row (1145's subject, not compared)"] = d.diffs.length
+        ? `moved at ${d.diffs.length} of ${d.n}, max |d| ${+d.max.toFixed(3)}`
+        : `unchanged, ${d.n} values`;
+    }
+  }
+  if (compared === 0) {
+    ok = false;
+    detail.compared = "unproven (228): no LensBar value compared on either build";
+  } else detail.compared = `${compared} values`;
+  return { ok, detail };
+}
+
+/** Per page, a wait until none of its requests has been in flight for 300ms (five seconds at most). */
+const LENS_QUIET = new WeakMap();
+
+/**
+ * Navigate once the page is quiet. A `goto` issued while the last surface is still fetching cancels
+ * those requests: a cancelled fetch is console noise on WebKit, and a local `wrangler pages dev`
+ * drops its proxy on a cancelled asset ("Network connection lost"), so every read starts from a page
+ * that has finished the one before it.
+ */
+async function lensGo(page, url) {
+  await LENS_QUIET.get(page)();
+  await lensRetry(page, "goto " + url, () => page.goto(url, { waitUntil: "networkidle" }));
+}
+
+/** Every retry the arm took, by page, for the artifact: a read that needed one is still visible. */
+const LENS_RETRIES = [];
+/**
+ * Ruling 217's gate polls the head's deployment before any arm runs, and never the reference's, so
+ * this arm's own navigations carry what the gate does for the head: three attempts, two seconds
+ * apart. The last attempt's error is thrown, and the surface fails as unproven (228), never passes.
+ */
+async function lensRetry(page, what, act) {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await act();
+    } catch (e) {
+      if (attempt === 3) throw e;
+      LENS_RETRIES.push({ what, attempt, error: String(e).split("\n")[0].slice(0, 200) });
+      await page.waitForTimeout(2000);
+    }
+  }
+}
+
+/** A context on one origin: the matrix's options, theme and Supabase mock, and its own db. */
+async function lensContext(browser, [w, h], theme, errors, who) {
+  const ctx = await browser.newContext({
+    viewport: { width: w, height: h },
+    hasTouch: w <= 1024,
+    isMobile: w < 1024,
+    deviceScaleFactor: 1,
+    colorScheme: theme,
+  });
+  const page = await ctx.newPage();
+  await page.addInitScript(
+    ({ theme }) => {
+      try {
+        localStorage.setItem("dna.theme", theme);
+      } catch {}
+    },
+    { theme },
+  );
+  const db = makeMockDb();
+  seedDiscovery(db);
+  // Enough Feed to scroll past the swap: seedDiscovery's one post and five more after it.
+  const more = makeMockDb();
+  seedPosts(more, 6);
+  db.posts.push(...more.posts.slice(1));
+  await mockSupabase(page, db);
+  const live = new Set();
+  let last = Date.now();
+  const settle = (r) => {
+    live.delete(r);
+    last = Date.now();
+  };
+  page.on("request", (r) => {
+    live.add(r);
+    last = Date.now();
+  });
+  page.on("requestfinished", settle);
+  page.on("requestfailed", settle);
+  LENS_QUIET.set(page, async () => {
+    const until = Date.now() + 5000;
+    while (Date.now() < until && (live.size || Date.now() - last < 300))
+      await page.waitForTimeout(50);
+  });
+  page.on("pageerror", (e) => {
+    const text = String(e);
+    if (!CANCELLED_MOCK_FETCH.test(text)) errors.push(who + ": " + text);
+  });
+  page.on("console", (m) => {
+    if (m.type() === "error" && !IGNORED_CONSOLE.test(m.text())) errors.push(who + ": " + m.text());
+  });
+  return page;
+}
+
+/** The read once two in a row, 120ms apart, agree; `unsettled` if they never do inside three seconds. */
+async function settledLensRead(page) {
+  await page.evaluate(() =>
+    document.fonts.ready.then(
+      () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))),
+    ),
+  );
+  let prev = await page.evaluate(readLensSlots);
+  for (let i = 0; i < 25; i++) {
+    await page.waitForTimeout(120);
+    const next = await page.evaluate(readLensSlots);
+    if (JSON.stringify(next) === JSON.stringify(prev)) return next;
+    prev = next;
+  }
+  return { ...prev, unsettled: true };
+}
+
+const LENS_ID_SURFACES = [
+  {
+    name: "Feed",
+    path: "/feed",
+    ready: (page) =>
+      // The list, not the bar: a bar that is missing is the comparison's to name, never a timeout's.
+      page.waitForFunction(
+        () => !!document.querySelector('[data-post-id], [data-testid="feed-empty"]'),
+        null,
+        { timeout: 20000 },
+      ),
+  },
+  {
+    name: "Discovery",
+    path: "/convene",
+    also: "/convene/" + LENS_ID_LONG_SCOPE,
+    ready: async (page) => {
+      await page.waitForSelector("[data-discovery]", { timeout: 20000 });
+      await page.waitForFunction(
+        () =>
+          !!document.querySelector(
+            "[data-discovery] [data-lanes], [data-lens-list], [role=alert]",
+          ) && !document.querySelector('[role="status"][aria-label="Loading Convene"]'),
+        null,
+        { timeout: 20000 },
+      );
+    },
+  },
+  {
+    name: "Connect",
+    path: "/connect",
+    ready: async (page) => {
+      await page.waitForSelector('[data-testid="connect"]', { timeout: 20000 });
+      await page.waitForFunction(
+        () => !document.querySelector('[role="status"][aria-label^="Loading"]'),
+        null,
+        { timeout: 20000 },
+      );
+    },
+  },
+];
+
+/** One surface on one origin: its top, the shell scrolled past the swap, and a second lens if any. */
+async function readLensSurface(page, origin, s) {
+  await lensGo(page, origin + s.path);
+  await s.ready(page);
+  const reads = { top: await settledLensRead(page) };
+  await page.evaluate((y) => {
+    const sc = document.querySelector('[data-scroller="feed"]');
+    sc.scrollTop = y;
+    sc.dispatchEvent(new Event("scroll"));
+  }, LENS_ID_SCROLL);
+  await page.waitForFunction(() => {
+    const sc = document.querySelector('[data-scroller="feed"]');
+    const shell = document.querySelector("[data-scrolled]");
+    return !!shell && shell.getAttribute("data-scrolled") === (sc.scrollTop > 72 ? "1" : "0");
+  });
+  reads.scrolled = await settledLensRead(page);
+  if (s.also) {
+    await lensGo(page, origin + s.also);
+    await s.ready(page);
+    reads.scope = await settledLensRead(page);
+  }
+  return reads;
+}
+
+async function runDiscoveryLensIdentity(browserType, bname, [w, h], theme) {
+  const tag = `${bname}-${w}x${h}-${theme}-discovery-lens-identity`;
+  M.armStart(tag);
+  const browser = await launch(browserType);
+  const errors = [];
+  const tier = tierOf(w);
+  const reads = { reference: LENS_REF_BASE, head: {}, ref: {}, verdicts: {} };
+  const named = (s) => lensCheckName(tag, s, tier);
+  try {
+    const head = await lensContext(browser, [w, h], theme, errors, "head");
+    const ref = await lensContext(browser, [w, h], theme, errors, LENS_REF_NAME);
+    await signIn(head);
+    // Ruling 228: a reference that cannot be reached, or signs in to nothing, proves nothing, and
+    // every check it was to prove fails naming why. Nothing here passes on the head's read alone.
+    let refDown = null;
+    try {
+      await lensRetry(ref, "sign-in", () => signIn(ref, LENS_REF_BASE));
+    } catch (e) {
+      refDown = "sign-in: " + String(e).split("\n")[0];
+    }
+    for (const s of LENS_ID_SURFACES) {
+      const hr = (reads.head[s.name] = await readLensSurface(head, BASE, s));
+      let rr = null;
+      let why = refDown;
+      if (!why)
+        try {
+          rr = reads.ref[s.name] = await readLensSurface(ref, LENS_REF_BASE, s);
+        } catch (e) {
+          why = String(e).split("\n")[0];
+        }
+      if (why) {
+        reads.verdicts[s.name] = why;
+        record(
+          named(s),
+          false,
+          `unproven (228): the reference build at ${LENS_REF_BASE} was not read: ${why.slice(0, 240)}`,
+        );
+        continue;
+      }
+      const v = judgeSurface(s.name, tier, hr, rr);
+      reads.verdicts[s.name] = v.detail;
+      record(named(s), v.ok, JSON.stringify(v.detail));
+    }
+    record(tag + " no page errors", errors.length === 0, errors.join(" | ").slice(0, 300));
+  } catch (e) {
+    record(tag + " flow", false, String(e).slice(0, 400));
+  } finally {
+    // Every box both builds gave, for the job's artifact: the evidence a pass or a failure rests on.
+    reads.retries = LENS_RETRIES.splice(0);
+    fs.writeFileSync(path.join(M.OUT, tag + ".json"), JSON.stringify(reads, null, 2));
+    await browser.close();
+  }
+}
+
+/** Addendum 4's and 5's arms and their cells, in item order, then handoff 33-A's link arm (G100). */
 const FOLLOWUP_ARMS = [
   [runDiscoveryPresenter, FOLLOWUP_VIEWPORTS],
   [runDiscoveryOnline, FOLLOWUP_VIEWPORTS],
@@ -2502,6 +3874,9 @@ const FOLLOWUP_ARMS = [
   [runDiscoveryStep, PANE_VIEWPORTS],
   [runDiscoveryHomes, FOLLOWUP_VIEWPORTS],
   [runDiscoveryWidth, WIDTH_VIEWPORTS],
+  [runDiscoveryLink, FOLLOWUP_VIEWPORTS],
+  // Addendum 2 item 4 (1145): every other LensBar identical to the reference build's.
+  [runDiscoveryLensIdentity, LENS_ID_VIEWPORTS],
 ];
 
 module.exports = {
@@ -2516,4 +3891,14 @@ module.exports = {
   __seedDiscovery: seedDiscovery,
   __seedCorpus: seedCorpus,
   __full: fullDensity,
+  __lensIdentity: {
+    readLensSlots,
+    lensDiff,
+    compareSlot,
+    judgeSurface,
+    lensCheckName,
+    LENS_ID_SURFACES,
+    LENS_REF_BASE,
+    LENS_ID_TOLERANCE,
+  },
 };

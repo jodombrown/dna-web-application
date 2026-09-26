@@ -301,6 +301,19 @@ export function memberEventPath(id: string): string {
   return "/convene/events/" + encodeURIComponent(id);
 }
 
+/**
+ * The address a share hands over (1028, 1140; G120): the public page's when event_page says the event
+ * has one, and the member page's otherwise, which always opens the event. The event page's Share and
+ * Discovery's Share and Copy link all build it here and nowhere else. `public` is event_page's
+ * answer, never derived in TypeScript; given only an id, with no page read, it is the member page's.
+ */
+export function eventShareUrl(
+  origin: string,
+  ev: Pick<EventPageEvent, "id"> & Partial<Pick<EventPageEvent, "slug" | "public">>,
+): string {
+  return origin + (ev.public && ev.slug ? publicEventPath(ev.slug) : memberEventPath(ev.id));
+}
+
 /** An image the public page may show, through the event-media function and never a storage path. */
 export function eventMediaUrl(slug: string, key: { position: number } | { party: string }): string {
   const q =

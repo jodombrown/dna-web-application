@@ -1,11 +1,15 @@
-// Strand `components/dna/Pane.jsx`, first ported at compile v1789885868097915 (ruling 851) and
+// Strand `components/dna/Pane.jsx`, first ported at compile v1789885868097915 (ruling 851),
 // reconciled at compile v1790212533284400 (handoff 32-A, rulings 862 and 844) with corrections 23
-// §1 (1083, Escape amended by 1084) and 24 §6 (1064, ratified 1085). The .jsx and the bundle are
-// identical once both are compiled the same way; the dispositions are in
-// docs/strand-ports/v1790212533284400.md.
+// §1 (1083, Escape amended by 1084) and 24 §6 (1064, ratified 1085), dispositions in
+// docs/strand-ports/v1790212533284400.md, and carried unchanged through v1790279130697923, whose
+// Pane is byte for byte v1790212533284400's. Reconciled at compile v1790366257373061 (handoff 33-A,
+// correction 28 item 1, G110, ratified 1134), which adds `paneWidth`, `height`, `listHidden`,
+// `hiddenWidth`, the toolbar's three handlers and four labels, and a second expanded branch that
+// draws them; the dispositions are in docs/strand-ports/v1790366257373061.md. The .jsx and the
+// bundle are identical once both are compiled the same way.
 //
 // Rulings the compiled part cites in its own doc comment: 561, 607, 612, 79, 588, 589, 700, 719,
-// 1083, 69 and 1064.
+// 1083, 69 and 1064; its correction 28 paragraph cites G110 and B9-SPEC's pane line.
 // A pane (561) is a second surface consulted alongside the first. It is navigated into, never
 // summoned. Above `--tier-expanded` it is a pane beside the list; below it the pane is its own
 // route, full width, with its own back affordance — medium taking the pane was the counter-case 561
@@ -41,18 +45,40 @@
 // rendered; nothing is a different element tree, so React never rebuilds the list and a lane
 // scrolled sideways keeps its position across open and close. The track snaps; the section's opacity
 // moves at `--dur-slow` (589). Default open, so an existing caller renders as it did, with the
-// markers and the cluster's wrapper the port record's section 4 lists. Below
+// markers and the cluster's wrapper v1790212533284400's port record lists in its section 4. Below
 // `--tier-expanded` `open` does nothing: the pane is its own route (561). `selected={false}` is
 // still a pane open on its own empty state and is not the closed pane.
+// Correction 28 (G110; B9-SPEC's pane line, which the compile cites as line 14, its number before
+// Revision 2, and which is line 19 in Revision 2). A second expanded branch, placed after the route
+// form's return, so below `--tier-expanded` none of the new props does anything. It runs when
+// `paneWidth`, `height` or any of `onToggleList`, `onCopyLink`, `onShare` is passed; `listHidden`
+// and `hiddenWidth` alone do not enter it. Without them the expanded Pane is correction 24's grid,
+// the same DOM and styles as before. `paneWidth` fixes the pane and gives the list the rest,
+// `minmax(0,1fr) {paneWidth}`, a number read as px. `height` bounds the grid: the list column and a
+// `data-pane-body` wrapper round the pane's content each scroll on their own (`overflow-y: auto`,
+// overscroll contained), and the section is `position: relative`, not sticky; with the list column
+// a scroller, `selectedKey`'s bring-into-view has something to move. Any tool handler renders
+// `data-pane-bar` at the section's top: on the left the `role="toolbar"` group `data-pane-toolbar`,
+// Hide or show the list (`panel-left-close`, `panel-left-open`), Copy link (`link`), Share
+// (`share`), each marked `data-tool`; on the right correction 23's cluster, unchanged in content,
+// order and keys. Without a tool handler the cluster keeps the corner. `listHidden`, while open,
+// draws `0px minmax(0,{hiddenWidth})` centred with no gap (default 720): the list slot is still the
+// same element, `aria-hidden`, inert and hidden, so its scroll is kept while `selectedKey` holds.
+// The follow below runs on a new key hidden or not, and the hidden list is laid out at no width,
+// so a caller holds its key while the list is hidden (G128). Closed wins over hidden. In this
+// branch the pane's content always sits inside `data-pane-body`, bounded or not.
 //
-// Bound by `DiscoverySurface` (handoff 31-B) with `onClose` only. The stepping pair, `selectedKey`
-// and `open` are 32-B's to bind; no page passes them in this port.
+// `DiscoverySurface` (handoff 31-B) is the one caller. It binds `onClose`, `closeLabel`,
+// `selectedKey` (held while the list is hidden, G128) and the stepping pair, and renders the Pane
+// only while an item is open, so no page passes `open`. G110's binding of `paneWidth` 520, `height`
+// and the three tool handlers is handoff 33-A's change to that caller, not this part's.
 import { useEffect, useRef, type CSSProperties, type KeyboardEvent, type ReactNode } from "react";
 import { IconButton } from "./IconButton";
 
 export type PaneProps = {
   tier?: "compact" | "medium" | "expanded";
-  /** The list column, rendered beside the pane at expanded and as the route's own page below it. */
+  /** The list column, expanded only. Below expanded the list is its own page, which the host
+   *  renders; this component does not render `list` there. */
   list?: ReactNode;
   /** 607: the default corpus, with the arrived-at item marked `data-arrived`. */
   listFallback?: ReactNode;
@@ -84,6 +110,30 @@ export type PaneProps = {
   selectedKey?: string | undefined;
   /** 1064. Expanded only. False is the closed pane; default true. */
   open?: boolean;
+  /** Correction 28 (G110). Expanded only. Fixes the pane's width and gives the list the rest:
+   *  `minmax(0,1fr) {paneWidth}`. A number is px. Absent, the grid is as before. */
+  paneWidth?: number | string | undefined;
+  /** Correction 28. Expanded only. Bounds the grid's height; the list column and the pane body then
+   *  scroll separately and the pane section is not sticky. Absent, the page scrolls as before. */
+  height?: number | string | undefined;
+  /** Correction 28. While open: `0px minmax(0,{hiddenWidth})` centred, no gap; the list slot stays
+   *  the same element, hidden and inert, its scroll kept while `selectedKey` holds (G128). Default
+   *  false. Takes effect only with `paneWidth`, `height` or a tool handler, which select the branch
+   *  that reads it. */
+  listHidden?: boolean | undefined;
+  /** Correction 28. Any of the three renders the toolbar at the pane's top, ordered Hide or show the
+   *  list, Copy link, Share, with correction 23's cluster at the right of the same row. Expanded
+   *  only. The caller owns the list state, the clipboard and the share. */
+  onToggleList?: (() => void) | undefined;
+  onCopyLink?: (() => void) | undefined;
+  onShare?: (() => void) | undefined;
+  /** Defaults "Hide list", "Show list", "Copy link", "Share". Words only (69). */
+  hideListLabel?: string | undefined;
+  showListLabel?: string | undefined;
+  copyLinkLabel?: string | undefined;
+  shareLabel?: string | undefined;
+  /** The pane's maximum width with the list hidden. Default 720; a number is px. */
+  hiddenWidth?: number | string | undefined;
   style?: CSSProperties | undefined;
 };
 
@@ -122,6 +172,17 @@ export function Pane({
   hasNext,
   selectedKey,
   open = true,
+  paneWidth,
+  height,
+  listHidden = false,
+  onToggleList,
+  hideListLabel = "Hide list",
+  showListLabel = "Show list",
+  onCopyLink,
+  copyLinkLabel = "Copy link",
+  onShare,
+  shareLabel = "Share",
+  hiddenWidth = 720,
   style,
 }: PaneProps) {
   const listCol = useRef<HTMLDivElement>(null);
@@ -271,6 +332,154 @@ export function Pane({
         </div>
       </section>
     );
+
+  const tools = !!(onToggleList || onCopyLink || onShare);
+  if (paneWidth != null || tools || height != null) {
+    // Correction 28. Same tree as below: list column first, pane section second, in every state.
+    // Reached only at expanded, since the route form returned above. `inert` is React 19's boolean
+    // where the compile writes React 18's `''`, as in the grid below.
+    const w = typeof paneWidth === "number" ? paneWidth + "px" : paneWidth;
+    const hideList = open && listHidden;
+    const hw = typeof hiddenWidth === "number" ? hiddenWidth + "px" : hiddenWidth;
+    const cols = !open
+      ? "minmax(0,1fr) 0px"
+      : hideList
+        ? "0px minmax(0," + hw + ")"
+        : w
+          ? "minmax(0,1fr) " + w
+          : "minmax(0,var(--pane-list-width)) minmax(0,1fr)";
+    const bounded = height != null;
+    const toolbar = tools ? (
+      <div
+        data-pane-toolbar
+        role="toolbar"
+        aria-label={title}
+        style={{ display: "flex", alignItems: "center", gap: "var(--space-1)" }}
+      >
+        {onToggleList && (
+          <IconButton
+            name={hideList ? "panel-left-open" : "panel-left-close"}
+            label={hideList ? showListLabel : hideListLabel}
+            data-tool="list"
+            onClick={onToggleList}
+          />
+        )}
+        {onCopyLink && (
+          <IconButton name="link" label={copyLinkLabel} data-tool="copy" onClick={onCopyLink} />
+        )}
+        {onShare && (
+          <IconButton name="share" label={shareLabel} data-tool="share" onClick={onShare} />
+        )}
+      </div>
+    ) : null;
+    return (
+      <div
+        data-pane-open={open ? "true" : "false"}
+        data-pane-list-hidden={hideList ? "true" : undefined}
+        style={{
+          display: "grid",
+          gridTemplateColumns: cols,
+          justifyContent: hideList ? "center" : undefined,
+          gap: open && !hideList ? "var(--pane-gap)" : 0,
+          alignItems: bounded ? "stretch" : "start",
+          height: bounded ? height : undefined,
+          minHeight: 0,
+          fontFamily: "var(--font-sans)",
+          color: "var(--ink)",
+          ...style,
+        }}
+      >
+        <div
+          data-pane-list
+          ref={listCol}
+          aria-hidden={hideList ? true : undefined}
+          inert={hideList ? true : undefined}
+          style={{
+            minWidth: 0,
+            minHeight: 0,
+            overflowY: bounded ? "auto" : undefined,
+            overflowX: bounded || hideList ? "hidden" : undefined,
+            overscrollBehavior: bounded ? "contain" : undefined,
+            visibility: hideList ? "hidden" : undefined,
+          }}
+        >
+          {cold ? listFallback : list}
+        </div>
+        <section
+          aria-label={title}
+          aria-live={open ? "polite" : undefined}
+          aria-hidden={open ? undefined : true}
+          inert={open ? undefined : true}
+          onKeyDown={onPaneKey}
+          style={{
+            position: bounded ? "relative" : "sticky",
+            top: bounded ? undefined : "var(--space-4)",
+            zIndex: "var(--z-pane)" as unknown as number,
+            minWidth: 0,
+            minHeight: 0,
+            boxSizing: "border-box",
+            display: bounded || tools ? "flex" : undefined,
+            flexDirection: "column",
+            background: "var(--surface)",
+            border: "var(--border-thin) solid var(--line)",
+            borderRadius: "var(--radius-l)",
+            overflow: "hidden",
+            opacity: open ? 1 : 0,
+            visibility: open ? "visible" : "hidden",
+            transition:
+              "opacity var(--dur-slow) var(--ease), visibility 0s linear " +
+              (open ? "0s" : "var(--dur-slow)"),
+            animation: open ? "strand-pane-in var(--dur-slow) var(--ease)" : "none",
+          }}
+        >
+          <style>{"@keyframes strand-pane-in{from{opacity:0}to{opacity:1}}"}</style>
+          {open && tools && (
+            <div
+              data-pane-bar
+              style={{
+                flex: "none",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: "var(--space-2)",
+                padding: "var(--space-2)",
+                borderBottom: "var(--border-thin) solid var(--line)",
+                background: "var(--surface)",
+              }}
+            >
+              {toolbar}
+              {cluster}
+            </div>
+          )}
+          {open && !tools && cluster && (
+            <div
+              style={{
+                position: "absolute",
+                top: "var(--space-2)",
+                right: "var(--space-2)",
+                zIndex: 1,
+              }}
+            >
+              {cluster}
+            </div>
+          )}
+          {open && (
+            <div
+              data-pane-body
+              style={{
+                flex: bounded ? "1 1 auto" : undefined,
+                minHeight: 0,
+                overflowY: bounded ? "auto" : undefined,
+                overscrollBehavior: bounded ? "contain" : undefined,
+              }}
+            >
+              {paneBody}
+            </div>
+          )}
+        </section>
+      </div>
+    );
+  }
 
   // 1064: one grid, one tree. The track SNAPS between its two states and only the pane section's
   // opacity moves, over --dur-slow. Three builds that animated the track's width were read and

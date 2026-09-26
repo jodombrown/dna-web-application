@@ -1,6 +1,11 @@
 // Strand `components/core/Menu.jsx`, ported at compile v1790212533284400 (handoff 32-A, correction
-// 25 section 2, rulings 663, 1097, 1102 and 1103). A new part: the compile before this one had no
-// menu, and a card's ellipsis handed its caller a press (`onMenu`).
+// 25 section 2, rulings 663, 1097, 1102 and 1103), unchanged at v1790279130697923, and reconciled at
+// compile v1790366257373061 (correction 28, ratified 1134; handoff 33-A item 2). Correction 28 item
+// 6 (G113; B9-SPEC's card menu, line 49 of Revision 2) changes one declaration: the minimum width is
+// 240 for every caller, where it was 220; the maximum stays 320. Nothing else in Menu or its item
+// differs between the two bundles. The dispositions are in `docs/strand-ports/v1790366257373061.md`.
+// When the part was new, the compile before it had no menu, and a card's ellipsis handed its caller
+// a press (`onMenu`).
 //
 // A list of acts summoned from one control, most often an ellipsis. Not for navigation, not for
 // choosing a value (Select), not for filters (FacetRail).
@@ -8,8 +13,10 @@
 // is absent: the caller leaves it out or passes a falsy entry, which is dropped. There is no disabled
 // item and no `disabled` field; a greyed act is refused (1097). Rules collapse: a rule never leads,
 // trails or doubles once the absent items are gone. `tone: "danger"` renders the label and icon in
-// the error rung; it exists in the part and Discovery does not use it (1097 refuses Report). The
-// compile writes --danger; this reads --error under ruling 425, and --danger is var(--error).
+// the error rung. PostCard's discovery face sets it on the Report it appends when its caller passes
+// `onReport` (correction 29 ask 1, folded into 28), and Discovery passes none: 1097 refuses Report,
+// and 1129 keeps it off the card until its table and sheet exist. The compile writes --danger; this
+// reads --error under ruling 425, and --danger is var(--error).
 // WAI-ARIA menu: `role="menu"`, `menuitem`, roving focus. ArrowUp and ArrowDown wrap, Home and End,
 // Enter and Space select and close (the item is a native button), Escape and Tab close; Escape and
 // select return focus to the anchor. Escape calls `preventDefault`, so the Pane's guard of correction
@@ -21,6 +28,7 @@
 // bottom-end, flipped above when the room below is short, clamped inside the viewport, and
 // repositioned on scroll and resize while open. `portal={false}` renders in place, absolutely
 // positioned inside the anchor's positioned parent, for frames and specimens that are scaled.
+// Minimum width 240, maximum 320; a caller's `style` is spread last and would override both.
 // Items are 44 on touch and 36 on pointer; `input` overrides the detected mode for proofs. Stacking
 // is `--z-menu` (1103), 62: above the pane and sticky chrome, below dialog and notification, and
 // clear of a contained sheet the menu opens from. A modal Sheet here is a native dialog in the top
@@ -54,7 +62,8 @@ export type MenuItem = {
   label: string;
   /** A name from Strand's icon set, drawn before the label. */
   icon?: string | undefined;
-  /** Renders the label and icon in the error rung (--error, 425). Unused on Discovery (1097). */
+  /** Renders the label and icon in the error rung (--error, 425). PostCard's Report carries it
+   *  (correction 29 ask 1); Discovery passes no Report (1097, 1129). */
   tone?: "danger" | undefined;
   onSelect?: (() => void) | undefined;
 };
@@ -82,6 +91,7 @@ export type MenuProps = {
   placement?: MenuPlacement | undefined;
   /** Overrides the detected input mode. Items are 44 on touch, 36 on pointer. */
   input?: Mode | undefined;
+  /** Minimum width 240 (correction 28; was 220), maximum 320. Spread last. */
   style?: CSSProperties | undefined;
 };
 
@@ -252,7 +262,8 @@ export function Menu({
       style={{
         ...geo,
         zIndex: "var(--z-menu)" as unknown as number,
-        minWidth: 220,
+        // Correction 28 item 6 (G113; B9-SPEC's card menu): 240 for every caller, where it was 220.
+        minWidth: 240,
         maxWidth: 320,
         boxSizing: "border-box",
         padding: "var(--space-1)",
