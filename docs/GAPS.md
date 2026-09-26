@@ -5341,7 +5341,7 @@ mechanism WebKit resolved against the border box for the image in run 347. Nothi
 (ruling 55), and no arm reads it, so nothing on a page shows it today. Owed: the video frame's poster
 in the same declared grid cell, in a Strand correction, before any surface renders video.
 
-## G120. Discovery's Copy link and Share hand over the post's address, where the face links to the event's
+## G120. Discovery's Copy link and Share hand over the post's address, where the face links to the event's — closed (1140)
 
 **Severity: low. Opened 25 September 2026 during handoff 33-A (G100, G110), filed under ruling 597.
 The number is assigned by this entry (ruling 638).**
@@ -5360,6 +5360,41 @@ link gets another. Both open the event, but only one is the page. The open pane 
 its toolbar's Share hands over `/posts/{post id}`, and the event page's own Share row, inside the
 same pane, hands over the event's address. Owed: a ruling on the address Discovery's share path
 hands over, and one share path for the card, the pane and the page.
+
+**Closed 26 September 2026 by handoff 33-A Addendum 1 item 2.** Ruling 1140 has Copy link and Share
+on a Convene event, in Discovery's pane toolbar and the card menu, hand over the event's public
+address under `/e/`, never `/posts/{post id}`. B9-SPEC states it in the toolbar and the menu, since
+Revision 3. The event page's rule is now one function, `eventShareUrl` in `src/lib/event-page.ts`,
+and the event page's Share row and Discovery's four controls all call it:
+
+- The event facts come from the event page's own read, `event_page` under EventSurface's query
+  key, never a second read and never a TypeScript derivation of `public` (1028).
+- An event with a public page hands over `/e/{slug}` on this origin. One with none hands over the
+  member address, `/convene/events/{id}`, which is what the event page's own Share hands over in
+  the same case. A read that fails or answers nothing hands over the member address too, the one
+  address that always opens the event, and one that has already failed hands it over inside the
+  press.
+- Both menu items and both toolbar controls are present for every event.
+- A read already cached is used inside the press, because a share sheet and, on WebKit, a clipboard
+  write need its activation. The pane's page is cached once the pane has loaded it. A card's is
+  cached by hover intent at expanded (1067), or once the read its ellipsis's press starts has
+  answered. A press made before then waits for that read's first answer, never for the retries
+  EventSurface's query makes, and the harness stubs both APIs, so no arm reads activation. That is
+  G131.
+
+This closes the first of the two things the entry owed; the second, one share path for the card,
+the pane and the page, stays open as G130. Discovery's four controls and the Feed's `share(id)` go
+through `useShare`, with one toast and one fallback, and the Feed still hands over the post's
+address. The event page's own sheet keeps its own copy and share: its share hands over
+`{ title, url }` and shows nothing when the share is refused, where `useShare` hands over `{ url }`
+and shows the address as its toast. So in the open pane the toolbar's Share and Share via in the
+page's own sheet hand over one address in two payloads.
+
+The width arm reads the pane's Copy link and Share at all five expanded widths, and the link arm
+reads the card menu's at 390x844 and 1280x800, with one seeded event's page not public. Read in
+Chromium, the width arm's check at 1280x800 and the link arm's two at both cells fail on `8d9dfd3`,
+whose four controls hand over `/posts/{post id}`, and on `d23c55f`, whose menu hands over the same
+and whose pane has no toolbar.
 
 ## G121. B9-SPEC Revision 2's pane height, frame less header less 88, overruns this shell's feed column — closed (1136)
 
@@ -5610,3 +5645,112 @@ offset onto the list column. That mechanism is inferred from the call stack and 
 router's source (555). It is the class of copy-forward CLAUDE.md records under W58 and ruling 552.
 Owed: the mechanism read in the router, and the list column's offset settled after the router's
 restoration or excluded from it.
+
+---
+
+## G130. The event page's Share sheet keeps its own share and copy, apart from Discovery's `useShare`
+
+**Severity: low. Opened 26 September 2026 during the review of handoff 33-A Addendum 1 item 2 (G120), filed under ruling 597. The number is assigned by this entry (ruling 638).**
+
+G120 owed two things: a ruling on the address Discovery's share path hands over, and one share path
+for the card, the pane and the page. Ruling 1140 settled the address, and `eventShareUrl` builds it
+for all three. The share path is still two:
+
+- Discovery's card menu and pane toolbar go through the Feed's `useShare`
+  (`src/components/dna/FeedSurface.tsx:38`). Its share calls `navigator.share({ url })`, or copies
+  where the browser has no share. A share that throws, a dismissed sheet included, shows the address
+  as its toast.
+- The event page's own sheet (`src/components/dna/EventShareSheet.tsx:61-75`) copies with the same
+  toast. Its Share via calls `navigator.share({ title, url })`, is offered only where the browser
+  has a share, and shows nothing when the share throws.
+
+So at expanded, with the pane open, the toolbar's Share and Share via in the sheet that the page's
+Share row opens, in the same pane, hand over one address, with and without the event's title, and a
+dismissed share toasts in one and not the other. Neither is ruled: 1140 names the address, and
+neither B9-SPEC nor B10-SPEC section 4 names the payload or what a refused share shows. Owed: a
+ruling on one share path for the card, the pane and the page, with its payload and what a refused
+share shows.
+
+---
+
+## G131. A card menu's Share or Copy link selected before the event page's read answers hands over after an await
+
+**Severity: low. Opened 26 September 2026 during the review of handoff 33-A Addendum 1 item 2 (G120), filed under ruling 597. The number is assigned by this entry (ruling 638).**
+
+Under 1140 the card menu hands over the address the event page builds from its own read,
+`event_page`, and Discovery's items carry no slug and no public flag. So `handOver`
+(`src/components/dna/DiscoverySurface.tsx:418`) uses the page from the query cache inside the press
+when it is there. A read that has already failed, or is paused offline, hands over the member
+address inside the press. Otherwise the press waits for the read's first answer, starting the read
+if none is running. The pane's page is cached once the pane has loaded it; its toolbar is drawn as
+it opens, so a press on it before that waits too. A card's is cached by hover intent at expanded
+(1067), or by the read that the press on its ellipsis starts (`warmMenu`), once that read answers. A
+select made inside that round trip takes the awaited path.
+
+A scratch probe, not an arm, read this on this change's build in Chromium, against the harness's
+`event_page` mock, which answers in 120 ms. A hand-over counted as in the press when it ran before a
+`setTimeout(0)` the press set, and `window.event` agreed in every case:
+
+- At 390x844, a click select made 0 ms after the menu appeared was awaited for Share and Copy link
+  on both events read, and three of four were at 50 ms. From 100 ms on, every one ran in the press.
+  A tap select at 0 ms was awaited once in four.
+- At 1280x800, hover intent had not always answered by the press: at 0 and 50 ms, seven of eight
+  were awaited, and from 100 ms on every one ran in the press.
+- A keyboard select, Enter on the ellipsis and then Enter on the item, was awaited at both widths.
+  The read starts at the click that Enter makes.
+- The pane's Copy link and Share ran in the press at 1280x800.
+
+Every hand-over was the right address. The link arm's `menuSelect` selects as soon as the menu opens,
+so its presses can take either path; it reads the address, which both paths share. Chromium kept
+the press's activation across these awaits: `navigator.userActivation.isActive` read true at every
+awaited hand-over, at 390x844 and 1280x800.
+
+The review of this change read the pane with `event_page` failing, in Chromium at 1280x800. As
+first written, `handOver` awaited the read through `fetchQuery`, which joins a read already running
+together with its retries: EventSurface's query retries a failed read three times on the default
+client, 1, 2 and 4 seconds apart. So Share and Copy link, pressed as the toolbar was drawn, handed
+over the member address 7355 and 7357 ms after the press, after four reads. Chromium no longer read
+the press's activation, and a share stub that refuses without it was refused, so `useShare` showed
+the address as its toast. `handOver` now waits for the running read's first answer through the
+query cache, and hands over at the first failure. Re-read on the rebuilt build:
+
+- The review's own sequence handed over the member address inside the press, for Share and for
+  Copy link, after one read. The first attempt had already failed when the toolbar was pressed.
+- A second scratch probe had `event_page` answer 1500 ms after each request, failing or not, and
+  pressed while the first attempt was still running. In the pane at 1280x800, and on the card menu
+  at 390x844 selected as soon as the menu opened, every hand-over came 4 or 5 ms after that first
+  attempt answered. It was the member address when the attempt failed and `/e/{slug}` when it
+  answered, with activation still read at 1.1 to 1.4 seconds after the press.
+
+A wait of one attempt still outlives the press on a slow network. On WebKit a share sheet and a
+clipboard write need the press's gesture, and whether the gesture survives a network await is
+unread here: WebKit is not installed (G21), and the harness stubs both APIs, so no arm reads
+activation. Where the call is refused, `useShare` shows the address as its toast. Owed: a hand-over
+that keeps the press's activation when the read has not answered, read on WebKit. For Copy link, a
+`navigator.clipboard.write` of a `ClipboardItem` whose text is a promise is the usual form for a
+write whose text is not yet known. That form is unread here. Share has no such form, so its address
+would have to be known at the press.
+
+Only the latest press hands over. A wait that a later Share or Copy link press overtakes drops its
+hand-over, so a late answer cannot write over the clipboard, or open a sheet, after the member has
+moved on. The third review found that order broken before the merge, and it is fixed in the same
+change.
+
+## G132. The card menu's Add to calendar waits out the event page read's retries when that read is failing
+
+**Severity: low. Opened 26 September 2026 during the review of handoff 33-A Addendum 1 item 2 (G120), filed under ruling 597. The number is assigned by this entry (ruling 638).**
+
+The card menu's Add to calendar (1097, `src/components/dna/DiscoverySurface.tsx:858`) reads the
+event page through `qc.fetchQuery` under EventSurface's key. `fetchQuery` joins a read of that key
+that is already running, together with the three retries EventSurface's query makes on the default
+client, 1, 2 and 4 seconds apart; its own `retry: false` does not reach a read it joins. So with the
+pane open on an event whose `event_page` is failing, that event's card menu shows "The calendar file
+could not be made." about seven seconds after Add to calendar is pressed.
+
+A scratch probe, not an arm, read it in Chromium at 1280x800 against the harness's mock, with the
+pane open on a going, dated event and its card's menu pressed as soon as it opened. The toast came
+6969 ms after the press on this change's build and 7078 ms after it on `8d9dfd3`, each after three
+more reads of the page. With the read answering, the file downloaded 66 and 69 ms after the press.
+The item predates G120, and this change leaves it as it was. G131 records the same join in Share and
+Copy link, where `handOver` now waits for the running read's first answer only. Owed: the calendar
+item waits for the running read's first answer too, or a ruling that the wait stands.

@@ -31,34 +31,38 @@ import { useShellScroll } from "@/lib/shell-scroll";
 import { useTier } from "@/lib/tier";
 import { COMPOSER_HOST } from "./AppShell";
 
+/** One share path and its toast. `shareUrl` hands a URL to the share sheet, or to the clipboard where
+ *  there is none; `copyUrl` hands it to the clipboard. Each calls the browser before any await, so a
+ *  caller that has its URL at the press stays inside the press. `share` is the Feed's: a post's
+ *  address. Discovery hands over the event page's address through the other two (1140, G120). */
 export function useShare() {
   const [toast, setToast] = useState<string | null>(null);
-  const share = async (id: string) => {
-    const url = window.location.origin + "/posts/" + id;
+  const say = (text: string) => {
+    setToast(text);
+    window.setTimeout(() => setToast(null), 2600);
+  };
+  const shareUrl = async (url: string) => {
     try {
       if (navigator.share) {
         await navigator.share({ url });
         return;
       }
       await navigator.clipboard.writeText(url);
-      setToast("Link copied.");
+      say("Link copied.");
     } catch {
-      setToast(url);
+      say(url);
     }
-    window.setTimeout(() => setToast(null), 2600);
   };
-  /** Handoff 32-B (1097): Discovery's Copy link, the same link `share` hands over, to the clipboard. */
-  const copy = async (id: string) => {
-    const url = window.location.origin + "/posts/" + id;
+  const copyUrl = async (url: string) => {
     try {
       await navigator.clipboard.writeText(url);
-      setToast("Link copied.");
+      say("Link copied.");
     } catch {
-      setToast(url);
+      say(url);
     }
-    window.setTimeout(() => setToast(null), 2600);
   };
-  return { share, copy, toast };
+  const share = (id: string) => shareUrl(window.location.origin + "/posts/" + id);
+  return { share, shareUrl, copyUrl, toast };
 }
 
 export function toastStyle(tier: "compact" | "medium" | "expanded") {

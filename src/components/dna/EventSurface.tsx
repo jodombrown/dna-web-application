@@ -34,10 +34,9 @@ import { Toast } from "@/components/strand/Toast";
 import type { Member } from "@/lib/auth";
 import {
   downloadIcs,
+  eventShareUrl,
   isFollowing,
   loadEventPage,
-  memberEventPath,
-  publicEventPath,
   setFollow,
   type EventInvitation,
   type EventPage,
@@ -243,7 +242,7 @@ export function EventSurface({
   const where = placeWord(ev.mode, page.place);
   const invited = page.invitations.filter((i) => i.status === "invited");
   const origin = typeof window !== "undefined" ? window.location.origin : "";
-  const shareUrl = origin + (ev.public ? publicEventPath(ev.slug) : memberEventPath(ev.id));
+  const shareUrl = eventShareUrl(origin, ev);
 
   const state = ev.cancelled
     ? "cancelled"

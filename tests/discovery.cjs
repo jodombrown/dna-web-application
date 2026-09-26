@@ -635,6 +635,56 @@ async function menuSelect(page, card, label) {
   await menu.waitFor({ state: "detached", timeout: 10000 }).catch(() => undefined);
 }
 
+/**
+ * Copy link and Share read without a clipboard or a share sheet, which a headless engine may refuse
+ * (G110, 1140): each stub keeps the URL it is handed in `window.__copied` or `window.__shared`. The
+ * stubs stand in for the APIs that need the press's activation, so no arm reads activation (G131).
+ */
+function stubHandOver(page) {
+  return page.addInitScript(() => {
+    window.__copied = [];
+    window.__shared = [];
+    try {
+      Object.defineProperty(navigator, "clipboard", {
+        configurable: true,
+        value: { writeText: async (t) => void window.__copied.push(t) },
+      });
+      Object.defineProperty(navigator, "share", {
+        configurable: true,
+        value: async (d) => void window.__shared.push(d && d.url),
+      });
+    } catch {}
+  });
+}
+
+/** What `act` hands over through those stubs: emptied first, read once they hold `copied` and
+ *  `shared` URLs or after 5s, because a press whose page is not cached reads it first (1140). */
+async function handedOver(page, act, { copied = 0, shared = 0 }) {
+  await page.evaluate(() => {
+    window.__copied = [];
+    window.__shared = [];
+  });
+  await act();
+  await page
+    .waitForFunction(
+      (n) => window.__copied.length >= n.copied && window.__shared.length >= n.shared,
+      { copied, shared },
+      { timeout: 5000 },
+    )
+    .catch(() => undefined);
+  return page.evaluate(() => ({ copied: window.__copied, shared: window.__shared }));
+}
+
+/** Whether `url` is `path` on the origin under test. */
+function onPath(url, path) {
+  try {
+    const u = new URL(url);
+    return u.origin === new URL(BASE).origin && u.pathname === path;
+  } catch {
+    return false;
+  }
+}
+
 /** The text of the surface and its columns with every card's when line taken out. */
 async function digitsOutsideWhen(page) {
   return page.evaluate(() => {
@@ -2058,7 +2108,7 @@ function presenterRow(page, card) {
 }
 
 /** Opens a card and answers the event page's presenter block: the name after "Presented by". */
-async function openAndReadPresenter(page, card) {
+async function openAndReadPresenter(page, card, { photo = false } = {}) {
   await page.locator(`${card} [data-card-open]`).click();
   await page.waitForSelector(
     '[data-event-page][data-event-state="loaded"] [data-event-presenter]',
@@ -2066,6 +2116,15 @@ async function openAndReadPresenter(page, card) {
       timeout: 20000,
     },
   );
+  // The page's photos come from a second read after the page (EventSurface's `images`), so a page
+  // already cached, by hover intent (1067) or by the press on a card's ellipsis (1140), is loaded a
+  // commit before its presenter's photo is drawn. A presenter who has a photo is read once it is.
+  if (photo)
+    await page
+      .waitForSelector('[data-event-page][data-event-state="loaded"] [data-event-presenter] img', {
+        timeout: 5000,
+      })
+      .catch(() => undefined);
   return page.evaluate(() => {
     const block = document.querySelector("[data-event-page] [data-event-presenter]");
     const img = block && block.querySelector("img");
@@ -2098,7 +2157,7 @@ async function runDiscoveryPresenter(browserType, bname, [w, h], theme) {
     const guildRow = await presenterRow(page, guild);
     const guildMenu = (await readMenu(page, guild)).map((x) => x.label);
     await closeMenu(page);
-    const pane = await openAndReadPresenter(page, veiled);
+    const pane = await openAndReadPresenter(page, veiled, { photo: true });
     await openDiscovery(page);
     const guildPane = await openAndReadPresenter(page, guild);
 
@@ -2681,22 +2740,8 @@ async function runDiscoveryWidth(browserType, bname, [w, h], theme) {
   const E = seedDiscovery(db);
   const { browser, page, errors } = await context(browserType, [w, h], theme, db);
   const near = (a, b) => a != null && Math.abs(a - b) <= 1;
-  // G110's Copy link and Share (1097): what each hands over, read without a clipboard or a share
-  // sheet, which a headless engine may refuse.
-  await page.addInitScript(() => {
-    window.__copied = [];
-    window.__shared = [];
-    try {
-      Object.defineProperty(navigator, "clipboard", {
-        configurable: true,
-        value: { writeText: async (t) => void window.__copied.push(t) },
-      });
-      Object.defineProperty(navigator, "share", {
-        configurable: true,
-        value: async (d) => void window.__shared.push(d && d.url),
-      });
-    } catch {}
-  });
+  // G110's Copy link and Share: what each hands over (1140, G120).
+  await stubHandOver(page);
   try {
     await signIn(page);
     await openDiscovery(page);
@@ -2871,23 +2916,27 @@ async function runDiscoveryWidth(browserType, bname, [w, h], theme) {
       }),
     );
 
-    // Copy link and Share: the card menu's own path (useShare, 1097), with the open event's post.
+    // Copy link and Share: the open event's public address under /e/, as its page builds it and
+    // the card menu hands it over (1140, G120). The seeded page is public, its slug "discovery-{id}".
     let handed = null;
-    if (open && open.tools.includes("Copy link") && open.tools.includes("Share")) {
-      await page.locator('[data-pane-toolbar] [data-tool="copy"]').click();
-      await page.locator('[data-pane-toolbar] [data-tool="share"]').click();
-      await page.waitForTimeout(300);
-      handed = await page.evaluate(() => ({ copied: window.__copied, shared: window.__shared }));
-    }
-    const postPath = "/posts/" + E.supper.post_id;
+    if (open && open.tools.includes("Copy link") && open.tools.includes("Share"))
+      handed = await handedOver(
+        page,
+        async () => {
+          await page.locator('[data-pane-toolbar] [data-tool="copy"]').click();
+          await page.locator('[data-pane-toolbar] [data-tool="share"]').click();
+        },
+        { copied: 1, shared: 1 },
+      );
+    const publicPath = "/e/discovery-" + E.supper.event_id;
     record(
       tag +
-        " pane (G110): Copy link and Share hand over the open event's post, the card menu's path (1097)",
+        " pane (G110): Copy link and Share hand over the open event's public address under /e/, as its page builds it (1140, G120)",
       !!handed &&
         handed.copied.length === 1 &&
-        new URL(handed.copied[0]).pathname === postPath &&
+        onPath(handed.copied[0], publicPath) &&
         handed.shared.length === 1 &&
-        new URL(handed.shared[0]).pathname === postPath,
+        onPath(handed.shared[0], publicPath),
       JSON.stringify(handed),
     );
 
@@ -2917,6 +2966,8 @@ async function runDiscoveryWidth(browserType, bname, [w, h], theme) {
  * Its title is an anchor to the address a plain click navigates to, a cover spans the face, and the
  * presenter, topic and ellipsis stand above it. A modified or middle press is the browser's and
  * opens no pane; a plain press on the media opens the event, the pane at expanded and the route below.
+ * Addendum 1 item 2 (1140, G120): the card menu's Copy link and Share hand over the event's public
+ * address under /e/, and for an event with no public page the member address, as the event page does.
  */
 async function runDiscoveryLink(browserType, bname, [w, h], theme) {
   const tag = `${bname}-${w}x${h}-${theme}-discovery-link`;
@@ -2924,7 +2975,10 @@ async function runDiscoveryLink(browserType, bname, [w, h], theme) {
   const tier = tierOf(w);
   const db = makeMockDb();
   const E = seedDiscovery(db);
+  // 1140: one event with no public page, as event_page answers it (1028), before any page loads.
+  db.attend.pages[E.madina.event_id].event.public = false;
   const { browser, page, errors } = await context(browserType, [w, h], theme, db);
+  await stubHandOver(page);
   // A modified or middle press may open a tab. Each is closed as it opens, and nothing it requests
   // leaves the runner: only this page's requests go on to its mocks and to BASE.
   const opened = [];
@@ -3055,6 +3109,45 @@ async function runDiscoveryLink(browserType, bname, [w, h], theme) {
           ? (await page.locator('[data-discovery][data-pane-open="1"]').count()) === 1
           : (await page.locator("[data-event-page] [data-back-row]").count()) === 1),
       landed.pathname + landed.search,
+    );
+
+    // 1140, G120: the card menu's Copy link, then Share from the menu reopened, read through the
+    // harness's stubs. The seeded page is public, its slug "discovery-{id}". `menuSelect` selects as
+    // soon as the menu opens, which can be before the read the ellipsis's press started has answered,
+    // so a press here may take the awaited path (G131); both paths hand over one address, and the
+    // arm reads the address.
+    await openDiscovery(page);
+    const menuHanded = await handedOver(
+      page,
+      async () => {
+        await menuSelect(page, card, "Copy link");
+        await menuSelect(page, card, "Share");
+      },
+      { copied: 1, shared: 1 },
+    );
+    const publicPath = "/e/discovery-" + E.supper.event_id;
+    record(
+      tag +
+        " the card menu's Copy link and Share hand over the event's public address under /e/, as its page builds it (1140, G120)",
+      menuHanded.copied.length === 1 &&
+        onPath(menuHanded.copied[0], publicPath) &&
+        menuHanded.shared.length === 1 &&
+        onPath(menuHanded.shared[0], publicPath),
+      JSON.stringify(menuHanded),
+    );
+
+    // An event with no public page: the member address, which is what its page's own Share hands over.
+    const memberHanded = await handedOver(
+      page,
+      () => menuSelect(page, cardSel(E.madina, "soon"), "Copy link"),
+      { copied: 1 },
+    );
+    record(
+      tag +
+        " for an event with no public page, the card menu's Copy link hands over the member address, as its page does (1140, G120)",
+      memberHanded.copied.length === 1 &&
+        onPath(memberHanded.copied[0], "/convene/events/" + E.madina.event_id),
+      JSON.stringify(memberHanded),
     );
 
     record(tag + " no page errors", errors.length === 0, errors.join(" | ").slice(0, 300));

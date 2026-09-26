@@ -35,7 +35,7 @@
 //
 // No digit renders except in a card's when line: the reason row is words (1096), the where line is a
 // format word and places, and there is no count anywhere.
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient, type QueryState } from "@tanstack/react-query";
 import { useLocation, useNavigate, useRouter } from "@tanstack/react-router";
 import {
   useEffect,
@@ -95,7 +95,7 @@ import {
   type FacetLists,
 } from "@/lib/discovery-search";
 import { setFollowing } from "@/lib/connect";
-import { downloadIcs, loadEventPage } from "@/lib/event-page";
+import { downloadIcs, eventShareUrl, loadEventPage, type EventPage } from "@/lib/event-page";
 import { setSaved } from "@/lib/feed";
 import { setHeaderLens } from "@/lib/header-lens-store";
 import { useBackToOrigin, type Origin } from "@/lib/origin";
@@ -238,7 +238,7 @@ export function DiscoverySurface({
   const paneOpen = expanded && !!paneId;
   const openLane = useLocation({ select: (l) => l.state.discoveryLane });
   const { scrolled, scrollerRef } = useShellScroll();
-  const { share, copy, toast: shareToast } = useShare();
+  const { shareUrl, copyUrl, toast: shareToast } = useShare();
   const [toast, setToast] = useState<string | null>(null);
   const [browseOpen, setBrowseOpen] = useState(false);
   const [dismissed, setDismissed] = useState<ReadonlySet<string>>(new Set());
@@ -389,15 +389,74 @@ export function DiscoverySurface({
       : navigate({ to: "/convene/$lens", params: { lens }, search, resetScroll: false }));
   const fromElsewhere = !!toOrigin.arrivedFrom && toOrigin.arrivedFrom.to === "/feed";
   const closePane = fromElsewhere ? toOrigin.go : closeToDiscovery;
+  // The event page's one read, under EventSurface's key.
+  const pageKey = (eventId: string) => [EVENT_PAGE_KEY, member.id, eventId];
+  const warmPage = (eventId: string) =>
+    void qc.prefetchQuery({
+      queryKey: pageKey(eventId),
+      queryFn: () => loadEventPage(eventId),
+      staleTime: 30_000,
+    });
   // 1067: preload at expanded with a pointer warms the event route and the page's one read under
   // EventSurface's key, so the pane opens with data. Never at compact or medium, never on touch.
   const warmEvent = (eventId: string) => {
     void router.preloadRoute({ to: "/convene/events/$id", params: { id: eventId }, search });
-    void qc.prefetchQuery({
-      queryKey: [EVENT_PAGE_KEY, member.id, eventId],
-      queryFn: () => loadEventPage(eventId),
-      staleTime: 30_000,
+    warmPage(eventId);
+  };
+  // 1140, G120: Share and Copy link, in the card's menu and the pane's toolbar, hand over the address
+  // the event page's own Share hands over, built by `eventShareUrl` from that page's read: the public
+  // page under /e/ when event_page says there is one (1028), and the member page, which always opens
+  // the event, when there is none or the read fails or answers nothing. A share sheet and, on WebKit,
+  // a clipboard write need the press's activation, so a read already cached is used inside the press:
+  // the pane's page once the pane has loaded it, and a card's by hover intent at expanded (1067), or
+  // once the read its ellipsis's press starts (`warmMenu`) has answered. A read that has failed, or
+  // is paused offline, hands over the member address inside the press. A press made while the read
+  // runs waits for its first answer only, and the gesture may not survive that wait (G131). Only the
+  // latest press hands over: a wait that a later press has overtaken drops its hand-over, so a late
+  // answer never writes over the clipboard or opens a sheet after the member has moved on.
+  const handSeq = useRef(0);
+  const handOver = (eventId: string, to: (url: string) => Promise<void>) => {
+    const seq = ++handSeq.current;
+    const give = (page: EventPage | null) =>
+      void to(eventShareUrl(window.location.origin, page?.event ?? { id: eventId }));
+    // The read's answer so far: its page; null once an attempt has failed or none is running;
+    // undefined while its first attempt runs.
+    const answer = (s: QueryState<EventPage | null> | undefined) =>
+      s?.data !== undefined
+        ? s.data
+        : s?.fetchStatus === "fetching" && !s.fetchFailureCount
+          ? undefined
+          : null;
+    const key = pageKey(eventId);
+    const was = qc.getQueryState<EventPage | null>(key);
+    if (
+      was?.data === undefined &&
+      !was?.fetchFailureCount &&
+      (was?.fetchStatus ?? "idle") === "idle"
+    )
+      warmPage(eventId);
+    const cache = qc.getQueryCache();
+    const query = cache.find<EventPage | null>({ queryKey: key, exact: true });
+    const now = answer(query?.state);
+    if (now !== undefined) return give(now);
+    // Never `fetchQuery` here: it joins a read already running, and EventSurface's query retries a
+    // failed read three times, which held the hand-over about seven seconds past the press (G131).
+    const stop = cache.subscribe(({ query: q, type }) => {
+      if (seq !== handSeq.current) return stop();
+      if (q !== query) return;
+      const then = type === "removed" ? null : answer(q.state);
+      if (then === undefined) return;
+      stop();
+      give(then);
     });
+  };
+  // The press that opens a card's menu starts the page's read, at every tier, so the menu's Share and
+  // Copy link find it cached once it answers, one event_page round trip after the press (G131). Read
+  // on the card's wrapper from the ellipsis's own `aria-haspopup`, because the part names no callback
+  // for its menu opening (844).
+  const warmMenu = (eventId: string) => (e: { target: EventTarget }) => {
+    if (e.target instanceof Element && e.target.closest('[aria-haspopup="menu"]'))
+      warmPage(eventId);
   };
 
   const dismiss = async (item: DiscoveryItem, lane: DiscoveryLaneId) => {
@@ -757,17 +816,18 @@ export function DiscoverySurface({
     const topic = familyLabel(family);
     const subscribed = family ? (subscribedNow[family] ?? subscribedFamilies.has(family)) : false;
     return [
-      !!postId && {
+      // 1140: an event always has an address, so both are always present.
+      {
         id: "share",
         label: "Share",
         icon: "share",
-        onSelect: () => void share(postId),
+        onSelect: () => handOver(item.event_id, shareUrl),
       },
-      !!postId && {
+      {
         id: "copy",
         label: "Copy link",
         icon: "link",
-        onSelect: () => void copy(postId),
+        onSelect: () => handOver(item.event_id, copyUrl),
       },
       !!postId && {
         id: "save",
@@ -876,6 +936,8 @@ export function DiscoverySurface({
         // The selected ring (1083) is drawn 4 outside the face. With the pane bounded, the list
         // follows the open card to its column's top; this margin brings the ring into view with it.
         style={{ flex: "none", scrollSnapAlign: "start", scrollMarginBlock: 4 }}
+        onPointerDownCapture={warmMenu(item.event_id)}
+        onClickCapture={warmMenu(item.event_id)}
       >
         <PostCard
           presentation="discovery"
@@ -1143,9 +1205,9 @@ export function DiscoverySurface({
   // The toolbar (Hide or show the list, Copy link, Share) and the cluster (Previous event, Next
   // event, Back to Discovery) share the pane's top row. Hide list keeps the list the same element,
   // hidden and inert with its scroll kept, and centres the pane at 720; it lasts while the pane is
-  // open and resets when it closes. Copy link and Share are the card menu's own share path
-  // (`useShare`, 1097) with the open event's post, found in the lanes the projection answered or in
-  // the event page's read the pane already made, and absent when neither names one.
+  // open and resets when it closes. Copy link and Share are the card menu's own (`handOver`, 1140,
+  // G120): the open event's address as its page builds it, from the read the pane already made, so
+  // they are present for every event the pane opens.
   const [listHidden, setListHidden] = useState(false);
   useEffect(() => {
     if (!paneOpen) setListHidden(false);
@@ -1165,7 +1227,6 @@ export function DiscoverySurface({
     queryFn: () => loadEventPage(paneId ?? ""),
     enabled: false,
   });
-  const panePostId = paneItem?.post.id ?? paneRead.data?.post?.id ?? null;
   const paneTitleField = paneItem?.post.fields["title"]?.value;
   // The pane and its toolbar are named by the event; until its title is known, by "Event".
   const paneTitle =
@@ -1325,8 +1386,8 @@ export function DiscoverySurface({
             setHiddenKey(paneId);
             setListHidden((h) => !h);
           }}
-          onCopyLink={panePostId ? () => void copy(panePostId) : undefined}
-          onShare={panePostId ? () => void share(panePostId) : undefined}
+          onCopyLink={paneId ? () => handOver(paneId, copyUrl) : undefined}
+          onShare={paneId ? () => handOver(paneId, shareUrl) : undefined}
           onClose={closePane}
           closeLabel={"Back to " + (fromElsewhere ? toOrigin.origin.label : "Discovery")}
           selectedKey={(listHidden ? hiddenKey : paneId) ?? undefined}

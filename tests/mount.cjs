@@ -897,7 +897,8 @@ async function runMountConvene(bt, bname, [w, h], theme, path) {
 
 /** /convene/events/$id at expanded: Discovery with the event page in its Pane (1047). A cold arrival
  *  carries no lane, so the pane steps nowhere: its cluster is the one close control (1083), beside
- *  the toolbar correction 28 adds (Hide list, and Copy link and Share with the event's post; G110). */
+ *  the toolbar correction 28 adds (Hide list, and Copy link and Share with the event's address under
+ *  /e/; G110, 1140, G120). */
 async function runMountEvent(bt, bname, [w, h], theme) {
   const tag = `${bname}-${w}x${h}-${theme}-mount-event`;
   const tabs = VOCAB.convene_lenses.length;
