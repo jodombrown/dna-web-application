@@ -60,3 +60,11 @@ export * from "./Pane";
 // Strand compile v1790212533284400 (handoff 32-A, correction 25 §2, ruling 1102): Menu, the list of
 // acts a card's ellipsis summons. It reads --z-menu (1103). PostCard's discovery face renders it.
 export * from "./Menu";
+// Strand compile v1790410319010950 (corrections 30 and 31, ratified 1153; handoff 33-D item 2):
+// Tooltip, which IconButton now wraps itself in (1146), and correction 30's three parts. No page
+// binds BodyBlocks, PersonCard or BrowseTile yet; the first Discovery handoff and Brief 10
+// Revision 4 do.
+export * from "./Tooltip";
+export * from "./BodyBlocks";
+export * from "./PersonCard";
+export * from "./BrowseTile";

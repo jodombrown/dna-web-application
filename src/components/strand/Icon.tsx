@@ -1,10 +1,12 @@
-// Ported from Strand components/core/Icon.jsx. Behavior unchanged.
+// Ported from Strand components/core/Icon.jsx. Behavior unchanged. `size` is a number or, as
+// BrowseTile passes `var(--icon-inline)` at compile v1790410319010950, a CSS length; the compiled
+// part sizes by either, so the type is what widened (handoff 33-D).
 import type { CSSProperties, HTMLAttributes } from "react";
 import { assetBase } from "./cmeta";
 
 export type IconProps = Omit<HTMLAttributes<HTMLSpanElement>, "style"> & {
   name: string;
-  size?: number;
+  size?: number | string;
   style?: CSSProperties;
 };
 
