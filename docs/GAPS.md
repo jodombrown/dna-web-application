@@ -5679,7 +5679,7 @@ share shows.
 
 Under 1140 the card menu hands over the address the event page builds from its own read,
 `event_page`, and Discovery's items carry no slug and no public flag. So `handOver`
-(`src/components/dna/DiscoverySurface.tsx:418`) uses the page from the query cache inside the press
+(`src/components/dna/DiscoverySurface.tsx:419`) uses the page from the query cache inside the press
 when it is there. A read that has already failed, or is paused offline, hands over the member
 address inside the press. Otherwise the press waits for the read's first answer, starting the read
 if none is running. The pane's page is cached once the pane has loaded it; its toolbar is drawn as
@@ -5731,16 +5731,20 @@ that keeps the press's activation when the read has not answered, read on WebKit
 write whose text is not yet known. That form is unread here. Share has no such form, so its address
 would have to be known at the press.
 
-Only the latest press hands over. A wait that a later Share or Copy link press overtakes drops its
-hand-over, so a late answer cannot write over the clipboard, or open a sheet, after the member has
-moved on. The third review found that order broken before the merge, and it is fixed in the same
-change.
+A wait is dropped once a later press overtakes it: a press of the same control, or a press on
+another event. So a late answer cannot write over a later copy, or open a sheet, after the member has
+moved on, and a Copy link followed by a Share on the same event hands over both. The third review
+found the late overwrite before the merge. The first fix counted every press together, and on the
+deployed preview, where the read had not answered, the link arm's Share dropped its Copy link
+(`copied: []` at 390x844 and 1280x800 on `757149e`). Holding the read for 1500 ms reproduced that
+locally at 390x844, and the rule above passes the same sequence. A Share on one event held behind its
+read, followed by a Copy link on another, no longer opens the first event's sheet.
 
 ## G132. The card menu's Add to calendar waits out the event page read's retries when that read is failing
 
 **Severity: low. Opened 26 September 2026 during the review of handoff 33-A Addendum 1 item 2 (G120), filed under ruling 597. The number is assigned by this entry (ruling 638).**
 
-The card menu's Add to calendar (1097, `src/components/dna/DiscoverySurface.tsx:858`) reads the
+The card menu's Add to calendar (1097, `src/components/dna/DiscoverySurface.tsx:862`) reads the
 event page through `qc.fetchQuery` under EventSurface's key. `fetchQuery` joins a read of that key
 that is already running, together with the three retries EventSurface's query makes on the default
 client, 1, 2 and 4 seconds apart; its own `retry: false` does not reach a read it joins. So with the

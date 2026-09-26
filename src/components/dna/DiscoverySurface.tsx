@@ -411,12 +411,16 @@ export function DiscoverySurface({
   // the pane's page once the pane has loaded it, and a card's by hover intent at expanded (1067), or
   // once the read its ellipsis's press starts (`warmMenu`) has answered. A read that has failed, or
   // is paused offline, hands over the member address inside the press. A press made while the read
-  // runs waits for its first answer only, and the gesture may not survive that wait (G131). Only the
-  // latest press hands over: a wait that a later press has overtaken drops its hand-over, so a late
-  // answer never writes over the clipboard or opens a sheet after the member has moved on.
-  const handSeq = useRef(0);
-  const handOver = (eventId: string, to: (url: string) => Promise<void>) => {
-    const seq = ++handSeq.current;
+  // runs waits for its first answer only, and the gesture may not survive that wait (G131). A wait
+  // is dropped once a later press overtakes it: one of the same control, or one on another event. So
+  // a late answer never writes over a later copy or opens a sheet the member has moved past, while a
+  // Copy link followed by a Share on the same event hands over both.
+  const handPresses = useRef<{ kind: "copy" | "share"; eventId: string }[]>([]);
+  const handOver = (eventId: string, kind: "copy" | "share") => {
+    const to = kind === "copy" ? copyUrl : shareUrl;
+    const seq = handPresses.current.push({ kind, eventId }) - 1;
+    const overtaken = () =>
+      handPresses.current.slice(seq + 1).some((p) => p.kind === kind || p.eventId !== eventId);
     const give = (page: EventPage | null) =>
       void to(eventShareUrl(window.location.origin, page?.event ?? { id: eventId }));
     // The read's answer so far: its page; null once an attempt has failed or none is running;
@@ -442,7 +446,7 @@ export function DiscoverySurface({
     // Never `fetchQuery` here: it joins a read already running, and EventSurface's query retries a
     // failed read three times, which held the hand-over about seven seconds past the press (G131).
     const stop = cache.subscribe(({ query: q, type }) => {
-      if (seq !== handSeq.current) return stop();
+      if (overtaken()) return stop();
       if (q !== query) return;
       const then = type === "removed" ? null : answer(q.state);
       if (then === undefined) return;
@@ -821,13 +825,13 @@ export function DiscoverySurface({
         id: "share",
         label: "Share",
         icon: "share",
-        onSelect: () => handOver(item.event_id, shareUrl),
+        onSelect: () => handOver(item.event_id, "share"),
       },
       {
         id: "copy",
         label: "Copy link",
         icon: "link",
-        onSelect: () => handOver(item.event_id, copyUrl),
+        onSelect: () => handOver(item.event_id, "copy"),
       },
       !!postId && {
         id: "save",
@@ -1386,8 +1390,8 @@ export function DiscoverySurface({
             setHiddenKey(paneId);
             setListHidden((h) => !h);
           }}
-          onCopyLink={paneId ? () => handOver(paneId, copyUrl) : undefined}
-          onShare={paneId ? () => handOver(paneId, shareUrl) : undefined}
+          onCopyLink={paneId ? () => handOver(paneId, "copy") : undefined}
+          onShare={paneId ? () => handOver(paneId, "share") : undefined}
           onClose={closePane}
           closeLabel={"Back to " + (fromElsewhere ? toOrigin.origin.label : "Discovery")}
           selectedKey={(listHidden ? hiddenKey : paneId) ?? undefined}
