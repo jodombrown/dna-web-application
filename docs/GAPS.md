@@ -2530,6 +2530,24 @@ carries this entry supersedes run 279 and starts a fresh run on the new head, wh
 a re-run cannot confirm a WebKit failure by reproduction, so the head's one re-run stays unspent and
 is available if the next head reds on this same check.
 
+**Tenth sighting, 26 September 2026, at the fifth and eighth sightings' width, on a healthy runner
+again.** Pages run 377 (`36268454297`) on `37d98d7` (PR 69, handoff 33-D), `matrix (webkit)`, first
+attempt, at `webkit-1536x960-light`, with the same message to the character. 6875 of 6879,
+`emitted 31 of 32`, and `0 behind a web-process crash (G5) | 0 an aborted fetch on mocked REST |
+4 unclassified`. The other three are this arm's ruling 292 line and `discovery-pane-tools`' two G128
+checks, a harness condition the next head narrows (G138). No web process was lost at any tier, so
+this is the ninth's shape. The arm's ERROR screenshot shows the composer open, the offer standing, the
+text area empty and no tooltip on screen.
+
+**What the branch changed on this path.** In `Composer.tsx`, only the Remove image IconButton's
+placement, which renders once per attached image (G136), and the flow attaches none before the offer.
+The offer, `continueDraft` and `ComposerShell`'s draft load are `f452140`'s. Every IconButton now
+wraps itself in a Tooltip, the composer's own included, but the continue control is a `Button`, and
+the flow's last pointer action before it, the audience pill, is not an IconButton. Chromium read
+6880 of 6880 on the same head. **Not fixed, and no re-run spent**: the push that carries this entry
+supersedes run 377 and starts a fresh run on the new head, so the head's one re-run under ruling 304
+stays unspent.
+
 **Not this gap's scope.** The check's assertions and the arms' declared counts stay as they are.
 
 ## G35. Mapbox Search Box carries no POI for Ghana, Kenya or Nigeria, so a Convene host there always falls to their words
@@ -6119,7 +6137,9 @@ range, and the engine moves its `scrollTop` with no setter involved.
   1280 and 598 → 36 → 598 at 1440.
 - **WebKit does not.** Dispatch 71 (`36268117282`) ran the arm on WebKit against `f452140`'s
   deployment. It read the list at its end, hidden, after Previous and Next, and shown:
-  538 → 120 → 120 → 120 at 1280 and 600 → 20 → 20 → 20 at 1440.
+  538 → 120 → 120 → 120 at 1280 and 600 → 20 → 20 → 20 at 1440. Run 377 (`36268454297`) read the
+  branch's own deployment on WebKit, with the part's padded column and guard: 536 → 136 → 136 → 136
+  and 598 → 36 → 36 → 36.
 - **Neither is a write.** The arm's setter trap caught none in either cell, so neither the part nor
   Discovery moved the list.
 
