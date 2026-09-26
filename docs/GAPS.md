@@ -1694,6 +1694,12 @@ deployment URL (`https://<hash>.dna-web-application.pages.dev`) instead of the a
 It recurred on 25 September on run 361, across two deployments of one build, and cleared on its
 own. G126 records it.
 
+**Amended 26 September 2026 by handoff 33-B (1141).** The instruction above, to pass `matrix.yml`'s
+`base_url` the deployment URL only once a second deployment 404s, is superseded. Every
+push-triggered test job now reads the deployment its own run uploaded, at that deployment's own
+URL, and a dispatch of `matrix.yml` or `webkit-crash.yml` without `base_url` is refused by name. The
+deployment URL is what every push reads and what every dispatch must name. G126 records the change.
+
 ---
 
 ## G21. WebKit runs only in CI, and design pass 01 proved that costs defects
@@ -5631,6 +5637,36 @@ to `pages-deployment-alias-url || deployment-url`, so every push-triggered job r
 Owed: a ruling on whether the push-triggered jobs read the per-deployment host, which 811 already
 names for each deployment, instead of the alias. That is a harness change, and handoff 33-A does not
 make it.
+
+**Amended 26 September 2026 by handoff 33-B (1141).** Ruling 1141 answers what this entry owed. The
+push-triggered live and matrix jobs, and ruling 217's gate inside them, read the per-deployment host
+of the deployment the same run uploaded, and never the branch alias. The dispatch workflows stop
+defaulting to the alias. The harness change:
+
+- `pages.yml`: the deploy job's `url` output is wrangler-action's `deployment-url`, the upload's own
+  host, `https://<id>.dna-web-application.pages.dev`. It was `pages-deployment-alias-url` first.
+  `BASE` in the live and matrix jobs is that output alone, and the host built from `ref_name` is
+  gone. A step after the deploy fails the job by name when `deployment-url` is empty or is the
+  alias.
+- `matrix.yml` and `webkit-crash.yml`: a dispatch without `base_url` is refused by name, and none of
+  their jobs builds the alias from the branch name.
+- `scripts/host-tested.sh` runs first after the checkout in every test job, push and dispatch alike,
+  and opens the job summary with the host the job tests (811, 893).
+
+In this entry's window every job read the alias,
+`https://claude-new-session-n9rnpi.dna-web-application.pages.dev`. The two deployments' own hosts
+were `https://5797cc2d.dna-web-application.pages.dev` (attempt 1, deployed at 22:29:18) and
+`https://e18f60ee.dna-web-application.pages.dev` (attempt 2, deployed at 23:46:35), read from each
+deploy log's "Take a peek over at" line. No job read either.
+
+The entry stays open until a run on the new setup reads green, and closes then. The first run that
+can read green on it is handoff 33-B's own enforcing run, on a head that carries this amendment, so
+the closure cites that run and is recorded after it: nothing is committed to a branch once its
+enforcing run has started (556).
+
+Owed as a separate reading: whether the per-deployment host also answered 404 in this entry's
+window, the third unread item above. It is still unread. This change decides which host later runs
+read, and it does not answer what `5797cc2d`'s and `e18f60ee`'s hosts answered on 25 September.
 
 ---
 
