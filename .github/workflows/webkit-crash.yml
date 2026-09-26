@@ -14,7 +14,7 @@ on:
   workflow_dispatch:
     inputs:
       base_url:
-        description: Deployed URL to loop against (defaults to the branch's Pages preview)
+        description: The deployment to loop against, at its own URL (https://<id>.dna-web-application.pages.dev). Required; a dispatch without it is refused (ruling 1141).
         required: false
         default: ""
       loops:
@@ -44,21 +44,18 @@ jobs:
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
+      # Ruling 1141 (G126): the deployment the dispatch names at base_url, or a refusal by name before
+      # anything is installed. No host is built from the branch name.
+      - name: Resolve target URL (ruling 1141)
+        id: target
+        env:
+          BASE: ${{ inputs.base_url }}
+          KIND: dispatch
+        run: scripts/host-tested.sh
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
       - run: bun install --frozen-lockfile
-      - name: Resolve target URL
-        id: target
-        env:
-          BASE_URL: ${{ inputs.base_url }}
-          REF_NAME: ${{ github.ref_name }}
-        run: |
-          set -uo pipefail
-          URL="$BASE_URL"
-          if [ -z "$URL" ]; then URL="https://${REF_NAME}.dna-web-application.pages.dev"; fi
-          echo "url=$URL" >> "$GITHUB_OUTPUT"
-          echo "Looping against $URL"
       - name: Live check (the deployment serves the app)
         run: |
           set -e

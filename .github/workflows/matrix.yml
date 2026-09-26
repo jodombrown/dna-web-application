@@ -1,16 +1,16 @@
 # Responsive test matrix (ruling 61) against a deployed Pages URL, in Chromium and WebKit.
-# Dispatch it for a branch; base_url defaults to that branch's Pages preview alias.
-#
-# The default only resolves for a branch whose name is already a valid host label. Cloudflare
-# slugifies an alias, so a branch carrying a slash needs base_url passed explicitly; the deployment
-# check names the URL it tried, so the failure says so rather than looking like a dead deployment.
+# Dispatch it with base_url, the deployment to test at its own URL,
+# https://<id>.dna-web-application.pages.dev, which the Host tested block of every push run's
+# summary names. There is no default (ruling 1141, G126): every job here refuses a dispatch without
+# base_url, by name, in scripts/host-tested.sh. The one host a branch name gives is its alias, a
+# pointer Cloudflare moves between deployments and no valid host for a branch carrying a slash.
 name: Responsive matrix
 
 on:
   workflow_dispatch:
     inputs:
       base_url:
-        description: Deployed URL to test (defaults to the branch's Pages preview)
+        description: The deployment to test, at its own URL (https://<id>.dna-web-application.pages.dev). Required; a dispatch without it is refused (ruling 1141).
         required: false
         default: ""
       engine:
@@ -67,9 +67,14 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
-      BASE: ${{ inputs.base_url || format('https://{0}.dna-web-application.pages.dev', github.ref_name) }}
+      BASE: ${{ inputs.base_url }}
     steps:
       - uses: actions/checkout@v4
+      # Ruling 1141: the dispatch's base_url or a refusal by name, never a host built from the branch.
+      - name: The host this job tests (ruling 1141)
+        env:
+          KIND: dispatch
+        run: scripts/host-tested.sh
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
@@ -99,17 +104,14 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-      - name: Resolve the deployment whose endpoint is measured
+      # Ruling 1141: the endpoint is read out of the deployment the dispatch names at base_url, and a
+      # dispatch without one is refused by name.
+      - name: Resolve the deployment whose endpoint is measured (ruling 1141)
         id: target
         env:
-          BASE_URL: ${{ inputs.base_url }}
-          REF_NAME: ${{ github.ref_name }}
-        run: |
-          set -uo pipefail
-          URL="$BASE_URL"
-          if [ -z "$URL" ]; then URL="https://${REF_NAME}.dna-web-application.pages.dev"; fi
-          echo "url=$URL" >> "$GITHUB_OUTPUT"
-          echo "Reading the endpoint out of the deployment at $URL, then measuring it"
+          BASE: ${{ inputs.base_url }}
+          KIND: dispatch
+        run: scripts/host-tested.sh
       - name: Measure the composer's Anthropic call (ruling 74)
         env:
           BASE: ${{ steps.target.outputs.url }}
@@ -162,21 +164,17 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-      # Ruling 217: the registry is a third party this job does not test.
-      - run: scripts/retry.sh 3 bun install --frozen-lockfile
-      - name: Resolve target URL and artifact slug
+      # Ruling 1141: first after the checkout, so a dispatch without base_url is refused, by name,
+      # before anything is installed. The URL is the dispatch's own; none is built from the branch.
+      - name: Resolve target URL and artifact slug (ruling 1141)
         id: target
         env:
-          BASE_URL: ${{ inputs.base_url }}
+          BASE: ${{ inputs.base_url }}
+          KIND: dispatch
           REF_NAME: ${{ github.ref_name }}
         run: |
           set -uo pipefail
-          URL="$BASE_URL"
-          if [ -z "$URL" ]; then URL="https://${REF_NAME}.dna-web-application.pages.dev"; fi
-          echo "url=$URL" >> "$GITHUB_OUTPUT"
+          scripts/host-tested.sh || exit 1
           # upload-artifact rejects " : < > | * ? \ / CR LF in a name, and our branch names
           # carry a slash. Map every rejected character, for any branch shape, not just that one.
           SLUG=$(printf '%s' "$REF_NAME" | tr -d '\r\n' | tr '"/:<>|*?\\' '-')
@@ -185,7 +183,12 @@ jobs:
           [ -n "$ENGINES" ] || ENGINES="chromium webkit"
           echo "engines=$ENGINES" >> "$GITHUB_OUTPUT"
           echo "slug=$SLUG" >> "$GITHUB_OUTPUT"
-          echo "Testing $URL in $ENGINES (artifact slug $SLUG)"
+          echo "Testing ${BASE%/} in $ENGINES (artifact slug $SLUG)"
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      # Ruling 217: the registry is a third party this job does not test.
+      - run: scripts/retry.sh 3 bun install --frozen-lockfile
       # Ruling 485, Design pass 01 B14 item 3: every token a surface cites resolves in both themes.
       # Static, so it runs before the deployment is even reached and names the file that cites the
       # token rather than leaving an unstyled value to be spotted in a screenshot.
