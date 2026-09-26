@@ -5422,6 +5422,21 @@ mechanism WebKit resolved against the border box for the image in run 347. Nothi
 (ruling 55), and no arm reads it, so nothing on a page shows it today. Owed: the video frame's poster
 in the same declared grid cell, in a Strand correction, before any surface renders video.
 
+**Amended 26 September 2026 by handoff 33-D (correction 30 Part B, ratified with correction 31 under
+1153).** Correction 30 lays the ratioed video's poster in the one declared grid cell, `minmax(0,1fr)`
+by `minmax(0,1fr)` with `minHeight: 0`, with play and duration absolute over it. The unratioed video
+is byte-identical to before. `MediaBlock.tsx` carries it as compiled, so the mechanism this entry
+named is gone from the part.
+
+It stays open because it is unread, not because it is untrue. The handoff owed a `matrix (webkit)`
+reading of the poster inside its frame at 390, 820 and 1280, and no deployed page renders a video to
+read. Ruling 55 keeps video out of the composer, `PostCardRouter.tsx` maps a post's media to `image`
+or `gallery` only, and neither `BodyBlocks`, whose video block goes through this frame, nor anything
+else in the tree renders `kind="video"`. No arm was written, because an arm on a page that cannot
+show the frame would pass or fail on nothing (930). This entry closes on the first WebKit arm that
+reads a ratioed video on a page: `BodyBlocks`' video block, once the first Discovery handoff or
+Brief 10 Revision 4 binds it, is the likely first.
+
 ## G120. Discovery's Copy link and Share hand over the post's address, where the face links to the event's — closed (1140)
 
 **Severity: low. Opened 25 September 2026 during handoff 33-A (G100, G110), filed under ruling 597.
