@@ -63,13 +63,15 @@
 // (`share`), each marked `data-tool`; on the right correction 23's cluster, unchanged in content,
 // order and keys. Without a tool handler the cluster keeps the corner. `listHidden`, while open,
 // draws `0px minmax(0,{hiddenWidth})` centred with no gap (default 720): the list slot is still the
-// same element, `aria-hidden`, inert and hidden, so its scroll is kept. Closed wins over hidden. In
-// this branch the pane's content always sits inside `data-pane-body`, bounded or not.
+// same element, `aria-hidden`, inert and hidden, so its scroll is kept while `selectedKey` holds.
+// The follow below runs on a new key hidden or not, and the hidden list is laid out at no width,
+// so a caller holds its key while the list is hidden (G128). Closed wins over hidden. In this
+// branch the pane's content always sits inside `data-pane-body`, bounded or not.
 //
 // `DiscoverySurface` (handoff 31-B) is the one caller. It binds `onClose`, `closeLabel`,
-// `selectedKey` and the stepping pair, and renders the Pane only while an item is open, so no page
-// passes `open`. G110's binding of `paneWidth` 520, `height` and the three tool handlers is handoff
-// 33-A's change to that caller, not this part's.
+// `selectedKey` (held while the list is hidden, G128) and the stepping pair, and renders the Pane
+// only while an item is open, so no page passes `open`. G110's binding of `paneWidth` 520, `height`
+// and the three tool handlers is handoff 33-A's change to that caller, not this part's.
 import { useEffect, useRef, type CSSProperties, type KeyboardEvent, type ReactNode } from "react";
 import { IconButton } from "./IconButton";
 
@@ -115,8 +117,9 @@ export type PaneProps = {
    *  scroll separately and the pane section is not sticky. Absent, the page scrolls as before. */
   height?: number | string | undefined;
   /** Correction 28. While open: `0px minmax(0,{hiddenWidth})` centred, no gap; the list slot stays
-   *  the same element, hidden and inert, its scroll kept. Default false. Takes effect only with
-   *  `paneWidth`, `height` or a tool handler, which select the branch that reads it. */
+   *  the same element, hidden and inert, its scroll kept while `selectedKey` holds (G128). Default
+   *  false. Takes effect only with `paneWidth`, `height` or a tool handler, which select the branch
+   *  that reads it. */
   listHidden?: boolean | undefined;
   /** Correction 28. Any of the three renders the toolbar at the pane's top, ordered Hide or show the
    *  list, Copy link, Share, with correction 23's cluster at the right of the same row. Expanded

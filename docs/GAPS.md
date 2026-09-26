@@ -5437,6 +5437,13 @@ ring's sides are clipped. A lane's first card may lose its left band to the colu
 `overflow-x: hidden`. Owed: a Strand correction that leaves the ring's inset inside the bounded list
 column.
 
+**Amended 26 September 2026 (handoff 33-A Addendum 1, the review of item 3).** The ring's bottom is
+cut at a list's end as well. In a lens list at 1280x800 (`/convene/network`), Next onto the last
+card leaves the list at its end: scrollTop 538, with a scrollHeight of 1112 in a 573.8 column. The
+card runs from 64.4 to 574.3, and the column has no foot padding. So the face is cut by 0.5 and the
+ring's bottom band is outside the column. It reads the same on `8d9dfd3`, with Pane's key held
+(G128), and after a step taken with the list hidden. The same Strand correction owes the bottom.
+
 ## G124. Arrow keys inside the Pane's toolbar step to another event
 
 **Severity: low. Opened 25 September 2026 during handoff 33-A's review (G110), filed under ruling 597. The number is assigned by this entry (ruling 638).**
@@ -5543,3 +5550,63 @@ were in Chromium at 1280x800, 1440x900 and 1600x1000, and two independent re-rea
 Wherever the rail reaches its bound, its foot sits 24 above the feed column's. With the pane open,
 the rail is the strip and ends where its content does, so the 48 does not show. Owed: a ruling on
 whether the rail column takes the canvas's 24 at expanded, or the spec names the rail's 48.
+
+---
+
+## G128. Pane's `selectedKey` follow runs while the list is hidden, and writes the hidden list's scroll
+
+**Severity: low. Opened 26 September 2026 during handoff 33-A Addendum 1 item 3 (Chat's read of `5a09009`), filed under ruling 597. The number is assigned by this entry (ruling 638).**
+
+Correction 28 says the hidden list keeps its scroll (the extraction, line 17: "The list slot stays
+the same element, hidden and inert, and keeps its scroll"). The bundle's follow
+(`docs/strand/v1790366257373061/_ds_bundle.js:3154-3157`, ported at
+`src/components/strand/Pane.tsx:246-250`) runs on every new `selectedKey` with no `listHidden`
+check. `bringIntoView` then sets `scrollTop += box.top - c.top`, and the hidden list is still laid
+out, at no width, on its 0px track. So a step taken while the list is hidden writes its scroll
+against that layout.
+
+Read in Chromium on this branch's build of `8d9dfd3`, and upheld by two independent re-readings:
+
+- At 1280x800, Hide list moves the list from 1936 to 2107. That is scroll anchoring on the 0px
+  track, and Show list reverses it.
+- A Next while hidden then writes 2107 to 150. A setter trap on the list's `scrollTop` caught
+  `bringIntoView`, called from the follow effect, once per step and nothing else. 1440 and 1600
+  read the same.
+- Discovery's own refollow on Show list covers steps that end on another card. It does not cover
+  steps that return to the card the list was hidden on (Next, then Previous). Show list then left
+  the list at 150, with the open card 61 above the column's top, out of view and without its ring.
+
+Discovery now holds the key it passes Pane at the open event the list was hidden on, until the list
+is shown (`hiddenKey` in `DiscoverySurface.tsx`). A step while hidden therefore writes nothing, and
+Show list follows only when the open event changed. The step arm reads the hidden list's scroll
+across a Next: on `8d9dfd3` it fails (4266 to 1185 at 1280, 4066 to 1185 at 1600), and with the
+held key it holds. One outcome differs from `8d9dfd3`: hide on a card, step away, step back to it
+and show, and the list is where it was hidden. That is "scroll kept"; if the member had scrolled the
+open card out of view before hiding, it stays out of view.
+
+The part is unchanged (844). A caller that passes the open item as `selectedKey` together with
+`listHidden`, the compile's own usage, still writes the hidden list's scroll. Owed: a Strand
+correction that guards the follow on `listHidden`, after which Discovery's held key goes.
+
+---
+
+## G129. Back then Forward to an event reached by a step reopens the pane with its list scrolled away from the open card
+
+**Severity: low. Opened 26 September 2026 during the review of handoff 33-A Addendum 1 item 3, filed under ruling 597. The number is assigned by this entry (ruling 638).**
+
+This was read in Chromium at 1280x800. It reads identically on this branch's build of `8d9dfd3` and
+on the build that holds Pane's key (G128), with the list shown throughout:
+
+- With the list arranged at 1936, Next follows to 85, and the open card sits at 4.0 with its ring.
+- Browser Back leaves the pane, and browser Forward reopens it with a new list element. Pane's mount
+  follow writes 0 to 89, and Discovery's refollow writes 89 to 85.
+- A later write then sets 1936, the offset from before the step. The open card ends at -1847, out of
+  view.
+
+The last write came from the router's bundle (`Match-*.js`, through a `Set.forEach`).
+`scrollToTopSelectors` in `src/router.tsx:26-30` names the feed, left and right scrollers, not
+`[data-pane-list]`. So this reads as the router's element scroll restoration copying a remembered
+offset onto the list column. That mechanism is inferred from the call stack and was not read in the
+router's source (555). It is the class of copy-forward CLAUDE.md records under W58 and ruling 552.
+Owed: the mechanism read in the router, and the list column's offset settled after the router's
+restoration or excluded from it.

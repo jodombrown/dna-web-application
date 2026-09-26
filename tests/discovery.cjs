@@ -2498,21 +2498,43 @@ async function runDiscoveryStep(browserType, bname, [w, h], theme) {
         two.listScrolled,
       JSON.stringify(two),
     );
-    // Hidden, the list has no width to follow the open card in; Show list brings it back into view.
+    // Hidden, the list has no width to follow the open card in, so a step taken then leaves its
+    // scroll where it is (correction 28: the same element, inert, its scroll kept), read on the
+    // element itself (930); Show list brings the open card back into view. The list is taken to its
+    // end first, away from the open card, so a follow while hidden would have somewhere to move it.
     let refollow = null;
+    let hiddenScroll = null;
     const listTool = page.locator('[data-pane-toolbar] [data-tool="list"]');
+    const listTop = () =>
+      page.evaluate(
+        () =>
+          Math.round(document.querySelector("[data-discovery] [data-pane-list]").scrollTop * 10) /
+          10,
+      );
     if ((await listTool.count()) === 1) {
+      await page.evaluate(() => {
+        document.querySelector("[data-discovery] [data-pane-list]").scrollTop = 1e6;
+      });
+      await page.waitForTimeout(300);
       await listTool.click();
       await page.waitForTimeout(300);
+      const before = await listTop();
       await next(E.cloth.event_id);
+      hiddenScroll = { before, after: await listTop() };
       await listTool.click();
       await page.waitForTimeout(500);
       refollow = await read();
     }
     record(
-      tag + " Hide list, Next, Show list: the open card is in the list's view again (1083, G110)",
-      !!refollow && refollow.id === E.cloth.event_id && refollow.selected && refollow.ring,
-      JSON.stringify(refollow),
+      tag +
+        " Hide list, Next, Show list: the step leaves the hidden list's scroll where it was, and the open card is in the list's view again (1083, G110, correction 28)",
+      !!refollow &&
+        !!hiddenScroll &&
+        Math.abs(hiddenScroll.after - hiddenScroll.before) <= 1 &&
+        refollow.id === E.cloth.event_id &&
+        refollow.selected &&
+        refollow.ring,
+      JSON.stringify({ hiddenScroll, refollow }),
     );
     // 688: Back to Discovery leaves the lanes where the member left them. The list column scrolls
     // while the pane is open (G110), so the card at its top goes back to the same distance from the

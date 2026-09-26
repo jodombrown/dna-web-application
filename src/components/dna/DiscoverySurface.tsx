@@ -1150,6 +1150,11 @@ export function DiscoverySurface({
   useEffect(() => {
     if (!paneOpen) setListHidden(false);
   }, [paneOpen]);
+  // The open event when the list was hidden, which Pane follows (1083) until it is shown again.
+  // Pane follows its key hidden or not, and the hidden list is laid out at no width, so following
+  // the open event there would write the list's scroll on every step; held, a step writes nothing
+  // (correction 28's scroll kept), and Show list follows only if the open event changed.
+  const [hiddenKey, setHiddenKey] = useState<string | null>(null);
   const paneItem =
     paneOpen && paneId
       ? (data?.sections ?? []).flatMap((s) => s.items).find((i) => i.event_id === paneId)
@@ -1223,7 +1228,8 @@ export function DiscoverySurface({
   }, [paneOpen, scrollerRef]);
 
   // The list follows the open card (1083): Pane's `selectedKey` brings it into the bounded list
-  // column's view vertically, and a lane scrolls sideways, so it is brought into its lane's view here.
+  // column's view vertically, its face at the column's top, where the ring drawn 4 outside it is cut,
+  // and a lane scrolls sideways, so it is brought into view here, ring and lane both.
   // Hidden, the list has no width to follow in. Shown again on the card it was hidden on, it keeps
   // its place (correction 28's hidden list keeps its scroll); shown on another, reached by Previous
   // or Next while it was hidden, it brings that card into view.
@@ -1315,12 +1321,15 @@ export function DiscoverySurface({
           paneWidth={520}
           height="100%"
           listHidden={listHidden}
-          onToggleList={() => setListHidden((h) => !h)}
+          onToggleList={() => {
+            setHiddenKey(paneId);
+            setListHidden((h) => !h);
+          }}
           onCopyLink={panePostId ? () => void copy(panePostId) : undefined}
           onShare={panePostId ? () => void share(panePostId) : undefined}
           onClose={closePane}
           closeLabel={"Back to " + (fromElsewhere ? toOrigin.origin.label : "Discovery")}
-          selectedKey={paneId ?? undefined}
+          selectedKey={(listHidden ? hiddenKey : paneId) ?? undefined}
           {...stepping}
         >
           {pane}
