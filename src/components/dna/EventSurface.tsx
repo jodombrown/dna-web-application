@@ -168,6 +168,11 @@ export function EventSurface({
   const reread = () => qc.invalidateQueries({ queryKey: [EVENT_PAGE_KEY, member.id, id] });
   const { origin: back, go: goBack } = useBackToOrigin();
 
+  // 1147 (handoff 33-D item 3): the error and not-found states' EmptyState fills its column. The
+  // page takes the visible height the shell publishes (in the pane, the pane body's own bounded
+  // height) plus its own foot padding, so its content box runs to the visible foot, and the empty
+  // column takes the rest of it below the Back row.
+  const foot = compact ? 130 : 96;
   const frame = (state: string, children: React.ReactNode) => (
     <div
       data-event-page={id}
@@ -175,6 +180,10 @@ export function EventSurface({
       style={{
         display: "flex",
         flexDirection: "column",
+        minHeight:
+          state === "error" || state === "not-found"
+            ? "calc(" + (inPane ? "100%" : "var(--_shell-visible)") + " + " + foot + "px)"
+            : undefined,
         gap: 20,
         width: "100%",
         // 1143: in the pane the pane is the bound (520, or 720 with the list hidden), so the cover
@@ -210,30 +219,34 @@ export function EventSurface({
   if (pageQ.isError)
     return frame(
       "error",
-      <EmptyState
-        c="convene"
-        title="This event did not load."
-        body="Check your connection and try again."
-        action={
-          <Button variant="secondary" onClick={() => void pageQ.refetch()}>
-            Try again
-          </Button>
-        }
-      />,
+      <div data-empty-column style={{ display: "flex", flexDirection: "column", flex: "1 1 auto" }}>
+        <EmptyState
+          c="convene"
+          title="This event did not load."
+          body="Check your connection and try again."
+          action={
+            <Button variant="secondary" onClick={() => void pageQ.refetch()}>
+              Try again
+            </Button>
+          }
+        />
+      </div>,
     );
   if (!page)
     return frame(
       "not-found",
-      <EmptyState
-        c="convene"
-        title="This event is not available."
-        body="It may have been removed, or it is not one you can see."
-        action={
-          <Button variant="secondary" onClick={goBack}>
-            {"Back to " + back.label}
-          </Button>
-        }
-      />,
+      <div data-empty-column style={{ display: "flex", flexDirection: "column", flex: "1 1 auto" }}>
+        <EmptyState
+          c="convene"
+          title="This event is not available."
+          body="It may have been removed, or it is not one you can see."
+          action={
+            <Button variant="secondary" onClick={goBack}>
+              {"Back to " + back.label}
+            </Button>
+          }
+        />
+      </div>,
     );
 
   const ev = page.event;

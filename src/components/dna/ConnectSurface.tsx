@@ -209,17 +209,18 @@ export function ConnectSurface({ member, search }: { member: Member; search: Con
   const qc = useQueryClient();
   const lens: ConnectLens = search.lens ?? "members";
   /**
-   * B16 item 2 (W38, W48): every Connect empty state centres in the space the sticky bars leave, so
-   * it is never clipped under the lens bar and never reads as a stub parked at the top of an empty
-   * scroller. The lens bar block is 44 of track plus its own padding; the dock is 64 below 1024.
+   * B16 item 2 (W38, W48), as 1147 moves it onto the column (handoff 33-D item 3): every Connect
+   * empty state fills the space below the sticky lens bar, so it is never clipped under the bar and
+   * never reads as a stub parked at the top of an empty scroller. The root takes the visible height
+   * the shell publishes (--_shell-visible) while the lens shows its empty state, the empty state's
+   * own column takes the rest of it (`flex: 1`), and EmptyState fills that column.
    */
-  const LENS_BLOCK = expanded ? 76 : 60;
-  const APP_HEADER = expanded ? 64 : 56;
-  const fillEmpty = {
-    fill: true,
-    stickyTop: APP_HEADER + LENS_BLOCK,
-    stickyBottom: expanded ? 0 : 64,
-  } as const;
+  const EMPTY_COLUMN: CSSProperties = {
+    display: "flex",
+    flexDirection: "column",
+    flex: "1 1 auto",
+  };
+  let emptyLens = false;
   const filters = useMemo(() => filtersOf(search), [search]);
   const filtered = hasFilters(filters);
   const scopeOf = CONNECT_LENSES.find((l) => l.id === lens)?.scope;
@@ -561,6 +562,8 @@ export function ConnectSurface({ member, search }: { member: Member; search: Con
   let body: ReactNode;
   if (lens === "members") {
     const items = (members.data?.pages ?? []).flatMap((p) => p.items).filter((c) => !gone(c));
+    const membersEmpty = !members.isPending && !members.isError && items.length === 0;
+    emptyLens = membersEmpty;
     body = (
       <>
         <div
@@ -594,7 +597,11 @@ export function ConnectSurface({ member, search }: { member: Member; search: Con
             </button>
           )}
         </div>
-        <section aria-label="Members" style={cardsGap} data-testid="lens-members">
+        <section
+          aria-label="Members"
+          style={membersEmpty ? { ...cardsGap, ...EMPTY_COLUMN } : cardsGap}
+          data-testid="lens-members"
+        >
           {members.isPending ? (
             <Ghosts compact={compact} label="Loading Connect" />
           ) : members.isError ? (
@@ -604,7 +611,6 @@ export function ConnectSurface({ member, search }: { member: Member; search: Con
               <EmptyState
                 c="connect"
                 pattern="kente"
-                {...fillEmpty}
                 title="Nobody matches these filters."
                 body="Clear one and try again."
                 action={
@@ -617,7 +623,6 @@ export function ConnectSurface({ member, search }: { member: Member; search: Con
               <EmptyState
                 c="connect"
                 pattern="kente"
-                {...fillEmpty}
                 title="Nobody here yet."
                 body="Members appear as they join. Yours is the first profile they will see."
                 action={
@@ -661,8 +666,13 @@ export function ConnectSurface({ member, search }: { member: Member; search: Con
     );
   } else if (lens === "suggested") {
     const items = (suggested.data ?? []).filter((c) => !gone(c));
+    emptyLens = !suggested.isPending && !suggested.isError && items.length === 0;
     body = (
-      <section aria-label="Suggested" style={cardsGap} data-testid="lens-suggested">
+      <section
+        aria-label="Suggested"
+        style={emptyLens ? { ...cardsGap, ...EMPTY_COLUMN } : cardsGap}
+        data-testid="lens-suggested"
+      >
         {suggested.isPending ? (
           <Ghosts compact={compact} label="Loading Connect" />
         ) : suggested.isError ? (
@@ -671,7 +681,6 @@ export function ConnectSurface({ member, search }: { member: Member; search: Con
           <EmptyState
             c="connect"
             pattern="kente"
-            {...fillEmpty}
             title="No suggestions with a real reason yet."
             body="DIA suggests someone when you share an event, a Space, a corridor, or a connection with them. Until then, this stays empty."
             action={
@@ -692,23 +701,25 @@ export function ConnectSurface({ member, search }: { member: Member; search: Con
       items: (d?.[s.key] ?? []).filter((c) => !gone(c)),
     }));
     const allEmpty = !!d && sections.every((s) => s.items.length === 0);
+    emptyLens = !network.isPending && !network.isError && allEmpty;
     body = network.isPending ? (
       <Ghosts compact={compact} label="Loading Connect" />
     ) : network.isError ? (
       <LoadError {...CONNECT_ERROR} onRetry={() => void network.refetch()} />
     ) : allEmpty ? (
-      <EmptyState
-        c="connect"
-        pattern="kente"
-        {...fillEmpty}
-        title="Your network starts here."
-        body="Connections you make and members you follow gather here."
-        action={
-          <Button variant="secondary" c="connect" onClick={() => setLens("members")}>
-            Browse members
-          </Button>
-        }
-      />
+      <div style={EMPTY_COLUMN} data-testid="lens-network-empty">
+        <EmptyState
+          c="connect"
+          pattern="kente"
+          title="Your network starts here."
+          body="Connections you make and members you follow gather here."
+          action={
+            <Button variant="secondary" c="connect" onClick={() => setLens("members")}>
+              Browse members
+            </Button>
+          }
+        />
+      </div>
     ) : (
       <div style={{ display: "flex", flexDirection: "column", gap: 28 }} data-testid="lens-network">
         {sections.map((s) => (
@@ -732,6 +743,10 @@ export function ConnectSurface({ member, search }: { member: Member; search: Con
     );
   } else {
     const d = where.data;
+    emptyLens =
+      !where.isPending &&
+      !where.isError &&
+      (!d || (d.continent.length === 0 && d.diaspora.length === 0));
     const cols = compact ? "repeat(2, minmax(0,1fr))" : "repeat(4, minmax(0,1fr))";
     const group = (label: string, names: string[]) =>
       names.length === 0 ? null : (
@@ -776,13 +791,14 @@ export function ConnectSurface({ member, search }: { member: Member; search: Con
     ) : where.isError ? (
       <LoadError {...CONNECT_ERROR} onRetry={() => void where.refetch()} />
     ) : !d || (d.continent.length === 0 && d.diaspora.length === 0) ? (
-      <EmptyState
-        c="connect"
-        pattern="kente"
-        {...fillEmpty}
-        title="No country has reached the floor yet."
-        body="Where shows a country once enough members are there to appear as a group, never as individuals."
-      />
+      <div style={EMPTY_COLUMN} data-testid="lens-where-empty">
+        <EmptyState
+          c="connect"
+          pattern="kente"
+          title="No country has reached the floor yet."
+          body="Where shows a country once enough members are there to appear as a group, never as individuals."
+        />
+      </div>
     ) : (
       <div style={{ display: "flex", flexDirection: "column", gap: 20 }} data-testid="lens-where">
         {group("On the continent", d.continent)}
@@ -841,6 +857,7 @@ export function ConnectSurface({ member, search }: { member: Member; search: Con
         display: "flex",
         flexDirection: "column",
         gap: 20,
+        minHeight: emptyLens ? "var(--_shell-visible)" : undefined,
         fontFamily: "var(--font-sans)",
         color: "var(--ink)",
       }}

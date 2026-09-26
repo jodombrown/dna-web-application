@@ -1520,6 +1520,134 @@ async function runMountShell(bt, bname, [w, h], theme) {
   );
 }
 
+/**
+ * Handoff 33-D item 4 (1147; correction 31 item 4): EmptyState fills the column it sits in, at
+ * Discovery's empty lens, the Feed's and Connect's. The column is the element that holds the part,
+ * which each surface now gives the height (the shell publishes the visible height as
+ * --_shell-visible and the surface carries it down). Read on the page as rendered:
+ *   - the wallpaper, the part's own box, against the column's content box, all four sides within 1;
+ *   - the block's centre against the centre of what is visible of the column: below any sticky
+ *     chrome over it, above the fixed dock, inside the scroller;
+ *   - the radius 0;
+ *   - the column's foot at the visible foot: the dock's top below expanded, the scroller's bottom at
+ *     expanded, and in Discovery's lanes the canvas foot, the scroller's bottom padding.
+ */
+function readEmpty(page) {
+  return page.evaluate(() => {
+    const es = document.querySelector("[data-empty-state]");
+    if (!es) return null;
+    const r1 = (v) => Math.round(v * 10) / 10;
+    const col = es.parentElement;
+    const cs = getComputedStyle(col);
+    const cb = col.getBoundingClientRect();
+    const content = {
+      left: cb.left + parseFloat(cs.borderLeftWidth) + parseFloat(cs.paddingLeft),
+      top: cb.top + parseFloat(cs.borderTopWidth) + parseFloat(cs.paddingTop),
+      right: cb.right - parseFloat(cs.borderRightWidth) - parseFloat(cs.paddingRight),
+      bottom: cb.bottom - parseFloat(cs.borderBottomWidth) - parseFloat(cs.paddingBottom),
+    };
+    const w = es.getBoundingClientRect();
+    let sc = es;
+    while (sc && !sc.hasAttribute("data-scroller")) sc = sc.parentElement;
+    if (!sc) return null;
+    const sb = sc.getBoundingClientRect();
+    const lanes = !!document.querySelector("[data-canvas][data-layout]") && sc.tagName === "MAIN";
+    let foot = sb.bottom - (lanes ? parseFloat(getComputedStyle(sc).paddingBottom) || 0 : 0);
+    const dock = document.querySelector('[data-pulse="dock"]');
+    if (dock && getComputedStyle(dock).position === "fixed")
+      foot = Math.min(foot, dock.getBoundingClientRect().top);
+    let top = Math.max(sb.top, cb.top);
+    for (const e of sc.querySelectorAll("*")) {
+      if (getComputedStyle(e).position !== "sticky") continue;
+      const r = e.getBoundingClientRect();
+      if (r.bottom > top && r.top <= top && r.left < cb.right && r.right > cb.left) top = r.bottom;
+    }
+    const bottom = Math.min(cb.bottom, foot);
+    const block = (es.querySelector("[data-empty-block]") || es).getBoundingClientRect();
+    return {
+      sides: [
+        w.left - content.left,
+        w.top - content.top,
+        content.right - w.right,
+        content.bottom - w.bottom,
+      ].map(r1),
+      centre: r1((block.top + block.bottom) / 2 - (top + bottom) / 2),
+      radius: getComputedStyle(es).borderRadius,
+      foot: [r1(cb.bottom), r1(foot)],
+    };
+  });
+}
+
+const emptyFills = (m) => ({
+  ok:
+    !!m &&
+    m.sides.every((v) => Math.abs(v) <= 1) &&
+    Math.abs(m.centre) <= 1 &&
+    m.radius === "0px" &&
+    Math.abs(m.foot[0] - m.foot[1]) <= 1,
+  detail: JSON.stringify(m),
+});
+
+async function runMountEmpty(bt, bname, [w, h], theme) {
+  const tag = `${bname}-${w}x${h}-${theme}-mount-empty`;
+  await arm(
+    tag,
+    async () => {
+      // The Feed's Mine lens with nothing posted.
+      const db = makeMockDb();
+      seedPosts(db, 0);
+      const s = await context(bt, [w, h], theme, db);
+      await signIn(s.page);
+      return s;
+    },
+    async ({ page }) => {
+      await page.goto(BASE + "/feed?lens=mine", { waitUntil: "networkidle" });
+      await page
+        .locator('[data-testid="feed-empty"] [data-empty-state]')
+        .waitFor({ timeout: 20000 });
+      await page.waitForTimeout(400);
+      const feed = emptyFills(await readEmpty(page));
+      record(
+        tag +
+          " Feed, an empty lens: EmptyState fills its column, the block centred in the visible area (1147)",
+        feed.ok,
+        feed.detail,
+      );
+      // Connect's Members lens with nobody in it.
+      const cdb = makeMockDb();
+      seedPosts(cdb, 1);
+      Object.assign(cdb.connect, { membersEmpty: true, whereEmpty: true, suggestFail: true });
+      const c = await context(bt, [w, h], theme, cdb);
+      await signIn(c.page);
+      await c.page.goto(BASE + "/connect", { waitUntil: "networkidle" });
+      await c.page.getByText("Nobody here yet.").waitFor({ timeout: 20000 });
+      await c.page.waitForTimeout(400);
+      const connect = emptyFills(await readEmpty(c.page));
+      record(
+        tag +
+          " Connect, Members with nobody: EmptyState fills its column, the block centred in the visible area (1147)",
+        connect.ok,
+        connect.detail,
+      );
+      // Discovery's Curated lens with nothing in it.
+      const ddb = discoveryDb();
+      ddb.discovery.sections = { ...ddb.discovery.sections, curated: [] };
+      const d = await context(bt, [w, h], theme, ddb);
+      await signIn(d.page);
+      await openDiscovery(d.page, "/convene/curated");
+      await d.page.getByText("Nothing in this lens yet.").waitFor({ timeout: 20000 });
+      await d.page.waitForTimeout(400);
+      const discovery = emptyFills(await readEmpty(d.page));
+      record(
+        tag +
+          " Discovery, an empty lens: EmptyState fills its column, the block centred in the visible area (1147)",
+        discovery.ok,
+        discovery.detail,
+      );
+    },
+  );
+}
+
 async function runMount(bt, bname, vp, theme) {
   await runMountFeed(bt, bname, vp, theme);
   await runMountPost(bt, bname, vp, theme);
@@ -1542,6 +1670,8 @@ async function runMount(bt, bname, vp, theme) {
   // Addendum 3 item E: MediaBlock's ratio on the Feed's Convene card, and every other box kept.
   await runMountMedia(bt, bname, vp, theme);
   await runMountCovers(bt, bname, vp, theme);
+  // Handoff 33-D item 4 (1147): EmptyState fills its column on Discovery, the Feed and Connect.
+  await runMountEmpty(bt, bname, vp, theme);
 }
 
-module.exports = { runMount, MOUNT_CELLS };
+module.exports = { runMount, MOUNT_CELLS, runMountEmpty };

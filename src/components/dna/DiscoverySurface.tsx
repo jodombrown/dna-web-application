@@ -1143,10 +1143,24 @@ export function DiscoverySurface({
   // B9-SPEC Revision 2's grid, 1125, is 1131's first handoff), or the EmptyState.
   const lensLane: DiscoveryLaneId | null = lens === "all" ? null : lens;
   const lensSection = lensLane ? sections.find((s) => s.section === lensLane) : undefined;
+  // 1147 (handoff 33-D item 3): the lens's EmptyState fills its own column, which takes the rest of
+  // the list's height; the surface root takes the visible height the shell publishes, and in the
+  // pane the list column's own bounded height.
+  const lensEmpty =
+    !!lensLane &&
+    !(lensLane === "follow" && sentence && !lensSection?.items.length) &&
+    !(lensSection && lensSection.items.length > 0);
   const lensView = lensLane ? (
     <div
       data-lens-list={lensLane}
-      style={{ display: "flex", flexDirection: "column", gap: 16, width: "100%", minWidth: 0 }}
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        gap: 16,
+        width: "100%",
+        minWidth: 0,
+        flex: lensEmpty ? "1 1 auto" : undefined,
+      }}
     >
       {laneName(lensLane) && <h2 style={H2}>{laneName(lensLane)}</h2>}
       {lensLane === "follow" && sentence && !lensSection?.items.length ? (
@@ -1156,16 +1170,21 @@ export function DiscoverySurface({
           {lensSection.items.map((it) => card(it, lensLane, true))}
         </div>
       ) : (
-        <EmptyState
-          c="convene"
-          title="Nothing in this lens yet."
-          body="Widen the lens or browse another way."
-          action={
-            <Button variant="secondary" onClick={() => setLens("all")}>
-              Back to All
-            </Button>
-          }
-        />
+        <div
+          data-empty-column
+          style={{ display: "flex", flexDirection: "column", flex: "1 1 auto" }}
+        >
+          <EmptyState
+            c="convene"
+            title="Nothing in this lens yet."
+            body="Widen the lens or browse another way."
+            action={
+              <Button variant="secondary" onClick={() => setLens("all")}>
+                Back to All
+              </Button>
+            }
+          />
+        </div>
       )}
     </div>
   ) : null;
@@ -1183,6 +1202,7 @@ export function DiscoverySurface({
   ) : (
     lensView
   );
+  const emptyLensView = lensEmpty && !read.isError && !(!read.data && read.isPending);
 
   // Pane stepping (1083, 1044): Previous and Next across the lane the open card came from, in its
   // order, to the nearest neighbours the member has not dismissed. The open card is found in the lane
@@ -1388,10 +1408,18 @@ export function DiscoverySurface({
         <Pane
           tier="expanded"
           list={
-            <>
+            // 1147: the list column is bounded, so an empty lens's column fills it from here.
+            <div
+              data-pane-list-content
+              style={
+                emptyLensView
+                  ? { display: "flex", flexDirection: "column", minHeight: "100%" }
+                  : undefined
+              }
+            >
               {headerRow}
               {body}
-            </>
+            </div>
           }
           title={paneTitle}
           paneWidth={520}
@@ -1418,7 +1446,13 @@ export function DiscoverySurface({
     <div
       data-discovery
       data-lens={lens}
-      style={{ display: "flex", flexDirection: "column", gap: 16, minWidth: 0 }}
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        gap: 16,
+        minWidth: 0,
+        minHeight: emptyLensView ? "var(--_shell-visible)" : undefined,
+      }}
     >
       {laneStyle}
       {compact ? (
