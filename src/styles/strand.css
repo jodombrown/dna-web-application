@@ -378,6 +378,31 @@
   --pane-list-width: 360px;
   --pane-gap: var(--space-6);
 
+  /* ---- Strand compile v1790410319010950 (corrections 30 and 31, ratified 1153; handoff 33-D
+     item 2): the sixteen tokens its tokens/spacing.css adds, at the compile's own values, in its
+     own order and under its own selector (604). ---- */
+  /* Correction 30's parts (604, correction 31 item 1). Values unchanged from the readings off v5. */
+  --browse-tile-width: 180px; /* BrowseTile: the tile's width */
+  --browse-tile-min-height: 84px; /* BrowseTile: the tile's minimum height */
+  --person-card-min-height: 84px; /* PersonCard row: minimum height */
+  --person-tile-min-height: 112px; /* PersonCard tile: minimum height */
+  --avatar-card: 56px; /* PersonCard row: avatar */
+  --avatar-tile: 48px; /* PersonCard tile: avatar */
+  --carousel-slide: 86%; /* MediaBlock carousel: a slide's share of the row, so the next slide's edge shows */
+  --icon-inline: 14px; /* BrowseTile: the check before the detail line (the --text-xs rung's glyph) */
+  --focus-offset: 2px; /* BrowseTile, PersonCard, MediaBlock carousel: outline offset */
+
+  /* EmptyState (1147, correction 31 item 4). */
+  --empty-badge: 48px; /* EmptyState: the CBadge */
+  --empty-measure: 360px; /* EmptyState: title and body measure */
+
+  /* Tooltip (1146, correction 31 item 3). */
+  --tooltip-delay: 300ms; /* @kind other */ /* pointer rest or focus before the tooltip paints */
+  --tooltip-grace: 300ms; /* @kind other */ /* after one hides, a neighbour's shows at once within this window */
+  --tooltip-gap: 6px; /* between the control and the tooltip */
+  --tooltip-max-width: 240px;
+  --z-tooltip: 90; /* @kind other */ /* above toast: a tooltip names the control under the pointer wherever it is */
+
   /* Lane geometry (731). A card laid in a lane; read by the caller that lays the lane. */
   --lane-card-width: 320px;
 

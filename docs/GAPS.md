@@ -5989,3 +5989,49 @@ every suite; only runs bracketed by two such reads were counted.
 Owed: nothing in the product. A local runner that checks the served build before it counts a run,
 or a pinned `wrangler` that holds under load, would stop the next session from reading a red that is
 not the change's.
+
+## G136. Tooltip places itself against its host span, so an absolutely placed IconButton's tooltip lands at an empty box
+
+**Severity: low. Opened 26 September 2026 during handoff 33-D (correction 31 item 3, 1146), filed
+under ruling 597. The number is assigned by this entry (ruling 638).**
+
+Correction 31's `Tooltip` wraps its control in a `span[data-tooltip-host]` (`display: inline-flex`).
+It measures that span to place itself below the control, or above it at the viewport's foot.
+`IconButton` wraps itself in one and still hands its `style` to the button. When a caller positions
+the IconButton absolutely, the button leaves the host's flow. The host is then an empty 0 by 0 box
+where the button would have sat, and the tooltip is placed against that box, not against the
+control.
+
+The compile's own `Composer` does this: its "Remove image" button on a thumbnail is
+`position: absolute; top: -8; right: -8`. The tree has it there and twice more, in `ProfileHeader`'s
+"Change cover" camera buttons. Each now puts the placement on a wrapper,
+`<span style="position:absolute; …; display:flex">`, around the IconButton. The host span then wraps
+the button, the tooltip is placed against it, and the button lands where it did. The part is as
+compiled (844).
+
+Owed: a Strand correction that places the tooltip against the control rather than the host, for
+instance the host's first element child. The three wrappers then go.
+
+## G137. Native `title` tooltips remain on parts correction 31 did not reach
+
+**Severity: low. Opened 26 September 2026 during handoff 33-D, filed under ruling 597. The number is
+assigned by this entry (ruling 638).**
+
+Handoff 33-D's IconButton row asks for "no `title` attribute anywhere in `src/`". `Tooltip.prompt.md`
+says "No `title=` anywhere in Strand". Neither holds of compile `v1790410319010950` itself, which
+still writes a native `title` in four parts:
+
+- `FacetRail`'s collapsed strip, on the expand button and on each axis button;
+- `LensBar`'s icon-first seat on a pointer;
+- `VerbChip`'s disabled reason;
+- `PostCard`'s "Written by you" pen icon.
+
+The ports carry each as compiled. The bundle governs, and the handoff says to port what it does.
+`IdentityMark`, which is the tree's own and not in the compile, carries one too. So does the shadcn
+layer's `sidebar.tsx`, which nothing imports.
+
+What handoff 33-D made true: no IconButton renders `title`, and none can be handed one, because
+`IconButtonProps` omits it. Every IconButton names itself through `aria-label` and the Tooltip.
+
+Owed: a ruling on whether 1146's Tooltip replaces these too. If it does, a Strand correction brings
+the four parts onto it, and the tree moves `IdentityMark` in the same change.

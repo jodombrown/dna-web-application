@@ -3297,7 +3297,190 @@ async function runDiscoveryLink(browserType, bname, [w, h], theme) {
   }
 }
 
-/** Addendum 4's and 5's arms and their cells, in item order, then handoff 33-A's link arm (G100). */
+/**
+ * Handoff 33-D item 4 (1146, 1153): IconButton's built-in Tooltip, measured in the browser where
+ * Strand's readout could only read the delay it scheduled. On a fine pointer, on the open pane's
+ * toolbar: resting on Hide list paints no tooltip before 250 ms and one by 600 ms; the neighbour's,
+ * Copy link, paints within 100 ms of the pointer reaching it; Escape takes it away and nothing
+ * paints again while the pointer rests; and the tool's accessible name is its label alone, with no
+ * `title` and no `aria-describedby`, while its tooltip shows. On a touch cell, resting on and
+ * focusing the header's bell paints none. The times are the page's own, from the pointerover the
+ * browser fires to the tooltip's insertion, so the harness's round trips are not in them.
+ */
+async function runDiscoveryTooltip(browserType, bname, [w, h], theme) {
+  const tag = `${bname}-${w}x${h}-${theme}-discovery-tooltip`;
+  M.armStart(tag);
+  const db = makeMockDb();
+  const E = seedDiscovery(db);
+  const { browser, page, errors } = await context(browserType, [w, h], theme, db);
+  const pointer = w > 1024;
+  const watch = () =>
+    page.evaluate(() => {
+      const tt = (window.__tt = { over: [], shown: [] });
+      const name = (el) => {
+        const host = el instanceof Element ? el.closest("[data-tooltip-host]") : null;
+        const b = host && host.querySelector("button");
+        return b ? b.getAttribute("aria-label") : null;
+      };
+      document.addEventListener(
+        "pointerover",
+        (e) => {
+          const label = name(e.target);
+          if (label && !tt.over.some((o) => o.label === label && o.open)) {
+            tt.over.forEach((o) => (o.open = false));
+            tt.over.push({ label, t: performance.now(), open: true });
+          }
+        },
+        true,
+      );
+      new MutationObserver((ms) => {
+        for (const m of ms)
+          for (const n of m.addedNodes)
+            if (n instanceof Element && n.matches("[data-tooltip]"))
+              tt.shown.push({ label: n.textContent, t: performance.now() });
+      }).observe(document.body, { childList: true, subtree: true });
+    });
+  const center = async (sel) => {
+    const b = await page.locator(sel).boundingBox();
+    return b ? [b.x + b.width / 2, b.y + b.height / 2] : null;
+  };
+  const shownFor = (label, ms) =>
+    page
+      .waitForFunction(
+        (label) => {
+          const t = document.querySelector("[data-tooltip]");
+          return !!t && t.textContent === label && getComputedStyle(t).visibility === "visible";
+        },
+        label,
+        { timeout: ms },
+      )
+      .then(() => true)
+      .catch(() => false);
+  const delay = (label) =>
+    page.evaluate((label) => {
+      const over = window.__tt.over.filter((o) => o.label === label).pop();
+      const shown = window.__tt.shown
+        .filter((s) => s.label === label && over && s.t >= over.t)
+        .shift();
+      return over && shown ? Math.round(shown.t - over.t) : null;
+    }, label);
+  const count = () => page.locator("[data-tooltip]").count();
+  try {
+    await signIn(page);
+    if (pointer) {
+      await openDiscovery(page, "/convene/network");
+      await page
+        .locator(`${cardSel(E.cloth, "network")} [data-card-open]`)
+        .first()
+        .click();
+      await page.waitForSelector('[data-discovery][data-pane-open="1"] [data-pane-toolbar]', {
+        timeout: 20000,
+      });
+      await page.evaluate(() => document.activeElement && document.activeElement.blur());
+      // Rest well away first, past the grace window, so the first read is the delay and not a
+      // neighbour's grace.
+      await page.mouse.move(2, h - 2);
+      await page.waitForTimeout(800);
+      await watch();
+      const hide = await center('[data-pane-toolbar] [data-tool="list"]');
+      const copy = await center('[data-pane-toolbar] [data-tool="copy"]');
+      await page.mouse.move(hide[0], hide[1], { steps: 4 });
+      const first = (await shownFor("Hide list", 3000)) ? await delay("Hide list") : null;
+      const box = await page.evaluate(() => {
+        const t = document.querySelector("[data-tooltip]");
+        const b = document.querySelector('[data-pane-toolbar] [data-tool="list"]');
+        if (!t || !b) return null;
+        const r = t.getBoundingClientRect();
+        const c = b.getBoundingClientRect();
+        return {
+          placement: t.getAttribute("data-placement"),
+          clear: r.top >= c.bottom || r.bottom <= c.top,
+        };
+      });
+      record(
+        tag +
+          " rest on a Pane tool: no tooltip before 250 ms, one by 600 ms, placed off the control (1146, 1153)",
+        first !== null && first >= 250 && first <= 600 && !!box && box.clear,
+        JSON.stringify({ first, box }),
+      );
+      await page.mouse.move(copy[0], copy[1], { steps: 4 });
+      const second = (await shownFor("Copy link", 3000)) ? await delay("Copy link") : null;
+      record(
+        tag + " the neighbour's tooltip within 100 ms, inside the grace (1146)",
+        second !== null && second <= 100,
+        JSON.stringify({ second }),
+      );
+      await page.keyboard.press("Escape");
+      await page.waitForTimeout(100);
+      const gone = await count();
+      await page.waitForTimeout(800);
+      const later = await count();
+      const open = await page.locator('[data-discovery][data-pane-open="1"]').count();
+      record(
+        tag +
+          " Escape takes the showing tooltip away and nothing paints again while the pointer rests",
+        second !== null && gone === 0 && later === 0 && open === 1,
+        JSON.stringify({ showing: second !== null, gone, later, open }),
+      );
+      await page.mouse.move(2, h - 2, { steps: 4 });
+      await page.waitForTimeout(800);
+      await page.mouse.move(hide[0], hide[1], { steps: 4 });
+      const again = await shownFor("Hide list", 3000);
+      const name = await page.evaluate(() => {
+        const b = document.querySelector('[data-pane-toolbar] [data-tool="list"]');
+        const t = document.querySelector("[data-tooltip]");
+        return {
+          label: b && b.getAttribute("aria-label"),
+          title: b && b.getAttribute("title"),
+          describedby: b && b.getAttribute("aria-describedby"),
+          tipHidden: t && t.getAttribute("aria-hidden"),
+        };
+      });
+      const byRole = await page.getByRole("button", { name: "Hide list", exact: true }).count();
+      record(
+        tag +
+          " the tool's accessible name is its label alone while its tooltip shows: no title, no aria-describedby",
+        again &&
+          name.label === "Hide list" &&
+          name.title === null &&
+          name.describedby === null &&
+          name.tipHidden === "true" &&
+          byRole === 1,
+        JSON.stringify({ again, name, byRole }),
+      );
+    } else {
+      // A touch cell: the pointer mode is coarse, so nothing paints on rest or on focus.
+      await openDiscovery(page, "/convene");
+      await watch();
+      await page.locator('[data-testid="bell"]').hover();
+      await page.waitForTimeout(800);
+      const rest = await count();
+      await page.locator('[data-testid="bell"]').focus();
+      await page.waitForTimeout(800);
+      const focus = await count();
+      const title = await page.locator('[data-testid="bell"]').getAttribute("title");
+      record(
+        tag +
+          " on touch the bell paints no tooltip on rest or on focus, and carries no title (1146)",
+        rest === 0 && focus === 0 && title === null,
+        JSON.stringify({ rest, focus, title }),
+      );
+    }
+  } catch (e) {
+    record(tag + " flow", false, String(e).slice(0, 400));
+  }
+  record(tag + " no page errors", errors.length === 0, errors.join(" | ").slice(0, 300));
+  await browser.close();
+}
+
+/** Handoff 33-D's cells: the Tooltip on a pointer cell and a touch cell. */
+const TOOLTIP_VIEWPORTS = [
+  [[1280, 800], "light"],
+  [[820, 1180], "dark"],
+];
+
+/** Addendum 4's and 5's arms and their cells, in item order, then handoff 33-A's link arm (G100)
+ *  and handoff 33-D's Tooltip arm. */
 const FOLLOWUP_ARMS = [
   [runDiscoveryPresenter, FOLLOWUP_VIEWPORTS],
   [runDiscoveryOnline, FOLLOWUP_VIEWPORTS],
@@ -3306,6 +3489,7 @@ const FOLLOWUP_ARMS = [
   [runDiscoveryHomes, FOLLOWUP_VIEWPORTS],
   [runDiscoveryWidth, WIDTH_VIEWPORTS],
   [runDiscoveryLink, FOLLOWUP_VIEWPORTS],
+  [runDiscoveryTooltip, TOOLTIP_VIEWPORTS],
 ];
 
 module.exports = {

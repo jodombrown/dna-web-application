@@ -844,19 +844,17 @@ export function Composer({
                   opacity: img.pending ? 0.6 : 1,
                 }}
               />
-              <IconButton
-                name="x"
-                label="Remove image"
-                size={44}
-                onClick={() => setImages((s) => s.filter((_, j) => j !== i))}
-                style={{
-                  position: "absolute",
-                  top: -8,
-                  right: -8,
-                  color: "var(--on-fill)",
-                  background: "var(--scrim)",
-                }}
-              />
+              {/* G136: the placement sits on a wrapper, so the Tooltip's host span wraps the button
+                  and the tooltip is placed against it; the button lands where it did. */}
+              <span style={{ position: "absolute", top: -8, right: -8, display: "flex" }}>
+                <IconButton
+                  name="x"
+                  label="Remove image"
+                  size={44}
+                  onClick={() => setImages((s) => s.filter((_, j) => j !== i))}
+                  style={{ color: "var(--on-fill)", background: "var(--scrim)" }}
+                />
+              </span>
             </span>
           ))}
         </div>
