@@ -5940,6 +5940,9 @@ builds.
 Owed: the Feed keeps its header lens after any in-app move from Discovery, and an arm reads the
 header after that move below expanded.
 
+**Amended 26 September 2026 by handoff 33-B item 5.** The lens-identity arm this entry names has
+left the suite. What is owed is unchanged.
+
 ## G135. A local `wrangler pages dev` dies under the suites' load, and a port another process holds answers in its place
 
 **Severity: low. It touches no deployment and no CI job: CI reads the deployed Pages build and never
