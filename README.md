@@ -2,26 +2,23 @@
 
 we are going to start blank
 
-This project was built with [Lovable](https://lovable.dev).
+## Host, deploy path and rules
 
-## Build with Lovable
-
-Continue developing this project in the [Lovable editor](https://lovable.dev/projects/3be10572-d30e-4274-a37b-225b9cbd10fd).
-
-- **Ship faster**: describe what you want to build and Lovable handles the code.
-- **Stay in sync**: every change made in Lovable is committed straight to this repository.
-- **Full ownership**: this code is yours. Push to `main` on GitHub and your changes sync back into Lovable, ready for your next prompt.
-
-## Development
-
-Prefer working locally? You need Node.js and npm — [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating).
-
-```sh
-git clone <this-repository-url>
-cd <repository-name>
-npm i
-npm run dev
-```
+- Host: Cloudflare Pages, project `dna-web-application`. The app is TanStack Start with SSR; Nitro's
+  `cloudflare-pages` preset builds it into `dist/`, with the server in `dist/_worker.js`. Supabase
+  holds auth, Postgres, RLS, storage and the Edge Functions.
+- Deploy path: every change reaches `main` through a `claude/*` branch and a pull request, merged once
+  its final head and its green enforcing run have been read (rulings 1114, 1142).
+  `.github/workflows/pages.yml` runs on every push: lint, typecheck and the static checks, then
+  `bun run build` and `wrangler pages deploy dist`, as a preview deployment for a branch and as
+  production for `main`. The live checks and the responsive matrix then run against that
+  deployment's own URL (ruling 1141).
+- Rules: `CLAUDE.md` carries the doctrine and the absolutes, `AGENTS.md` the roles and the git
+  discipline, and `docs/GAPS.md` the working copy of the gap register. Notion is the source of truth
+  for specs and doctrine.
+- Local: `bun install`, then `bun run dev` serves the app. `bun run build` followed by
+  `wrangler pages dev dist` serves the built worker, the only local command that exercises its
+  headers, nonce and routes.
 
 ## DNA build notes (Brief 1, composer)
 

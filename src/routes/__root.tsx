@@ -14,7 +14,6 @@ import { useEffect, useRef, type ReactNode } from "react";
 import { Button } from "@/components/strand/Button";
 import { FooterLink, SystemPage } from "@/components/dna/AuthSurface";
 import appCss from "../styles.css?url";
-import { reportLovableError } from "../lib/lovable-error-reporting";
 import { AuthProvider, useAuth } from "../lib/auth";
 import {
   isUngated,
@@ -61,9 +60,6 @@ function NotFoundComponent() {
 export function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   console.error(error);
   const router = useRouter();
-  useEffect(() => {
-    reportLovableError(error, { boundary: "tanstack_root_error_component" });
-  }, [error]);
 
   // B10 item 3: one act. "Try again" is the act; "Go home" is the footer line.
   return (
