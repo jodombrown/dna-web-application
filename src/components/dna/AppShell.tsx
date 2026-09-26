@@ -123,6 +123,40 @@ export function AppShell({
   useLayoutEffect(() => {
     scrollToTop();
   }, [surface, scrollToTop]);
+  // 1147 (correction 31; handoff 33-D item 3): a surface's empty column fills the visible height of
+  // this column, from the top of main's content box to the column's visible foot. The foot is the
+  // fixed dock's top edge below expanded and the scroller's own bottom at expanded; in the lanes
+  // canvas it is the canvas foot, the scroller's bottom padding (B9-SPEC's 24 at expanded, the
+  // dock's clearance at medium). The shell measures it rather than stating it in a calc, because
+  // the header's height under a top inset and the dock's overlap are layout facts of its own
+  // elements, and publishes it on main as --_shell-visible, in px, for a surface root to take as
+  // its min-height. EmptyState itself never reads the viewport (1147).
+  useLayoutEffect(() => {
+    const sc = scrollerRef.current;
+    if (!sc) return;
+    const host = sc.tagName === "MAIN" ? sc : sc.querySelector<HTMLElement>(":scope > main");
+    if (!host) return;
+    const measure = () => {
+      const box = sc.getBoundingClientRect();
+      const top =
+        box.top +
+        (host === sc ? 0 : host.offsetTop) +
+        parseFloat(getComputedStyle(host).paddingTop);
+      let foot = box.bottom - (lanes ? parseFloat(getComputedStyle(sc).paddingBottom) || 0 : 0);
+      const dock = document.querySelector<HTMLElement>('[data-pulse="dock"]');
+      if (dock && getComputedStyle(dock).position === "fixed")
+        foot = Math.min(foot, dock.getBoundingClientRect().top);
+      host.style.setProperty("--_shell-visible", Math.max(0, foot - top) + "px");
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(sc);
+    window.addEventListener("resize", measure);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", measure);
+    };
+  }, [tier, lanes, inset]);
   // Proof the shell mounted once: the stamp is set on mount and never changes across routes.
   const mounted = useRef<string>("");
   if (!mounted.current) mounted.current = String(Date.now());

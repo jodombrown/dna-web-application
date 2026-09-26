@@ -158,13 +158,17 @@ export function NotificationPanel({
           Loading
         </p>
       ) : (
-        <div data-testid="notifications-empty">
+        <div
+          data-testid="notifications-empty"
+          // 1147 (handoff 33-D item 3): the list is the column. Where the panel bounds it (the
+          // Sheet), the empty state fills it; the pointer popover sizes to its content. No inset.
+          style={{ display: "flex", flexDirection: "column", minHeight: "100%" }}
+        >
           {/* B17 item 4: the same EmptyState component as every other empty state. */}
           <EmptyState
             c="brand"
             title="Nothing yet."
             body="When a member accepts your connection request, attests a contribution, approves your Space role, or an event you joined is near, it appears here."
-            style={{ margin: "12px 16px" }}
           />
         </div>
       )}

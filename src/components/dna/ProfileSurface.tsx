@@ -776,6 +776,11 @@ export function ProfileSurface({ handle, edit, asPublic }: ProfileSurfaceProps) 
 
   const gate = signedOut && profileQ.isSuccess && !profile;
   const loading = profileQ.isPending;
+  // 1147 (handoff 33-D item 3): the gate and the missing profile are an EmptyState alone in this
+  // column, so the column is theirs. In the shell it takes the visible height the shell publishes,
+  // less its own top padding; on the public page it takes the rest of that page's bounded scroller.
+  const missing = !gate && !loading && !profile;
+  const pad = expanded && !publicView ? 24 : 0;
 
   const body = (
     <div
@@ -788,7 +793,14 @@ export function ProfileSurface({ handle, edit, asPublic }: ProfileSurfaceProps) 
         flexDirection: "column",
         gap: 16,
         minWidth: 0,
-        paddingTop: expanded && !publicView ? 24 : 0,
+        paddingTop: pad,
+        minHeight:
+          gate || missing
+            ? publicView
+              ? undefined
+              : "calc(var(--_shell-visible) - " + pad + "px)"
+            : undefined,
+        flex: (gate || missing) && publicView ? "1 1 auto" : undefined,
       }}
     >
       {/* Rulings 396, 486: one Back row for every surface that has a parent. It names the parent,
@@ -839,7 +851,6 @@ export function ProfileSurface({ handle, edit, asPublic }: ProfileSurfaceProps) 
           c="connect"
           title="This profile is for members."
           body="Sign in to see it, or join DNA."
-          style={{ marginTop: 24 }}
           action={
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center" }}>
               <Button onClick={() => goSignIn(false)}>Sign in</Button>
@@ -850,7 +861,7 @@ export function ProfileSurface({ handle, edit, asPublic }: ProfileSurfaceProps) 
           }
         />
       )}
-      {!gate && !loading && !profile && (
+      {missing && (
         <EmptyState
           title="No member at this address."
           body="The link may have changed."
@@ -1146,6 +1157,9 @@ export function ProfileSurface({ handle, edit, asPublic }: ProfileSurfaceProps) 
             margin: "0 auto",
             width: "100%",
             boxSizing: "border-box",
+            // 1147: the scroller is bounded, so the gate's column fills it; the 48 foot stays below
+            // as the page's own scroll room, as it does under a profile.
+            minHeight: gate || missing ? "calc(100% + 48px)" : undefined,
           }}
         >
           {body}

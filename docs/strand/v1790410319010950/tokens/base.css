@@ -1,0 +1,12 @@
+html{background:var(--bg);color:var(--ink);font-family:var(--font-sans);font-size:var(--text-m);line-height:var(--text-m-lh);-webkit-font-smoothing:antialiased}
+body{margin:0}
+a{color:var(--ink);text-decoration:underline;text-decoration-color:var(--line-strong);text-underline-offset:2px}
+a:hover{text-decoration-color:var(--ink)}
+:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+
+/* 608. Motion is not identity here: the focus ring and the DIA glow carry identity and neither is motion.
+   Under reduced motion the three durations collapse to zero and no transform-based entrance runs. */
+@media (prefers-reduced-motion: reduce){
+:root{--dur-micro:0ms; /* @kind other */ --dur-default:0ms; /* @kind other */ --dur-slow:0ms; /* @kind other */}
+*,*::before,*::after{animation-duration:0ms!important;animation-delay:0ms!important;animation-iteration-count:1!important;transition-duration:0ms!important}
+}

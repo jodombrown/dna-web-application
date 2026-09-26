@@ -2530,6 +2530,24 @@ carries this entry supersedes run 279 and starts a fresh run on the new head, wh
 a re-run cannot confirm a WebKit failure by reproduction, so the head's one re-run stays unspent and
 is available if the next head reds on this same check.
 
+**Tenth sighting, 26 September 2026, at the fifth and eighth sightings' width, on a healthy runner
+again.** Pages run 377 (`36268454297`) on `37d98d7` (PR 69, handoff 33-D), `matrix (webkit)`, first
+attempt, at `webkit-1536x960-light`, with the same message to the character. 6875 of 6879,
+`emitted 31 of 32`, and `0 behind a web-process crash (G5) | 0 an aborted fetch on mocked REST |
+4 unclassified`. The other three are this arm's ruling 292 line and `discovery-pane-tools`' two G128
+checks, a harness condition the next head narrows (G138). No web process was lost at any tier, so
+this is the ninth's shape. The arm's ERROR screenshot shows the composer open, the offer standing, the
+text area empty and no tooltip on screen.
+
+**What the branch changed on this path.** In `Composer.tsx`, only the Remove image IconButton's
+placement, which renders once per attached image (G136), and the flow attaches none before the offer.
+The offer, `continueDraft` and `ComposerShell`'s draft load are `f452140`'s. Every IconButton now
+wraps itself in a Tooltip, the composer's own included, but the continue control is a `Button`, and
+the flow's last pointer action before it, the audience pill, is not an IconButton. Chromium read
+6880 of 6880 on the same head. **Not fixed, and no re-run spent**: the push that carries this entry
+supersedes run 377 and starts a fresh run on the new head, so the head's one re-run under ruling 304
+stays unspent.
+
 **Not this gap's scope.** The check's assertions and the arms' declared counts stay as they are.
 
 ## G35. Mapbox Search Box carries no POI for Ghana, Kenya or Nigeria, so a Convene host there always falls to their words
@@ -5422,6 +5440,21 @@ mechanism WebKit resolved against the border box for the image in run 347. Nothi
 (ruling 55), and no arm reads it, so nothing on a page shows it today. Owed: the video frame's poster
 in the same declared grid cell, in a Strand correction, before any surface renders video.
 
+**Amended 26 September 2026 by handoff 33-D (correction 30 Part B, ratified with correction 31 under
+1153).** Correction 30 lays the ratioed video's poster in the one declared grid cell, `minmax(0,1fr)`
+by `minmax(0,1fr)` with `minHeight: 0`, with play and duration absolute over it. The unratioed video
+is byte-identical to before. `MediaBlock.tsx` carries it as compiled, so the mechanism this entry
+named is gone from the part.
+
+It stays open because it is unread, not because it is untrue. The handoff owed a `matrix (webkit)`
+reading of the poster inside its frame at 390, 820 and 1280, and no deployed page renders a video to
+read. Ruling 55 keeps video out of the composer, `PostCardRouter.tsx` maps a post's media to `image`
+or `gallery` only, and neither `BodyBlocks`, whose video block goes through this frame, nor anything
+else in the tree renders `kind="video"`. No arm was written, because an arm on a page that cannot
+show the frame would pass or fail on nothing (930). This entry closes on the first WebKit arm that
+reads a ratioed video on a page: `BodyBlocks`' video block, once the first Discovery handoff or
+Brief 10 Revision 4 binds it, is the likely first.
+
 ## G120. Discovery's Copy link and Share hand over the post's address, where the face links to the event's — closed (1140)
 
 **Severity: low. Opened 25 September 2026 during handoff 33-A (G100, G110), filed under ruling 597.
@@ -5534,7 +5567,7 @@ replaces:
 
 Owed: the two statements above restated, in a change that touches them.
 
-## G123. Pane's bounded list column clips the selected card's ring at its edges
+## G123. Pane's bounded list column clips the selected card's ring at its edges — closed (1150, 1151)
 
 **Severity: low. Opened 25 September 2026 during handoff 33-A (G110), filed under ruling 597. The
 number is assigned by this entry (ruling 638).**
@@ -5560,7 +5593,26 @@ card runs from 64.4 to 574.3, and the column has no foot padding. So the face is
 ring's bottom band is outside the column. It reads the same on `8d9dfd3`, with Pane's key held
 (G128), and after a step taken with the list hidden. The same Strand correction owes the bottom.
 
-## G124. Arrow keys inside the Pane's toolbar step to another event
+**Closed 26 September 2026 by handoff 33-D (correction 30 Part B; 1150, 1151).**
+
+- **The part.** A bounded list column pads `--space-2` on all four sides, and the follow lands the
+  selected card below the column's top padding (`Pane.tsx`, as compiled).
+- **The lane.** Pane cannot pad a lane's own sideways scroller (1151), and Discovery's lane already
+  did this since `61718b7`: at expanded it has `marginLeft` −4, padding 4 each side and scroll
+  padding 4. It now states them as `--space-1`.
+- **The arm.** `discovery-pane-tools` reads the ring at 1280 and 1440, on both engines, with three
+  checks: a lens list's sides and top, the list's foot once Next has taken it to its end, and a lane's
+  first card inside both scrollports.
+- **Read on this branch** in Chromium against the local build, per side as left, top, right, bottom.
+  Each is how far the ring sits inside, and negative is cut:
+  - at 1280, the lens list reads 4, 3.5, 4 and the foot 3.8; a lane's first card reads 0 inside the
+    lane and 4 inside the list;
+  - at 1440, the same.
+- **On `f452140`** the same arm reads the lens list at −4, −4.5, −4 and the foot at −4.2.
+- **Evidence still owed.** The enforcing run on the final head reads this on both engines. If it
+  does not read green there, this entry is reopened with what it read.
+
+## G124. Arrow keys inside the Pane's toolbar step to another event — closed (correction 30)
 
 **Severity: low. Opened 25 September 2026 during handoff 33-A's review (G110), filed under ruling 597. The number is assigned by this entry (ruling 638).**
 
@@ -5571,6 +5623,19 @@ who presses ArrowRight expecting the next tool gets the next event instead. A to
 arrow-key movement between its tools, and here the keys belong to the section. Both behaviours are
 the compile's, and Discovery binds them as ported (844). Owed: a Strand correction that lets the
 toolbar keep its arrow keys, or drops the toolbar role.
+
+**Closed 26 September 2026 by handoff 33-D (correction 30 Part B, ratified with correction 31 under
+1153).**
+
+- **The part.** It keeps `role="toolbar"` with the APG's keys: ArrowLeft, ArrowRight, Home and End
+  move focus between the tools and stop at the ends. Each is marked handled, so the section's step
+  handler, which yields to `defaultPrevented`, does not change the open event. `Pane.tsx` carries
+  `onToolbarKey` as compiled. ArrowLeft and ArrowRight on anything else in the pane still step.
+- **The arm.** `discovery-pane-tools` focuses Hide list and presses ArrowRight, End, ArrowRight,
+  Home and ArrowLeft. At 1280 and 1440 on this branch it reads focus on `list`, `copy`, `share`,
+  `share`, `list`, `list`, with the open event unchanged.
+- **On `f452140`** focus stays on `list` and the event steps.
+- **Evidence still owed.** The enforcing run on the final head reads this on both engines.
 
 ## G125. B9-SPEC Revision 2 addresses the member event page by slug; B10-SPEC and the tree address it by id — closed (1137)
 
@@ -5595,7 +5660,7 @@ changes.
 
 ---
 
-## G126. The branch alias answered 404 on every route for about ninety minutes, across two deployments of one build, and cleared on its own (G20 recurred)
+## G126. The branch alias answered 404 on every route for about ninety minutes, across two deployments of one build, and cleared on its own (G20 recurred) — closed (1154)
 
 **Severity: medium. It blocks the exit check, not the build. Opened 26 September 2026 during handoff 33-A (PR #67), filed under ruling 597. The number is assigned by this entry (ruling 638). Left open: G20's next step is a harness change outside handoff 33-A.**
 
@@ -5668,6 +5733,21 @@ Owed as a separate reading: whether the per-deployment host also answered 404 in
 window, the third unread item above. It is still unread. This change decides which host later runs
 read, and it does not answer what `5797cc2d`'s and `e18f60ee`'s hosts answered on 25 September.
 
+**Closed 26 September 2026 on run 374 (handoff 33-D item 0, 1154).**
+
+- Run 374 is `pages.yml` id `36257756375`, on `53a2f4a`, handoff 33-B's final head. It is the only
+  run on that branch and the first on 1141's setup, and it read green on both engines against the
+  deployment's own host.
+- The deploy job's 1141 step passed. The live job and both matrix jobs each opened with the same
+  Host tested line: `https://043c2208.dna-web-application.pages.dev`, the deployment that run
+  uploaded, built from `53a2f4a`. No job read the branch alias.
+- `matrix (chromium)` job `108447813774` read 6842 of 6842, and `matrix (webkit)` job
+  `108447813801` read 6842 of 6842. Each had none behind a web-process crash (G5) and none
+  unclassified. `live` job `108447813800` read 162 of 162 with its three standing unproven arms.
+- Still unread, and not answered by this closure: whether the per-deployment hosts `5797cc2d` and
+  `e18f60ee` also answered 404 in this entry's window on 25 September. Run 374 reads a later
+  deployment's own host. It says nothing about what those two hosts answered then.
+
 ---
 
 ## G127. The rail column's foot at expanded is 48, where B9-SPEC's canvas foot is 24
@@ -5699,7 +5779,7 @@ whether the rail column takes the canvas's 24 at expanded, or the spec names the
 
 ---
 
-## G128. Pane's `selectedKey` follow runs while the list is hidden, and writes the hidden list's scroll
+## G128. Pane's `selectedKey` follow runs while the list is hidden, and writes the hidden list's scroll — closed (correction 30)
 
 **Severity: low. Opened 26 September 2026 during handoff 33-A Addendum 1 item 3 (Chat's read of `5a09009`), filed under ruling 597. The number is assigned by this entry (ruling 638).**
 
@@ -5733,6 +5813,28 @@ open card out of view before hiding, it stays out of view.
 The part is unchanged (844). A caller that passes the open item as `selectedKey` together with
 `listHidden`, the compile's own usage, still writes the hidden list's scroll. Owed: a Strand
 correction that guards the follow on `listHidden`, after which Discovery's held key goes.
+
+**Closed 26 September 2026 by handoff 33-D (correction 30 Part B, ratified with correction 31 under
+1153).**
+
+- **The part.** The follow does not run while the list is hidden, so the hidden list's `scrollTop` is
+  never written. On Show list it runs only if the key changed while the list was hidden.
+- **Discovery's held key goes.** `hiddenKey`, from `3d05d50`, was removed only after the step arm
+  read the same with the part's guard alone, in Chromium against the local build, at 1280 and 1600.
+  - "Hide list, Next, Show list" read the hidden list's `scrollTop` 4282 → 4282 at 1280 and
+    4082 → 4082 at 1600, with the card and its ring back in view on Show list.
+  - Those are the readings the held key gave, value for value.
+  - Discovery now passes the open event as `selectedKey` throughout.
+- **The new check.** `discovery-pane-tools` adds a setter trap on the hidden list's `scrollTop`
+  across Previous and Next, and at 1280 and 1440 reads no write and the hidden value held across
+  both steps. In Chromium the list's own values ran 536 → 136 → 136 → 536 at 1280 and
+  598 → 36 → 36 → 598 at 1440: before hiding, hidden, after the two steps, shown. WebKit read
+  538 → 120 → 120 → 120 and 600 → 20 → 20 → 20 on dispatch 71, with no write either: Hide moves the
+  list and Show does not move it back there, which is G138 and not this gap. So the check reads
+  what G128 owns, no write and the hidden value held, and not where Show list leaves the list.
+- **On `f452140`** this check also passes, because the held key produced the same outcome there. It
+  is the one changed check in this handoff that cannot fail first, and the report says so.
+- **Evidence still owed.** The enforcing run on the final head reads this on both engines.
 
 ---
 
@@ -5974,3 +6076,109 @@ every suite; only runs bracketed by two such reads were counted.
 Owed: nothing in the product. A local runner that checks the served build before it counts a run,
 or a pinned `wrangler` that holds under load, would stop the next session from reading a red that is
 not the change's.
+
+## G136. Tooltip places itself against its host span, so an absolutely placed IconButton's tooltip lands at an empty box
+
+**Severity: low. Opened 26 September 2026 during handoff 33-D (correction 31 item 3, 1146), filed
+under ruling 597. The number is assigned by this entry (ruling 638).**
+
+Correction 31's `Tooltip` wraps its control in a `span[data-tooltip-host]` (`display: inline-flex`).
+It measures that span to place itself below the control, or above it at the viewport's foot.
+`IconButton` wraps itself in one and still hands its `style` to the button. When a caller positions
+the IconButton absolutely, the button leaves the host's flow. The host is then an empty 0 by 0 box
+where the button would have sat, and the tooltip is placed against that box, not against the
+control.
+
+The compile's own `Composer` does this: its "Remove image" button on a thumbnail is
+`position: absolute; top: -8; right: -8`. The tree has it there and twice more, in `ProfileHeader`'s
+"Change cover" camera buttons. Each now puts the placement on a wrapper,
+`<span style="position:absolute; …; display:flex">`, around the IconButton. The host span then wraps
+the button, the tooltip is placed against it, and the button lands where it did. The part is as
+compiled (844).
+
+Owed: a Strand correction that places the tooltip against the control rather than the host, for
+instance the host's first element child. The three wrappers then go.
+
+## G137. Native `title` tooltips remain on parts correction 31 did not reach
+
+**Severity: low. Opened 26 September 2026 during handoff 33-D, filed under ruling 597. The number is
+assigned by this entry (ruling 638).**
+
+Handoff 33-D's IconButton row asks for "no `title` attribute anywhere in `src/`". `Tooltip.prompt.md`
+says "No `title=` anywhere in Strand". Neither holds of compile `v1790410319010950` itself, which
+still writes a native `title` in four parts:
+
+- `FacetRail`'s collapsed strip, on the expand button and on each axis button;
+- `LensBar`'s icon-first seat on a pointer;
+- `VerbChip`'s disabled reason;
+- `PostCard`'s "Written by you" pen icon.
+
+The ports carry each as compiled. The bundle governs, and the handoff says to port what it does.
+`IdentityMark`, which is the tree's own and not in the compile, carries one too. So does the shadcn
+layer's `sidebar.tsx`, which nothing imports.
+
+What handoff 33-D made true: no IconButton renders `title`, and none can be handed one, because
+`IconButtonProps` omits it. Every IconButton names itself through `aria-label` and the Tooltip.
+
+Owed: a ruling on whether 1146's Tooltip replaces these too. If it does, a Strand correction brings
+the four parts onto it, and the tree moves `IdentityMark` in the same change.
+
+## G138. On WebKit, Show list leaves the Pane's list where Hide list moved it
+
+**Severity: low. Opened 26 September 2026 during handoff 33-D, filed under ruling 597. The number is
+assigned by this entry (ruling 638).**
+
+Correction 28 says the hidden list keeps its scroll. The part hides the list by taking its track to
+0px, where it stays laid out at no width. Hiding therefore changes the list's layout and its scroll
+range, and the engine moves its `scrollTop` with no setter involved.
+
+- **Chromium moves it back on Show list.** G128's own reading was 1936 → 2107 → 1936. Handoff
+  33-D's `discovery-pane-tools` arm, against the branch's local build, read 536 → 136 → 536 at
+  1280 and 598 → 36 → 598 at 1440.
+- **WebKit does not.** Dispatch 71 (`36268117282`) ran the arm on WebKit against `f452140`'s
+  deployment. It read the list at its end, hidden, after Previous and Next, and shown:
+  538 → 120 → 120 → 120 at 1280 and 600 → 20 → 20 → 20 at 1440. Run 377 (`36268454297`) read the
+  branch's own deployment on WebKit, with the part's padded column and guard: 536 → 136 → 136 → 136
+  and 598 → 36 → 36 → 36.
+- **Neither is a write.** The arm's setter trap caught none in either cell, so neither the part nor
+  Discovery moved the list.
+
+The readings fit scroll anchoring in Chromium and none in WebKit. That mechanism was not read in
+either engine (555).
+
+What a member sees in Safari: hide the list and show it again, with no step or with steps that
+return to the same event, and the list comes back scrolled elsewhere. The open card can then be out
+of view. A step that ends on another event is followed on Show list (the part's guard, G128), so
+that case lands.
+
+Owed: a Strand correction under which the part keeps the list's scroll itself across Hide and Show,
+for instance by holding `scrollTop` on Hide and writing it back on Show when the key has not
+changed. The arm's G128 check reads no write and the hidden value held. It does not read where Show
+list leaves the list, because that differs by engine; once the part keeps the scroll, it can.
+
+## G139. The public event page's header carries the padding shorthand beside its safe-area longhand, and drops the inset when the tier flips
+
+**Severity: low. Opened 26 September 2026 during handoff 33-D, filed under ruling 597. The number is
+assigned by this entry (ruling 638).**
+
+`src/components/dna/PublicEventSurface.tsx:137-141` styles the header with
+`padding: compact ? "0 16px" : "0 32px"` and `paddingTop: "env(safe-area-inset-top)"` in one object.
+`useTier` flips from compact once on mount at every width above compact. When it flips, React
+writes the changed shorthand, which resets `padding-top`, and does not rewrite the unchanged
+longhand. React's development build names it in the guest arm at 1280x800, on the branch and on
+`f452140` alike: "Updating a style property during rerender (padding) when a conflicting property is
+set (paddingTop) can lead to styling bugs".
+
+Read in Chromium against local dev servers of both builds, reached as the guest arm reaches it, by
+a client navigation to `/e/{slug}` from `/sign-in`:
+
+- At 1280x800 the header's inline style ends as `padding: 0px 32px`, and the
+  `env(safe-area-inset-top)` longhand is gone.
+- At 390x844, where the tier does not flip, it keeps `padding-top: env(safe-area-inset-top)`.
+
+On a desktop the inset is 0 either way, so nothing moves. Above compact with a top inset that is not
+0, the header's row would sit under the status bar. That was not read on a device.
+
+Owed: the header in longhand only, as `AppHeader` and `ProfileSurface`'s public header already are
+(ruling 344's inset in `paddingTop`, the sides in `paddingLeft` and `paddingRight`). Handoff 33-D
+does not reach this surface, so it is not changed here.

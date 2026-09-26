@@ -4,7 +4,9 @@
 //
 // Design pass 01, B10 item 6 with STRAND-CHANGES section 7 (W38, W48): a stub page's empty
 // treatment is EmptyState, never a placeholder card, and it fills the space the sticky bars leave
-// so it centres rather than sitting as a stub parked at the top of an empty scroller.
+// so it centres rather than sitting as a stub parked at the top of an empty scroller. Since 1147
+// (handoff 33-D item 3) that height is the column's: the stub takes the visible height the shell
+// publishes, and EmptyState fills it.
 import { createFileRoute, notFound, useNavigate } from "@tanstack/react-router";
 import { Button } from "@/components/strand/Button";
 import { EmptyState } from "@/components/strand/EmptyState";
@@ -22,12 +24,13 @@ function CStub() {
   const navigate = useNavigate();
   const active = c as C;
   return (
-    <div data-testid="c-stub" data-c={active}>
+    <div
+      data-testid="c-stub"
+      data-c={active}
+      style={{ display: "flex", flexDirection: "column", minHeight: "var(--_shell-visible)" }}
+    >
       <EmptyState
         c={active}
-        fill
-        stickyTop={56}
-        stickyBottom={64}
         title={C_LABEL[active] + " is next."}
         body="This surface arrives with its own brief. Until then Feed is Home and the shell is the same everywhere."
         action={

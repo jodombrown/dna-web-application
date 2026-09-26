@@ -408,8 +408,20 @@ export function FeedSurface({ member, view }: { member: Member; view: FeedView }
     );
   };
 
+  // 1147 (handoff 33-D item 3): an empty lens fills the column. The root takes the visible height
+  // the shell publishes, and the list and its empty wrapper carry it down, so EmptyState's
+  // wallpaper runs to the column's edges and its block sits centred in what the member sees.
+  const emptyLens = !directId && !!posts && posts.length === 0;
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 12 }} data-feed>
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        gap: 12,
+        minHeight: emptyLens ? "var(--_shell-visible)" : undefined,
+      }}
+      data-feed
+    >
       {directId ? (
         <div
           data-direct-post={directId}
@@ -570,10 +582,22 @@ export function FeedSurface({ member, view }: { member: Member; view: FeedView }
               collapsed={expandedTier ? stuck : scrolled}
             />
           </div>
-          <div ref={listRef} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          <div
+            ref={listRef}
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: 12,
+              flex: emptyLens ? "1 1 auto" : undefined,
+            }}
+          >
             {posts === undefined && <Ghosts />}
             {posts && posts.length === 0 && (
-              <div data-testid="feed-empty" data-lens={lens}>
+              <div
+                data-testid="feed-empty"
+                data-lens={lens}
+                style={{ display: "flex", flexDirection: "column", flex: "1 1 auto" }}
+              >
                 <EmptyState
                   c={empty.c}
                   title={empty.title}

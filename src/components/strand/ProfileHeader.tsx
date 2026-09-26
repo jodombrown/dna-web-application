@@ -103,19 +103,16 @@ export function ProfileHeader({
         </div>
       )}
       {member.cover && (
-        <IconButton
-          name="camera"
-          label="Change cover"
-          size={36}
-          onClick={onCover}
-          style={{
-            position: "absolute",
-            right: 12,
-            top: 12,
-            background: "var(--surface)",
-            borderRadius: 10,
-          }}
-        />
+        // G136: the placement sits on a wrapper, so the Tooltip's host span wraps the button.
+        <span style={{ position: "absolute", right: 12, top: 12, display: "flex" }}>
+          <IconButton
+            name="camera"
+            label="Change cover"
+            size={36}
+            onClick={onCover}
+            style={{ background: "var(--surface)", borderRadius: 10 }}
+          />
+        </span>
       )}
     </>
   );
@@ -544,19 +541,16 @@ export function ProfileHeader({
             </div>
           )}
           {owner && member.cover && (
-            <IconButton
-              name="camera"
-              label="Change cover"
-              size={36}
-              onClick={onCover}
-              style={{
-                position: "absolute",
-                right: 8,
-                top: 8,
-                background: "var(--surface)",
-                borderRadius: 10,
-              }}
-            />
+            // G136: the placement sits on a wrapper, so the Tooltip's host span wraps the button.
+            <span style={{ position: "absolute", right: 8, top: 8, display: "flex" }}>
+              <IconButton
+                name="camera"
+                label="Change cover"
+                size={36}
+                onClick={onCover}
+                style={{ background: "var(--surface)", borderRadius: 10 }}
+              />
+            </span>
           )}
         </div>
       )}
