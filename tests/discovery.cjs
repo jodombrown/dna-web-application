@@ -3298,6 +3298,210 @@ async function runDiscoveryLink(browserType, bname, [w, h], theme) {
 }
 
 /**
+ * Handoff 33-D item 4 (G123, G124, G128; correction 30 Part B, 1150, 1151). Pane's bounded list
+ * column, its toolbar and its follow, read on the part as Discovery binds it, at 1280 and 1440:
+ *
+ *   G123  the selected card's ring (1083: 2px --bg then 2px --ink, 4 outside the face) inside the
+ *         list column's scrollport: at the sides and the top of a lens list whose card fills the
+ *         column, at the foot once Next has taken the list to its end, and for a lane's first card
+ *         inside the lane's own scrollport as well (the lane pads itself, 1151).
+ *   G124  on a toolbar tool, ArrowRight, End, Home and ArrowLeft move focus between the tools, stop
+ *         at the ends and never step to another event.
+ *   G128  with the list hidden, Next and Previous never write its scrollTop (a setter trap on the
+ *         element), and Show list on the event it was hidden on leaves it where it was. Discovery
+ *         held Pane's key to the same effect from 3d05d50 until this handoff, so this check read
+ *         the same before the part's own guard; it is the part's guard it reads now.
+ */
+async function runDiscoveryPaneTools(browserType, bname, [w, h], theme) {
+  const tag = `${bname}-${w}x${h}-${theme}-discovery-pane-tools`;
+  M.armStart(tag);
+  const db = makeMockDb();
+  const E = seedDiscovery(db);
+  const { browser, page, errors } = await context(browserType, [w, h], theme, db);
+  const r1 = (v) => Math.round(v * 10) / 10;
+  // How far the ring sits inside each scrollport it is in, per side; negative is cut.
+  const ring = () =>
+    page.evaluate(() => {
+      const list = document.querySelector("[data-discovery] [data-pane-list]");
+      const card = list && list.querySelector("article[data-selected]");
+      if (!card) return null;
+      const port = (el) => {
+        const b = el.getBoundingClientRect();
+        const cs = getComputedStyle(el);
+        const left = b.left + parseFloat(cs.borderLeftWidth);
+        const top = b.top + parseFloat(cs.borderTopWidth);
+        return { left, top, right: left + el.clientWidth, bottom: top + el.clientHeight };
+      };
+      const c = card.getBoundingClientRect();
+      const inside = (p) =>
+        [
+          c.left - 4 - p.left,
+          c.top - 4 - p.top,
+          p.right - (c.right + 4),
+          p.bottom - (c.bottom + 4),
+        ].map((v) => Math.round(v * 10) / 10);
+      const lane = card.closest("[data-lane-row]");
+      return {
+        list: inside(port(list)),
+        lane: lane ? inside(port(lane)) : null,
+        atEnd: Math.abs(list.scrollTop + list.clientHeight - list.scrollHeight) <= 1,
+        pad: getComputedStyle(list).paddingTop,
+      };
+    });
+  const whole = (sides, which) => which.every((i) => sides && sides[i] >= -0.5);
+  const openCard = async (sel) => {
+    await page.locator(`${sel} [data-card-open]`).first().click();
+    await page.waitForSelector('[data-discovery][data-pane-open="1"] [data-event-page]', {
+      timeout: 20000,
+    });
+    await page.waitForTimeout(500);
+  };
+  const next = async (id) => {
+    await page.locator('[data-pane-cluster] button[aria-label="Next event"]').click();
+    await page.waitForURL((u) => u.pathname.endsWith("/" + id), { timeout: 10000 });
+    await page.waitForSelector('[data-event-page][data-event-state="loaded"]', { timeout: 20000 });
+    await page.waitForTimeout(500);
+  };
+  const previous = async (id) => {
+    await page.locator('[data-pane-cluster] button[aria-label="Previous event"]').click();
+    await page.waitForURL((u) => u.pathname.endsWith("/" + id), { timeout: 10000 });
+    await page.waitForSelector('[data-event-page][data-event-state="loaded"]', { timeout: 20000 });
+    await page.waitForTimeout(500);
+  };
+  let lensTop = null;
+  let lensEnd = null;
+  let laneFirst = null;
+  let keys = null;
+  let hidden = null;
+  try {
+    await signIn(page);
+    // A lens list: the network lens's two cards, each at the column's width (G123's sides).
+    await openDiscovery(page, "/convene/network");
+    await openCard(cardSel(E.cloth, "network"));
+    lensTop = await ring();
+    await next(E.stream.event_id);
+    lensEnd = await ring();
+    // G128: the list at its end, then hidden; Previous then Next; then shown on the same event.
+    // Hide and Show move the list by scroll anchoring on the 0px track and back (G128's own
+    // reading), which no setter carries, so the trap counts the part's writes alone, and the
+    // readings compare hidden with hidden and shown with shown.
+    const pre = await page.evaluate(() => {
+      const list = document.querySelector("[data-discovery] [data-pane-list]");
+      list.scrollTop = 1e6;
+      return new Promise((r) => setTimeout(() => r(Math.round(list.scrollTop)), 300));
+    });
+    await page.locator('[data-pane-toolbar] [data-tool="list"]').click();
+    await page.waitForTimeout(400);
+    const before = await page.evaluate(() => {
+      const list = document.querySelector("[data-discovery] [data-pane-list]");
+      const d = Object.getOwnPropertyDescriptor(Element.prototype, "scrollTop");
+      window.__g128 = [];
+      Object.defineProperty(list, "scrollTop", {
+        configurable: true,
+        get() {
+          return d.get.call(this);
+        },
+        set(v) {
+          window.__g128.push(v);
+          d.set.call(this, v);
+        },
+      });
+      return Math.round(list.scrollTop);
+    });
+    await previous(E.cloth.event_id);
+    await next(E.stream.event_id);
+    const mid = await page.evaluate(() =>
+      Math.round(document.querySelector("[data-discovery] [data-pane-list]").scrollTop),
+    );
+    await page.locator('[data-pane-toolbar] [data-tool="list"]').click();
+    await page.waitForTimeout(500);
+    hidden = await page.evaluate(
+      ({ pre, before, mid }) => {
+        const list = document.querySelector("[data-discovery] [data-pane-list]");
+        const writes = window.__g128.slice();
+        delete list.scrollTop;
+        return { pre, before, mid, after: Math.round(list.scrollTop), writes };
+      },
+      { pre, before, mid },
+    );
+    // A lane's first card, from All (1151).
+    await openDiscovery(page, "/convene");
+    const firstLane = await page.evaluate(() => {
+      const row = document.querySelector("[data-lanes] [data-lane-row]");
+      const item = row && row.querySelector("[data-discovery-item]");
+      return item
+        ? `[data-discovery-item="${item.getAttribute("data-discovery-item")}"][data-section="${item.getAttribute("data-section")}"]`
+        : null;
+    });
+    if (firstLane) {
+      await openCard(firstLane);
+      laneFirst = await ring();
+    }
+    // G124 last, on the lane card's open pane: on a build whose toolbar keys step, they move the
+    // open event, and nothing after this reads the pane.
+    const url = page.url();
+    keys = await (async () => {
+      const tool = () =>
+        page.evaluate(
+          () =>
+            (document.activeElement && document.activeElement.getAttribute("data-tool")) || null,
+        );
+      await page.locator('[data-pane-toolbar] [data-tool="list"]').focus();
+      const seen = [await tool()];
+      for (const k of ["ArrowRight", "End", "ArrowRight", "Home", "ArrowLeft"]) {
+        await page.keyboard.press(k);
+        await page.waitForTimeout(250);
+        seen.push(await tool());
+      }
+      return { seen, stayed: page.url() === url };
+    })();
+  } catch (e) {
+    record(tag + " flow", false, String(e).slice(0, 400));
+  }
+  record(
+    tag +
+      " G123: in a lens list the selected card's ring is inside the list column's scrollport at its sides and top (correction 30, 1150)",
+    !!lensTop && whole(lensTop.list, [0, 1, 2]),
+    JSON.stringify(lensTop),
+  );
+  record(
+    tag +
+      " G123: Next onto the last card takes the list to its end, and the ring is inside the scrollport at its foot",
+    !!lensEnd && lensEnd.atEnd && whole(lensEnd.list, [0, 1, 2, 3]),
+    JSON.stringify(lensEnd),
+  );
+  record(
+    tag +
+      " G123: a lane's first card, selected, keeps its ring inside the lane's own scrollport and the list column's (1151)",
+    !!laneFirst &&
+      !!laneFirst.lane &&
+      whole(laneFirst.lane, [0, 1]) &&
+      whole(laneFirst.list, [0, 1]),
+    JSON.stringify(laneFirst),
+  );
+  record(
+    tag +
+      " G124: ArrowRight, End, Home and ArrowLeft on the toolbar move focus between its tools, stop at the ends and never step",
+    !!keys &&
+      keys.stayed &&
+      JSON.stringify(keys.seen) ===
+        JSON.stringify(["list", "copy", "share", "share", "list", "list"]),
+    JSON.stringify(keys),
+  );
+  record(
+    tag +
+      " G128: with the list hidden, Previous and Next never write its scrollTop, and Show list on the same event leaves it where it was",
+    !!hidden &&
+      hidden.writes.length === 0 &&
+      Math.abs(hidden.mid - hidden.before) <= 1 &&
+      Math.abs(hidden.after - hidden.pre) <= 1,
+    JSON.stringify(hidden),
+  );
+  record(tag + " no page errors", errors.length === 0, errors.join(" | ").slice(0, 300));
+  await browser.close();
+}
+
+/**
  * Handoff 33-D item 4 (1146, 1153): IconButton's built-in Tooltip, measured in the browser where
  * Strand's readout could only read the delay it scheduled. On a fine pointer, on the open pane's
  * toolbar: resting on Hide list paints no tooltip before 250 ms and one by 600 ms; the neighbour's,
@@ -3473,14 +3677,19 @@ async function runDiscoveryTooltip(browserType, bname, [w, h], theme) {
   await browser.close();
 }
 
-/** Handoff 33-D's cells: the Tooltip on a pointer cell and a touch cell. */
+/** Handoff 33-D's cells: Pane's tools at 1280 and 1440 (G123's widths); the Tooltip on a pointer
+ *  cell and a touch cell. */
+const PANE_TOOLS_VIEWPORTS = [
+  [[1280, 800], "light"],
+  [[1440, 900], "dark"],
+];
 const TOOLTIP_VIEWPORTS = [
   [[1280, 800], "light"],
   [[820, 1180], "dark"],
 ];
 
 /** Addendum 4's and 5's arms and their cells, in item order, then handoff 33-A's link arm (G100)
- *  and handoff 33-D's Tooltip arm. */
+ *  and handoff 33-D's Pane tools and Tooltip arms. */
 const FOLLOWUP_ARMS = [
   [runDiscoveryPresenter, FOLLOWUP_VIEWPORTS],
   [runDiscoveryOnline, FOLLOWUP_VIEWPORTS],
@@ -3489,6 +3698,7 @@ const FOLLOWUP_ARMS = [
   [runDiscoveryHomes, FOLLOWUP_VIEWPORTS],
   [runDiscoveryWidth, WIDTH_VIEWPORTS],
   [runDiscoveryLink, FOLLOWUP_VIEWPORTS],
+  [runDiscoveryPaneTools, PANE_TOOLS_VIEWPORTS],
   [runDiscoveryTooltip, TOOLTIP_VIEWPORTS],
 ];
 

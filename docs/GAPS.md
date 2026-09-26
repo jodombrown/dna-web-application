@@ -5549,7 +5549,7 @@ replaces:
 
 Owed: the two statements above restated, in a change that touches them.
 
-## G123. Pane's bounded list column clips the selected card's ring at its edges
+## G123. Pane's bounded list column clips the selected card's ring at its edges — closed (1150, 1151)
 
 **Severity: low. Opened 25 September 2026 during handoff 33-A (G110), filed under ruling 597. The
 number is assigned by this entry (ruling 638).**
@@ -5575,7 +5575,26 @@ card runs from 64.4 to 574.3, and the column has no foot padding. So the face is
 ring's bottom band is outside the column. It reads the same on `8d9dfd3`, with Pane's key held
 (G128), and after a step taken with the list hidden. The same Strand correction owes the bottom.
 
-## G124. Arrow keys inside the Pane's toolbar step to another event
+**Closed 26 September 2026 by handoff 33-D (correction 30 Part B; 1150, 1151).**
+
+- **The part.** A bounded list column pads `--space-2` on all four sides, and the follow lands the
+  selected card below the column's top padding (`Pane.tsx`, as compiled).
+- **The lane.** Pane cannot pad a lane's own sideways scroller (1151), and Discovery's lane already
+  did this since `61718b7`: at expanded it has `marginLeft` −4, padding 4 each side and scroll
+  padding 4. It now states them as `--space-1`.
+- **The arm.** `discovery-pane-tools` reads the ring at 1280 and 1440, on both engines, with three
+  checks: a lens list's sides and top, the list's foot once Next has taken it to its end, and a lane's
+  first card inside both scrollports.
+- **Read on this branch** in Chromium against the local build, per side as left, top, right, bottom.
+  Each is how far the ring sits inside, and negative is cut:
+  - at 1280, the lens list reads 4, 3.5, 4 and the foot 3.8; a lane's first card reads 0 inside the
+    lane and 4 inside the list;
+  - at 1440, the same.
+- **On `f452140`** the same arm reads the lens list at −4, −4.5, −4 and the foot at −4.2.
+- **Evidence still owed.** The enforcing run on the final head reads this on both engines. If it
+  does not read green there, this entry is reopened with what it read.
+
+## G124. Arrow keys inside the Pane's toolbar step to another event — closed (correction 30)
 
 **Severity: low. Opened 25 September 2026 during handoff 33-A's review (G110), filed under ruling 597. The number is assigned by this entry (ruling 638).**
 
@@ -5586,6 +5605,19 @@ who presses ArrowRight expecting the next tool gets the next event instead. A to
 arrow-key movement between its tools, and here the keys belong to the section. Both behaviours are
 the compile's, and Discovery binds them as ported (844). Owed: a Strand correction that lets the
 toolbar keep its arrow keys, or drops the toolbar role.
+
+**Closed 26 September 2026 by handoff 33-D (correction 30 Part B, ratified with correction 31 under
+1153).**
+
+- **The part.** It keeps `role="toolbar"` with the APG's keys: ArrowLeft, ArrowRight, Home and End
+  move focus between the tools and stop at the ends. Each is marked handled, so the section's step
+  handler, which yields to `defaultPrevented`, does not change the open event. `Pane.tsx` carries
+  `onToolbarKey` as compiled. ArrowLeft and ArrowRight on anything else in the pane still step.
+- **The arm.** `discovery-pane-tools` focuses Hide list and presses ArrowRight, End, ArrowRight,
+  Home and ArrowLeft. At 1280 and 1440 on this branch it reads focus on `list`, `copy`, `share`,
+  `share`, `list`, `list`, with the open event unchanged.
+- **On `f452140`** focus stays on `list` and the event steps.
+- **Evidence still owed.** The enforcing run on the final head reads this on both engines.
 
 ## G125. B9-SPEC Revision 2 addresses the member event page by slug; B10-SPEC and the tree address it by id — closed (1137)
 
@@ -5729,7 +5761,7 @@ whether the rail column takes the canvas's 24 at expanded, or the spec names the
 
 ---
 
-## G128. Pane's `selectedKey` follow runs while the list is hidden, and writes the hidden list's scroll
+## G128. Pane's `selectedKey` follow runs while the list is hidden, and writes the hidden list's scroll — closed (correction 30)
 
 **Severity: low. Opened 26 September 2026 during handoff 33-A Addendum 1 item 3 (Chat's read of `5a09009`), filed under ruling 597. The number is assigned by this entry (ruling 638).**
 
@@ -5763,6 +5795,25 @@ open card out of view before hiding, it stays out of view.
 The part is unchanged (844). A caller that passes the open item as `selectedKey` together with
 `listHidden`, the compile's own usage, still writes the hidden list's scroll. Owed: a Strand
 correction that guards the follow on `listHidden`, after which Discovery's held key goes.
+
+**Closed 26 September 2026 by handoff 33-D (correction 30 Part B, ratified with correction 31 under
+1153).**
+
+- **The part.** The follow does not run while the list is hidden, so the hidden list's `scrollTop` is
+  never written. On Show list it runs only if the key changed while the list was hidden.
+- **Discovery's held key goes.** `hiddenKey`, from `3d05d50`, was removed only after the step arm
+  read the same with the part's guard alone, in Chromium against the local build, at 1280 and 1600.
+  - "Hide list, Next, Show list" read the hidden list's `scrollTop` 4282 → 4282 at 1280 and
+    4082 → 4082 at 1600, with the card and its ring back in view on Show list.
+  - Those are the readings the held key gave, value for value.
+  - Discovery now passes the open event as `selectedKey` throughout.
+- **The new check.** `discovery-pane-tools` adds a setter trap on the hidden list's `scrollTop`
+  across Previous and Next, and reads no write at 1280 and 1440. The list's own values ran
+  536 → 136 → 136 → 536 at 1280 and 598 → 36 → 36 → 598 at 1440: before hiding, hidden, after the
+  two steps, shown. Hide and Show move it by scroll anchoring, which no setter carries.
+- **On `f452140`** this check also passes, because the held key produced the same outcome there. It
+  is the one changed check in this handoff that cannot fail first, and the report says so.
+- **Evidence still owed.** The enforcing run on the final head reads this on both engines.
 
 ---
 

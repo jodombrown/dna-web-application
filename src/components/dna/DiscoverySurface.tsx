@@ -1090,23 +1090,25 @@ export function DiscoverySurface({
         scrollSnapType: "x proximity",
         scrollbarWidth: "none",
         alignItems: "flex-start",
-        // The selected ring sits 4px outside the card (1083), so the row keeps 4px above it.
-        padding: "4px 0 8px",
+        // The selected ring sits 4px outside the card (1083), so the row keeps --space-1 above it.
+        padding: "var(--space-1) 0 var(--space-2)",
         // Inline, the padding is drawn back out by a negative margin and repeated as scroll padding,
         // so the first card lines up with the lane's heading. Only expanded rings a card (the pane
-        // opens there), so only expanded keeps 4px beside it, drawn back on the left alone: the
+        // opens there), so only expanded keeps --space-1 beside it, drawn back on the left alone: the
         // expanded column has no end padding to take it, and overflow at the start never scrolls.
-        // Medium keeps none: with 4px there, Chrome re-snapped the router's restore on Back 4px
-        // short (1065).
+        // This is the lane padding its own scroller, which Pane cannot do for it (1151): inside the
+        // pane's list column, which pads --space-2 (1150), a selected first card's ring sits inside
+        // the list's scrollport by 4 and inside the lane's own by 0. Medium keeps none: with 4px
+        // there, Chrome re-snapped the router's restore on Back 4px short (1065).
         ...(compact
           ? { margin: "0 -16px", paddingLeft: 16, paddingRight: 16, scrollPaddingInline: 16 }
           : expanded
             ? {
-                marginLeft: -4,
+                marginLeft: "calc(-1 * var(--space-1))",
                 minWidth: 0,
-                paddingLeft: 4,
-                paddingRight: 4,
-                scrollPaddingInline: 4,
+                paddingLeft: "var(--space-1)",
+                paddingRight: "var(--space-1)",
+                scrollPaddingInline: "var(--space-1)",
               }
             : { minWidth: 0 }),
       }}
@@ -1247,11 +1249,6 @@ export function DiscoverySurface({
   useEffect(() => {
     if (!paneOpen) setListHidden(false);
   }, [paneOpen]);
-  // The open event when the list was hidden, which Pane follows (1083) until it is shown again.
-  // Pane follows its key hidden or not, and the hidden list is laid out at no width, so following
-  // the open event there would write the list's scroll on every step; held, a step writes nothing
-  // (correction 28's scroll kept), and Show list follows only if the open event changed.
-  const [hiddenKey, setHiddenKey] = useState<string | null>(null);
   const paneItem =
     paneOpen && paneId
       ? (data?.sections ?? []).flatMap((s) => s.items).find((i) => i.event_id === paneId)
@@ -1324,11 +1321,13 @@ export function DiscoverySurface({
   }, [paneOpen, scrollerRef]);
 
   // The list follows the open card (1083): Pane's `selectedKey` brings it into the bounded list
-  // column's view vertically, its face at the column's top, where the ring drawn 4 outside it is cut,
-  // and a lane scrolls sideways, so it is brought into view here, ring and lane both.
+  // column's view vertically, its face below the column's --space-2 padding so the ring drawn 4
+  // outside it stays whole (correction 30, G123). A lane scrolls sideways, which Pane does not
+  // reach, so the card is brought into view here too, ring and lane both.
   // Hidden, the list has no width to follow in. Shown again on the card it was hidden on, it keeps
-  // its place (correction 28's hidden list keeps its scroll); shown on another, reached by Previous
-  // or Next while it was hidden, it brings that card into view.
+  // its place (the hidden list keeps its scroll: Pane does not follow while it is hidden, correction
+  // 30, G128); shown on another, reached by Previous or Next while it was hidden, it brings that card
+  // into view.
   const hiddenOn = useRef<string | null>(null);
   useEffect(() => {
     if (!paneOpen || !paneId) {
@@ -1425,15 +1424,14 @@ export function DiscoverySurface({
           paneWidth={520}
           height="100%"
           listHidden={listHidden}
-          onToggleList={() => {
-            setHiddenKey(paneId);
-            setListHidden((h) => !h);
-          }}
+          onToggleList={() => setListHidden((h) => !h)}
           onCopyLink={paneId ? () => handOver(paneId, "copy") : undefined}
           onShare={paneId ? () => handOver(paneId, "share") : undefined}
           onClose={closePane}
           closeLabel={"Back to " + (fromElsewhere ? toOrigin.origin.label : "Discovery")}
-          selectedKey={(listHidden ? hiddenKey : paneId) ?? undefined}
+          // Correction 30 (G128): Pane does not follow while the list is hidden, and on Show list
+          // follows only if the open event changed, so the open event is the key throughout.
+          selectedKey={paneId ?? undefined}
           {...stepping}
         >
           {pane}

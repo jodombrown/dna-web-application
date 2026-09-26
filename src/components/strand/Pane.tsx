@@ -5,8 +5,13 @@
 // Pane is byte for byte v1790212533284400's. Reconciled at compile v1790366257373061 (handoff 33-A,
 // correction 28 item 1, G110, ratified 1134), which adds `paneWidth`, `height`, `listHidden`,
 // `hiddenWidth`, the toolbar's three handlers and four labels, and a second expanded branch that
-// draws them; the dispositions are in docs/strand-ports/v1790366257373061.md. The .jsx and the
-// bundle are identical once both are compiled the same way.
+// draws them; the dispositions are in docs/strand-ports/v1790366257373061.md. Reconciled at compile
+// v1790410319010950 (correction 30 Part B, ratified with correction 31 under 1153; handoff 33-D),
+// which pads the bounded list column, keeps the toolbar's arrow keys and guards the follow on
+// `listHidden` (G123, G124, G128); no prop is added. The dispositions are in
+// docs/strand-ports/v1790410319010950.md. Correction 30's archive `Pane.jsx` is the source the
+// compile's `sourceHashes` names (`5ec88a699bcf`), and it and the bundle are identical once both
+// are compiled the same way.
 //
 // Rulings the compiled part cites in its own doc comment: 561, 607, 612, 79, 588, 589, 700, 719,
 // 1083, 69 and 1064; its correction 28 paragraph cites G110 and B9-SPEC's pane line.
@@ -63,15 +68,22 @@
 // (`share`), each marked `data-tool`; on the right correction 23's cluster, unchanged in content,
 // order and keys. Without a tool handler the cluster keeps the corner. `listHidden`, while open,
 // draws `0px minmax(0,{hiddenWidth})` centred with no gap (default 720): the list slot is still the
-// same element, `aria-hidden`, inert and hidden, so its scroll is kept while `selectedKey` holds.
-// The follow below runs on a new key hidden or not, and the hidden list is laid out at no width,
-// so a caller holds its key while the list is hidden (G128). Closed wins over hidden. In this
-// branch the pane's content always sits inside `data-pane-body`, bounded or not.
+// same element, `aria-hidden`, inert and hidden, and its scroll is kept. Closed wins over hidden. In
+// this branch the pane's content always sits inside `data-pane-body`, bounded or not.
+// Correction 30 (G123, G124, G128; the ruling on the padding is 1150). A bounded list column pads
+// `--space-2` on all four sides, and the follow lands the selected card below that padding, so its
+// 4px ring stays inside the scrollport at the sides, the top and the list's end. Pane cannot pad a
+// lane's own sideways scroller: a lane pads itself for its first card (1151). The toolbar keeps
+// `role="toolbar"` with its arrow keys: ArrowLeft, ArrowRight, Home and End move focus between the
+// tools, stop at the ends and mark the key handled, so the section's step handler, which yields to
+// `defaultPrevented`, does not change the open item. The follow does not run while the list is
+// hidden, so the hidden list's scroll is never written; on Show list it runs only if the key
+// changed while the list was hidden.
 //
 // `DiscoverySurface` (handoff 31-B) is the one caller. It binds `onClose`, `closeLabel`,
-// `selectedKey` (held while the list is hidden, G128) and the stepping pair, and renders the Pane
-// only while an item is open, so no page passes `open`. G110's binding of `paneWidth` 520, `height`
-// and the three tool handlers is handoff 33-A's change to that caller, not this part's.
+// `selectedKey` (the open event) and the stepping pair, and renders the Pane only while an item is
+// open, so no page passes `open`. G110's binding of `paneWidth` 520, `height` and the three tool
+// handlers is handoff 33-A's change to that caller, not this part's.
 import { useEffect, useRef, type CSSProperties, type KeyboardEvent, type ReactNode } from "react";
 import { IconButton } from "./IconButton";
 
@@ -117,9 +129,9 @@ export type PaneProps = {
    *  scroll separately and the pane section is not sticky. Absent, the page scrolls as before. */
   height?: number | string | undefined;
   /** Correction 28. While open: `0px minmax(0,{hiddenWidth})` centred, no gap; the list slot stays
-   *  the same element, hidden and inert, its scroll kept while `selectedKey` holds (G128). Default
-   *  false. Takes effect only with `paneWidth`, `height` or a tool handler, which select the branch
-   *  that reads it. */
+   *  the same element, hidden and inert, its scroll kept: the follow does not run while it is hidden
+   *  (correction 30, G128). Default false. Takes effect only with `paneWidth`, `height` or a tool
+   *  handler, which select the branch that reads it. */
   listHidden?: boolean | undefined;
   /** Correction 28. Any of the three renders the toolbar at the pane's top, ordered Hide or show the
    *  list, Copy link, Share, with correction 23's cluster at the right of the same row. Expanded
@@ -146,7 +158,28 @@ function bringIntoView(col: HTMLElement | null, sel: string) {
   if (!el) return;
   const box = el.getBoundingClientRect();
   const c = col.getBoundingClientRect();
-  col.scrollTop += box.top - c.top;
+  // G123: land the card below the column's top padding, so a selected ring drawn 4px outside the face is not cut at the top.
+  const pad = parseFloat(getComputedStyle(col).paddingTop) || 0;
+  col.scrollTop += box.top - c.top - pad;
+}
+// G124: role="toolbar" keeps its arrow keys (APG toolbar pattern). ArrowLeft/Right and Home/End move focus between its tools and stop
+// at the ends; preventDefault marks the event handled, so the section's step handler, guarded by defaultPrevented, does not change the open event.
+function onToolbarKey(e: KeyboardEvent<HTMLDivElement>) {
+  const k = e.key;
+  if (k !== "ArrowLeft" && k !== "ArrowRight" && k !== "Home" && k !== "End") return;
+  const tools = Array.from(e.currentTarget.querySelectorAll("button"));
+  if (!tools.length) return;
+  e.preventDefault();
+  const i = tools.indexOf(document.activeElement as HTMLButtonElement);
+  const to =
+    k === "Home"
+      ? 0
+      : k === "End"
+        ? tools.length - 1
+        : k === "ArrowLeft"
+          ? Math.max(0, i - 1)
+          : Math.min(tools.length - 1, i + 1);
+  tools[to]?.focus();
 }
 
 export function Pane({
@@ -243,11 +276,23 @@ export function Pane({
     // 607: bring the arrived-at item into view without moving focus or the page.
     if (cold && tier === "expanded") bringIntoView(listCol.current, "[data-arrived]");
   }, [cold, tier]);
+  const listIsHidden = !!(open && listHidden);
+  const hiddenAt = useRef<string | undefined>(undefined);
+  const wasHidden = useRef(listIsHidden);
   useEffect(() => {
     // 1083: the list follows the open item as the member steps. List scroll only.
+    // G128: no follow while the list is hidden, so its scrollTop is never written against the 0px track. On Show list, follow only if
+    // the key changed while hidden; if it came back to where it was hidden, the list keeps its scroll.
+    const was = wasHidden.current;
+    wasHidden.current = listIsHidden;
+    if (listIsHidden) {
+      if (!was) hiddenAt.current = selectedKey;
+      return;
+    }
+    if (was && selectedKey === hiddenAt.current) return;
     if (selectedKey != null && tier === "expanded")
       bringIntoView(listCol.current, "[data-selected]");
-  }, [selectedKey, tier]);
+  }, [selectedKey, tier, listIsHidden]);
   const paneBody = loading ? (
     <p
       style={{
@@ -354,6 +399,7 @@ export function Pane({
         data-pane-toolbar
         role="toolbar"
         aria-label={title}
+        onKeyDown={onToolbarKey}
         style={{ display: "flex", alignItems: "center", gap: "var(--space-1)" }}
       >
         {onToggleList && (
@@ -400,6 +446,8 @@ export function Pane({
             overflowY: bounded ? "auto" : undefined,
             overflowX: bounded || hideList ? "hidden" : undefined,
             overscrollBehavior: bounded ? "contain" : undefined,
+            padding: bounded ? "var(--space-2)" : undefined,
+            boxSizing: bounded ? "border-box" : undefined,
             visibility: hideList ? "hidden" : undefined,
           }}
         >
