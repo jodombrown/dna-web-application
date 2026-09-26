@@ -2742,9 +2742,9 @@ async function runDiscoveryWidth(browserType, bname, [w, h], theme) {
       JSON.stringify(pane),
     );
 
-    // Handoff 33-A, G110 (B9-SPEC Revision 2's pane line, 1127; correction 28): the pane 520 at the
-    // right and the list the rest, both starting level, each scrolling on its own and the feed
-    // column not at all, the pane's foot on the canvas's foot (G121 records why that is the height).
+    // Handoff 33-A, G110 (B9-SPEC's pane line, 1127, 1136; correction 28): the pane 520 at the right
+    // and the list the rest, both starting level, each scrolling on its own and the feed column not
+    // at all, the pane's foot on the canvas's foot (1136: the column's own height less the 16).
     const tracks = () =>
       page.evaluate(() => {
         const r1 = (n) => Math.round(n * 10) / 10;

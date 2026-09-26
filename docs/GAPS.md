@@ -5361,7 +5361,7 @@ its toolbar's Share hands over `/posts/{post id}`, and the event page's own Shar
 same pane, hands over the event's address. Owed: a ruling on the address Discovery's share path
 hands over, and one share path for the card, the pane and the page.
 
-## G121. B9-SPEC Revision 2's pane height, frame less header less 88, overruns this shell's feed column
+## G121. B9-SPEC Revision 2's pane height, frame less header less 88, overruns this shell's feed column — closed (1136)
 
 **Severity: low. Opened 25 September 2026 during handoff 33-A (G110), filed under ruling 597. The
 number is assigned by this entry (ruling 638).**
@@ -5381,6 +5381,17 @@ list and the pane body scrolls. G110's closing note has the
 1280x800 reading. The width arm reads the pane's foot on the canvas's foot at all five expanded
 widths. Owed: the spec's line restated to the shell's lens row, or a ruling
 on the lens row's height.
+
+**Closed 26 September 2026 by handoff 33-A Addendum 1 item 1.** Ruling 1136 gives the open pane the
+feed column's own height less the 16 that starts it level with the rail, which is what Discovery
+already does. B9-SPEC Revision 3 (sha256 `4bcc45c781d4fc38671a64b780c3e01785dbbb60fead72b629913b44a5558c7c`)
+replaces the spec byte for byte and states that line. Read on this branch's build of `8d9dfd3` in
+Chromium at 1280x800, 1440x900 and 1600x1000:
+
+- the pane is 573.8, 673.8 and 773.8 tall, from 202.2, level with the rail strip;
+- its foot is the feed column's content foot, the viewport less the column's 24.
+
+The two comments that cited this entry now cite 1136.
 
 ## G122. Two statements outside correction 28's parts still give the expanded rail as 260
 
@@ -5436,7 +5447,7 @@ arrow-key movement between its tools, and here the keys belong to the section. B
 the compile's, and Discovery binds them as ported (844). Owed: a Strand correction that lets the
 toolbar keep its arrow keys, or drops the toolbar role.
 
-## G125. B9-SPEC Revision 2 addresses the member event page by slug; B10-SPEC and the tree address it by id
+## G125. B9-SPEC Revision 2 addresses the member event page by slug; B10-SPEC and the tree address it by id — closed (1137)
 
 **Severity: low. Opened 25 September 2026 during handoff 33-A's review (G100), filed under ruling 597. The number is assigned by this entry (ruling 638).**
 
@@ -5451,6 +5462,11 @@ The tree follows B10-SPEC. The route's param is the event id, and `loadEventPage
 that is not a UUID. So the face's link (G100) and every Discovery navigation address the page by
 id. Nothing here changes it, since the route belongs to Brief 10. Owed: a ruling on which address
 the member page has, and B9-SPEC or B10-SPEC restated to it.
+
+**Closed 26 September 2026 by handoff 33-A Addendum 1 item 1.** Ruling 1137 addresses the member
+event page by id, `/convene/events/{id}`, as the tree and B10-SPEC do; the readable, shareable
+address is the public one under `/e/`. B9-SPEC Revision 3's Routes line says so. Nothing in the tree
+changes.
 
 ---
 
