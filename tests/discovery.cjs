@@ -3308,9 +3308,11 @@ async function runDiscoveryLink(browserType, bname, [w, h], theme) {
  *   G124  on a toolbar tool, ArrowRight, End, Home and ArrowLeft move focus between the tools, stop
  *         at the ends and never step to another event.
  *   G128  with the list hidden, Next and Previous never write its scrollTop (a setter trap on the
- *         element), and Show list on the event it was hidden on leaves it where it was. Discovery
- *         held Pane's key to the same effect from 3d05d50 until this handoff, so this check read
- *         the same before the part's own guard; it is the part's guard it reads now.
+ *         element), its value holds while hidden, and Show list on the event it was hidden on
+ *         writes none. Discovery held Pane's key to the same effect from 3d05d50 until this
+ *         handoff, so this check read the same before the part's own guard; it is the part's
+ *         guard it reads now. Where the list stands after Show list is the engine's: Chromium
+ *         moves it back and WebKit does not (G138), so the check does not read it.
  */
 async function runDiscoveryPaneTools(browserType, bname, [w, h], theme) {
   const tag = `${bname}-${w}x${h}-${theme}-discovery-pane-tools`;
@@ -3382,9 +3384,9 @@ async function runDiscoveryPaneTools(browserType, bname, [w, h], theme) {
     await next(E.stream.event_id);
     lensEnd = await ring();
     // G128: the list at its end, then hidden; Previous then Next; then shown on the same event.
-    // Hide and Show move the list by scroll anchoring on the 0px track and back (G128's own
-    // reading), which no setter carries, so the trap counts the part's writes alone, and the
-    // readings compare hidden with hidden and shown with shown.
+    // Hide moves the list as it lays out on the 0px track, and Show moves it back in Chromium and
+    // not in WebKit (G138). Neither is a write, so the trap counts the part's writes alone, and
+    // the values compare hidden with hidden.
     const pre = await page.evaluate(() => {
       const list = document.querySelector("[data-discovery] [data-pane-list]");
       list.scrollTop = 1e6;
@@ -3490,11 +3492,8 @@ async function runDiscoveryPaneTools(browserType, bname, [w, h], theme) {
   );
   record(
     tag +
-      " G128: with the list hidden, Previous and Next never write its scrollTop, and Show list on the same event leaves it where it was",
-    !!hidden &&
-      hidden.writes.length === 0 &&
-      Math.abs(hidden.mid - hidden.before) <= 1 &&
-      Math.abs(hidden.after - hidden.pre) <= 1,
+      " G128: with the list hidden, Previous and Next never write its scrollTop, and Show list on the same event writes none",
+    !!hidden && hidden.writes.length === 0 && Math.abs(hidden.mid - hidden.before) <= 1,
     JSON.stringify(hidden),
   );
   record(tag + " no page errors", errors.length === 0, errors.join(" | ").slice(0, 300));

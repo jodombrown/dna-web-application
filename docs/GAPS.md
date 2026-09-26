@@ -5808,9 +5808,12 @@ correction that guards the follow on `listHidden`, after which Discovery's held 
   - Those are the readings the held key gave, value for value.
   - Discovery now passes the open event as `selectedKey` throughout.
 - **The new check.** `discovery-pane-tools` adds a setter trap on the hidden list's `scrollTop`
-  across Previous and Next, and reads no write at 1280 and 1440. The list's own values ran
-  536 → 136 → 136 → 536 at 1280 and 598 → 36 → 36 → 598 at 1440: before hiding, hidden, after the
-  two steps, shown. Hide and Show move it by scroll anchoring, which no setter carries.
+  across Previous and Next, and at 1280 and 1440 reads no write and the hidden value held across
+  both steps. In Chromium the list's own values ran 536 → 136 → 136 → 536 at 1280 and
+  598 → 36 → 36 → 598 at 1440: before hiding, hidden, after the two steps, shown. WebKit read
+  538 → 120 → 120 → 120 and 600 → 20 → 20 → 20 on dispatch 71, with no write either: Hide moves the
+  list and Show does not move it back there, which is G138 and not this gap. So the check reads
+  what G128 owns, no write and the hidden value held, and not where Show list leaves the list.
 - **On `f452140`** this check also passes, because the held key produced the same outcome there. It
   is the one changed check in this handoff that cannot fail first, and the report says so.
 - **Evidence still owed.** The enforcing run on the final head reads this on both engines.
@@ -6101,3 +6104,61 @@ What handoff 33-D made true: no IconButton renders `title`, and none can be hand
 
 Owed: a ruling on whether 1146's Tooltip replaces these too. If it does, a Strand correction brings
 the four parts onto it, and the tree moves `IdentityMark` in the same change.
+
+## G138. On WebKit, Show list leaves the Pane's list where Hide list moved it
+
+**Severity: low. Opened 26 September 2026 during handoff 33-D, filed under ruling 597. The number is
+assigned by this entry (ruling 638).**
+
+Correction 28 says the hidden list keeps its scroll. The part hides the list by taking its track to
+0px, where it stays laid out at no width. Hiding therefore changes the list's layout and its scroll
+range, and the engine moves its `scrollTop` with no setter involved.
+
+- **Chromium moves it back on Show list.** G128's own reading was 1936 → 2107 → 1936. Handoff
+  33-D's `discovery-pane-tools` arm, against the branch's local build, read 536 → 136 → 536 at
+  1280 and 598 → 36 → 598 at 1440.
+- **WebKit does not.** Dispatch 71 (`36268117282`) ran the arm on WebKit against `f452140`'s
+  deployment. It read the list at its end, hidden, after Previous and Next, and shown:
+  538 → 120 → 120 → 120 at 1280 and 600 → 20 → 20 → 20 at 1440.
+- **Neither is a write.** The arm's setter trap caught none in either cell, so neither the part nor
+  Discovery moved the list.
+
+The readings fit scroll anchoring in Chromium and none in WebKit. That mechanism was not read in
+either engine (555).
+
+What a member sees in Safari: hide the list and show it again, with no step or with steps that
+return to the same event, and the list comes back scrolled elsewhere. The open card can then be out
+of view. A step that ends on another event is followed on Show list (the part's guard, G128), so
+that case lands.
+
+Owed: a Strand correction under which the part keeps the list's scroll itself across Hide and Show,
+for instance by holding `scrollTop` on Hide and writing it back on Show when the key has not
+changed. The arm's G128 check reads no write and the hidden value held. It does not read where Show
+list leaves the list, because that differs by engine; once the part keeps the scroll, it can.
+
+## G139. The public event page's header carries the padding shorthand beside its safe-area longhand, and drops the inset when the tier flips
+
+**Severity: low. Opened 26 September 2026 during handoff 33-D, filed under ruling 597. The number is
+assigned by this entry (ruling 638).**
+
+`src/components/dna/PublicEventSurface.tsx:137-141` styles the header with
+`padding: compact ? "0 16px" : "0 32px"` and `paddingTop: "env(safe-area-inset-top)"` in one object.
+`useTier` flips from compact once on mount at every width above compact. When it flips, React
+writes the changed shorthand, which resets `padding-top`, and does not rewrite the unchanged
+longhand. React's development build names it in the guest arm at 1280x800, on the branch and on
+`f452140` alike: "Updating a style property during rerender (padding) when a conflicting property is
+set (paddingTop) can lead to styling bugs".
+
+Read in Chromium against local dev servers of both builds, reached as the guest arm reaches it, by
+a client navigation to `/e/{slug}` from `/sign-in`:
+
+- At 1280x800 the header's inline style ends as `padding: 0px 32px`, and the
+  `env(safe-area-inset-top)` longhand is gone.
+- At 390x844, where the tier does not flip, it keeps `padding-top: env(safe-area-inset-top)`.
+
+On a desktop the inset is 0 either way, so nothing moves. Above compact with a top inset that is not
+0, the header's row would sit under the status bar. That was not read on a device.
+
+Owed: the header in longhand only, as `AppHeader` and `ProfileSurface`'s public header already are
+(ruling 344's inset in `paddingTop`, the sides in `paddingLeft` and `paddingRight`). Handoff 33-D
+does not reach this surface, so it is not changed here.
