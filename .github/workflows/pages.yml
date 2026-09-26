@@ -19,7 +19,9 @@ jobs:
       contents: read
       deployments: write
     outputs:
-      url: ${{ steps.deploy.outputs.pages-deployment-alias-url || steps.deploy.outputs.deployment-url }}
+      # Ruling 1141: this deployment's own URL, never the branch alias. The step after the deploy
+      # says why, and fails the job by name when there is none.
+      url: ${{ steps.deploy.outputs.deployment-url }}
       deployed: ${{ steps.deploy.outcome == 'success' }}
     env:
       CF_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -100,6 +102,30 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           command: pages deploy dist --project-name=dna-web-application --branch=${{ github.ref_name }} --commit-hash=${{ github.sha }} --commit-dirty=true
+      # Ruling 1141 (G126). The live and matrix jobs, and ruling 217's gate inside them, read the
+      # deployment this run uploaded at its own URL, https://<id>.dna-web-application.pages.dev, and
+      # never the branch alias. The alias is a pointer Cloudflare moves between deployments, so a
+      # reading of it is not tied to this upload, and on run 361 it answered 404 on every route for
+      # about ninety minutes, across two deployments of one build, then cleared with nothing done.
+      # With no URL the job fails here, by name. Nothing downstream builds a host from the branch
+      # name, which is not even a valid host for a branch carrying a slash.
+      - name: The deployment's own URL (ruling 1141)
+        if: ${{ steps.deploy.outcome == 'success' }}
+        env:
+          URL: ${{ steps.deploy.outputs.deployment-url }}
+          ALIAS: ${{ steps.deploy.outputs.pages-deployment-alias-url }}
+          ID: ${{ steps.deploy.outputs.pages-deployment-id }}
+        run: |
+          set -uo pipefail
+          if [ -z "$URL" ]; then
+            echo "::error::The deploy step returned no deployment-url, so no job has a deployment to test. No host is built from the branch name (ruling 1141)."
+            exit 1
+          fi
+          if [ "$URL" = "$ALIAS" ]; then
+            echo "::error::The deploy step's deployment-url is the branch alias, $ALIAS, and not the deployment's own URL (ruling 1141)."
+            exit 1
+          fi
+          echo "Deployment ${ID:-(no id returned)} at $URL. The test jobs read this URL; the branch alias, ${ALIAS:-none returned}, is read by no job."
 
   # Ruling 218's arms, in their own job.
   #
@@ -114,7 +140,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
-      BASE: ${{ needs.deploy.outputs.url || format('https://{0}.dna-web-application.pages.dev', github.ref_name) }}
+      # Ruling 1141: the deployment this run uploaded, at its own URL. No fallback; the deploy job
+      # fails by name when it has no URL, and this job does not run.
+      BASE: ${{ needs.deploy.outputs.url }}
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
@@ -210,7 +238,8 @@ jobs:
       matrix:
         engine: [chromium, webkit]
     env:
-      BASE: ${{ needs.deploy.outputs.url || format('https://{0}.dna-web-application.pages.dev', github.ref_name) }}
+      # Ruling 1141, as in the live job: the deployment this run uploaded, at its own URL.
+      BASE: ${{ needs.deploy.outputs.url }}
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
