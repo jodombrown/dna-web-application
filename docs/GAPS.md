@@ -5385,7 +5385,9 @@ on the lens row's height.
 **Closed 26 September 2026 by handoff 33-A Addendum 1 item 1.** Ruling 1136 gives the open pane the
 feed column's own height less the 16 that starts it level with the rail, which is what Discovery
 already does. B9-SPEC Revision 3 (sha256 `4bcc45c781d4fc38671a64b780c3e01785dbbb60fead72b629913b44a5558c7c`)
-replaces the spec byte for byte and states that line. Read on this branch's build of `8d9dfd3` in
+replaces the spec byte for byte and states that line. Revision 4 (sha256
+`9949c0bbaf62c93fe25d3e1413155bc588a3bb82595ee579cda88d5fa02e6d96`), Chat's correction the same evening,
+replaces Revision 3 and keeps that line. Read on this branch's build of `8d9dfd3` in
 Chromium at 1280x800, 1440x900 and 1600x1000:
 
 - the pane is 573.8, 673.8 and 773.8 tall, from 202.2, level with the rail strip;
@@ -5512,3 +5514,32 @@ to `pages-deployment-alias-url || deployment-url`, so every push-triggered job r
 Owed: a ruling on whether the push-triggered jobs read the per-deployment host, which 811 already
 names for each deployment, instead of the alias. That is a harness change, and handoff 33-A does not
 make it.
+
+---
+
+## G127. The rail column's foot at expanded is 48, where B9-SPEC's canvas foot is 24
+
+**Severity: low. Opened 26 September 2026 during handoff 33-A Addendum 1 item 3 (Chat's read of `5a09009`), filed under ruling 597. The number is assigned by this entry (ruling 638).**
+
+B9-SPEC's expanded line gives the canvas "padding 24 at top and foot". AppShell draws that foot as
+each column's own bottom padding:
+
+- the feed column's is 24 at expanded (`src/components/dna/AppShell.tsx:311`);
+- the rail column's is 48 (`:328` and `:342`), and no comment or ruling gives a reason for it.
+
+The rail's foot was read against the pane's foot on this branch's build of `8d9dfd3`. The reads
+were in Chromium at 1280x800, 1440x900 and 1600x1000, and two independent re-readings upheld them.
+
+- **Pane open, the list shown or hidden.** The rail is its collapsed strip, which is content-sized
+  at 411 (`max-height: none`) and runs from 202.2 to 613.2 at all three heights. The pane's foot is
+  the feed column's content foot: 776, 876 and 976, the viewport less 24. So the rail's foot is
+  162.8, 262.8 and 362.8 above the pane's. The rail column's own content foot is 752, 852 and 952,
+  the viewport less 48, which is 24 above the pane's.
+- **Pane closed, the rail open.** The rail sits at its bound, `max-height: calc(100% - 16px)`:
+  549.8, 649.8 and 749.8 tall, with its content overflowing. Its foot is the rail column's content
+  foot, 24 above the lanes' foot.
+- Rail, list and pane start level at 202.2 in every state.
+
+Wherever the rail reaches its bound, its foot sits 24 above the feed column's. With the pane open,
+the rail is the strip and ends where its content does, so the 48 does not show. Owed: a ruling on
+whether the rail column takes the canvas's 24 at expanded, or the spec names the rail's 48.
