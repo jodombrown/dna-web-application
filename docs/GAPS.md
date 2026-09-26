@@ -4971,6 +4971,19 @@ sets it on Topics. The medium rail's 240 gives a checklist of 198 and the expand
 238, so both show two columns. The compact Sheet shares the body and shows two as well, as the
 compile does.
 
+**Amended 26 September 2026 by handoff 33-A Addendum 2 (1144).** Two columns wrapped the labels in
+the rail: at 1280 and 1440 the 238 checklist's tracks were 115 and four of the nine rows ran to three
+lines (65.3 tall), and at 820 the 198 checklist's were 95 and four ran to four lines (87), so the rows
+read as running into each other. B9-SPEC Revision 5's Filters line makes Topics one column in the
+FacetRail and keeps two only in the compact Filters Sheet. Strand's `columns` stays as built (844):
+Discovery's one axes list carries no `columns` on Topics, and the Sheet's FacetRail takes that list
+with `columns: 2` set on Topics alone, so no axis is listed twice. The facets arm's G102 check is
+changed in place and its count is unchanged: in the rail at 820, 1280 and 1440 it reads one column,
+from the checklist's computed layout and its rows' lefts, and each row's bottom at or above the next
+row's top; in the Sheet at 390 it reads two columns, the checklist 350 wide and its tracks 171.
+On `f19af1f` it fails at the three rail cells, a grid of two tracks with each odd row beside the next.
+The width the second column begins at, above, now governs the Sheet alone.
+
 ## G103. Format is a single segment, so format=online,hybrid shows as Online
 
 **Severity: low. Opened 24 September 2026 during handoff 32-B items 1 to 3, filed under ruling 597.

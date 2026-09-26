@@ -1720,29 +1720,52 @@ async function runDiscoveryFacets(browserType, bname, [w, h], theme) {
       file,
     );
 
-    // Handoff 33-A (correction 28, 1134). G102: Topics lays its rows in two columns once its
-    // checklist is 150 wide, in the rail and in the compact Sheet alike.
+    // Ruling 1144 (B9-SPEC Revision 5's Filters line, amending G102): in the FacetRail, medium and
+    // expanded, Topics is one column, each row's bottom at or above the next row's top; only the
+    // compact Sheet keeps two columns, its checklist 150 or wider. The columns are the checklist's
+    // computed layout and where its rows sit, never the prop the caller passed.
     await openDiscovery(page);
     scope = await openRail(page, tier);
     const topics = await page.evaluate((scope) => {
-      const boxes = Array.from(
+      const rows = Array.from(
         document.querySelectorAll(`${scope} [data-axis-id="family"] [role="checkbox"]`),
-      ).map((b) => b.getBoundingClientRect());
-      const list = document.querySelector(`${scope} [data-axis-id="family"] [data-columns]`);
+      );
+      const boxes = rows.map((b) => b.getBoundingClientRect());
+      const list = rows[0] ? rows[0].parentElement : null;
+      const cs = list ? getComputedStyle(list) : null;
+      const r = (n) => Math.round(n * 10) / 10;
       return {
         rows: boxes.length,
         lefts: [...new Set(boxes.map((b) => Math.round(b.left)))].sort((a, b) => a - b),
-        width: list ? Math.round(list.getBoundingClientRect().width * 10) / 10 : null,
-        columns: list ? getComputedStyle(list).gridTemplateColumns.split(" ").length : null,
+        width: list ? r(list.getBoundingClientRect().width) : null,
+        layout: cs ? cs.display + " " + cs.flexDirection + " " + cs.gridTemplateColumns : null,
+        columns: !cs
+          ? null
+          : cs.display === "grid"
+            ? cs.gridTemplateColumns.split(" ").length
+            : cs.display === "flex" && cs.flexDirection === "column"
+              ? 1
+              : null,
+        heights: boxes.map((b) => r(b.height)),
+        // How far each row's bottom runs past the next row's top, in document order.
+        overrun: boxes.slice(1).map((b, i) => r(boxes[i].bottom - b.top)),
       };
     }, scope);
+    const inSheet = tier === "compact";
     record(
-      tag + " Topics: its checklist 150 or wider, its rows in two columns (G102)",
+      tag +
+        (inSheet
+          ? " Topics: two columns in the compact Sheet, its checklist 150 or wider (1144, G102)"
+          : " Topics: one column in the FacetRail, no row running into the next (1144)"),
       topics.rows > 1 &&
-        topics.lefts.length === 2 &&
-        topics.columns === 2 &&
-        topics.width !== null &&
-        topics.width >= 150,
+        (inSheet
+          ? topics.lefts.length === 2 &&
+            topics.columns === 2 &&
+            topics.width !== null &&
+            topics.width >= 150
+          : topics.lefts.length === 1 &&
+            topics.columns === 1 &&
+            topics.overrun.every((d) => d <= 0)),
       JSON.stringify(topics),
     );
     // G111: in the rail, Clear all is in the pinned heading row and stays in view once the axes have

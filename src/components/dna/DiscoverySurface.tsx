@@ -4,7 +4,7 @@
 // discovery face, Menu, FacetRail's displays and ladders, Input's combobox and Pane's stepping. Handoff
 // 33-A binds what Strand correction 28 added to them (1134): the face's link (G100) and its own title
 // clamp (G115), the pane at 520 with its height, toolbar and hidden list (G110, 1127), Topics in two
-// columns (G102) and Clear all in the rail's heading row (G111).
+// columns in the compact Sheet only (G102, 1144) and Clear all in the rail's heading row (G111).
 //
 // One read projection and one write path per surface (CLAUDE.md): everything this surface shows comes
 // through `loadDiscovery` (the cards are the Feed's own views, hydrated by post id inside it, 660) and
@@ -548,8 +548,8 @@ export function DiscoverySurface({
       label: "Topics",
       icon: "hash",
       display: "checklist",
-      // G102 (correction 28): two columns once the checklist is 150 wide, which both rails are.
-      columns: 2,
+      // 1144: one column in the FacetRail, where two wrapped its labels to three and four lines; the
+      // compact Sheet's two columns (G102) are `sheetAxes` below.
       options: familyRows.map((f) => ({ id: f.value, label: f.label })),
     },
     ...(ladders.length
@@ -572,6 +572,9 @@ export function DiscoverySurface({
       })),
     },
   ];
+  // B9-SPEC Revision 5's Filters line (1144): the compact Sheet's axes are the rail's with Topics in
+  // two columns (G102), derived here so the axes are listed once.
+  const sheetAxes = axes.map((a) => (a.id === "family" ? { ...a, columns: 2 as const } : a));
   const railValue: FacetValue = {};
   for (const k of ["format", "price", "when", "family", "place"] as const)
     if (lists[k].length) railValue[k] = [...lists[k]];
@@ -1445,7 +1448,7 @@ export function DiscoverySurface({
             {homesLine ?? <span />}
             <FacetRail
               tier="compact"
-              axes={axes}
+              axes={sheetAxes}
               value={railValue}
               onChange={onRail}
               onClear={clearFacets}
