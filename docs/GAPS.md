@@ -5833,3 +5833,105 @@ more reads of the page. With the read answering, the file downloaded 66 and 69 m
 The item predates G120, and this change leaves it as it was. G131 records the same join in Share and
 Copy link, where `handOver` now waits for the running read's first answer only. Owed: the calendar
 item waits for the running read's first answer too, or a ruling that the wait stands.
+
+## G133. A Cloudflare Workers Builds check, connected outside the tree, was red on every commit it built — closed
+
+**Severity: medium while it stood. It failed no job in `pages.yml` and deployed nothing, but it put a
+red check on every commit it built, and a build of it that succeeded would have been a second deploy
+path for this repository that no brief names. Opened 26 September 2026 during handoff 33-A Addendum 2
+(PR #67), filed under ruling 597. The number is assigned by this entry (ruling 638).**
+
+What was read, on `claude/new-session-n9rnpi`, all times UTC:
+
+- A check named `Workers Builds: dna-web-application`, posted by Cloudflare's Workers Builds git
+  integration, failed on `52f9263` (check run `108367334289`, 08:03) and on `9289db8`
+  (`108367804518`, 08:06). Each completed in under a second, with no output text. Its build log was
+  on the Cloudflare dashboard only, which the session could not open, so why it failed is not read.
+- The check-suite notice for `b7baabf`, at 07:03, listed no third-party suite, and the integration's
+  first comment on #67 arrived at 08:02. Nothing under `.github/` or in the build config changed.
+- It built a Worker script named `dna-web-application` (id `f6c4bdf92bab4f0f8a29549e7e9ceffc`), which
+  the account then held. This repository is a Pages project: `wrangler.jsonc` sets
+  `pages_build_output_dir: "dist"`, Nitro's `cloudflare-pages` preset emits `dist/_worker.js`, and
+  `pages.yml` deploys with `wrangler pages deploy dist`. A Workers build of this tree has no Worker
+  entry to deploy, which fits an immediate failure but is inferred, not read.
+- The PR's commits since `b7baabf` touch Discovery's and the event page's source, tests and docs
+  only; `bun run build` passes locally and `pages.yml`'s deploy job was green on `b7baabf` (run 369).
+
+**Closed 26 September 2026, before handoff 33-A's final head.** The founder deleted the Worker
+`dna-web-application`, which had been created at 07:37 UTC (00:37 Pacific) that day with Workers
+Builds connected to this repository. Chat read the account afterwards and found no Workers, and this
+session's own read of the account (the Cloudflare Workers list) returned none, count 0. The Pages
+project `pages.yml` deploys is the one deploy path. The check's absence on the final head is read in
+PR #67's report; a Workers Builds check that still posts there is named there and stops the PR.
+
+## G134. Moving from Discovery to the Feed inside the app leaves the Feed with no header lens below expanded
+
+**Severity: low. Opened 26 September 2026 during the review of handoff 33-A Addendum 2 item 4
+(1145), filed under ruling 597. The number is assigned by this entry (ruling 638).**
+
+Below expanded, once the shell's scroller is past 72 (`SCROLL_SWAP_PX`), the header takes the
+LensBar that the surface on screen registered in `src/lib/header-lens-store.ts`
+(`src/components/dna/AppShell.tsx:189`). The Feed reached from Discovery inside the app shows none.
+Its own bar is hidden once scrolled, as it always is, and the header keeps the composer entry. So
+nothing on screen lets the member change the Feed's lens until they scroll back up.
+
+A scratch probe, not an arm, read this in Chromium at 390x844 and 820x1180. It ran on `9289db8` and
+on `f19af1f`, with identical results on both, so the defect predates item 4:
+
+- **Home control** (`goHome`, `AppShell.tsx:150`), pressed on `/convene` scrolled to 200. On the
+  Feed scrolled to 200, the header reads `data-centre="compose"` and holds no LensBar.
+- **In-app Back.** `/feed`, then `/convene` through the router, then `history.back()`: the same
+  result.
+- **Direct load.** `/feed` loaded directly and scrolled to 200 reads `data-centre="lens"` with the
+  header's LensBar visible.
+- **Another lens.** After either move, choosing another lens on the Feed and scrolling again brings
+  the header's LensBar back.
+
+The store keeps whatever was set last, and both surfaces clear it on unmount (`FeedSurface.tsx:244`,
+`DiscoverySurface.tsx:787`). The shell renders FeedSurface from `useLocation`'s pathname next to the
+`<Outlet />` (`src/routes/_shell.tsx:37`, `:116` and `:117`). The probe counted React commits
+through a devtools-hook stub. On every move, the Feed's lens anchor entered the DOM three or four
+commits before Discovery's root left it, 11 to 54 ms earlier. So the Feed registers
+(`FeedSurface.tsx:237`) and then Discovery clears the slot. The Feed's effect depends on
+`[view.kind, lens, navigate]`, and none of these change after the move, so it never registers again.
+A change of lens re-runs it, which is why choosing another lens restores the header's bar. Why the
+router moves the pathname a few commits before it swaps the outlet is not traced.
+
+At expanded the header never takes a lens, so nothing is missing there. The lens-identity arm cannot
+see this defect: every read it makes starts from a page load, and the defect is identical on both
+builds.
+
+Owed: the Feed keeps its header lens after any in-app move from Discovery, and an arm reads the
+header after that move below expanded.
+
+## G135. A local `wrangler pages dev` dies under the suites' load, and a port another process holds answers in its place
+
+**Severity: low. It touches no deployment and no CI job: CI reads the deployed Pages build and never
+runs `wrangler pages dev`. It costs local proof, which CLAUDE.md names as the only local command that
+proves anything about the worker. Opened 26 September 2026 during handoff 33-A Addendum 2 (PR #67),
+filed under ruling 597. The number is assigned by this entry (ruling 638).**
+
+What was read, on this session's container, with `wrangler` 4.129.0 serving `dist` copies on
+`127.0.0.1` ports while Playwright drove them:
+
+- Servers died on their own during or between suite runs, at intervals of roughly fifteen to forty
+  minutes. The logs end with workerd's
+  `kj/async-io-unix.c++:186: disconnected: ::write(...): Broken pipe` and "wrangler command errored",
+  or with an empty `✘ [ERROR]`, or, once, with esbuild's service deadlocking ("all goroutines are
+  asleep"). No cause beyond those lines was traced.
+- A dead server's port can be taken by another process started for another purpose, and `curl`'s
+  200 from `/convene` then describes that process's build. Here a reference server of `f19af1f`,
+  started by a parallel agent on the port a head build had failed to bind, answered until it died
+  at 08:11 UTC. Every suite before then read `f19af1f`'s geometry and failed the head's new checks,
+  and the head's server, restarted on the freed port, served every suite after it. The same collision happened once earlier
+  in the session, on another port.
+- The harness never passed on either: every check it could not read failed, and ruling 292's count
+  check named each arm that emitted fewer checks than it declares.
+
+What held the local proof for PR #67: a probe reads which build a port serves, by reading an element
+that differs between builds (here `data-lensbar-width` on Discovery's lens bar), before and after
+every suite; only runs bracketed by two such reads were counted.
+
+Owed: nothing in the product. A local runner that checks the served build before it counts a run,
+or a pinned `wrangler` that holds under load, would stop the next session from reading a red that is
+not the change's.

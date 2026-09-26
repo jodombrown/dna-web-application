@@ -59,8 +59,12 @@
 //                  still 1440 at 1920, no page scroll, and the pane beside a full 320 card; in
 //                  the pane, list shown and hidden, the event page's cover on the body's edges
 //                  and its text --space-5 inside them (1143).
+//   lens-identity  Addendum 2 item 4 (1145): every LensBar but the one in Discovery's lens row, and
+//                  that row's box, identical to f19af1f's build read in the same run (REF_BASE).
 //
 // Usage: BASE=https://<preview>.dna-web-application.pages.dev SPECIAL=discovery node tests/matrix.cjs
+const fs = require("fs");
+const path = require("path");
 const M = require("./matrix.cjs");
 const { seedAttend, seedAttendCard, publicPage } = require("./event.cjs");
 
@@ -3297,6 +3301,571 @@ async function runDiscoveryLink(browserType, bname, [w, h], theme) {
   }
 }
 
+// ---------------------------------------------------------------------------------------------------
+// Handoff 33-A Addendum 2 item 4 (1145) changes one LensBar call, Discovery's own. Every other lens
+// bar the app draws must come out of that change exactly as it went in, so this arm reads each of
+// them on the head under test (BASE) and on the reference build (LENS_REF_BASE) in the same browser
+// and the same run, and compares every coordinate. Two origins rather than a stored fixture, because
+// a label's width is the runner's fonts' and a fixture captured anywhere else would not match.
+//
+// The mounts, as the tree holds them (555; every `LensBar` in src/):
+//   own bar      a surface's LensBar in its own column: FeedSurface's in [data-lens-anchor],
+//                ConnectSurface's in [data-testid="lens-bar-wrap"], and Discovery's own at compact
+//                in its [data-lens-anchor], which is the only width item 4 leaves it there.
+//   header slot  AppHeader's compact LensBar, taken below expanded once the shell's scroller is past
+//                72 by whichever surface registered one (header-lens-store.ts): the Feed while its
+//                list shows, Discovery at compact only. Connect registers none.
+//   lens row     the shell's [data-layout-top], which only Discovery fills (setShellLayout, lanes
+//                mode), at medium and expanded. The ROW's box is compared; the bar inside it is
+//                item 4's subject, changed by design, and is read and reported but never compared.
+// Each surface is read at every one of the three slots against LENS_ID_MOUNTS, the table of where the
+// tree draws a bar: a slot it fills must hold a drawn bar on both builds, so a read with none is
+// unproven (228) and never a pass, and a slot it leaves empty is recorded as absent on both builds,
+// never skipped. Each check's name is written from the same table, so it names what it compared at
+// its tier and nothing it did not. Each is read at its top and again with the shell's scroller
+// at LENS_ID_SCROLL, past the 72 the header swap waits for; Discovery also at the lens whose scope
+// line is longest, the line item 4's `min-content` root could rewrap and so change the row's height.
+// Nothing else reaches a LensBar: /posts/:id opened from the Feed is the Feed's own mount (the shell
+// renders FeedSurface beneath it) and landed on directly renders none and clears the header slot;
+// /convene/{lens} and /convene/events/:id at expanded are Discovery's; no other surface registers a
+// header lens or fills the lens row.
+
+/**
+ * The reference build: f19af1f's own Pages deployment, the PR head before Addendum 2, whose app and
+ * tests equal af43dfd's. A per-deployment URL is immutable, so every run reads the same build.
+ * REF_BASE overrides it (a local server of that build, where pages.dev is out of reach), and the
+ * override must serve f19af1f's build: nothing on the page names its commit, and a build's asset
+ * names carry its environment as well as its source, so the arm cannot check it. The tell a reader
+ * has is the detail's "bar in the lens row", moved at medium and expanded against f19af1f. Move it
+ * only when a later ruling names a new reference, for instance once item 4 has merged and a later
+ * change must leave these bars as item 4 left them; the constant is the build every bar is held to.
+ */
+const LENS_REF_BASE = process.env.REF_BASE || "https://5cb1cdca.dna-web-application.pages.dev";
+const LENS_REF_NAME = "f19af1f";
+/** One cell per tier: compact, medium and expanded, both themes between them. */
+const LENS_ID_VIEWPORTS = [
+  [[390, 844], "light"],
+  [[820, 1180], "dark"],
+  [[1280, 800], "light"],
+];
+/**
+ * Absolute boxes in CSS px. The two builds run in one browser on one machine with one font set, and
+ * nothing around these bars differs between them, so the same layout gives the same floats: three
+ * runs per cell read a spread of 0 on every coordinate, on each build and between them. 0.01 is
+ * the margin over that, and it sits under the 1/64 px both engines lay boxes out in, so a change to
+ * layout moves some coordinate past it; only a transform finer than 0.01 would not.
+ */
+const LENS_ID_TOLERANCE = 0.01;
+/** The shell's scroller position for the second read: past the header swap's 72 (SCROLL_SWAP_PX). */
+const LENS_ID_SCROLL = 200;
+/** The Discovery lens with the longest scope line, from the vocabulary rather than a literal. */
+const LENS_ID_LONG_SCOPE = VOCAB.convene_lenses
+  .filter((l) => DISCOVERY_LENSES.includes(l.value))
+  .reduce((a, b) => (b.scope.length > a.scope.length ? b : a)).value;
+
+/** Runs in the page: every LensBar box in each of the three slots, and the shell's scroll. */
+function readLensSlots() {
+  const box = (el) => {
+    if (!el) return null;
+    const b = el.getBoundingClientRect();
+    return { x: b.x, y: b.y, w: b.width, h: b.height };
+  };
+  // The text itself, not the block holding it: a Range over the block's contents gives one rect per
+  // line box the text lays out in, and their union. The block spans the scope's full width whatever
+  // its words do, so letter-spacing, weight or a face at the same line height move only these.
+  const text = (el) => {
+    if (!el) return null;
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    const lines = Array.from(range.getClientRects())
+      .filter((b) => b.width > 0 && b.height > 0)
+      .map((b) => ({ x: b.x, y: b.y, w: b.width, h: b.height }));
+    if (!lines.length) return null;
+    const x = Math.min(...lines.map((b) => b.x));
+    const y = Math.min(...lines.map((b) => b.y));
+    const r = Math.max(...lines.map((b) => b.x + b.w));
+    const btm = Math.max(...lines.map((b) => b.y + b.h));
+    return { box: { x, y, w: r - x, h: btm - y }, lines };
+  };
+  const bar = (root) => {
+    const tablist = root.querySelector('[role="tablist"]');
+    const scope = root.querySelector(":scope > [data-lens-scope]");
+    return {
+      mode: root.getAttribute("data-lens-bar"),
+      visibility: getComputedStyle(root).visibility,
+      root: box(root),
+      tablist: box(tablist),
+      name: tablist ? tablist.getAttribute("aria-label") : null,
+      seats: tablist
+        ? Array.from(tablist.querySelectorAll('[role="tab"]')).map((s) => {
+            const word = s.querySelector(":scope > span:not([aria-hidden])");
+            return {
+              id: s.getAttribute("data-lens"),
+              on: s.getAttribute("aria-selected"),
+              seat: box(s),
+              glyph: box(s.querySelector(':scope > [aria-hidden="true"]')),
+              label: box(word),
+              word: word ? word.textContent : null,
+            };
+          })
+        : [],
+      scope: scope
+        ? {
+            open: scope.getAttribute("data-open"),
+            box: box(scope),
+            block: box(scope.firstElementChild),
+            text: text(scope.firstElementChild),
+            words: scope.textContent,
+          }
+        : null,
+    };
+  };
+  const header = document.querySelector("header[data-app-header]");
+  const headerBar = header && header.querySelector(".strand-lens");
+  const row = document.querySelector("[data-layout-top]");
+  const rowBar = row && row.querySelector(".strand-lens");
+  const own = Array.from(document.querySelectorAll(".strand-lens")).filter(
+    (el) => !el.closest("header[data-app-header]") && !el.closest("[data-layout-top]"),
+  );
+  const sc = document.querySelector('[data-scroller="feed"]');
+  return {
+    scrollTop: sc ? sc.scrollTop : null,
+    header: headerBar ? { centre: header.getAttribute("data-centre"), bar: bar(headerBar) } : null,
+    row: row ? { box: box(row), bar: rowBar ? bar(rowBar) : null } : null,
+    own: own.map(bar),
+  };
+}
+
+/** Every numeric leaf of `a` against `b` within the tolerance and every other leaf equal. */
+function lensDiff(a, b, tol = LENS_ID_TOLERANCE) {
+  const out = { n: 0, max: 0, diffs: [] };
+  const walk = (x, y, p) => {
+    if (typeof x === "number" && typeof y === "number") {
+      out.n++;
+      const d = Math.abs(x - y);
+      if (d > out.max) out.max = d;
+      if (d > tol) out.diffs.push([p, x, y]);
+    } else if (Array.isArray(x) && Array.isArray(y)) {
+      if (x.length !== y.length) out.diffs.push([p + ".length", x.length, y.length]);
+      for (let i = 0; i < Math.min(x.length, y.length); i++) walk(x[i], y[i], `${p}[${i}]`);
+    } else if (x && y && typeof x === "object" && typeof y === "object") {
+      for (const k of new Set([...Object.keys(x), ...Object.keys(y)]))
+        walk(x[k], y[k], p ? p + "." + k : k);
+    } else if (x !== y) out.diffs.push([p, x, y]);
+  };
+  walk(a, b, "");
+  return out;
+}
+
+/** A LensBar that is drawn: a root with a box and at least one seat, each with its lens and box. */
+function lensDrawn(bar) {
+  return (
+    !!bar &&
+    !!bar.root &&
+    bar.root.w > 0 &&
+    bar.root.h > 0 &&
+    bar.seats.length > 0 &&
+    bar.seats.every((s) => !!s.id && !!s.seat && s.seat.w > 0 && s.seat.h > 0)
+  );
+}
+
+/**
+ * The three slots. `pick` is what is compared: every box of the bars in the surface's own column,
+ * every box of the header's bar, and the lens row's own box, never the bar in it (1145 moves that
+ * bar by design). `drawn` is whether the slot holds a drawn LensBar, the row counting only with its
+ * bar. `says` is the slot in a check's name, compared and then absent.
+ */
+const LENS_SLOTS = [
+  {
+    key: "own",
+    name: "own bar",
+    pick: (r) => (r.own.length ? r.own : null),
+    drawn: (r) => r.own.length > 0 && r.own.every(lensDrawn),
+    says: ["its own LensBar", "its own column"],
+  },
+  {
+    key: "header",
+    name: "header slot",
+    pick: (r) => r.header,
+    drawn: (r) => !!r.header && lensDrawn(r.header.bar),
+    says: ["the header slot's (once scrolled past 72)", "the header slot"],
+  },
+  {
+    key: "row",
+    name: "lens row",
+    pick: (r) => (r.row ? r.row.box : null),
+    drawn: (r) => !!r.row && lensDrawn(r.row.bar),
+    says: ["the box of the shell's lens row (not the bar in it, 1145's subject)", "the lens row"],
+  },
+];
+
+/**
+ * Where f19af1f's tree draws a LensBar, per surface, tier and read (the mounts above, 555), and so
+ * where this arm requires one on both builds. A slot the table fills that holds no bar on either
+ * build compares nothing, and says so as unproven (228) rather than "absent on both"; a slot the
+ * table leaves empty must be empty on both, so a bar that turns up there on both says the table or
+ * the reference is not f19af1f's. Discovery's `scope` read is at its top, so it follows `top`.
+ */
+const LENS_ID_MOUNTS = {
+  Feed: (tier, state) => ({
+    own: true,
+    header: state === "scrolled" && tier !== "expanded",
+    row: false,
+  }),
+  Discovery: (tier, state) => ({
+    own: tier === "compact",
+    header: state === "scrolled" && tier === "compact",
+    row: tier !== "compact",
+  }),
+  Connect: () => ({ own: true, header: false, row: false }),
+};
+
+/** A check's name from the table, so it says exactly what it compares at its tier and no more. */
+function lensCheckName(tag, s, tier) {
+  const states = s.also ? ["top", "scrolled", "scope"] : ["top", "scrolled"];
+  const mounts = states.map((state) => LENS_ID_MOUNTS[s.name](tier, state));
+  const held = LENS_SLOTS.filter((slot) => mounts.some((m) => m[slot.key]));
+  const none = LENS_SLOTS.filter((slot) => !held.includes(slot));
+  const list = (xs, and) =>
+    xs.length < 2 ? xs.join("") : xs.slice(0, -1).join(", ") + ` ${and} ` + xs[xs.length - 1];
+  const bars = held.some((slot) => slot.key !== "row");
+  return (
+    `${tag} ${s.name}: ${list(
+      held.map((slot) => slot.says[0]),
+      "and",
+    )} identical to ${LENS_REF_NAME}'s${bars ? ", box for box" : ""}` +
+    (held.some((slot) => slot.key === "row") ? ", with a LensBar in the row on both builds" : "") +
+    (none.length
+      ? `; no LensBar in ${list(
+          none.map((slot) => slot.says[1]),
+          "or",
+        )} on either build`
+      : "") +
+    `; ${s.also ? "top, scrolled and on the longest scope line" : "top and scrolled"} (1145)`
+  );
+}
+
+/** One slot of one read on the two builds, both present: identical within the tolerance or not. */
+function compareSlot(head, ref) {
+  const d = lensDiff(head, ref);
+  return d.diffs.length
+    ? {
+        ok: false,
+        n: d.n,
+        said: `differs at ${d.diffs.length} of ${d.n}`,
+        diffs: d.diffs.slice(0, 6),
+      }
+    : { ok: true, n: d.n, said: `identical, ${d.n} values, max |d| ${+d.max.toFixed(4)}` };
+}
+
+/** One slot against the table: drawn on both and identical where it is mounted, empty on both where not. */
+function judgeSlot(slot, mounted, h, r) {
+  const onHead = slot.drawn(h);
+  const onRef = slot.drawn(r);
+  if (mounted) {
+    if (!onHead && !onRef)
+      return {
+        ok: false,
+        n: 0,
+        said: `unproven (228): no LensBar here on either build, where ${LENS_REF_NAME}'s tree draws one`,
+      };
+    if (!onRef)
+      return {
+        ok: false,
+        n: 0,
+        said: `unproven (228): ${LENS_REF_NAME} draws no LensBar here and the head does`,
+      };
+    if (!onHead)
+      return { ok: false, n: 0, said: `the head draws no LensBar here and ${LENS_REF_NAME} does` };
+    return compareSlot(slot.pick(h), slot.pick(r));
+  }
+  const hasHead = slot.pick(h) != null;
+  const hasRef = slot.pick(r) != null;
+  if (!hasHead && !hasRef)
+    return { ok: true, n: 0, said: "absent on both, where the tree mounts none" };
+  return {
+    ok: false,
+    n: 0,
+    said:
+      `present on ${hasHead && hasRef ? "both builds" : hasHead ? "the head only" : LENS_REF_NAME + " only"}` +
+      ` where ${LENS_REF_NAME}'s tree mounts none: the head, the reference or this arm's table is not what it says`,
+  };
+}
+
+/**
+ * One surface's reads on the two builds, slot by slot and state by state, against the table. A read
+ * that did not settle, or a scroll that stopped short of the header swap, proves nothing about the
+ * slot it was meant to exercise, so either fails the check rather than passing it on a partial read;
+ * and a surface that compared no value at all is unproven (228) whatever its slots said.
+ */
+function judgeSurface(name, tier, head, ref) {
+  const detail = {};
+  let ok = true;
+  let compared = 0;
+  for (const state of Object.keys(head)) {
+    const h = head[state];
+    const r = ref[state];
+    const s = (detail[state] = {});
+    if (!r) {
+      ok = false;
+      s.read = `${LENS_REF_NAME} has no ${state} read`;
+      continue;
+    }
+    if (h.unsettled || r.unsettled) {
+      ok = false;
+      s.settled = `no: head ${!h.unsettled}, ${LENS_REF_NAME} ${!r.unsettled}`;
+    }
+    if (state === "scrolled" && !(h.scrollTop > 72 && r.scrollTop > 72)) {
+      ok = false;
+      s.scroll = `short of the 72 swap: head ${h.scrollTop}, ${LENS_REF_NAME} ${r.scrollTop}`;
+    } else if (Math.abs(h.scrollTop - r.scrollTop) > LENS_ID_TOLERANCE) {
+      ok = false;
+      s.scroll = `head ${h.scrollTop}, ${LENS_REF_NAME} ${r.scrollTop}`;
+    }
+    const mounts = LENS_ID_MOUNTS[name](tier, state);
+    for (const slot of LENS_SLOTS) {
+      const c = judgeSlot(slot, mounts[slot.key], h, r);
+      if (!c.ok) ok = false;
+      compared += c.n;
+      s[slot.name] = c.diffs ? c.said + " " + JSON.stringify(c.diffs) : c.said;
+    }
+    // Item 4's own subject, reported so a reader can see the row held while the bar in it moved.
+    if (h.row && h.row.bar && r.row && r.row.bar) {
+      const d = lensDiff(h.row.bar, r.row.bar);
+      s["bar in the lens row (1145's subject, not compared)"] = d.diffs.length
+        ? `moved at ${d.diffs.length} of ${d.n}, max |d| ${+d.max.toFixed(3)}`
+        : `unchanged, ${d.n} values`;
+    }
+  }
+  if (compared === 0) {
+    ok = false;
+    detail.compared = "unproven (228): no LensBar value compared on either build";
+  } else detail.compared = `${compared} values`;
+  return { ok, detail };
+}
+
+/** Per page, a wait until none of its requests has been in flight for 300ms (five seconds at most). */
+const LENS_QUIET = new WeakMap();
+
+/**
+ * Navigate once the page is quiet. A `goto` issued while the last surface is still fetching cancels
+ * those requests: a cancelled fetch is console noise on WebKit, and a local `wrangler pages dev`
+ * drops its proxy on a cancelled asset ("Network connection lost"), so every read starts from a page
+ * that has finished the one before it.
+ */
+async function lensGo(page, url) {
+  await LENS_QUIET.get(page)();
+  await lensRetry(page, "goto " + url, () => page.goto(url, { waitUntil: "networkidle" }));
+}
+
+/** Every retry the arm took, by page, for the artifact: a read that needed one is still visible. */
+const LENS_RETRIES = [];
+/**
+ * Ruling 217's gate polls the head's deployment before any arm runs, and never the reference's, so
+ * this arm's own navigations carry what the gate does for the head: three attempts, two seconds
+ * apart. The last attempt's error is thrown, and the surface fails as unproven (228), never passes.
+ */
+async function lensRetry(page, what, act) {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await act();
+    } catch (e) {
+      if (attempt === 3) throw e;
+      LENS_RETRIES.push({ what, attempt, error: String(e).split("\n")[0].slice(0, 200) });
+      await page.waitForTimeout(2000);
+    }
+  }
+}
+
+/** A context on one origin: the matrix's options, theme and Supabase mock, and its own db. */
+async function lensContext(browser, [w, h], theme, errors, who) {
+  const ctx = await browser.newContext({
+    viewport: { width: w, height: h },
+    hasTouch: w <= 1024,
+    isMobile: w < 1024,
+    deviceScaleFactor: 1,
+    colorScheme: theme,
+  });
+  const page = await ctx.newPage();
+  await page.addInitScript(
+    ({ theme }) => {
+      try {
+        localStorage.setItem("dna.theme", theme);
+      } catch {}
+    },
+    { theme },
+  );
+  const db = makeMockDb();
+  seedDiscovery(db);
+  // Enough Feed to scroll past the swap: seedDiscovery's one post and five more after it.
+  const more = makeMockDb();
+  seedPosts(more, 6);
+  db.posts.push(...more.posts.slice(1));
+  await mockSupabase(page, db);
+  const live = new Set();
+  let last = Date.now();
+  const settle = (r) => {
+    live.delete(r);
+    last = Date.now();
+  };
+  page.on("request", (r) => {
+    live.add(r);
+    last = Date.now();
+  });
+  page.on("requestfinished", settle);
+  page.on("requestfailed", settle);
+  LENS_QUIET.set(page, async () => {
+    const until = Date.now() + 5000;
+    while (Date.now() < until && (live.size || Date.now() - last < 300))
+      await page.waitForTimeout(50);
+  });
+  page.on("pageerror", (e) => {
+    const text = String(e);
+    if (!CANCELLED_MOCK_FETCH.test(text)) errors.push(who + ": " + text);
+  });
+  page.on("console", (m) => {
+    if (m.type() === "error" && !IGNORED_CONSOLE.test(m.text())) errors.push(who + ": " + m.text());
+  });
+  return page;
+}
+
+/** The read once two in a row, 120ms apart, agree; `unsettled` if they never do inside three seconds. */
+async function settledLensRead(page) {
+  await page.evaluate(() =>
+    document.fonts.ready.then(
+      () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))),
+    ),
+  );
+  let prev = await page.evaluate(readLensSlots);
+  for (let i = 0; i < 25; i++) {
+    await page.waitForTimeout(120);
+    const next = await page.evaluate(readLensSlots);
+    if (JSON.stringify(next) === JSON.stringify(prev)) return next;
+    prev = next;
+  }
+  return { ...prev, unsettled: true };
+}
+
+const LENS_ID_SURFACES = [
+  {
+    name: "Feed",
+    path: "/feed",
+    ready: (page) =>
+      // The list, not the bar: a bar that is missing is the comparison's to name, never a timeout's.
+      page.waitForFunction(
+        () => !!document.querySelector('[data-post-id], [data-testid="feed-empty"]'),
+        null,
+        { timeout: 20000 },
+      ),
+  },
+  {
+    name: "Discovery",
+    path: "/convene",
+    also: "/convene/" + LENS_ID_LONG_SCOPE,
+    ready: async (page) => {
+      await page.waitForSelector("[data-discovery]", { timeout: 20000 });
+      await page.waitForFunction(
+        () =>
+          !!document.querySelector(
+            "[data-discovery] [data-lanes], [data-lens-list], [role=alert]",
+          ) && !document.querySelector('[role="status"][aria-label="Loading Convene"]'),
+        null,
+        { timeout: 20000 },
+      );
+    },
+  },
+  {
+    name: "Connect",
+    path: "/connect",
+    ready: async (page) => {
+      await page.waitForSelector('[data-testid="connect"]', { timeout: 20000 });
+      await page.waitForFunction(
+        () => !document.querySelector('[role="status"][aria-label^="Loading"]'),
+        null,
+        { timeout: 20000 },
+      );
+    },
+  },
+];
+
+/** One surface on one origin: its top, the shell scrolled past the swap, and a second lens if any. */
+async function readLensSurface(page, origin, s) {
+  await lensGo(page, origin + s.path);
+  await s.ready(page);
+  const reads = { top: await settledLensRead(page) };
+  await page.evaluate((y) => {
+    const sc = document.querySelector('[data-scroller="feed"]');
+    sc.scrollTop = y;
+    sc.dispatchEvent(new Event("scroll"));
+  }, LENS_ID_SCROLL);
+  await page.waitForFunction(() => {
+    const sc = document.querySelector('[data-scroller="feed"]');
+    const shell = document.querySelector("[data-scrolled]");
+    return !!shell && shell.getAttribute("data-scrolled") === (sc.scrollTop > 72 ? "1" : "0");
+  });
+  reads.scrolled = await settledLensRead(page);
+  if (s.also) {
+    await lensGo(page, origin + s.also);
+    await s.ready(page);
+    reads.scope = await settledLensRead(page);
+  }
+  return reads;
+}
+
+async function runDiscoveryLensIdentity(browserType, bname, [w, h], theme) {
+  const tag = `${bname}-${w}x${h}-${theme}-discovery-lens-identity`;
+  M.armStart(tag);
+  const browser = await launch(browserType);
+  const errors = [];
+  const tier = tierOf(w);
+  const reads = { reference: LENS_REF_BASE, head: {}, ref: {}, verdicts: {} };
+  const named = (s) => lensCheckName(tag, s, tier);
+  try {
+    const head = await lensContext(browser, [w, h], theme, errors, "head");
+    const ref = await lensContext(browser, [w, h], theme, errors, LENS_REF_NAME);
+    await signIn(head);
+    // Ruling 228: a reference that cannot be reached, or signs in to nothing, proves nothing, and
+    // every check it was to prove fails naming why. Nothing here passes on the head's read alone.
+    let refDown = null;
+    try {
+      await lensRetry(ref, "sign-in", () => signIn(ref, LENS_REF_BASE));
+    } catch (e) {
+      refDown = "sign-in: " + String(e).split("\n")[0];
+    }
+    for (const s of LENS_ID_SURFACES) {
+      const hr = (reads.head[s.name] = await readLensSurface(head, BASE, s));
+      let rr = null;
+      let why = refDown;
+      if (!why)
+        try {
+          rr = reads.ref[s.name] = await readLensSurface(ref, LENS_REF_BASE, s);
+        } catch (e) {
+          why = String(e).split("\n")[0];
+        }
+      if (why) {
+        reads.verdicts[s.name] = why;
+        record(
+          named(s),
+          false,
+          `unproven (228): the reference build at ${LENS_REF_BASE} was not read: ${why.slice(0, 240)}`,
+        );
+        continue;
+      }
+      const v = judgeSurface(s.name, tier, hr, rr);
+      reads.verdicts[s.name] = v.detail;
+      record(named(s), v.ok, JSON.stringify(v.detail));
+    }
+    record(tag + " no page errors", errors.length === 0, errors.join(" | ").slice(0, 300));
+  } catch (e) {
+    record(tag + " flow", false, String(e).slice(0, 400));
+  } finally {
+    // Every box both builds gave, for the job's artifact: the evidence a pass or a failure rests on.
+    reads.retries = LENS_RETRIES.splice(0);
+    fs.writeFileSync(path.join(M.OUT, tag + ".json"), JSON.stringify(reads, null, 2));
+    await browser.close();
+  }
+}
+
 /** Addendum 4's and 5's arms and their cells, in item order, then handoff 33-A's link arm (G100). */
 const FOLLOWUP_ARMS = [
   [runDiscoveryPresenter, FOLLOWUP_VIEWPORTS],
@@ -3306,6 +3875,8 @@ const FOLLOWUP_ARMS = [
   [runDiscoveryHomes, FOLLOWUP_VIEWPORTS],
   [runDiscoveryWidth, WIDTH_VIEWPORTS],
   [runDiscoveryLink, FOLLOWUP_VIEWPORTS],
+  // Addendum 2 item 4 (1145): every other LensBar identical to the reference build's.
+  [runDiscoveryLensIdentity, LENS_ID_VIEWPORTS],
 ];
 
 module.exports = {
@@ -3320,4 +3891,14 @@ module.exports = {
   __seedDiscovery: seedDiscovery,
   __seedCorpus: seedCorpus,
   __full: fullDensity,
+  __lensIdentity: {
+    readLensSlots,
+    lensDiff,
+    compareSlot,
+    judgeSurface,
+    lensCheckName,
+    LENS_ID_SURFACES,
+    LENS_REF_BASE,
+    LENS_ID_TOLERANCE,
+  },
 };
