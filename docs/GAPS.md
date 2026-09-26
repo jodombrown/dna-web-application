@@ -4512,6 +4512,21 @@ body. The page's reserved padding would now be an empty band under the bar, so i
 port, as this entry said it would, and the page keeps its own `16px` top. The pane arm still reads
 the first block below the close control.
 
+**Amended 26 September 2026 by handoff 33-A Addendum 2 (1143).** Correction 28's pane body is
+unpadded and the page's frame pads no sides, so at 520 the invitation notice, the title, the body
+and the cover all ran to the pane's border. The addendum reads the pane before #67 as padding its
+body with `--space-6`; the tree at `d23c55f` does not: that Pane's `--space-6` is its own Loading
+line's padding, and Discovery's `data-pane-body` wrapper was unpadded, so the page's sides were
+zero then too, hidden at 1440 and wider only by `--content-max` centring the page in a wider pane.
+`Pane.tsx` stays unchanged (844) and the page carries the inset, only with `inPane`: the frame
+pads `--space-5` on both sides and drops its `--content-max` cap, since the pane (520, or 720 with
+the list hidden) is the bound, so every state, loading, error, not found and cancelled included,
+sits inside it. The cover alone runs back out to the pane body's edges, squared and without side
+borders: the pane's rounded corners hold the toolbar row above the body, so the cover meets only
+straight edges. The top and bottom stay as the previous amendment left them, and the standalone
+page is unchanged. The width arm reads the cover on the body's content box and the kicker, the
+title and the date row `--space-5` inside it, with the list shown and hidden, at all five widths.
+
 ## G79. At expanded the lanes lose their horizontal position when the pane opens and closes
 
 **Severity: low. Opened 23 September 2026 during handoff 31-D item 6, filed under ruling 597. The

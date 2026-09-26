@@ -56,7 +56,9 @@
 //                  the cluster in view, the list and the body scrolling apart.
 //   homes          item 5 (1110, 928): Home between Topics and Place, a ladder for each of two homes.
 //   width          item 8 (1123): the canvas and the header on 5% and 95% of the viewport, the Feed
-//                  still 1440 at 1920, no page scroll, and the pane beside a full 320 card.
+//                  still 1440 at 1920, no page scroll, and the pane beside a full 320 card; in
+//                  the pane, list shown and hidden, the event page's cover on the body's edges
+//                  and its text --space-5 inside them (1143).
 //
 // Usage: BASE=https://<preview>.dna-web-application.pages.dev SPECIAL=discovery node tests/matrix.cjs
 const M = require("./matrix.cjs");
@@ -2854,6 +2856,53 @@ async function runDiscoveryWidth(browserType, bname, [w, h], theme) {
           ),
         };
       });
+    // Handoff 33-A Addendum 2 (1143): Pane's body is unpadded, so the event page carries its own
+    // inset. The cover's box meets the body's content box at both sides; the kicker, the title and
+    // the date row sit --space-5 inside it, the token read off the page. Each side is the gap from
+    // the content box's edge to the element's, so the cover reads [0,0] and the text [20,20].
+    const inset = () =>
+      page.evaluate(() => {
+        const r1 = (n) => Math.round(n * 10) / 10;
+        const body = document.querySelector("[data-discovery] [data-pane-body]");
+        const ep = body && body.querySelector("[data-event-page]");
+        if (!ep) return null;
+        const bs = getComputedStyle(body);
+        const b = body.getBoundingClientRect();
+        const left = b.left + body.clientLeft + (parseFloat(bs.paddingLeft) || 0);
+        const right =
+          b.left + body.clientLeft + body.clientWidth - (parseFloat(bs.paddingRight) || 0);
+        const sides = (el) => {
+          if (!el) return null;
+          const x = el.getBoundingClientRect();
+          return [r1(x.left - left), r1(right - x.right)];
+        };
+        const img = ep.querySelector(':scope > div > img[src*="post-media"]');
+        return {
+          body: [r1(left), r1(right)],
+          space5: parseFloat(
+            getComputedStyle(document.documentElement).getPropertyValue("--space-5"),
+          ),
+          cover: sides(img && img.parentElement),
+          kicker: sides(ep.querySelector("[data-event-kicker]")),
+          title: sides(ep.querySelector("[data-event-title]")),
+          when: sides(ep.querySelector('[data-fact="when"]')),
+        };
+      });
+    const insetHolds = (i) =>
+      !!i &&
+      i.space5 > 0 &&
+      !!i.cover &&
+      i.cover.every((s) => Math.abs(s) <= 0.5) &&
+      [i.kicker, i.title, i.when].every(
+        (el) => !!el && el.every((s) => Math.abs(s - i.space5) <= 0.5),
+      );
+    // The seeded page carries a cover (Brief 10's loaded page, `seed/loaded.jpg`); wait for it.
+    await page
+      .waitForSelector('[data-pane-body] [data-event-page] > div > img[src*="post-media"]', {
+        timeout: 10000,
+      })
+      .catch(() => {});
+    const insetShown = await inset();
     const open = await tracks();
     record(
       tag +
@@ -2877,6 +2926,7 @@ async function runDiscoveryWidth(browserType, bname, [w, h], theme) {
     // offset as its header row wraps at no width; the member reads it only once it is shown.)
     let hidden = null;
     let shown = null;
+    let insetHidden = null;
     if (open && open.tool) {
       await page.evaluate(() => {
         const list = document.querySelector("[data-discovery] [data-pane-list]");
@@ -2889,6 +2939,7 @@ async function runDiscoveryWidth(browserType, bname, [w, h], theme) {
       await page.locator('[data-pane-toolbar] [data-tool="list"]').click();
       await page.waitForTimeout(400);
       hidden = { ...(await tracks()), kept };
+      insetHidden = await inset();
       await page.locator('[data-pane-toolbar] [data-tool="list"]').click();
       await page.waitForTimeout(400);
       shown = await tracks();
@@ -2914,6 +2965,12 @@ async function runDiscoveryWidth(browserType, bname, [w, h], theme) {
         hidden,
         shown: shown && { pane: shown.pane, tool: shown.tool, top: shown.hidden.top },
       }),
+    );
+    record(
+      tag +
+        " pane (1143): the event page's cover spans the pane body edge to edge and the kicker, the title and the date row sit --space-5 inside it, list shown and hidden",
+      insetHolds(insetShown) && insetHolds(insetHidden),
+      JSON.stringify({ shown: insetShown, hidden: insetHidden }),
     );
 
     // Copy link and Share: the open event's public address under /e/, as its page builds it and

@@ -1136,9 +1136,15 @@ async function runMountMedia(bt, bname, [w, h], theme) {
  * Addendum 3 item D: the event pages' covers are not cards and pass no ratio, so each keeps the box
  * ea35e8e gave it, on the member page (the pane at expanded, its own route below) and on the public
  * page reached by a client navigation (tests/event.cjs's clientGo), the cover served by event-media.
+ * In the pane the member page's frame is 1143's, squared and edge to edge with no side borders; the
+ * image inside it keeps ea35e8e's box, which is what `keepsEa35` reads against the frame's inside.
  */
-/** MediaBlock's frame (its 14 radius, inline): the page chrome's wordmark and avatars are images too. */
+/** MediaBlock's frame on the public page (its 14 radius, inline): the page chrome's wordmark and
+ *  avatars are images too. */
 const COVER = 'div[style*="border-radius: 14px"]';
+/** The member page's frame, which in the pane has no radius (1143): the one child of the page whose
+ *  own child is an image, since the page's avatars sit deeper. */
+const MEMBER_COVER = "[data-event-page] > div:has(> img)";
 
 async function runMountCovers(bt, bname, [w, h], theme) {
   const tag = `${bname}-${w}x${h}-${theme}-mount-covers`;
@@ -1159,7 +1165,7 @@ async function runMountCovers(bt, bname, [w, h], theme) {
       await page.waitForSelector('[data-event-page][data-event-state="loaded"]', {
         timeout: 20000,
       });
-      const member = keepsEa35(await readMedia(page, "[data-event-page] " + COVER));
+      const member = keepsEa35(await readMedia(page, MEMBER_COVER));
       record(
         tag + " the member event page's cover keeps ea35e8e's box (no ratio)",
         member.ok,
