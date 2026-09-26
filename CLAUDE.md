@@ -71,7 +71,7 @@ Before you start, say in one line what you are about to do. Brief updates while 
 [absolute] No second framework, second auth path, or second payment rail without a brief that names it.
 [absolute] Every new table ships with RLS enabled and explicit policies for every persona (member, Space lead, event host, admin, service role). A table without RLS is a failed task. A persona with no use for a table is named in the table's comment as deliberately absent, with the reason; that meets this absolute (ruling 1116).
 [absolute] No secrets in code, logs, or commit messages.
-[absolute] Lovable never creates or alters schema.
+[absolute] Nothing outside a `claude/*` merge alters schema.
 [absolute] Fixed vocabularies (focus areas, industries, regional expertise, skills, languages, countries) are database tables read at runtime, never hardcoded arrays in a component. The legacy build kept them in a React file with a comment admitting they had to be hand-synced with the database; that is the named anti-pattern. What this governs is content vocabularies — the values a member's record can hold and a surface must display a label for — and not navigation (ruling 999, withdrawing 997's data half). `src/lib/lens.ts` is the standing instance of the distinction: a lens set is the surface's own corpus switch, it names no member data, nothing reads a label for it out of a row, and it is not a breach of this line. The Feed's lens set in `src/lib/lens.ts` has no vocabulary table and does not enter `public.vocabularies()` (194, 1041); Convene's lens set is `public.convene_lenses` and does (693, 1041).
 Convene's families and lenses are `public.convene_families` and `public.convene_lenses`, served by `vocabularies()`; `src/lib/lens.ts` is the Feed's structural lens set and stays in code under 194 and 1041.
 Convene's lens set is five, All, Communities, For you, Curated and My network (1093), and Discovery's nine lanes are their own table, `public.convene_lanes`, served by `vocabularies()` as `convene_lanes` (1105). A lens says who the events come from, and each lens but All shows its one lane; the lanes carry the floors and the dismissals, so neither id set stands in for the other.
@@ -172,8 +172,7 @@ After regenerating `src/lib/database.types.ts`, restore `export type Views`, whi
 
 Never force push to `main` (ruling 541) `[absolute]`. Force-with-lease is permitted on a Claude
 working branch, and only after a rebase that was instructed, pinned to the exact prior head. Plain
-force, without a lease, is refused everywhere. The reason is that Lovable syncs two ways on `main`
-(ruling 146): a force push there destroys the founder's visual commits, and they exist nowhere else.
+force, without a lease, is refused everywhere.
 
 A test arm that cannot run is reported as unproven, never as passing, and never folded into a
 passing count (ruling 228). An arm that silently vanishes reads as coverage the suite does not have.
@@ -377,10 +376,12 @@ contract, so the next wordmark lands by overwriting files in one directory plus 
 No component may import a logo as a module, inline it as SVG, or hardcode a dimension that assumes
 the current wordmark's aspect ratio. Size by height, width auto.
 
-Lovable commits straight to `main` (ruling 146) as `gpt-engineer-app[bot]`, app id 159125892
-(ruling 286). Check `main`'s recent commits at the start of any code session, report
-`gpt-engineer-app[bot]` commits, and rebase onto them. On conflict keep the founder's visual change
-and report it rather than resolving it silently.
+Ruling 1142: the founder removed this repository from Lovable on 25 September 2026, and every
+change to `main` now arrives through a `claude/*` branch and a merge Chat has cleared. Until then
+Lovable committed straight to `main` as `gpt-engineer-app[bot]`, app id 159125892 (rulings 146,
+286), and that identity should now never appear. Check `main`'s recent commits at the start of any
+code session. A `gpt-engineer-app[bot]` commit is reported by SHA and by the paths it touched, and
+the session stops there: it is not rebased onto or around.
 
 Classify `main`'s recent commits by how they landed, not by who authored them (ruling 920). A merge
 commit from a `claude/*` branch is Code's. Anything else is reported by SHA and by the paths it
@@ -397,20 +398,20 @@ session open.
 Ruling 921's line, written from the register rather than from the ruling's own text, which this
 session did not read: G28's one unsettled question is whether Lovable's app id belongs inside 598's
 allowlist, and the answer is that it stays outside it. The allowlist answers "may this identity
-commit here at all", and 146 answers "what is done about a Lovable commit when it appears" —
-expected, reported by SHA and by paths, rebased onto, the founder's visual change kept on conflict.
-Folding `159125892` into the allowlist would make a Lovable commit read as unremarkable, which is
-the one thing 146 says it is not. G28 is amended to that effect and stays open on its other half,
-the missing arm.
+commit here at all", and for `159125892` the answer under ruling 1142 is no: a commit from it is not
+expected, and it is reported and stopped on rather than rebased onto. Folding the id into the
+allowlist would make a Lovable commit read as unremarkable, which is the one thing it is not. G28
+stays open on its other half, the missing arm.
 
 Commit identity is checked by the GitHub account login or app id from the API, never by the git
-author name or email string (ruling 379). The permitted identities are `jodombrown`, `claude`,
-`gpt-engineer-app[bot]` and `region17gh`, the founder's Region 17 Claude Code seat (ruling 369).
-Any other identity is reported at session open.
+author name or email string (ruling 379). The permitted identities are `jodombrown`, `claude` and
+`region17gh`, the founder's Region 17 Claude Code seat (ruling 369); `gpt-engineer-app[bot]` is
+named only as the identity that should never appear (ruling 1142). Any other identity is reported
+at session open.
 
 That check is an allowlist of ids, never a denylist of names (ruling 598): `214720153`
 (`jodombrown`), `81847` (`claude`), `319149162` (`region17gh`). A git author name or email is free
 text the committer sets, which is why 379 reads the API at all, so a denylist fails open on precisely
 the identity nobody anticipated while an allowlist fails closed and names it. Lovable's app id
-`159125892` stays handled by 146: expected, reported, rebased onto. Nothing in the harness enforces
-any of this yet, which is gap G28.
+`159125892` stays outside it as the identity that should never appear: reported and stopped on,
+never rebased onto (ruling 1142). Nothing in the harness enforces any of this yet, which is gap G28.
