@@ -5197,7 +5197,7 @@ is not built: 32-B's items name no motion, the app carries none of the compile's
 (G84), and an entrance transform under the arms' geometry reads would need its own settle. Owed: the
 lane entrance, with G84's reduced-motion answer, in a brief that names it.
 
-## G115. The discovery face clamps its title on a `<button>`, which WebKit does not clamp (1087)
+## G115. The discovery face clamps its title on a `<button>`, which WebKit does not clamp (1087) — closed (1134)
 
 **Severity: low. Opened 25 September 2026 during handoff 32-B, filed under ruling 597. The number is
 assigned by this entry (ruling 638).**
@@ -5232,7 +5232,18 @@ the face's link, and the ellipsis reads "More: {title}". That reading is evidenc
 (894). `355db02`, `8186a74` and `5080ce8` change Discovery's scroll and ring code after it, so this
 entry stays open until the enforcing run for the final head reads the clamp on both engines (556).
 
-## G116. MediaBlock's ratioed image runs past its frame's edge on WebKit (1077, 1115)
+**Closed 26 September 2026 on run 367 (handoff 33-A Addendum 1 item 4, 1134).**
+
+- Run 367 is `pages.yml` id `36216830840`, on head `af43dfd`, the final head.
+- It passed on both engines: `matrix (webkit)` job `108334523577` read 6834 of 6834, and
+  `matrix (chromium)` job `108334523523` read 6834 of 6834. Each had none behind a web-process
+  crash (G5) and none unclassified.
+- At all 22 Discovery cells on each engine, it read the long title's clamp holding two lines at 55,
+  as the part's span inside the face's link, and the ellipsis reading "More: {title}".
+- The run on this closure's own commit, which changes only this register, is the enforcing run
+  (556), in the order Chat approved.
+
+## G116. MediaBlock's ratioed image runs past its frame's edge on WebKit (1077, 1115) — closed (1134)
 
 **Severity: low. Opened 25 September 2026 during handoff 32-B, filed under ruling 597. The number is
 assigned by this entry (ruling 638).**
@@ -5290,6 +5301,16 @@ The compile was measured in Chrome only. Under 1134 this entry closes only on a 
   final head (556). Until
   its `matrix (webkit)` job reads the same three cells, this entry stays open.
 - The video half is G119.
+
+**Closed 26 September 2026 on run 367 (handoff 33-A Addendum 1 item 4, 1134).**
+
+- Run 367's `matrix (webkit)` job `108334523577`, on head `af43dfd`, read 6834 of 6834, with none
+  behind a web-process crash (G5) and none unclassified.
+- It ran Addendum 3 item E's mount-media arm at `webkit-390x844-light`, `webkit-820x1180-dark` and
+  `webkit-1280x800-light`. At each, it read the Feed Convene card's one image at 16:9, filling its
+  frame inside the edge.
+- The video half stays open as G119.
+- The run on this closure's own commit is the enforcing run (556).
 
 ## G117. Run 350 passed the live Place check's "Near reads the place" with nothing to read — closed (1095)
 
