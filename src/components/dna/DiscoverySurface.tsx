@@ -44,6 +44,7 @@
 import { useQuery, useQueryClient, type QueryState } from "@tanstack/react-query";
 import { useLocation, useNavigate, useRouter } from "@tanstack/react-router";
 import {
+  useCallback,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -952,13 +953,19 @@ export function DiscoverySurface({
   const followedIds = new Set((data?.follows ?? []).map((f) => f.id));
   const subscribedFamilies = new Set((data?.subscriptions ?? []).map((s) => s.family));
 
-  /** The menu (1097): items in the ruled order; an item that does not apply is absent. */
-  const menuFor = (item: DiscoveryItem, lane: DiscoveryLaneId): MenuProps["items"] => {
+  /** The menu (1097): items in the ruled order; an item that does not apply is absent. The saved and
+   *  going marks are the answer's the card came from (`src`): each answer reads them for its own
+   *  items, so a More on Convene card reads the second answer's (1148). */
+  const menuFor = (
+    item: DiscoveryItem,
+    lane: DiscoveryLaneId,
+    src: Discovery | null,
+  ): MenuProps["items"] => {
     const post = item.post;
     const ev = post.event;
     const postId = post.id ?? "";
-    const saved = postId ? (savedNow[postId] ?? !!data?.saved.has(postId)) : false;
-    const going = !!data?.going.has(item.event_id);
+    const saved = postId ? (savedNow[postId] ?? !!src?.saved.has(postId)) : false;
+    const going = !!src?.going.has(item.event_id);
     const hostId = ev?.hostId ?? "";
     // 1121: the Follow item names the presenter as the pane does, and follows the host as it does.
     const presenter = ev?.presenter?.name ?? post.author_name;
@@ -1082,12 +1089,18 @@ export function DiscoverySurface({
   // `event_going_names` gave for the event, joined as the surface joins names, then "and others are
   // going."; nothing when it gave none. The relationship lanes keep their reason (1096), and the part
   // lets a reason win over a going sentence.
-  const goingFor = (lane: DiscoveryLaneId, eventId: string) => {
-    const names = GOING_LANES.has(lane) ? data?.goingNames.get(eventId) : undefined;
+  const goingFor = (lane: DiscoveryLaneId, eventId: string, src: Discovery | null) => {
+    const names = GOING_LANES.has(lane) ? src?.goingNames.get(eventId) : undefined;
     return names && names.length > 0 ? joinWords(names) + " and others are going." : undefined;
   };
 
-  const card = (item: DiscoveryItem, lane: DiscoveryLaneId, lensList = false) => {
+  /** One card, from the answer `src` it came from; `inGrid` fills its track in the lens grid. */
+  const card = (
+    item: DiscoveryItem,
+    lane: DiscoveryLaneId,
+    src: Discovery | null,
+    inGrid = false,
+  ) => {
     const post = item.post;
     const ev = post.event;
     const title = post.fields["title"]?.value;
@@ -1111,9 +1124,9 @@ export function DiscoverySurface({
         <PostCard
           presentation="discovery"
           c="convene"
-          // Handoff 32-B's lens list: a lens but All is a vertical list of the same card at 680.
-          // B9-SPEC Revision 2's grid at --lane-card-width (1125) is 1131's first handoff.
-          style={lensList ? { width: "min(680px, 100%)" } : undefined}
+          // 1125: in a lens's grid the same card fills its track, which is --lane-card-width at
+          // least and a fraction of the column past it; in a lane it keeps the part's own width.
+          style={inGrid ? { width: "100%" } : undefined}
           // G115 (1087; correction 28): the part clamps the title on a span inside its link, so the
           // title is the string itself and the ellipsis is named "More: {title}".
           title={typeof title === "string" ? title : undefined}
@@ -1127,9 +1140,9 @@ export function DiscoverySurface({
           presenterSrc={shown ? shown.avatar : post.author_avatar}
           topic={topic ?? undefined}
           reason={reasonFor(lane, item.reason)}
-          going={goingFor(lane, item.event_id)}
+          going={goingFor(lane, item.event_id, src)}
           media={post.media[0]}
-          menu={menuFor(item, lane)}
+          menu={menuFor(item, lane, src)}
           selected={paneOpen && paneId === item.event_id && (openLane ?? lane) === lane}
           onOpen={() => {
             // 1160: a card opened from a lane is one of the three acts that teach the order; the
@@ -1282,8 +1295,8 @@ export function DiscoverySurface({
   // date (none when the projection knows none); a city carries its country, and a country tile, whose
   // name is its country, carries nothing more. A tap toggles the Topics or the Place facet with the
   // tile's own id, and a tile is selected while its facet holds it. No See all, no count, and no lane
-  // act: a tile applies a facet and opens nothing (1160). Browse is All's alone, so a tile's address is
-  // /convene narrowed.
+  // act: a tile applies a facet and opens nothing (1160). A tile's address is the page it narrows: All,
+  // or under a lens the lens, where Browse is one of More on Convene's lanes (1148).
   const zone = browserZone();
   const toggled = (axis: "family" | "place", id: string): FacetLists => ({
     ...lists,
@@ -1305,7 +1318,15 @@ export function DiscoverySurface({
         name={name}
         detail={detail}
         selected={lists[axis].includes(id)}
-        href={router.buildLocation({ to: "/convene", search: searchOf(next) }).href}
+        href={
+          lens === "all"
+            ? router.buildLocation({ to: "/convene", search: searchOf(next) }).href
+            : router.buildLocation({
+                to: "/convene/$lens",
+                params: { lens },
+                search: searchOf(next),
+              }).href
+        }
         onSelect={() => setFacets(next)}
         style={{ scrollSnapAlign: "start" }}
       />
@@ -1343,29 +1364,35 @@ export function DiscoverySurface({
     );
   };
 
-  // All (685, 1092): each lane the projection returned, in the order it answered them, Browse as its
-  // tiles, and the Communities lane as its sentence alone when the member follows no host, placed
-  // among the lanes around it by the answer's `lane_order` (1160), never by a position held here.
+  // All's lanes (685, 1092) as an answer `src` gave them, in the order it answered them: Browse as
+  // its tiles, every other lane as its cards, and a lane with neither absent (632). See all applies as
+  // on All wherever All's lanes render, under All and in More on Convene (1148).
+  const laneEntries = (from: DiscoverySection[], src: Discovery | null) =>
+    from.flatMap<LaneEntry>((s) => {
+      if (s.section === "browse") {
+        const body = s.tiles ? browseBody(s.tiles) : null;
+        return body ? [{ id: s.section, body, seeAll: false }] : [];
+      }
+      if (s.items.length === 0) return [];
+      return [
+        {
+          id: s.section,
+          body: laneRow(
+            s.section,
+            s.items.map((it) => card(it, s.section, src)),
+          ),
+          seeAll: true,
+        },
+      ];
+    });
+
+  // All: each lane the projection returned, and the Communities lane as its sentence alone when the
+  // member follows no host, placed among the lanes around it by the answer's `lane_order` (1160),
+  // never by a position held here.
   const followLane = sections.find((s) => s.section === "follow");
   const sentenceLane =
     lens === "all" && !!sentence && (!followLane || followLane.items.length === 0);
-  const eventLanes = sections.flatMap<LaneEntry>((s) => {
-    if (s.section === "browse") {
-      const body = s.tiles ? browseBody(s.tiles) : null;
-      return body ? [{ id: s.section, body, seeAll: false }] : [];
-    }
-    if (s.items.length === 0) return [];
-    return [
-      {
-        id: s.section,
-        body: laneRow(
-          s.section,
-          s.items.map((it) => card(it, s.section)),
-        ),
-        seeAll: lens === "all",
-      },
-    ];
-  });
+  const eventLanes = lens === "all" ? laneEntries(sections, data) : [];
   // Search with no match (B9-SPEC's States): every lane dropped under the search, or the lens's own.
   const noMatch =
     !!lists.q &&
@@ -1407,8 +1434,8 @@ export function DiscoverySurface({
     </div>
   );
 
-  // A lens (693, 1105): its one lane as a vertical list of the same card at 680 (handoff 32-B;
-  // B9-SPEC Revision 2's grid, 1125, is 1131's first handoff), or the EmptyState.
+  // A lens (693, 1105): its one lane as a grid of the same card filling the column (1125), or the
+  // EmptyState.
   const lensLane: DiscoveryLaneId | null = lens === "all" ? null : lens;
   const lensSection = lensLane ? sections.find((s) => s.section === lensLane) : undefined;
   // 1147 (handoff 33-D item 3): the lens's EmptyState fills its own column, which takes the rest of
@@ -1419,6 +1446,84 @@ export function DiscoverySurface({
   const lensCards = !!lensSection && lensSection.items.length > 0;
   const lensSentence = lensLane === "follow" && !!sentence && !lensCards && !noMatch;
   const lensEmpty = !!lensLane && !lensCards && !lensSentence;
+
+  // More on Convene (1148). The grid's column count is read from the laid-out grid, wherever the
+  // pane puts it, on every resize, and never shown. While the lens's cards are fewer than those
+  // columns, All's lanes follow beneath them from a second read of the projection with the same
+  // facets under All, each lane less the lens's own events as the projection answered the lens. The
+  // projection applied each lane's floor when it answered (632) and the floors are its own
+  // (`private.convene_thresholds`), so the surface re-applies none and holds no count: a lane the
+  // removal empties is absent. A lens with no events keeps its EmptyState and reads nothing more.
+  const [columns, setColumns] = useState(0);
+  const gridRef = useCallback((el: HTMLDivElement | null) => {
+    if (!el) return;
+    const read = () =>
+      setColumns(getComputedStyle(el).gridTemplateColumns.split(" ").filter(Boolean).length);
+    read();
+    const ro = new ResizeObserver(read);
+    ro.observe(el);
+    return () => {
+      ro.disconnect();
+      setColumns(0);
+    };
+  }, []);
+  const shortHere =
+    !!lensLane && lensCards && columns > 0 && (lensSection?.items.length ?? 0) < columns;
+  // 688: the pane narrows the list to its own column, where the grid lays fewer tracks, but the lanes
+  // stay where the member left them. So More on Convene stays while the pane is open if it showed as
+  // the pane opened, and a card opened from it keeps its place, its ring and its steps (1044, 1083).
+  const [shortOutside, setShortOutside] = useState(false);
+  useEffect(() => {
+    if (!paneOpen) setShortOutside(shortHere);
+  }, [paneOpen, shortHere]);
+  const short = shortHere || (paneOpen && shortOutside && lensCards);
+  const allFacets = useMemo(() => ({ ...facets, lens: "all" as const }), [facets]);
+  const moreRead = useQuery({
+    // All's own key: the same facets under All are the same read, so All and this share it.
+    queryKey: ["discovery", member.id, allFacets],
+    queryFn: () => loadDiscovery(member, allFacets),
+    enabled: short,
+    refetchOnWindowFocus: true,
+  });
+  const more = short ? (moreRead.data ?? null) : null;
+  const lensIds = new Set(
+    (data?.sections ?? []).find((s) => s.section === lensLane)?.items.map((i) => i.event_id) ?? [],
+  );
+  // All's lanes less the lens's events, before this member's dismissals: stepping reads these, as it
+  // reads the lens's own lane before them (1044).
+  const moreLanes: DiscoverySection[] = (more?.sections ?? []).map((s) => ({
+    ...s,
+    items: s.items.filter((i) => !lensIds.has(i.event_id)),
+  }));
+  const moreEntries = laneEntries(
+    moreLanes.map((s) => ({
+      ...s,
+      items: s.items.filter((i) => !dismissed.has(s.section + ":" + i.event_id)),
+    })),
+    more,
+  );
+  const moreView = moreEntries.length ? (
+    <section
+      data-more-on-convene
+      aria-labelledby="more-on-convene"
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        gap: 12,
+        minWidth: 0,
+        borderTop: "1px solid var(--line)",
+        paddingTop: 20,
+        marginTop: 4,
+      }}
+    >
+      <h2 id="more-on-convene" style={H2}>
+        More on Convene
+      </h2>
+      <div data-lanes style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
+        {moreEntries.map((l, i) => lane(l.id, i === 0, l.body, l.seeAll))}
+      </div>
+    </section>
+  ) : null;
   const lensView = lensLane ? (
     <div
       data-lens-list={lensLane}
@@ -1435,9 +1540,21 @@ export function DiscoverySurface({
       {lensSentence ? (
         sentenceLine
       ) : lensSection && lensCards ? (
-        <div data-lens-cards style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          {lensSection.items.map((it) => card(it, lensLane, true))}
-        </div>
+        <>
+          <div
+            ref={gridRef}
+            data-lens-cards
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fill, minmax(var(--lane-card-width), 1fr))",
+              gap: 12,
+              minWidth: 0,
+            }}
+          >
+            {lensSection.items.map((it) => card(it, lensLane, data, true))}
+          </div>
+          {moreView}
+        </>
       ) : (
         <div
           data-empty-column
@@ -1484,7 +1601,9 @@ export function DiscoverySurface({
   // as the projection answered it, so dismissing the card that is open still steps from its place.
   // An event opened from outside Discovery, or not in the lane the projection answered, steps nowhere.
   const stepLane =
-    paneOpen && openLane ? (data?.sections ?? []).find((s) => s.section === openLane) : undefined;
+    paneOpen && openLane
+      ? [...(data?.sections ?? []), ...moreLanes].find((s) => s.section === openLane)
+      : undefined;
   const stepIds = stepLane ? stepLane.items.map((i) => i.event_id) : [];
   const at = paneId ? stepIds.indexOf(paneId) : -1;
   const kept = (id: string) => !dismissed.has(openLane + ":" + id);
@@ -1524,7 +1643,9 @@ export function DiscoverySurface({
   }, [paneOpen]);
   const paneItem =
     paneOpen && paneId
-      ? (data?.sections ?? []).flatMap((s) => s.items).find((i) => i.event_id === paneId)
+      ? [...(data?.sections ?? []), ...moreLanes]
+          .flatMap((s) => s.items)
+          .find((i) => i.event_id === paneId)
       : undefined;
   // An observer only: EventSurface makes this read under the same key, and this never fetches.
   const paneRead = useQuery({
@@ -1548,8 +1669,8 @@ export function DiscoverySurface({
   // 688: the lanes stay where the member left them. With the pane bounded the feed column cannot
   // scroll (its offset clamps to 0) and the list column scrolls instead. So the card at the list
   // column's top is kept, with its distance from that top, and when the pane closes the feed column
-  // is scrolled to put the same card at the same distance. A card, not an offset: a lens list's
-  // cards are `min(680px, 100%)`, narrower and so shorter in the list column than in the full one.
+  // is scrolled to put the same card at the same distance. A card, not an offset: a lens's grid lays
+  // fewer and narrower tracks in the list column than in the full one, so its cards sit elsewhere.
   // While the list is hidden its layout has no width, so the place it was hidden at is the one kept.
   const listAnchor = useRef<{ item: string; section: string; at: number } | null>(null);
   const hiddenNow = useRef(listHidden);
