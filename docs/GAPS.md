@@ -6182,3 +6182,49 @@ On a desktop the inset is 0 either way, so nothing moves. Above compact with a t
 Owed: the header in longhand only, as `AppHeader` and `ProfileSurface`'s public header already are
 (ruling 344's inset in `paddingTop`, the sides in `paddingLeft` and `paddingRight`). Handoff 33-D
 does not reach this surface, so it is not changed here.
+
+## G140. After sign-in, Chromium's 1366x1024 light onboarding-layout arm stayed on `/sign-in?` for 15 s on run 379, and passed on runs 380 and 381
+
+**Severity: low, unread. Opened 27 September 2026 during handoff 34-A (item 1), filed under
+ruling 597. The number is assigned by this entry (ruling 638).**
+
+Three readings of `chromium-1366x1024-light-onboarding-layout`, each from the `matrix (chromium)` job
+of a `pages.yml` run:
+
+- **Run 379, red.** `main`'s push run on `dc21b64` (`36277451548`, job `108502943001`), against
+  `4d90a13f.dna-web-application.pages.dev`. The arm's first wait, `signInTo(page, "**/welcome")`
+  (`tests/onboarding.cjs:163`, the wait at `:121`), timed out. The log reads
+  `page.waitForURL: Timeout 15000ms exceeded.`, then
+  `waiting for navigation to "**/welcome" until "load"`, then
+  `navigated to "https://4d90a13f.dna-web-application.pages.dev/sign-in?"`. Its ruling 292 line
+  read `emitted 1 of 37; the 36 checks behind the failure never ran`. The job read 6842 of 6844:
+  the arm's failure and its 292 line were the only two, 0 behind a web-process crash (G5) and 2
+  unclassified.
+- **Run 380, green.** The push run on `bc7c9c9`, on `claude/new-session-rqs074` (`36280764192`, job
+  `108512103333`), against `7356b9b8.dna-web-application.pages.dev`. The arm emitted 37 of 37 (ARM
+  5913 to 5950) and the job read 6880 of 6880.
+- **Run 381, green.** `main`'s push run on `eba3198` (`36285472824`, job `108525412534`), against
+  `499e8435.dna-web-application.pages.dev`. The arm emitted 37 of 37 (ARM 5913 to 5950) and the job
+  read 6880 of 6880.
+
+What the three builds share. `eba3198`'s tree is `bc7c9c9`'s (both `3ccc3bf`), so runs 380 and 381
+read one tree. `dc21b64` differs from it by handoff 33-C's three commits and nothing else.
+`b5798d6` deleted `.lovable/` and `src/lib/lovable-error-reporting.ts`, took the reporter's call out
+of the root `ErrorComponent` (`src/routes/__root.tsx`), and edited `README.md` and `AGENTS.md`.
+`26fc1e3` rewrote `vite.config.ts` off `@lovable.dev/vite-tanstack-config` and took the wrapper out
+of `package.json`, `bun.lock` and `bunfig.toml`; its message records a clean build byte-identical to
+`b5798d6`'s through the wrapper once the three values that differ between any two clean builds are
+set aside. `bc7c9c9` edited `AGENTS.md` and `CLAUDE.md`. `src/routes/sign-in.tsx` and
+`tests/onboarding.cjs` are the same file in all three.
+
+What the address shows, and no more. `/sign-in?`, with an empty query, is the address a native
+submission of the sign-in form produces: the form declares no `method` or `action`, and neither field
+carries a `name` (`src/routes/sign-in.tsx:219` to `244`). Whether the press reached the form before
+its `onSubmit` did was not read (555).
+
+Not read: the arm's failure screenshot, `onboarding-layout-fail-chromium-1366-light`, in run 379's
+artifact `matrix-chromium-run-379` (`10918766443`). The session that opened this entry could not
+reach the host that serves Actions artifacts.
+
+Owed: that screenshot, read while the artifact is retained, and any further red reading of this arm
+added here before a cause is named.
