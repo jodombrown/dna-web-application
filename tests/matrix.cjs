@@ -1746,6 +1746,10 @@ async function mockSupabase(page, db, opts = {}) {
         // With a city chosen in Place, Near reads the place rather than a home (1095).
         if (id === "near" && cityName)
           items = items.map((i) => ({ ...i, reason: { kind: "near", place: { city: cityName } } }));
+        // 1173: under a search the floors do not apply, so a lane holding any match shows and a lane
+        // with no match drops. This mock holds no floors at all (its fixtures seed every lane at or
+        // above its floor, and the narrowings the arms read were calibrated without them), so under
+        // All it answers as the projection does under a search: a lane with an item left shows.
         if (lens === "all" && items.length === 0) continue;
         sections.push({ section: id, items });
       }

@@ -1303,6 +1303,32 @@ async function runLiveDbArms({ record, skip }) {
           (tooLong.ok ? "answered" : tooLong.code),
       );
 
+      // 1173: under a search the floors do not apply. One seeded event's title (1165) names that event,
+      // and Filling up, whose floor is two, comes back holding it: a search whose matches sit one to
+      // a lane returns the lane. Read as the owner, before the dismissal below.
+      const seededTitle = await attempt(
+        client,
+        "select title from public.events where id = $1::uuid",
+        [SEEDED_FILLING[0]],
+      );
+      const title = seededTitle.ok && seededTitle.rows[0] ? seededTitle.rows[0].title : null;
+      const one = title ? await ask(Q, [title]) : null;
+      const oneFilling = one && one.ok ? section(one.d, "filling") : null;
+      const oneIds = one && one.ok ? sectionIds(one.d) : [];
+      record(
+        "Handoff 34-A addendum (1173): a search whose matches sit one to a lane returns the lane: the seeded event's title returns Filling up holding it",
+        !!one &&
+          one.ok &&
+          oneIds.length >= 1 &&
+          !!oneFilling &&
+          oneFilling.items.some((i) => i.event_id === SEEDED_FILLING[0]),
+        (title ? "title found" : "no title for the seeded event") +
+          " lanes " +
+          (one ? (one.ok ? JSON.stringify(oneIds) : failed(one)) : "not read") +
+          " filling " +
+          (oneFilling ? oneFilling.items.length + " item(s)" : "absent"),
+      );
+
       // 1172: the Browse lane is withdrawn. No section is browse, no section carries tiles, and
       // lane_order is the ten lanes.
       const tiled = all.ok ? ((all.d && all.d.sections) || []).filter((x) => "tiles" in x) : [];

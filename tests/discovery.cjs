@@ -3895,6 +3895,10 @@ async function runDiscoverySearch(browserType, bname, [w, h], theme) {
       q: await q(),
       call: lastCall(db).p_q ?? null,
       ids: [...new Set(ids)],
+      // 1173: how many matches each shown lane holds, against the lane's floor.
+      lanes: Object.fromEntries(
+        Object.entries(await laneItems(page)).map(([lane, items]) => [lane, items.length]),
+      ),
     };
 
     const calls = db.discovery.calls.length;
@@ -3975,6 +3979,20 @@ async function runDiscoverySearch(browserType, bname, [w, h], theme) {
       applied.ids.every((id) => kente.includes(id)),
     JSON.stringify(applied),
   );
+  // 1173: under a search the floors do not apply. Happening soon's floor is four (B9-SPEC's Lanes
+  // line) and one event matches "kente" in it, so the lane shows with its one match.
+  const belowFloor =
+    !!applied && Object.entries(applied.lanes).filter(([lane, n]) => n < LANE_FLOORS[lane]);
+  record(
+    tag +
+      " search: a lane holding a single match shows under a search, below the floor it would need without one (1173)",
+    !!applied &&
+      applied.lanes["soon"] === 1 &&
+      !!belowFloor &&
+      belowFloor.length > 0 &&
+      Object.values(applied.lanes).every((n) => n > 0),
+    JSON.stringify({ lanes: applied && applied.lanes, belowFloor }),
+  );
   record(
     tag + " search: Escape clears the draft and leaves the applied search as it is (1124)",
     !!escaped && escaped.value === "" && escaped.q === "kente" && escaped.calls === 0,
@@ -4013,6 +4031,19 @@ async function runDiscoverySearch(browserType, bname, [w, h], theme) {
 /** The search field's bounds beside the bar (B9-SPEC's medium line, 1124). */
 const SEARCH_MIN_PX = 140;
 const SEARCH_MAX_PX = 280;
+/** The lanes' floors as B9-SPEC Revision 7's Lanes line gives them (632), which a search lifts (1173). */
+const LANE_FLOORS = {
+  soon: 4,
+  weekend: 2,
+  online: 2,
+  filling: 2,
+  fresh: 2,
+  curated: 1,
+  follow: 1,
+  taste: 2,
+  near: 2,
+  network: 1,
+};
 
 /** Learned order and its acts (1160): the pane's cell, and compact's, where a card opens a route. */
 const ORDER_VIEWPORTS = [
