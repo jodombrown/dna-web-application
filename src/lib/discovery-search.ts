@@ -88,8 +88,8 @@ export type DiscoverySearch = {
 };
 
 const FAMILY_TOKEN = /^[a-z][a-z0-9_]{0,63}$/;
-/** 1159: the projection refuses a search past 100 characters with 22023. */
-const Q_MAX = 100;
+/** 1159: the projection refuses a search past 100 characters with 22023. The field holds no more. */
+export const Q_MAX = 100;
 
 /** The search as the URL carries it. The router parses a value that reads as JSON (`?q=2026`), so a
  *  number or a boolean is its text; a list is not a search. */

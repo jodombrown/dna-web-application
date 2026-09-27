@@ -4,20 +4,25 @@
 // discovery face, Menu, FacetRail's displays and ladders, Input's combobox and Pane's stepping. Handoff
 // 33-A binds what Strand correction 28 added to them (1134): the face's link (G100) and its own title
 // clamp (G115), the pane at 520 with its height, toolbar and hidden list (G110, 1127), Topics in two
-// columns in the compact Sheet only (G102, 1144) and Clear all in the rail's heading row (G111).
+// columns in the compact Sheet only (G102, 1144) and Clear all in the rail's heading row (G111). The
+// first Discovery handoff (34-A, 1124 to 1165) restores the search, the Browse lane on Strand's
+// BrowseTile (1133), Filling up, the member's learned lane order and the going row (1128, 1138, 1158).
 //
 // One read projection and one write path per surface (CLAUDE.md): everything this surface shows comes
-// through `loadDiscovery` (the cards are the Feed's own views, hydrated by post id inside it, 660) and
-// Place's options through `convene_places()` (1095). Every menu act is an existing write path (item
-// 6): Save is the Feed's `setSaved`, Add to calendar the event page's `.ics`, Follow is Connect's
-// `set_follow` wrapper, Subscribe `set_subscription` and Not this `dismiss_discovery_item`. The
-// rail's open or collapsed state is the member's own row in `member_rail_state` (1111). Nothing here filters, ranks or counts:
-// the projection chose every lane and every item under row policy, and a lane it did not return is
-// absent with no heading and no placeholder (632).
+// through `loadDiscovery` (the cards are the Feed's own views, hydrated by post id inside it, 660; the
+// going names are `event_going_names` beside `event_presenters`) and Place's options through
+// `convene_places()` (1095). Every menu act is an existing write path (item 6): Save is the Feed's
+// `setSaved`, Add to calendar the event page's `.ics`, Follow is Connect's `set_follow` wrapper,
+// Subscribe `set_subscription` and Not this `dismiss_discovery_item`. The rail's open or collapsed
+// state is the member's own row in `member_rail_state` (1111), and the three acts that teach the lane
+// order (a card opened, saved or followed from a lane) go only through `noteLaneAct` (1160). Nothing
+// here filters, ranks, sorts or counts: the projection chose every lane and every item under row
+// policy and answers the lanes in the member's order, and a lane it did not return is absent with no
+// heading and no placeholder (632).
 //
-// Two vocabularies, never one (1093, 1105): the five lenses switch who the events come from, the nine
-// lanes are sections of the page. Every lens word comes from `convene_lenses` and every lane name from
-// `convene_lanes`; the ids alone live in code.
+// Two vocabularies, never one (1093, 1105): the five lenses switch who the events come from, the
+// eleven lanes are sections of the page. Every lens word comes from `convene_lenses` and every lane
+// name from `convene_lanes`; the ids alone live in code.
 //
 // Layout (1082 as amended by 1094; item 7). The LensBar shows the five lenses with labels always and
 // icons at every tier and no seat after the lenses. The FacetRail is collapsed by default at every width: a
@@ -33,8 +38,9 @@
 // and the page's read under the key EventSurface reads (1067). The read refetches on window focus and
 // never live.
 //
-// No digit renders except in a card's when line: the reason row is words (1096), the where line is a
-// format word and places, and there is no count anywhere.
+// No digit renders except in a card's when line and a Browse topic's next date: the reason and going
+// rows are words (1096, 1138), the where line is a format word and places, and there is no count
+// anywhere, on a card or a tile.
 import { useQuery, useQueryClient, type QueryState } from "@tanstack/react-query";
 import { useLocation, useNavigate, useRouter } from "@tanstack/react-router";
 import {
@@ -49,6 +55,7 @@ import {
 import { EVENT_PAGE_KEY } from "@/components/dna/EventSurface";
 import { Ghosts } from "@/components/dna/Ghosts";
 import { LoadError } from "@/components/dna/LoadError";
+import { BrowseTile } from "@/components/strand/BrowseTile";
 import { Button } from "@/components/strand/Button";
 import { Chip } from "@/components/strand/Chip";
 import { DiaLine } from "@/components/strand/DiaLine";
@@ -61,6 +68,7 @@ import {
 } from "@/components/strand/FacetRail";
 import { Icon } from "@/components/strand/Icon";
 import { IconButton } from "@/components/strand/IconButton";
+import { Input } from "@/components/strand/Input";
 import { LensBar, type Lens } from "@/components/strand/LensBar";
 import type { MenuProps } from "@/components/strand/Menu";
 import { Pane } from "@/components/strand/Pane";
@@ -69,9 +77,12 @@ import { Toast } from "@/components/strand/Toast";
 import type { Member } from "@/lib/auth";
 import {
   dismissDiscoveryItem,
+  GOING_LANES,
   loadConvenePlaces,
   loadDiscovery,
+  noteLaneAct,
   setSubscription,
+  type BrowseTiles,
   type ConveneLensId,
   type ConvenePlace,
   type Discovery,
@@ -90,6 +101,7 @@ import {
   droppedUnknown,
   facetLists,
   NO_FACETS,
+  Q_MAX,
   searchOf,
   type DiscoverySearch,
   type FacetLists,
@@ -104,6 +116,7 @@ import { readRailCollapsed, railBand, writeRailCollapsed, type RailBand } from "
 import { setLeftRail, setRightRail, setShellLayout } from "@/lib/rail-store";
 import { useShellScroll } from "@/lib/shell-scroll";
 import { useMode, useTier, useWide } from "@/lib/tier";
+import { browserZone, dateLine } from "@/lib/when";
 import { loadVocabularies } from "@/lib/vocabularies";
 import { toastStyle, useShare } from "./FeedSurface";
 
@@ -210,7 +223,119 @@ const H2: CSSProperties = {
   color: "var(--ink)",
 };
 
+/** B9-SPEC's medium line (1124): the search field beside the bar takes 140 to 280. */
+const SEARCH_MIN = 140;
+const SEARCH_MAX = 280;
+const SEARCH_GAP = 12;
+
+/**
+ * The search (1124, 1159): one Strand Input. Enter applies the trimmed text as `q`, and applying an
+ * empty field removes it; Escape clears the draft and leaves an applied search as it is, so the chip
+ * and Clear all are what remove it. The draft follows the applied text whenever that changes (its chip
+ * removed, Clear all, Back). The field holds 100 characters, the most the projection takes.
+ */
+function SearchField({ q, onApply }: { q: string; onApply: (text: string) => void }) {
+  const [draft, setDraft] = useState(q);
+  useEffect(() => setDraft(q), [q]);
+  return (
+    <div data-discovery-search style={{ minWidth: 0 }}>
+      <Input
+        role="searchbox"
+        aria-label="Search events"
+        placeholder="Search events, hosts, places"
+        icon="search"
+        inputMode="search"
+        enterKeyHint="search"
+        autoComplete="off"
+        maxLength={Q_MAX}
+        value={draft}
+        onChange={(e) => setDraft((e.target as HTMLInputElement).value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            onApply(draft.trim());
+          } else if (e.key === "Escape" && draft) {
+            e.preventDefault();
+            setDraft("");
+          }
+        }}
+      />
+    </div>
+  );
+}
+
+/** Whether a centred bar leaves the field its 140 beside it; null until the bar is laid out. */
+function besideFits(row: HTMLElement | null): boolean | null {
+  const root = row?.querySelector<HTMLElement>(":scope > [data-lens-row-bar] > *");
+  if (!row || !root) return null;
+  return (row.clientWidth - root.offsetWidth) / 2 - SEARCH_GAP >= SEARCH_MIN;
+}
+
+/**
+ * The lens row at medium and expanded (1124 with 1145): the bar keeps its centre in the row, and the
+ * search field sits beside it at its end, taking the width left there from 140 to 280. Where a
+ * centred bar leaves less than 140 beside it (at medium, the five lenses' words leave 7 at 640, 59 at
+ * 744 and 97 at 820), the field takes its own line under the bar, centred at up to 280, so the bar is
+ * never pushed off centre or squeezed to make room. Read from the laid-out row and bar at every
+ * render and every resize, never from a width held in code: the bar's width is its words'.
+ */
+function LensRow({ bar, field }: { bar: ReactNode; field: ReactNode }) {
+  const row = useRef<HTMLDivElement>(null);
+  const [beside, setBeside] = useState(true);
+  // Whenever the shell hands the row a bar (it arrives with the vocabulary, after the row) and every
+  // resize of the row.
+  useLayoutEffect(() => {
+    const fits = besideFits(row.current);
+    if (fits !== null) setBeside(fits);
+  }, [bar]);
+  useLayoutEffect(() => {
+    const el = row.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => {
+      const fits = besideFits(el);
+      if (fits !== null) setBeside(fits);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  return (
+    <div
+      ref={row}
+      data-lens-row={beside ? "beside" : "under"}
+      style={{
+        display: "grid",
+        gridTemplateColumns: beside ? "minmax(0, 1fr) auto minmax(0, 1fr)" : "minmax(0, 1fr)",
+        columnGap: SEARCH_GAP,
+        rowGap: SEARCH_GAP,
+        alignItems: "start",
+      }}
+    >
+      <div data-lens-row-bar style={{ gridColumn: beside ? 2 : 1, minWidth: 0 }}>
+        {bar}
+      </div>
+      <div
+        style={
+          beside
+            ? // Level with the seats: the track pads its 44 seats by --space-1 top and bottom.
+              {
+                gridColumn: 3,
+                width: "100%",
+                maxWidth: SEARCH_MAX,
+                marginTop: "var(--space-1)",
+                minWidth: 0,
+              }
+            : { gridColumn: 1, justifySelf: "center", width: "min(" + SEARCH_MAX + "px, 100%)" }
+        }
+      >
+        {field}
+      </div>
+    </div>
+  );
+}
+
 type SeeAll = { to: "/convene"; search: DiscoverySearch } | { lens: ConveneLensId };
+/** One lane as the list renders it: its heading's id, its body, and whether See all may apply. */
+type LaneEntry = { id: DiscoveryLaneId; body: ReactNode; seeAll: boolean };
 
 export function DiscoverySurface({
   member,
@@ -485,10 +610,6 @@ export function DiscoverySurface({
     [lensRows],
   );
   const lensScope = lensRows.find((l) => l.value === lens)?.scope;
-  const laneOrder = useMemo(
-    () => new Map<string, number>(laneRows.map((l, i) => [l.value, i])),
-    [laneRows],
-  );
   const familyLabel = (family: string | null) =>
     family ? (familyRows.find((f) => f.value === family)?.label ?? null) : null;
 
@@ -601,10 +722,24 @@ export function DiscoverySurface({
     });
   };
   const clearFacets = () => setFacets(NO_FACETS);
+  // The search (1124): Enter applies it beside whatever the rail holds, and an empty field removes it.
+  const applySearch = (text: string) => setFacets({ ...lists, q: text });
 
   // Applied facets as removable Chips at compact (SPEC section 4), each by its own word; a value no
-  // read has named yet shows no chip.
-  const chips: { key: string; label: string; remove: () => void }[] = [];
+  // read has named yet shows no chip. An applied search is the first chip, its own text beside the
+  // search glyph (1124).
+  const chips: { key: string; label: ReactNode; remove: () => void }[] = [];
+  if (lists.q)
+    chips.push({
+      key: "q",
+      label: (
+        <>
+          <Icon name="search" size={14} />
+          <span data-search-chip>{lists.q}</span>
+        </>
+      ),
+      remove: () => setFacets({ ...lists, q: "" }),
+    });
   const without = (axis: keyof FacetLists, v: string) =>
     setFacets({ ...lists, [axis]: (lists[axis] as string[]).filter((x) => x !== v) } as FacetLists);
   for (const a of axes) {
@@ -687,6 +822,9 @@ export function DiscoverySurface({
         }
       />
     ) : null;
+  // The search (1124) in each tier's place: full width under the lens bar at compact, and in the lens
+  // row beside the bar at medium and expanded (`LensRow`).
+  const searchField = <SearchField q={lists.q} onApply={applySearch} />;
 
   // The shell's `lanes` mode, the rails and the header lens, each set while mounted and cleared on
   // unmount (rail-store.ts, header-lens-store.ts). The key is the lens, so the pane opening over the
@@ -698,9 +836,9 @@ export function DiscoverySurface({
       mode: "lanes",
       rail: railShut ? "collapsed" : "open",
       key: lens,
-      top: compact ? null : lensBar(false),
+      top: compact ? null : <LensRow bar={lensBar(false)} field={searchField} />,
     });
-    // lensBar reads the lens set, the lens, its scope and the search; listing those is enough.
+    // The row reads the lens set, the lens, its scope and the search; listing those is enough.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [compact, railShut, lens, lensKey, lensScope, search]);
   useEffect(() => {
@@ -791,14 +929,12 @@ export function DiscoverySurface({
     [],
   );
 
-  // The lanes as this member may see them now: the projection's, in the lanes' order, less what they
-  // dismissed here.
-  const sections: DiscoverySection[] = (data?.sections ?? [])
-    .map((s) => ({
-      ...s,
-      items: s.items.filter((i) => !dismissed.has(s.section + ":" + i.event_id)),
-    }))
-    .sort((a, b) => (laneOrder.get(a.section) ?? 99) - (laneOrder.get(b.section) ?? 99));
+  // The lanes as this member may see them now: the projection's, in the order it answered them (the
+  // member's learned order over the base order, 1160; never re-sorted here), less what they dismissed.
+  const sections: DiscoverySection[] = (data?.sections ?? []).map((s) => ({
+    ...s,
+    items: s.items.filter((i) => !dismissed.has(s.section + ":" + i.event_id)),
+  }));
 
   // 650, 1046: DIA's one sentence for a member who follows no host, in plain text with the host's name
   // unlinked (1053).
@@ -853,13 +989,17 @@ export function DiscoverySurface({
         onSelect: () => {
           setSavedNow((s) => ({ ...s, [postId]: !saved }));
           setSaved(member.id, postId, !saved).then(
+            // 1160: a save from a lane teaches the order, written before the re-read this save
+            // makes so the lane's place on it is the projection's; an unsave teaches nothing.
             () =>
-              reread(
-                [
-                  ["discovery", member.id],
-                  ["marks", member.id],
-                ],
-                () => setSavedNow(unset(postId)),
+              void (saved ? Promise.resolve() : noteLaneAct(lane, "save")).then(() =>
+                reread(
+                  [
+                    ["discovery", member.id],
+                    ["marks", member.id],
+                  ],
+                  () => setSavedNow(unset(postId)),
+                ),
               ),
             () => {
               setSavedNow((s) => ({ ...s, [postId]: saved }));
@@ -899,13 +1039,16 @@ export function DiscoverySurface({
         onSelect: () => {
           setFollowNow((f) => ({ ...f, [hostId]: !following }));
           setFollowing(hostId, !following).then(
+            // 1160: as Save, a follow from a lane teaches the order and an unfollow does not.
             () =>
-              reread(
-                [
-                  ["discovery", member.id],
-                  ["event-follow", member.id],
-                ],
-                () => setFollowNow(unset(hostId)),
+              void (following ? Promise.resolve() : noteLaneAct(lane, "follow")).then(() =>
+                reread(
+                  [
+                    ["discovery", member.id],
+                    ["event-follow", member.id],
+                  ],
+                  () => setFollowNow(unset(hostId)),
+                ),
               ),
             () => {
               setFollowNow((f) => ({ ...f, [hostId]: following }));
@@ -933,6 +1076,15 @@ export function DiscoverySurface({
       { rule: true },
       { id: "not", label: "Not this", icon: "x", onSelect: () => void dismiss(item, lane) },
     ];
+  };
+
+  // The going row (1124, 1128, 1138, 1158): outside the relationship lanes, the three first names
+  // `event_going_names` gave for the event, joined as the surface joins names, then "and others are
+  // going."; nothing when it gave none. The relationship lanes keep their reason (1096), and the part
+  // lets a reason win over a going sentence.
+  const goingFor = (lane: DiscoveryLaneId, eventId: string) => {
+    const names = GOING_LANES.has(lane) ? data?.goingNames.get(eventId) : undefined;
+    return names && names.length > 0 ? joinWords(names) + " and others are going." : undefined;
   };
 
   const card = (item: DiscoveryItem, lane: DiscoveryLaneId, lensList = false) => {
@@ -975,10 +1127,16 @@ export function DiscoverySurface({
           presenterSrc={shown ? shown.avatar : post.author_avatar}
           topic={topic ?? undefined}
           reason={reasonFor(lane, item.reason)}
+          going={goingFor(lane, item.event_id)}
           media={post.media[0]}
           menu={menuFor(item, lane)}
           selected={paneOpen && paneId === item.event_id && (openLane ?? lane) === lane}
-          onOpen={() => openEvent(item.event_id, lane)}
+          onOpen={() => {
+            // 1160: a card opened from a lane is one of the three acts that teach the order; the
+            // pane's Previous and Next go through `openEvent` alone and teach nothing.
+            void noteLaneAct(lane, "open");
+            openEvent(item.event_id, lane);
+          }}
           onPreload={expanded && !touch ? () => warmEvent(item.event_id) : undefined}
           onPresenter={
             presenterHandle
@@ -1079,7 +1237,7 @@ export function DiscoverySurface({
 
   // 1065: the router's element restoration keys each lane on its id, so Back returns every lane to
   // where the member left it. The shell's scrollToTopSelectors name the columns only, never a lane.
-  const laneRow = (id: DiscoveryLaneId, children: ReactNode) => (
+  const laneRow = (id: string, children: ReactNode) => (
     <div
       className="dna-lane"
       data-lane-row
@@ -1119,25 +1277,131 @@ export function DiscoverySurface({
     </div>
   );
 
-  // All (685, 1092): each lane the projection returned, in the lanes' order, and the Communities
-  // lane as its sentence alone, in its own place in that order, when the member follows no host.
+  // Browse (1124, 1133): the projection's tiles as two rows of Strand's BrowseTile, topics then places.
+  // A topic carries its next date, composed in the member's zone as a card's when line composes its
+  // date (none when the projection knows none); a city carries its country, and a country tile, whose
+  // name is its country, carries nothing more. A tap toggles the Topics or the Place facet with the
+  // tile's own id, and a tile is selected while its facet holds it. No See all, no count, and no lane
+  // act: a tile applies a facet and opens nothing (1160). Browse is All's alone, so a tile's address is
+  // /convene narrowed.
+  const zone = browserZone();
+  const toggled = (axis: "family" | "place", id: string): FacetLists => ({
+    ...lists,
+    [axis]: lists[axis].includes(id) ? lists[axis].filter((x) => x !== id) : [...lists[axis], id],
+  });
+  const tile = (
+    key: string,
+    kind: "topic" | "place",
+    name: string,
+    detail: string | undefined,
+    axis: "family" | "place",
+    id: string,
+  ) => {
+    const next = toggled(axis, id);
+    return (
+      <BrowseTile
+        key={key}
+        kind={kind}
+        name={name}
+        detail={detail}
+        selected={lists[axis].includes(id)}
+        href={router.buildLocation({ to: "/convene", search: searchOf(next) }).href}
+        onSelect={() => setFacets(next)}
+        style={{ scrollSnapAlign: "start" }}
+      />
+    );
+  };
+  const browseBody = (tiles: BrowseTiles): ReactNode => {
+    const topics = tiles.topics.map((t) => {
+      const at = t.next_at ? new Date(t.next_at) : null;
+      const next = at && !Number.isNaN(at.getTime()) ? dateLine(at, zone) : undefined;
+      return tile(
+        "family:" + t.family,
+        "topic",
+        familyLabel(t.family) ?? t.label,
+        next,
+        "family",
+        t.family,
+      );
+    });
+    const places = tiles.places.map((p) =>
+      tile(
+        "place:" + p.id,
+        "place",
+        p.name,
+        p.kind === "city" ? (p.country ?? undefined) : undefined,
+        "place",
+        p.id,
+      ),
+    );
+    if (!topics.length && !places.length) return null;
+    return (
+      <div data-browse style={{ display: "flex", flexDirection: "column", gap: 12, minWidth: 0 }}>
+        {topics.length > 0 && laneRow("browse-topics", topics)}
+        {places.length > 0 && laneRow("browse-places", places)}
+      </div>
+    );
+  };
+
+  // All (685, 1092): each lane the projection returned, in the order it answered them, Browse as its
+  // tiles, and the Communities lane as its sentence alone when the member follows no host, placed
+  // among the lanes around it by the answer's `lane_order` (1160), never by a position held here.
   const followLane = sections.find((s) => s.section === "follow");
   const sentenceLane =
     lens === "all" && !!sentence && (!followLane || followLane.items.length === 0);
-  const laneList: { id: DiscoveryLaneId; body: ReactNode; seeAll: boolean }[] = [
-    ...sections
-      .filter((s) => s.items.length > 0)
-      .map((s) => ({
+  const eventLanes = sections.flatMap<LaneEntry>((s) => {
+    if (s.section === "browse") {
+      const body = s.tiles ? browseBody(s.tiles) : null;
+      return body ? [{ id: s.section, body, seeAll: false }] : [];
+    }
+    if (s.items.length === 0) return [];
+    return [
+      {
         id: s.section,
         body: laneRow(
           s.section,
           s.items.map((it) => card(it, s.section)),
         ),
         seeAll: lens === "all",
-      })),
-    ...(sentenceLane ? [{ id: "follow" as const, body: sentenceLine, seeAll: false }] : []),
-  ].sort((a, b) => (laneOrder.get(a.id) ?? 99) - (laneOrder.get(b.id) ?? 99));
-  const lanesView = (
+      },
+    ];
+  });
+  // Search with no match (B9-SPEC's States): every lane dropped under the search, or the lens's own.
+  const noMatch =
+    !!lists.q &&
+    !!data &&
+    (lens === "all"
+      ? eventLanes.length === 0
+      : !sections.some((s) => s.section === lens && s.items.length > 0));
+  const laneList = [...eventLanes];
+  if (sentenceLane && !noMatch) {
+    const order = data?.laneOrder ?? [];
+    const at = order.indexOf("follow");
+    const after = at < 0 ? -1 : laneList.findIndex((l) => order.indexOf(l.id) > at);
+    laneList.splice(after < 0 ? laneList.length : after, 0, {
+      id: "follow",
+      body: sentenceLine,
+      seeAll: false,
+    });
+  }
+  // The search's EmptyState takes the search and every facet with it (1124), and fills its column
+  // (1147).
+  const noMatchState = (
+    <EmptyState
+      c="convene"
+      title="Nothing matches that search."
+      action={
+        <Button variant="secondary" onClick={clearFacets}>
+          Clear all
+        </Button>
+      }
+    />
+  );
+  const lanesView = noMatch ? (
+    <div data-empty-column style={{ display: "flex", flexDirection: "column", flex: "1 1 auto" }}>
+      {noMatchState}
+    </div>
+  ) : (
     <div data-lanes style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
       {laneList.map((l, i) => lane(l.id, i === 0, l.body, l.seeAll))}
     </div>
@@ -1150,10 +1414,11 @@ export function DiscoverySurface({
   // 1147 (handoff 33-D item 3): the lens's EmptyState fills its own column, which takes the rest of
   // the list's height; the surface root takes the visible height the shell publishes, and in the
   // pane the list column's own bounded height.
-  const lensEmpty =
-    !!lensLane &&
-    !(lensLane === "follow" && sentence && !lensSection?.items.length) &&
-    !(lensSection && lensSection.items.length > 0);
+  // Under a search that matched nothing, the lens shows the search's EmptyState in place of its own
+  // or of the Communities sentence (B9-SPEC's States).
+  const lensCards = !!lensSection && lensSection.items.length > 0;
+  const lensSentence = lensLane === "follow" && !!sentence && !lensCards && !noMatch;
+  const lensEmpty = !!lensLane && !lensCards && !lensSentence;
   const lensView = lensLane ? (
     <div
       data-lens-list={lensLane}
@@ -1167,9 +1432,9 @@ export function DiscoverySurface({
       }}
     >
       {laneName(lensLane) && <h2 style={H2}>{laneName(lensLane)}</h2>}
-      {lensLane === "follow" && sentence && !lensSection?.items.length ? (
+      {lensSentence ? (
         sentenceLine
-      ) : lensSection && lensSection.items.length > 0 ? (
+      ) : lensSection && lensCards ? (
         <div data-lens-cards style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           {lensSection.items.map((it) => card(it, lensLane, true))}
         </div>
@@ -1178,16 +1443,20 @@ export function DiscoverySurface({
           data-empty-column
           style={{ display: "flex", flexDirection: "column", flex: "1 1 auto" }}
         >
-          <EmptyState
-            c="convene"
-            title="Nothing in this lens yet."
-            body="Widen the lens or browse another way."
-            action={
-              <Button variant="secondary" onClick={() => setLens("all")}>
-                Back to All
-              </Button>
-            }
-          />
+          {noMatch ? (
+            noMatchState
+          ) : (
+            <EmptyState
+              c="convene"
+              title="Nothing in this lens yet."
+              body="Widen the lens or browse another way."
+              action={
+                <Button variant="secondary" onClick={() => setLens("all")}>
+                  Back to All
+                </Button>
+              }
+            />
+          )}
         </div>
       )}
     </div>
@@ -1206,7 +1475,9 @@ export function DiscoverySurface({
   ) : (
     lensView
   );
-  const emptyLensView = lensEmpty && !read.isError && !(!read.data && read.isPending);
+  // 1147: the column an EmptyState fills, the lens's own or the search's, takes the visible height.
+  const emptyLensView =
+    (lensEmpty || (lens === "all" && noMatch)) && !read.isError && !(!read.data && read.isPending);
 
   // Pane stepping (1083, 1044): Previous and Next across the lane the open card came from, in its
   // order, to the nearest neighbours the member has not dismissed. The open card is found in the lane
@@ -1471,6 +1742,8 @@ export function DiscoverySurface({
           >
             {lensBar(true)}
           </div>
+          {/* B9-SPEC's compact line (1124): the search field full width under the lens bar. */}
+          {searchField}
           <div
             data-first-row
             // B9-SPEC's compact line: one row of the homes and the Filters trigger. FacetRail's compact
@@ -1513,7 +1786,8 @@ export function DiscoverySurface({
               )}
             />
           </div>
-          {/* B9-SPEC's compact line: the applied chips and Clear all, only when a facet is set. */}
+          {/* B9-SPEC's compact line: the applied chips and Clear all, only when a facet or a search
+              is set. */}
           {chipRow && (
             <div
               data-applied-row
