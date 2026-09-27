@@ -1089,12 +1089,13 @@ export function DiscoverySurface({
   };
 
   // The going row (1124, 1128, 1138, 1158): outside the relationship lanes, the three first names
-  // `event_going_names` gave for the event, joined as the surface joins names, then "and others are
-  // going."; nothing when it gave none. The relationship lanes keep their reason (1096), and the part
-  // lets a reason win over a going sentence.
+  // `event_going_names` gave for the event, comma-joined, then "and others are going.": "Ama, Kojo,
+  // Efua and others are going." (Chat, Session 34; `joinWords` would put a second "and" before the
+  // third name). Nothing when it gave none. The relationship lanes keep their reason (1096), and the
+  // part lets a reason win over a going sentence.
   const goingFor = (lane: DiscoveryLaneId, eventId: string, src: Discovery | null) => {
     const names = GOING_LANES.has(lane) ? src?.goingNames.get(eventId) : undefined;
-    return names && names.length > 0 ? joinWords(names) + " and others are going." : undefined;
+    return names && names.length > 0 ? names.join(", ") + " and others are going." : undefined;
   };
 
   /** One card, from the answer `src` it came from; `inGrid` fills its track in the lens grid. */

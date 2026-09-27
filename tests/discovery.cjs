@@ -425,8 +425,9 @@ function browseTiles(E) {
 
 /** The going row's names (1128, 1138): three first names per event, never the viewer's (1158). */
 const GOING_NAMES = ["Ama", "Kojo", "Efua"];
-/** The sentence the surface composes from them (handoff 34-A item 5): joined, then the words. */
-const GOING_SENTENCE = "Ama, Kojo and Efua and others are going.";
+/** The sentence the surface composes from them (handoff 34-A item 5, as Chat corrected it in
+ *  Session 34): the three comma-joined, then the words. */
+const GOING_SENTENCE = "Ama, Kojo, Efua and others are going.";
 
 /**
  * Full density (632, 1092, 1124): all eleven lanes. The member follows Kwame Mensah and Culture and
