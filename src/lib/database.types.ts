@@ -1,6 +1,6 @@
 // Generated from the canonical Supabase project (dgspjevjoblujcoljvkn) with the Supabase MCP
-// generate_typescript_types tool on the Discovery follow-up's branch (#66), after
-// 20260924140000_p2_event_presenters was applied and recorded.
+// generate_typescript_types tool on the first Discovery handoff's branch (#71, handoff 34-A), after
+// 20260926170000 to 20260926170300 were applied and recorded.
 //
 // Nothing here is hand-written except this header and the `Views` helper at the end, which the
 // generator drops and every regeneration restores (`src/lib/feed.ts` reads it). The regeneration
@@ -10,12 +10,14 @@
 // file byte for byte, and `tests/migration-drift.cjs` reads it, so the generator returns it. Every
 // object the generator returns is explained by a migration in this tree, so nothing is left out.
 //
-// What 20260924140000 adds here: the function `event_presenters`, the presenter line for many events
-// at once as the event pane resolves it (674, 1079, 1121): each event id keys `presented_by` from
-// `private.event_post_facts` and `host` from `private.member_display`. It runs as the caller, so the
-// row policy on `events` decides which ids answer; authenticated only; at most 200 ids a call.
+// What the four add here (1124, 1131, 1157 to 1160): the table `member_lane_activity`, a member's
+// latest act from each Discovery lane, which only `note_lane_act` writes and the member reads and
+// deletes under row policy; the function `note_lane_act`, that one writer; the function
+// `event_going_names`, the going row's first names for many events at once, resolved as the event
+// page resolves them, authenticated only, at most 200 ids a call; and `convene_discovery`'s `p_q`,
+// the search. `convene_lanes` gains two rows, Browse and Filling up, which are data and not types.
 //
-// The two private functions it reads are absent by design: the private schema is not exposed by
+// The private functions they read are absent by design: the private schema is not exposed by
 // PostgREST, so the generator does not see it and no surface may reach it.
 
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
@@ -1313,6 +1315,42 @@ export type Database = {
           },
         ];
       };
+      member_lane_activity: {
+        Row: {
+          act: string;
+          acted_at: string;
+          lane: string;
+          member_id: string;
+        };
+        Insert: {
+          act: string;
+          acted_at?: string;
+          lane: string;
+          member_id: string;
+        };
+        Update: {
+          act?: string;
+          acted_at?: string;
+          lane?: string;
+          member_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "member_lane_activity_lane_fkey";
+            columns: ["lane"];
+            isOneToOne: false;
+            referencedRelation: "convene_lanes";
+            referencedColumns: ["lane"];
+          },
+          {
+            foreignKeyName: "member_lane_activity_member_id_fkey";
+            columns: ["member_id"];
+            isOneToOne: false;
+            referencedRelation: "members";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       member_languages: {
         Row: {
           member_id: string;
@@ -2351,6 +2389,7 @@ export type Database = {
           p_lens?: string;
           p_places?: string[];
           p_price?: string[];
+          p_q?: string;
           p_when?: string;
         };
         Returns: Json;
@@ -2365,6 +2404,7 @@ export type Database = {
         Args: { p_alias: string; p_event: string };
         Returns: string;
       };
+      event_going_names: { Args: { p_events: string[] }; Returns: Json };
       event_media_object: {
         Args: { p_key: string; p_kind: string; p_slug: string };
         Returns: {
@@ -2399,6 +2439,10 @@ export type Database = {
       invite_event_party: {
         Args: { p_event: string; p_member: string; p_role: string };
         Returns: Json;
+      };
+      note_lane_act: {
+        Args: { p_act: string; p_lane: string };
+        Returns: undefined;
       };
       onboard_relationship: {
         Args: {
