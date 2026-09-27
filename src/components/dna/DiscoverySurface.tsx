@@ -53,6 +53,7 @@ import {
   type CSSProperties,
   type ReactNode,
 } from "react";
+import { EventShareView } from "@/components/dna/EventShareSheet";
 import { EVENT_PAGE_KEY } from "@/components/dna/EventSurface";
 import { Ghosts } from "@/components/dna/Ghosts";
 import { LoadError } from "@/components/dna/LoadError";
@@ -112,6 +113,7 @@ import { downloadIcs, eventShareUrl, loadEventPage, type EventPage } from "@/lib
 import { setSaved } from "@/lib/feed";
 import { setHeaderLens } from "@/lib/header-lens-store";
 import { useBackToOrigin, type Origin } from "@/lib/origin";
+import { PaneShareContext } from "@/lib/pane-share";
 import type { EventView } from "@/lib/post-view";
 import { readRailCollapsed, railBand, writeRailCollapsed, type RailBand } from "@/lib/rail-memory";
 import { setLeftRail, setRightRail, setShellLayout } from "@/lib/rail-store";
@@ -529,7 +531,8 @@ export function DiscoverySurface({
     void router.preloadRoute({ to: "/convene/events/$id", params: { id: eventId }, search });
     warmPage(eventId);
   };
-  // 1140, G120: Share and Copy link, in the card's menu and the pane's toolbar, hand over the address
+  // 1140, G120: Share and Copy link in the card's menu, and Copy link in the pane's toolbar, hand over
+  // the address
   // the event page's own Share hands over, built by `eventShareUrl` from that page's read: the public
   // page under /e/ when event_page says there is one (1028), and the member page, which always opens
   // the event, when there is none or the read fails or answers nothing. A share sheet and, on WebKit,
@@ -1634,9 +1637,9 @@ export function DiscoverySurface({
   // The toolbar (Hide or show the list, Copy link, Share) and the cluster (Previous event, Next
   // event, Back to Discovery) share the pane's top row. Hide list keeps the list the same element,
   // hidden and inert with its scroll kept, and centres the pane at 720; it lasts while the pane is
-  // open and resets when it closes. Copy link and Share are the card menu's own (`handOver`, 1140,
-  // G120): the open event's address as its page builds it, from the read the pane already made, so
-  // they are present for every event the pane opens.
+  // open and resets when it closes. Copy link is the card menu's own (`handOver`, 1140, G120): the
+  // open event's address as its page builds it, from the read the pane already made, so it is
+  // present for every event the pane opens. Share opens the share view below (1156).
   const [listHidden, setListHidden] = useState(false);
   useEffect(() => {
     if (!paneOpen) setListHidden(false);
@@ -1666,6 +1669,84 @@ export function DiscoverySurface({
   useLayoutEffect(() => {
     paneRoot.current?.querySelector<HTMLElement>("[data-pane-body]")?.scrollTo({ top: 0 });
   }, [paneId]);
+
+  // The share view in the pane (1156, G130; handoff 34-A item 7). The toolbar's Share and the event
+  // page's own Share open one view, `EventShareView`, in the pane body in place of the page, which
+  // stays mounted and hidden beneath it. The toolbar's Share is its toggle and is pressed while it
+  // shows. The view's close control and Escape inside it return to the page, at the place the page
+  // was left and with focus back on the control that opened it; Previous, Next and closing the pane
+  // close it too, since it belongs to the event it opened on. Copy link and the card menu's Share are
+  // unchanged (1140).
+  const [shareFor, setShareFor] = useState<string | null>(null);
+  const shareOpen = paneOpen && !!paneId && shareFor === paneId;
+  useEffect(() => {
+    setShareFor(null);
+  }, [paneId, paneOpen]);
+  const shareBack = useRef<{ id: string; top: number; opener: HTMLElement | null } | null>(null);
+  const refocus = useRef(false);
+  const openShare = useCallback(() => {
+    if (!paneId) return;
+    const body = paneRoot.current?.querySelector<HTMLElement>("[data-pane-body]");
+    shareBack.current = {
+      id: paneId,
+      top: body?.scrollTop ?? 0,
+      opener: document.activeElement instanceof HTMLElement ? document.activeElement : null,
+    };
+    setShareFor(paneId);
+  }, [paneId]);
+  const closeShare = (toOpener: boolean) => {
+    refocus.current = toOpener;
+    setShareFor(null);
+  };
+  useLayoutEffect(() => {
+    const root = paneRoot.current;
+    const body = root?.querySelector<HTMLElement>("[data-pane-body]");
+    if (shareOpen) {
+      // As Sheet does for its own heading: the heading takes focus, so the view is read first.
+      body?.scrollTo({ top: 0 });
+      const h = root?.querySelector<HTMLElement>("[data-pane-share] [data-sheet-heading]");
+      if (h && !h.hasAttribute("tabindex")) h.setAttribute("tabindex", "-1");
+      h?.focus({ preventScroll: true });
+      return;
+    }
+    const back = shareBack.current;
+    shareBack.current = null;
+    // Only back to the page it opened on: Previous and Next start the next page at its top.
+    if (!back || back.id !== paneId) return;
+    if (body) body.scrollTop = back.top;
+    if (refocus.current && back.opener?.isConnected) back.opener.focus({ preventScroll: true });
+    refocus.current = false;
+  }, [shareOpen, paneId]);
+  // The part names no pressed state for its tools, so the surface writes it on the part's own Share
+  // button (844): true while the view shows, false otherwise. G141 asks Strand for the prop.
+  useLayoutEffect(() => {
+    paneRoot.current
+      ?.querySelector<HTMLElement>('[data-pane-toolbar] [data-tool="share"]')
+      ?.setAttribute("aria-pressed", shareOpen ? "true" : "false");
+  }, [shareOpen, paneOpen, paneId, listHidden]);
+  const shareEvent = paneRead.data?.event;
+  const shareView =
+    shareOpen && paneId ? (
+      <div
+        data-pane-share
+        onKeyDown={(e) => {
+          if (e.key !== "Escape" || e.defaultPrevented) return;
+          // Before the pane's own Escape, which closes the pane.
+          e.preventDefault();
+          closeShare(true);
+        }}
+        style={{ display: "flex", flexDirection: "column", minHeight: "100%" }}
+      >
+        <EventShareView
+          title={shareEvent?.title ?? paneTitle}
+          // Built as the page builds its own: the member address until the page's read answers.
+          url={eventShareUrl(window.location.origin, shareEvent ?? { id: paneId })}
+          isPublic={!!shareEvent?.public}
+          onClose={() => closeShare(true)}
+          onToast={say}
+        />
+      </div>
+    ) : null;
   // 688: the lanes stay where the member left them. With the pane bounded the feed column cannot
   // scroll (its offset clamps to 0) and the list column scrolls instead. So the card at the list
   // column's top is kept, with its distance from that top, and when the pane closes the feed column
@@ -1820,7 +1901,7 @@ export function DiscoverySurface({
           listHidden={listHidden}
           onToggleList={() => setListHidden((h) => !h)}
           onCopyLink={paneId ? () => handOver(paneId, "copy") : undefined}
-          onShare={paneId ? () => handOver(paneId, "share") : undefined}
+          onShare={paneId ? () => (shareOpen ? closeShare(false) : openShare()) : undefined}
           onClose={closePane}
           closeLabel={"Back to " + (fromElsewhere ? toOrigin.origin.label : "Discovery")}
           // Correction 30 (G128): Pane does not follow while the list is hidden, and on Show list
@@ -1828,7 +1909,13 @@ export function DiscoverySurface({
           selectedKey={paneId ?? undefined}
           {...stepping}
         >
-          {pane}
+          <PaneShareContext.Provider value={paneId ? openShare : null}>
+            {shareView}
+            {/* The page stays mounted beneath the view, laid out as the body's own child. */}
+            <div data-pane-page style={{ display: shareOpen ? "none" : "contents" }}>
+              {pane}
+            </div>
+          </PaneShareContext.Provider>
         </Pane>
         {toasts}
       </div>

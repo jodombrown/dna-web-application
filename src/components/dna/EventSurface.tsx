@@ -24,7 +24,7 @@
 // projection; nothing here counts anything for display.
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { useState, type CSSProperties } from "react";
+import { useContext, useState, type CSSProperties } from "react";
 import { Avatar } from "@/components/strand/Avatar";
 import { BackRow } from "@/components/strand/BackRow";
 import { Button } from "@/components/strand/Button";
@@ -46,6 +46,7 @@ import {
 } from "@/lib/event-page";
 import { deliverImageUrl } from "@/lib/media";
 import { useBackToOrigin } from "@/lib/origin";
+import { PaneShareContext } from "@/lib/pane-share";
 import { useTier } from "@/lib/tier";
 import { browserZone } from "@/lib/when";
 import {
@@ -137,6 +138,9 @@ export function EventSurface({
     initial: "going",
   });
   const [share, setShare] = useState(false);
+  // 1156 (G130): in Discovery's pane the page's own Share opens the pane's share view, the one its
+  // toolbar opens; outside the pane there is no opener and the page keeps its Sheet.
+  const paneShare = useContext(PaneShareContext);
   const [invitation, setInvitation] = useState<EventInvitation | null>(null);
 
   const pageQ = useQuery({
@@ -579,7 +583,7 @@ export function EventSurface({
             <Button
               variant="secondary"
               size="sm"
-              onClick={() => setShare(true)}
+              onClick={() => (paneShare ? paneShare() : setShare(true))}
               data-testid="event-share"
             >
               Share

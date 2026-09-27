@@ -5861,7 +5861,7 @@ restoration or excluded from it.
 
 ---
 
-## G130. The event page's Share sheet keeps its own share and copy, apart from Discovery's `useShare`
+## G130. The event page's Share sheet keeps its own share and copy, apart from Discovery's `useShare` — closed (ruling 1156)
 
 **Severity: low. Opened 26 September 2026 during the review of handoff 33-A Addendum 1 item 2 (G120), filed under ruling 597. The number is assigned by this entry (ruling 638).**
 
@@ -5883,6 +5883,17 @@ dismissed share toasts in one and not the other. Neither is ruled: 1140 names th
 neither B9-SPEC nor B10-SPEC section 4 names the payload or what a refused share shows. Owed: a
 ruling on one share path for the card, the pane and the page, with its payload and what a refused
 share shows.
+
+**Closed 27 September 2026, in handoff 34-A item 7, under ruling 1156.** 1156 ruled the share in the
+pane, and B9-SPEC Revision 6 carries it as "one share view, one path". The toolbar's Share and the
+event page's own Share now open one view, `EventShareView` in `src/components/dna/EventShareSheet.tsx`,
+in the pane body in place of the page and never as a Sheet over the screen. Its close control returns
+to the page. The standalone page's Sheet wraps the same component, unchanged, so the event page has
+one share wherever it renders: Share via hands over `{ title, url }`, is offered only where the
+browser has Web Share, and shows nothing when the share is refused. The toolbar's
+`handOver(paneId, "share")` is gone. As 1156 leaves them, the card menu's Share and Copy link and the
+toolbar's Copy link stay on `useShare` (1140): the card menu hands over `{ url }` and shows the
+address when a share is refused. That is the one difference left, and it is ruled rather than owed.
 
 ---
 
@@ -6228,3 +6239,26 @@ reach the host that serves Actions artifacts.
 
 Owed: that screenshot, read while the artifact is retained, and any further red reading of this arm
 added here before a cause is named.
+
+---
+
+## G141. Pane's toolbar names no pressed state, so the surface writes `aria-pressed` on the part's Share
+
+**Severity: low. Opened 27 September 2026 during handoff 34-A (item 7), filed under ruling 597. The
+number is assigned by this entry (ruling 638).**
+
+1156, with the founder's amendment to the 1164 release, makes the pane toolbar's Share the share
+view's toggle: it carries `aria-pressed` while the view shows. Strand's Pane at `v1790410319010950`
+draws that control as an `IconButton` marked `data-tool="share"` and forwards nothing else to it, no
+pressed prop and no pressed look (`src/components/strand/Pane.tsx:416` to `418`). So
+`DiscoverySurface` writes `aria-pressed` on the part's own button, reached as
+`[data-pane-toolbar] [data-tool="share"]`: true while the view shows, false otherwise. 844 is the
+precedent for reading a part's DOM where the part names no hook. React leaves an attribute it does not
+manage in place, and the surface writes it again on every render that could change it.
+
+What it costs. The state is announced and not drawn: the part's Share looks the same pressed and
+unpressed, apart from its hover and focus rendering. A redraw of the part's toolbar on a render the
+surface's effect does not follow would drop the attribute until the next write.
+
+Owed: a Strand correction giving Pane's toolbar tools a pressed state, as a prop and a look. Once it
+lands, the surface passes the prop and the DOM write goes.

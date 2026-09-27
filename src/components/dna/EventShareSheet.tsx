@@ -6,6 +6,11 @@
 // runtime by `qrcode` (pinned in package.json) into a data URL the page's CSP already admits, and it
 // is a distinct object from an admit token: a plain square, labelled as a page link, with the line
 // that says it admits nobody (88). `Share via` uses the Web Share API where the browser has it.
+//
+// Handoff 34-A item 7 (1156, G130): the view is `EventShareView`, one component, and it renders in
+// two places. The standalone page's Sheet below wraps it and is unchanged. In Discovery's pane at
+// expanded it renders in the pane body in place of the event page, opened by the page's own Share
+// and by the pane toolbar's Share alike, and its close control returns to the page.
 import { useEffect, useRef, useState } from "react";
 import QRCode from "qrcode";
 import { Button } from "@/components/strand/Button";
@@ -27,15 +32,26 @@ export type EventShareSheetProps = {
 
 export const SHARE_COPIED = "Link copied.";
 
-export function EventShareSheet({
-  open,
+export type EventShareViewProps = Omit<EventShareSheetProps, "compact" | "open"> & {
+  /** Whether the view is showing: the code is drawn only then. The Sheet keeps it mounted through
+   *  its exit, so it passes its own `open`; the pane mounts it only while it shows. */
+  open?: boolean | undefined;
+};
+
+/**
+ * The share view (1156): the heading row with its close control, then the address with Copy, the
+ * page-link code and its line where the page is public (1028), and Share via where the browser has
+ * Web Share. Two siblings, so the Sheet lays them out exactly as it always has and the pane gives
+ * them a column of their own.
+ */
+export function EventShareView({
+  open = true,
   onClose,
   title,
   url,
   isPublic,
-  compact,
   onToast,
-}: EventShareSheetProps) {
+}: EventShareViewProps) {
   const [code, setCode] = useState<string | null>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   const canShare = typeof navigator !== "undefined" && typeof navigator.share === "function";
@@ -75,17 +91,7 @@ export function EventShareSheet({
   };
 
   return (
-    <Sheet
-      open={open}
-      onClose={onClose}
-      variant={compact ? "sheet" : "drawer"}
-      label="Share this event"
-      actions={
-        <Button variant="secondary" onClick={onClose}>
-          Done
-        </Button>
-      }
-    >
+    <>
       <div
         style={{
           display: "flex",
@@ -209,6 +215,40 @@ export function EventShareSheet({
           </div>
         )}
       </div>
+    </>
+  );
+}
+
+/** The standalone page's Share sheet: the view in a Sheet with Done, exactly as before the split. */
+export function EventShareSheet({
+  open,
+  onClose,
+  title,
+  url,
+  isPublic,
+  compact,
+  onToast,
+}: EventShareSheetProps) {
+  return (
+    <Sheet
+      open={open}
+      onClose={onClose}
+      variant={compact ? "sheet" : "drawer"}
+      label="Share this event"
+      actions={
+        <Button variant="secondary" onClick={onClose}>
+          Done
+        </Button>
+      }
+    >
+      <EventShareView
+        open={open}
+        onClose={onClose}
+        title={title}
+        url={url}
+        isPublic={isPublic}
+        onToast={onToast}
+      />
     </Sheet>
   );
 }
