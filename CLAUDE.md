@@ -4,6 +4,8 @@
 
 Supabase (Postgres, Auth, RLS, Storage, Realtime, Edge Functions), Cloudflare (Pages, Workers, R2, Images), TypeScript throughout, Stripe, Resend, Mapbox. Source of truth for specs and doctrine is Notion; the brief you were handed is the scope.
 
+Cloudflare Pages is the host (1139): `pages.yml` deploys every branch as its own preview and `main` to production, so a merge to `main` is what goes live.
+
 ## Operating mode
 
 You are operating autonomously. The user is not watching in real time and cannot answer questions mid-task, so asking "Want me to?" or "Shall I?" will block the work. For reversible actions that follow from the original request, proceed without asking. Stop only for destructive actions or genuine scope changes the user must decide. Offering follow-ups after the task is done is fine; asking permission before doing the work is not.
@@ -74,7 +76,7 @@ Before you start, say in one line what you are about to do. Brief updates while 
 [absolute] Nothing outside a `claude/*` merge alters schema.
 [absolute] Fixed vocabularies (focus areas, industries, regional expertise, skills, languages, countries) are database tables read at runtime, never hardcoded arrays in a component. The legacy build kept them in a React file with a comment admitting they had to be hand-synced with the database; that is the named anti-pattern. What this governs is content vocabularies — the values a member's record can hold and a surface must display a label for — and not navigation (ruling 999, withdrawing 997's data half). `src/lib/lens.ts` is the standing instance of the distinction: a lens set is the surface's own corpus switch, it names no member data, nothing reads a label for it out of a row, and it is not a breach of this line. The Feed's lens set in `src/lib/lens.ts` has no vocabulary table and does not enter `public.vocabularies()` (194, 1041); Convene's lens set is `public.convene_lenses` and does (693, 1041).
 Convene's families and lenses are `public.convene_families` and `public.convene_lenses`, served by `vocabularies()`; `src/lib/lens.ts` is the Feed's structural lens set and stays in code under 194 and 1041.
-Convene's lens set is five, All, Communities, For you, Curated and My network (1093), and Discovery's nine lanes are their own table, `public.convene_lanes`, served by `vocabularies()` as `convene_lanes` (1105). A lens says who the events come from, and each lens but All shows its one lane; the lanes carry the floors and the dismissals, so neither id set stands in for the other.
+Convene's lens set is five, All, Communities, For you, Curated and My network (1093), and Discovery's eleven lanes, Browse and Filling up among them (1124), are their own table, `public.convene_lanes`, served by `vocabularies()` as `convene_lanes` (1105). A lens says who the events come from, and each lens but All shows its one lane; the lanes carry the floors and the dismissals, so neither id set stands in for the other. Learned order is the member's own (1160): `convene_discovery` answers the lanes in it and names it as `lane_order`, from `public.member_lane_activity`, which `note_lane_act` alone writes, and no surface sorts lanes by position.
 [absolute] One read projection and one write path per surface. Profile ships profile_view and save_profile_section; every surface after it follows the same shape. The legacy build had ten-plus duplicate profile-read functions.
 [absolute] A derived row, one table restating a fact whose truth lives in another, is written by its source's write path in the same transaction that writes the source, and never by a trigger (ruling 1002). `public.event_registrations` is the truth for attendance and `private.rsvp_write` writes the `event_rsvp` edge beside it; `private.rsvp_edge_drift()` names every disagreement and `tests/rsvp-drift.cjs` reads it, because a derivation nothing enforces is a derivation that drifts. The rows the build already derives by trigger are recorded as G56 and are not changed by the ruling.
 [absolute] The attestations table is chassis and already exists. Every engine writes to it; no engine creates its own attestation, endorsement, or trust table.
@@ -194,6 +196,14 @@ page loading across the swap 404s. It cost one arm's page-error check during Fix
 on one engine of two, and the tell was that only one of the eighteen connect arms failed when a real
 defect would have failed all eighteen. Wait for the dispatch, then push.
 
+Ruling 1155 amends 554, on 1141's per-deployment host. Every job reads the deployment it tests at that
+deployment's own URL, `https://<id>.dna-web-application.pages.dev`, and never the branch alias:
+`pages.yml`'s deploy job fails by name without one, and `matrix.yml` refuses a dispatch without its
+`base_url`. A dispatched run that names a deployment's own host keeps testing that build when a later
+push deploys another, so the swap above does not reach it. A later push still cancels the branch's
+running `pages.yml` jobs through that workflow's concurrency group, a `pages.yml` dispatch among them,
+so a run whose result is to be cited is still waited for.
+
 The enforcing matrix runs on the final head, and nothing is committed to the branch after it starts
 (ruling 556, which sequences 554 rather than amending it). A commit arriving mid-run does not invalidate
 the run, it invalidates the run's subject: an enforcing run on a head that is about to be superseded
@@ -234,6 +244,9 @@ behaviour standing rather than guessing.
 
 Build order for any surface: schema and RLS, then Edge Functions, then UI. Confirm any design extraction arrived with real content before building from it; a missing or empty extraction is a stop-and-report condition, never a reason to reconstruct the prototype from ruling summaries (ruling 90). No surface is built without an approved Claude Design prototype (ruling 62); the extraction and SPEC.md are the visual contract, the brief is the behavior contract.
 Design tokens and components come from Strand via the extraction; never from shadcn, never from the old repo (rulings 70, 72).
+The live Strand compile is `v1790410319010950` (1153): every part in `src/components/strand/` is read from it, and never measured off Design's frames (924).
+EmptyState fills the column it sits in, and the caller gives that column its height (1147): a bounded column, a Pane's list or body, by its own height, and a page's column by the visible height the shell publishes as `--_shell-visible`.
+Every IconButton names itself through Strand's Tooltip, and never through a native `title=` (1146).
 `--z-menu` is 62 in the stacking order, between `--z-sheet` (60) and `--z-dialog` (65) in `src/styles/strand.css` (1103): a Menu opens above the pane, the sticky chrome and a sheet it is summoned from, and below a dialog and the notification panel.
 Exit check for every surface is the responsive test matrix on the deployed URL: 360, 390, 430, 744, 820, 1024 both orientations, 1280, 1536, both themes, Safari and Chrome (ruling 61).
 
