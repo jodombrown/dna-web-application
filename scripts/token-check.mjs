@@ -26,7 +26,7 @@ const EXT = new Set([".ts", ".tsx", ".css", ".svg", ".html"]);
 const EXCLUDE = new Set([path.join(ROOT, "src/styles.css")]);
 
 /**
- * src/components/ui is the shadcn layer Lovable generates, on its own ramp and on Radix's runtime
+ * src/components/ui is the shadcn layer Lovable generated, on its own ramp and on Radix's runtime
  * custom properties (--radix-*). Rulings 70 and 72 keep Strand and that layer apart; a Strand token
  * check that walked into it would report Radix's properties as missing declarations.
  */

@@ -45,7 +45,7 @@ export type Vocabularies = {
     icon: string;
     scope: string;
   }[];
-  /** Rulings 1092 and 1105: Discovery's nine lanes, in their one fixed order, each with its name. */
+  /** Rulings 1092, 1105, 1124 and 1172: Discovery's ten lanes, in their base order, each with its name. */
   convene_lanes: { value: DiscoveryLaneId; name: string }[];
 };
 

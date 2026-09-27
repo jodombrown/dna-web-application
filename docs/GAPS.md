@@ -5861,7 +5861,7 @@ restoration or excluded from it.
 
 ---
 
-## G130. The event page's Share sheet keeps its own share and copy, apart from Discovery's `useShare`
+## G130. The event page's Share sheet keeps its own share and copy, apart from Discovery's `useShare` — closed (ruling 1156)
 
 **Severity: low. Opened 26 September 2026 during the review of handoff 33-A Addendum 1 item 2 (G120), filed under ruling 597. The number is assigned by this entry (ruling 638).**
 
@@ -5883,6 +5883,17 @@ dismissed share toasts in one and not the other. Neither is ruled: 1140 names th
 neither B9-SPEC nor B10-SPEC section 4 names the payload or what a refused share shows. Owed: a
 ruling on one share path for the card, the pane and the page, with its payload and what a refused
 share shows.
+
+**Closed 27 September 2026, in handoff 34-A item 7, under ruling 1156.** 1156 ruled the share in the
+pane, and B9-SPEC Revision 6 carries it as "one share view, one path". The toolbar's Share and the
+event page's own Share now open one view, `EventShareView` in `src/components/dna/EventShareSheet.tsx`,
+in the pane body in place of the page and never as a Sheet over the screen. Its close control returns
+to the page. The standalone page's Sheet wraps the same component, unchanged, so the event page has
+one share wherever it renders: Share via hands over `{ title, url }`, is offered only where the
+browser has Web Share, and shows nothing when the share is refused. The toolbar's
+`handOver(paneId, "share")` is gone. As 1156 leaves them, the card menu's Share and Copy link and the
+toolbar's Copy link stay on `useShare` (1140): the card menu hands over `{ url }` and shows the
+address when a share is refused. That is the one difference left, and it is ruled rather than owed.
 
 ---
 
@@ -6182,3 +6193,154 @@ On a desktop the inset is 0 either way, so nothing moves. Above compact with a t
 Owed: the header in longhand only, as `AppHeader` and `ProfileSurface`'s public header already are
 (ruling 344's inset in `paddingTop`, the sides in `paddingLeft` and `paddingRight`). Handoff 33-D
 does not reach this surface, so it is not changed here.
+
+## G140. After sign-in, Chromium's 1366x1024 light onboarding-layout arm stayed on `/sign-in?` for 15 s on run 379, and passed on runs 380 and 381
+
+**Severity: low, unread. Opened 27 September 2026 during handoff 34-A (item 1), filed under
+ruling 597. The number is assigned by this entry (ruling 638).**
+
+Three readings of `chromium-1366x1024-light-onboarding-layout`, each from the `matrix (chromium)` job
+of a `pages.yml` run:
+
+- **Run 379, red.** `main`'s push run on `dc21b64` (`36277451548`, job `108502943001`), against
+  `4d90a13f.dna-web-application.pages.dev`. The arm's first wait, `signInTo(page, "**/welcome")`
+  (`tests/onboarding.cjs:163`, the wait at `:121`), timed out. The log reads
+  `page.waitForURL: Timeout 15000ms exceeded.`, then
+  `waiting for navigation to "**/welcome" until "load"`, then
+  `navigated to "https://4d90a13f.dna-web-application.pages.dev/sign-in?"`. Its ruling 292 line
+  read `emitted 1 of 37; the 36 checks behind the failure never ran`. The job read 6842 of 6844:
+  the arm's failure and its 292 line were the only two, 0 behind a web-process crash (G5) and 2
+  unclassified.
+- **Run 380, green.** The push run on `bc7c9c9`, on `claude/new-session-rqs074` (`36280764192`, job
+  `108512103333`), against `7356b9b8.dna-web-application.pages.dev`. The arm emitted 37 of 37 (ARM
+  5913 to 5950) and the job read 6880 of 6880.
+- **Run 381, green.** `main`'s push run on `eba3198` (`36285472824`, job `108525412534`), against
+  `499e8435.dna-web-application.pages.dev`. The arm emitted 37 of 37 (ARM 5913 to 5950) and the job
+  read 6880 of 6880.
+
+What the three builds share. `eba3198`'s tree is `bc7c9c9`'s (both `3ccc3bf`), so runs 380 and 381
+read one tree. `dc21b64` differs from it by handoff 33-C's three commits and nothing else.
+`b5798d6` deleted `.lovable/` and `src/lib/lovable-error-reporting.ts`, took the reporter's call out
+of the root `ErrorComponent` (`src/routes/__root.tsx`), and edited `README.md` and `AGENTS.md`.
+`26fc1e3` rewrote `vite.config.ts` off `@lovable.dev/vite-tanstack-config` and took the wrapper out
+of `package.json`, `bun.lock` and `bunfig.toml`; its message records a clean build byte-identical to
+`b5798d6`'s through the wrapper once the three values that differ between any two clean builds are
+set aside. `bc7c9c9` edited `AGENTS.md` and `CLAUDE.md`. `src/routes/sign-in.tsx` and
+`tests/onboarding.cjs` are the same file in all three.
+
+What the address shows, and no more. `/sign-in?`, with an empty query, is the address a native
+submission of the sign-in form produces: the form declares no `method` or `action`, and neither field
+carries a `name` (`src/routes/sign-in.tsx:219` to `244`). Whether the press reached the form before
+its `onSubmit` did was not read (555).
+
+Not read: the arm's failure screenshot, `onboarding-layout-fail-chromium-1366-light`, in run 379's
+artifact `matrix-chromium-run-379` (`10918766443`). The session that opened this entry could not
+reach the host that serves Actions artifacts.
+
+Owed: that screenshot, read while the artifact is retained, and any further red reading of this arm
+added here before a cause is named.
+
+---
+
+## G141. Pane's toolbar names no pressed state, so the surface writes `aria-pressed` on the part's Share
+
+**Severity: low. Opened 27 September 2026 during handoff 34-A (item 7), filed under ruling 597. The
+number is assigned by this entry (ruling 638).**
+
+1156, with the founder's amendment to the 1164 release, makes the pane toolbar's Share the share
+view's toggle: it carries `aria-pressed` while the view shows. Strand's Pane at `v1790410319010950`
+draws that control as an `IconButton` marked `data-tool="share"` and forwards nothing else to it, no
+pressed prop and no pressed look (`src/components/strand/Pane.tsx:416` to `418`). So
+`DiscoverySurface` writes `aria-pressed` on the part's own button, reached as
+`[data-pane-toolbar] [data-tool="share"]`: true while the view shows, false otherwise. 844 is the
+precedent for reading a part's DOM where the part names no hook. React leaves an attribute it does not
+manage in place, and the surface writes it again on every render that could change it.
+
+What it costs. The state is announced and not drawn: the part's Share looks the same pressed and
+unpressed, apart from its hover and focus rendering. A redraw of the part's toolbar on a render the
+surface's effect does not follow would drop the attribute until the next write.
+
+Owed: a Strand correction giving Pane's toolbar tools a pressed state, as a prop and a look. Once it
+lands, the surface passes the prop and the DOM write goes.
+
+---
+
+## G142. `tests/rsvp-drift.cjs` prints FAIL and exits 0
+
+**Severity: medium. The step that exists to go red on a derivation that drifts (ruling 1002) stays
+green when it finds one. Opened 27 September 2026 during handoff 34-A, filed under ruling 597. The
+number is assigned by this entry (ruling 638).**
+
+Three of the arm's failure paths set `code = 1` and `return` from inside the `try`
+(`tests/rsvp-drift.cjs:92` to `93`, `:125` to `126`, `:130` to `131`). A `return` there runs the
+`finally`, which closes the client, and leaves the async function, so `process.exit(code)` at `:149`
+is never reached. Node then exits on its own with status 0, and the workflow step `RSVP edge drift
+(ruling 1002)` in `pages.yml` reads green. Only the path that throws, `code = 1` in the `catch`,
+reaches the exit.
+
+What it hid. On run 382, the live job on `8e31309` after Chat's seed under 1165, the step printed
+ten `FAIL going without an edge` rows, one per seeded registration with no `event_rsvp` edge beside
+it. It exited 0. The disagreement reached a red reading only through the live-checks arms that read
+the drift function themselves (handoff 30-D's claim arm). The seed itself is Chat's and is reported
+on the PR (#71). This entry is the arm's exit.
+
+Owed: the three failure paths reach the exit with their status, and the step goes red on a
+disagreement. A one-line change in the test, outside 34-A's scope, so it is filed rather than made
+here.
+
+---
+
+## G143. A live-db block whose presence probe fails reports one name UNPROVEN and drops every other arm in it
+
+**Severity: medium. Arms that cannot run vanish instead of reading UNPROVEN, which is the failure mode
+ruling 228 exists to prevent. Opened 27 September 2026 during handoff 34-A, filed under ruling 597.
+The number is assigned by this entry (ruling 638).**
+
+`tests/live-db.cjs` opens each block with a presence probe, `to_regprocedure` on the function the
+block reads. When the probe answers null the block calls `skip(names.x, why)` for its first arm's
+name alone and returns. Every other arm in the block is recorded by a bare `record(...)` with a label
+of its own, so none of them is reported at all: not FAIL, not UNPROVEN. On run 382 the Discovery
+block's probe named `convene_discovery`'s eight-argument signature, which 20260926170300 drops. Of
+the block's nineteen arms it reported one UNPROVEN, its first, and the other eighteen were absent from
+the job's count, which read 141 of 143 (job `108539886763`). Handoff 34-A moves that probe to the
+nine-argument signature, so the block runs again. The mechanism is unchanged in this block and in
+the others built the same way.
+
+Owed: a block that cannot run reports every arm it carries as UNPROVEN with the probe's reason, for
+example by naming its arms up front in `names` and skipping each, so a missing function reads as the
+coverage it removes.
+
+---
+
+## G144. At medium, a centred lens bar leaves less than 140 beside it below a viewport of about 905 — closed (ruling 1171)
+
+**Severity: low. A reading of B9-SPEC Revision 6 that the geometry forced. Opened 27 September 2026
+during handoff 34-A (item 5), filed under ruling 597. The number is assigned by this entry (ruling
+638).**
+
+B9-SPEC Revision 6's medium line puts the search field in the lens row, "taking the width left beside
+the bar, 140 to 280" (1124), and its Lens bar line keeps the bar centred at medium and expanded
+(1145). The bar's width is its five words', 561 in Chromium at every width measured. The row is the
+canvas less 32 on each side. A centred bar leaves `(row - 561) / 2 - 12` beside it: 7 at 640, 59 at
+744, 97 at 820 and 199 at 1024. So from 640 to about 905 no reading gives the field 140 beside a
+centred bar, and below about 725 not even beside a bar at the row's start.
+
+What the tree does. `LensRow` in `src/components/dna/DiscoverySurface.tsx` measures the laid-out row
+and bar on every render and resize. Where a centred bar leaves 140 beside it, the field sits there at
+its end, 140 to 280, which is every expanded width. Where it does not, the field takes its own line
+under the bar, centred at up to 280, so 1145's centring holds and the bar is never squeezed. The
+discovery search arm reads the field beside the bar at 1280 and under it at 820.
+
+Owed: a ruling on the field's place at medium where the width beside a centred bar is under 140,
+whether that is this line under the bar or another.
+
+**Closed 27 September 2026, in handoff 34-A's addendum item C, under ruling 1171.** Where the bar, a
+12 gap and a 140 field do not fit side by side in the lens row, the field takes its own full-width row
+under the bar, as at compact. With 1170 the bar and the field centre together as one unit on the line
+the header's five Cs centre on, so the fit is measured on the width available to a unit centred on
+that line: the row's width less twice the line's distance from the row's centre. `LensRow` in
+`src/components/dna/DiscoverySurface.tsx` measures the row, the bar and the dock, and measures again
+when any of them resizes. At medium the dock is the fixed one and its Cs centre on the viewport, so
+the flip is where the row's width reaches the bar's 560.77, the gap and 140: the field sits beside
+the bar from a viewport of 777 and under it at 776, read in Chromium after the fonts settle. The
+discovery facets arm reads the unit at 820, 1280 and 1440 and the search arm at 820 and 1280.

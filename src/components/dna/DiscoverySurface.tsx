@@ -4,20 +4,26 @@
 // discovery face, Menu, FacetRail's displays and ladders, Input's combobox and Pane's stepping. Handoff
 // 33-A binds what Strand correction 28 added to them (1134): the face's link (G100) and its own title
 // clamp (G115), the pane at 520 with its height, toolbar and hidden list (G110, 1127), Topics in two
-// columns in the compact Sheet only (G102, 1144) and Clear all in the rail's heading row (G111).
+// columns in the compact Sheet only (G102, 1144) and Clear all in the rail's heading row (G111). The
+// first Discovery handoff (34-A, 1124 to 1174) restores the search, Filling up, the member's learned
+// lane order and the going row (1128, 1138, 1158); its addendum withdraws the Browse lane (1172) and
+// centres the lens bar and the search field as one unit (1170, 1171).
 //
 // One read projection and one write path per surface (CLAUDE.md): everything this surface shows comes
-// through `loadDiscovery` (the cards are the Feed's own views, hydrated by post id inside it, 660) and
-// Place's options through `convene_places()` (1095). Every menu act is an existing write path (item
-// 6): Save is the Feed's `setSaved`, Add to calendar the event page's `.ics`, Follow is Connect's
-// `set_follow` wrapper, Subscribe `set_subscription` and Not this `dismiss_discovery_item`. The
-// rail's open or collapsed state is the member's own row in `member_rail_state` (1111). Nothing here filters, ranks or counts:
-// the projection chose every lane and every item under row policy, and a lane it did not return is
-// absent with no heading and no placeholder (632).
+// through `loadDiscovery` (the cards are the Feed's own views, hydrated by post id inside it, 660; the
+// going names are `event_going_names` beside `event_presenters`) and Place's options through
+// `convene_places()` (1095). Every menu act is an existing write path (item 6): Save is the Feed's
+// `setSaved`, Add to calendar the event page's `.ics`, Follow is Connect's `set_follow` wrapper,
+// Subscribe `set_subscription` and Not this `dismiss_discovery_item`. The rail's open or collapsed
+// state is the member's own row in `member_rail_state` (1111), and the three acts that teach the lane
+// order (a card opened, saved or followed from a lane) go only through `noteLaneAct` (1160). Nothing
+// here filters, ranks, sorts or counts: the projection chose every lane and every item under row
+// policy and answers the lanes in the member's order, and a lane it did not return is absent with no
+// heading and no placeholder (632).
 //
-// Two vocabularies, never one (1093, 1105): the five lenses switch who the events come from, the nine
-// lanes are sections of the page. Every lens word comes from `convene_lenses` and every lane name from
-// `convene_lanes`; the ids alone live in code.
+// Two vocabularies, never one (1093, 1105): the five lenses switch who the events come from, the
+// ten lanes are sections of the page. Every lens word comes from `convene_lenses` and every lane
+// name from `convene_lanes`; the ids alone live in code.
 //
 // Layout (1082 as amended by 1094; item 7). The LensBar shows the five lenses with labels always and
 // icons at every tier and no seat after the lenses. The FacetRail is collapsed by default at every width: a
@@ -33,11 +39,12 @@
 // and the page's read under the key EventSurface reads (1067). The read refetches on window focus and
 // never live.
 //
-// No digit renders except in a card's when line: the reason row is words (1096), the where line is a
-// format word and places, and there is no count anywhere.
+// No digit renders except in a card's when line: the reason and going rows are words (1096, 1138),
+// the where line is a format word and places, and there is no count anywhere.
 import { useQuery, useQueryClient, type QueryState } from "@tanstack/react-query";
 import { useLocation, useNavigate, useRouter } from "@tanstack/react-router";
 import {
+  useCallback,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -46,6 +53,7 @@ import {
   type CSSProperties,
   type ReactNode,
 } from "react";
+import { EventShareView } from "@/components/dna/EventShareSheet";
 import { EVENT_PAGE_KEY } from "@/components/dna/EventSurface";
 import { Ghosts } from "@/components/dna/Ghosts";
 import { LoadError } from "@/components/dna/LoadError";
@@ -61,6 +69,7 @@ import {
 } from "@/components/strand/FacetRail";
 import { Icon } from "@/components/strand/Icon";
 import { IconButton } from "@/components/strand/IconButton";
+import { Input } from "@/components/strand/Input";
 import { LensBar, type Lens } from "@/components/strand/LensBar";
 import type { MenuProps } from "@/components/strand/Menu";
 import { Pane } from "@/components/strand/Pane";
@@ -69,8 +78,10 @@ import { Toast } from "@/components/strand/Toast";
 import type { Member } from "@/lib/auth";
 import {
   dismissDiscoveryItem,
+  GOING_LANES,
   loadConvenePlaces,
   loadDiscovery,
+  noteLaneAct,
   setSubscription,
   type ConveneLensId,
   type ConvenePlace,
@@ -90,6 +101,7 @@ import {
   droppedUnknown,
   facetLists,
   NO_FACETS,
+  Q_MAX,
   searchOf,
   type DiscoverySearch,
   type FacetLists,
@@ -99,6 +111,7 @@ import { downloadIcs, eventShareUrl, loadEventPage, type EventPage } from "@/lib
 import { setSaved } from "@/lib/feed";
 import { setHeaderLens } from "@/lib/header-lens-store";
 import { useBackToOrigin, type Origin } from "@/lib/origin";
+import { PaneShareContext } from "@/lib/pane-share";
 import type { EventView } from "@/lib/post-view";
 import { readRailCollapsed, railBand, writeRailCollapsed, type RailBand } from "@/lib/rail-memory";
 import { setLeftRail, setRightRail, setShellLayout } from "@/lib/rail-store";
@@ -210,7 +223,180 @@ const H2: CSSProperties = {
   color: "var(--ink)",
 };
 
+/** B9-SPEC's medium line (1124, 1171): the search field beside the bar takes 140 to 280, past a 12 gap. */
+const SEARCH_MIN = 140;
+const SEARCH_MAX = 280;
+const SEARCH_GAP = 12;
+
+/**
+ * The search (1124, 1159): one Strand Input. Enter applies the trimmed text as `q`, and applying an
+ * empty field removes it; Escape clears the draft and leaves an applied search as it is, so the chip
+ * and Clear all are what remove it. The draft follows the applied text whenever that changes (its chip
+ * removed, Clear all, Back). The field holds 100 characters, the most the projection takes.
+ */
+function SearchField({ q, onApply }: { q: string; onApply: (text: string) => void }) {
+  const [draft, setDraft] = useState(q);
+  useEffect(() => setDraft(q), [q]);
+  return (
+    <div data-discovery-search style={{ minWidth: 0 }}>
+      <Input
+        role="searchbox"
+        aria-label="Search events"
+        placeholder="Search events, hosts, places"
+        icon="search"
+        inputMode="search"
+        enterKeyHint="search"
+        autoComplete="off"
+        maxLength={Q_MAX}
+        value={draft}
+        onChange={(e) => setDraft((e.target as HTMLInputElement).value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            onApply(draft.trim());
+          } else if (e.key === "Escape" && draft) {
+            e.preventDefault();
+            setDraft("");
+          }
+        }}
+      />
+    </div>
+  );
+}
+
+/**
+ * The line the five Cs centre on (1170): the Pulse dock's five C buttons, in the header at expanded
+ * and in the fixed dock below expanded, read as the centre of the box their five faces span. Null when
+ * no dock is in the document, and the row centres on itself. Read from the DOM (844), never from a
+ * width held in code: the header's row is logo, dock, home and avatar, so where its Cs sit depends on
+ * the wordmark's width and the controls' at every viewport.
+ */
+function pulseAxis(): number | null {
+  const cs = document.querySelectorAll<HTMLElement>('nav[aria-label="Pulse"] button[data-c]');
+  if (cs.length === 0) return null;
+  let left = Infinity;
+  let right = -Infinity;
+  for (const c of cs) {
+    const b = c.getBoundingClientRect();
+    left = Math.min(left, b.left);
+    right = Math.max(right, b.right);
+  }
+  return Number.isFinite(left) && right > left ? (left + right) / 2 : null;
+}
+
+/** How the row lays the unit: beside with the field at `field` wide, or the field under the bar. Both
+ *  centre on the axis, which sits `shift` right of the row's own centre (negative: left). */
+type UnitLayout = { beside: boolean; field: number; shift: number };
+
+/**
+ * The unit's layout from the laid-out row, bar and dock (1170, 1171). The width available to a unit
+ * centred on the axis is the row's less twice the axis's distance from the row's centre. The field
+ * takes what that leaves beside the bar and its 12 gap, from 140 to 280; below 140 it takes its own
+ * full-width row under the bar. A bar too wide to centre on the axis inside the row centres on the
+ * row instead, so nothing is pushed out of it.
+ */
+function unitLayout(row: HTMLElement, root: HTMLElement): UnitLayout | null {
+  // Rects, not offsetWidth: the bar's width is its words' and is not whole, and a whole-pixel reading
+  // moves the medium flip by a pixel.
+  const box = row.getBoundingClientRect();
+  const width = box.width;
+  const bar = root.getBoundingClientRect().width;
+  if (!width || !bar) return null;
+  const centre = box.left + width / 2;
+  const axis = pulseAxis();
+  const shift = axis === null ? 0 : axis - centre;
+  const room = width - 2 * Math.abs(shift);
+  if (room < bar) return { beside: false, field: 0, shift: 0 };
+  const field = Math.min(SEARCH_MAX, room - bar - SEARCH_GAP);
+  return field >= SEARCH_MIN ? { beside: true, field, shift } : { beside: false, field: 0, shift };
+}
+
+/**
+ * The lens row at medium and expanded (1170, 1171): the lens bar and the search field centre together
+ * as one unit on the page's axis, the line the header's five Cs centre on, with the scope line under
+ * the bar. The field takes 140 to 280 beside the bar; where the bar, the 12 gap and a 140 field do not
+ * fit side by side, the field takes its own full-width row under the bar, as at compact. Measured from
+ * the laid-out row, bar and dock, and measured again when any of them resizes (the bar's words settle
+ * with the fonts, the header's dock moves when the wordmark loads) and when the window does.
+ */
+function LensRow({ bar, field }: { bar: ReactNode; field: ReactNode }) {
+  const row = useRef<HTMLDivElement>(null);
+  const barRef = useRef<HTMLDivElement>(null);
+  const [layout, setLayout] = useState<UnitLayout>({ beside: false, field: 0, shift: 0 });
+  // Whenever the shell hands the row a bar (it arrives with the vocabulary, after the row), then on
+  // every resize of the row, the bar's root, the dock and the header's images.
+  useLayoutEffect(() => {
+    const el = row.current;
+    const root = barRef.current?.firstElementChild;
+    if (!el || !(root instanceof HTMLElement)) return;
+    const measure = () => {
+      const next = unitLayout(el, root);
+      if (next)
+        setLayout((was) =>
+          was.beside === next.beside &&
+          Math.abs(was.field - next.field) < 0.5 &&
+          Math.abs(was.shift - next.shift) < 0.5
+            ? was
+            : next,
+        );
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    ro.observe(root);
+    const dock = document.querySelector('nav[aria-label="Pulse"]');
+    if (dock) ro.observe(dock);
+    for (const img of document.querySelectorAll("header img")) ro.observe(img);
+    window.addEventListener("resize", measure);
+    let live = true;
+    void document.fonts?.ready.then(() => {
+      if (live) measure();
+    });
+    return () => {
+      live = false;
+      ro.disconnect();
+      window.removeEventListener("resize", measure);
+    };
+  }, [bar]);
+  const { beside, shift } = layout;
+  return (
+    <div
+      ref={row}
+      data-lens-row={beside ? "beside" : "under"}
+      style={{ display: "flex", flexDirection: "column", gap: SEARCH_GAP, minWidth: 0 }}
+    >
+      <div
+        data-lens-unit
+        style={{
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "flex-start",
+          gap: SEARCH_GAP,
+          minWidth: 0,
+          // Centred in a box narrowed on the side away from the axis by twice the axis's offset, so
+          // the unit's centre is the axis and its edges stay inside the row.
+          marginLeft: shift > 0 ? 2 * shift : 0,
+          marginRight: shift < 0 ? -2 * shift : 0,
+        }}
+      >
+        <div ref={barRef} data-lens-row-bar style={{ flex: "none", minWidth: 0 }}>
+          {bar}
+        </div>
+        {beside && (
+          // Level with the seats: the track pads its 44 seats by --space-1 top and bottom.
+          <div style={{ flex: "none", width: layout.field, marginTop: "var(--space-1)" }}>
+            {field}
+          </div>
+        )}
+      </div>
+      {!beside && <div style={{ width: "100%", minWidth: 0 }}>{field}</div>}
+    </div>
+  );
+}
+
 type SeeAll = { to: "/convene"; search: DiscoverySearch } | { lens: ConveneLensId };
+/** One lane as the list renders it: its heading's id, its body, and whether See all may apply. */
+type LaneEntry = { id: DiscoveryLaneId; body: ReactNode; seeAll: boolean };
 
 export function DiscoverySurface({
   member,
@@ -403,7 +589,8 @@ export function DiscoverySurface({
     void router.preloadRoute({ to: "/convene/events/$id", params: { id: eventId }, search });
     warmPage(eventId);
   };
-  // 1140, G120: Share and Copy link, in the card's menu and the pane's toolbar, hand over the address
+  // 1140, G120: Share and Copy link in the card's menu, and Copy link in the pane's toolbar, hand over
+  // the address
   // the event page's own Share hands over, built by `eventShareUrl` from that page's read: the public
   // page under /e/ when event_page says there is one (1028), and the member page, which always opens
   // the event, when there is none or the read fails or answers nothing. A share sheet and, on WebKit,
@@ -485,10 +672,6 @@ export function DiscoverySurface({
     [lensRows],
   );
   const lensScope = lensRows.find((l) => l.value === lens)?.scope;
-  const laneOrder = useMemo(
-    () => new Map<string, number>(laneRows.map((l, i) => [l.value, i])),
-    [laneRows],
-  );
   const familyLabel = (family: string | null) =>
     family ? (familyRows.find((f) => f.value === family)?.label ?? null) : null;
 
@@ -596,13 +779,29 @@ export function DiscoverySurface({
       home: homeId ? [homeId] : [],
       rung: homeId && step && step !== "in" ? [step as DiscoveryHomeRung] : [],
       place: next["place"] ?? [],
+      // The search is not a rail axis: a change in the rail keeps it (1159).
+      q: lists.q,
     });
   };
   const clearFacets = () => setFacets(NO_FACETS);
+  // The search (1124): Enter applies it beside whatever the rail holds, and an empty field removes it.
+  const applySearch = (text: string) => setFacets({ ...lists, q: text });
 
   // Applied facets as removable Chips at compact (SPEC section 4), each by its own word; a value no
-  // read has named yet shows no chip.
-  const chips: { key: string; label: string; remove: () => void }[] = [];
+  // read has named yet shows no chip. An applied search is the first chip, its own text beside the
+  // search glyph (1124).
+  const chips: { key: string; label: ReactNode; remove: () => void }[] = [];
+  if (lists.q)
+    chips.push({
+      key: "q",
+      label: (
+        <>
+          <Icon name="search" size={14} />
+          <span data-search-chip>{lists.q}</span>
+        </>
+      ),
+      remove: () => setFacets({ ...lists, q: "" }),
+    });
   const without = (axis: keyof FacetLists, v: string) =>
     setFacets({ ...lists, [axis]: (lists[axis] as string[]).filter((x) => x !== v) } as FacetLists);
   for (const a of axes) {
@@ -685,6 +884,9 @@ export function DiscoverySurface({
         }
       />
     ) : null;
+  // The search (1124) in each tier's place: full width under the lens bar at compact, and in the lens
+  // row beside the bar at medium and expanded (`LensRow`).
+  const searchField = <SearchField q={lists.q} onApply={applySearch} />;
 
   // The shell's `lanes` mode, the rails and the header lens, each set while mounted and cleared on
   // unmount (rail-store.ts, header-lens-store.ts). The key is the lens, so the pane opening over the
@@ -696,9 +898,9 @@ export function DiscoverySurface({
       mode: "lanes",
       rail: railShut ? "collapsed" : "open",
       key: lens,
-      top: compact ? null : lensBar(false),
+      top: compact ? null : <LensRow bar={lensBar(false)} field={searchField} />,
     });
-    // lensBar reads the lens set, the lens, its scope and the search; listing those is enough.
+    // The row reads the lens set, the lens, its scope and the search; listing those is enough.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [compact, railShut, lens, lensKey, lensScope, search]);
   useEffect(() => {
@@ -789,14 +991,12 @@ export function DiscoverySurface({
     [],
   );
 
-  // The lanes as this member may see them now: the projection's, in the lanes' order, less what they
-  // dismissed here.
-  const sections: DiscoverySection[] = (data?.sections ?? [])
-    .map((s) => ({
-      ...s,
-      items: s.items.filter((i) => !dismissed.has(s.section + ":" + i.event_id)),
-    }))
-    .sort((a, b) => (laneOrder.get(a.section) ?? 99) - (laneOrder.get(b.section) ?? 99));
+  // The lanes as this member may see them now: the projection's, in the order it answered them (the
+  // member's learned order over the base order, 1160; never re-sorted here), less what they dismissed.
+  const sections: DiscoverySection[] = (data?.sections ?? []).map((s) => ({
+    ...s,
+    items: s.items.filter((i) => !dismissed.has(s.section + ":" + i.event_id)),
+  }));
 
   // 650, 1046: DIA's one sentence for a member who follows no host, in plain text with the host's name
   // unlinked (1053).
@@ -814,13 +1014,19 @@ export function DiscoverySurface({
   const followedIds = new Set((data?.follows ?? []).map((f) => f.id));
   const subscribedFamilies = new Set((data?.subscriptions ?? []).map((s) => s.family));
 
-  /** The menu (1097): items in the ruled order; an item that does not apply is absent. */
-  const menuFor = (item: DiscoveryItem, lane: DiscoveryLaneId): MenuProps["items"] => {
+  /** The menu (1097): items in the ruled order; an item that does not apply is absent. The saved and
+   *  going marks are the answer's the card came from (`src`): each answer reads them for its own
+   *  items, so a More on Convene card reads the second answer's (1148). */
+  const menuFor = (
+    item: DiscoveryItem,
+    lane: DiscoveryLaneId,
+    src: Discovery | null,
+  ): MenuProps["items"] => {
     const post = item.post;
     const ev = post.event;
     const postId = post.id ?? "";
-    const saved = postId ? (savedNow[postId] ?? !!data?.saved.has(postId)) : false;
-    const going = !!data?.going.has(item.event_id);
+    const saved = postId ? (savedNow[postId] ?? !!src?.saved.has(postId)) : false;
+    const going = !!src?.going.has(item.event_id);
     const hostId = ev?.hostId ?? "";
     // 1121: the Follow item names the presenter as the pane does, and follows the host as it does.
     const presenter = ev?.presenter?.name ?? post.author_name;
@@ -851,13 +1057,17 @@ export function DiscoverySurface({
         onSelect: () => {
           setSavedNow((s) => ({ ...s, [postId]: !saved }));
           setSaved(member.id, postId, !saved).then(
+            // 1160: a save from a lane teaches the order, written before the re-read this save
+            // makes so the lane's place on it is the projection's; an unsave teaches nothing.
             () =>
-              reread(
-                [
-                  ["discovery", member.id],
-                  ["marks", member.id],
-                ],
-                () => setSavedNow(unset(postId)),
+              void (saved ? Promise.resolve() : noteLaneAct(lane, "save")).then(() =>
+                reread(
+                  [
+                    ["discovery", member.id],
+                    ["marks", member.id],
+                  ],
+                  () => setSavedNow(unset(postId)),
+                ),
               ),
             () => {
               setSavedNow((s) => ({ ...s, [postId]: saved }));
@@ -897,13 +1107,16 @@ export function DiscoverySurface({
         onSelect: () => {
           setFollowNow((f) => ({ ...f, [hostId]: !following }));
           setFollowing(hostId, !following).then(
+            // 1160: as Save, a follow from a lane teaches the order and an unfollow does not.
             () =>
-              reread(
-                [
-                  ["discovery", member.id],
-                  ["event-follow", member.id],
-                ],
-                () => setFollowNow(unset(hostId)),
+              void (following ? Promise.resolve() : noteLaneAct(lane, "follow")).then(() =>
+                reread(
+                  [
+                    ["discovery", member.id],
+                    ["event-follow", member.id],
+                  ],
+                  () => setFollowNow(unset(hostId)),
+                ),
               ),
             () => {
               setFollowNow((f) => ({ ...f, [hostId]: following }));
@@ -933,7 +1146,23 @@ export function DiscoverySurface({
     ];
   };
 
-  const card = (item: DiscoveryItem, lane: DiscoveryLaneId, lensList = false) => {
+  // The going row (1124, 1128, 1138, 1158): outside the relationship lanes, the three first names
+  // `event_going_names` gave for the event, comma-joined, then "and others are going.": "Ama, Kojo,
+  // Efua and others are going." (Chat, Session 34; `joinWords` would put a second "and" before the
+  // third name). Nothing when it gave none. The relationship lanes keep their reason (1096), and the
+  // part lets a reason win over a going sentence.
+  const goingFor = (lane: DiscoveryLaneId, eventId: string, src: Discovery | null) => {
+    const names = GOING_LANES.has(lane) ? src?.goingNames.get(eventId) : undefined;
+    return names && names.length > 0 ? names.join(", ") + " and others are going." : undefined;
+  };
+
+  /** One card, from the answer `src` it came from; `inGrid` fills its track in the lens grid. */
+  const card = (
+    item: DiscoveryItem,
+    lane: DiscoveryLaneId,
+    src: Discovery | null,
+    inGrid = false,
+  ) => {
     const post = item.post;
     const ev = post.event;
     const title = post.fields["title"]?.value;
@@ -957,9 +1186,9 @@ export function DiscoverySurface({
         <PostCard
           presentation="discovery"
           c="convene"
-          // Handoff 32-B's lens list: a lens but All is a vertical list of the same card at 680.
-          // B9-SPEC Revision 2's grid at --lane-card-width (1125) is 1131's first handoff.
-          style={lensList ? { width: "min(680px, 100%)" } : undefined}
+          // 1125: in a lens's grid the same card fills its track, which is --lane-card-width at
+          // least and a fraction of the column past it; in a lane it keeps the part's own width.
+          style={inGrid ? { width: "100%" } : undefined}
           // G115 (1087; correction 28): the part clamps the title on a span inside its link, so the
           // title is the string itself and the ellipsis is named "More: {title}".
           title={typeof title === "string" ? title : undefined}
@@ -973,10 +1202,16 @@ export function DiscoverySurface({
           presenterSrc={shown ? shown.avatar : post.author_avatar}
           topic={topic ?? undefined}
           reason={reasonFor(lane, item.reason)}
+          going={goingFor(lane, item.event_id, src)}
           media={post.media[0]}
-          menu={menuFor(item, lane)}
+          menu={menuFor(item, lane, src)}
           selected={paneOpen && paneId === item.event_id && (openLane ?? lane) === lane}
-          onOpen={() => openEvent(item.event_id, lane)}
+          onOpen={() => {
+            // 1160: a card opened from a lane is one of the three acts that teach the order; the
+            // pane's Previous and Next go through `openEvent` alone and teach nothing.
+            void noteLaneAct(lane, "open");
+            openEvent(item.event_id, lane);
+          }}
           onPreload={expanded && !touch ? () => warmEvent(item.event_id) : undefined}
           onPresenter={
             presenterHandle
@@ -1117,41 +1352,162 @@ export function DiscoverySurface({
     </div>
   );
 
-  // All (685, 1092): each lane the projection returned, in the lanes' order, and the Communities
-  // lane as its sentence alone, in its own place in that order, when the member follows no host.
+  // All's lanes (685, 1092) as an answer `src` gave them, in the order it answered them, each as its
+  // cards, and a lane with none absent (632). See all applies as on All wherever All's lanes render,
+  // under All and in More on Convene (1148).
+  const laneEntries = (from: DiscoverySection[], src: Discovery | null) =>
+    from.flatMap<LaneEntry>((s) => {
+      if (s.items.length === 0) return [];
+      return [
+        {
+          id: s.section,
+          body: laneRow(
+            s.section,
+            s.items.map((it) => card(it, s.section, src)),
+          ),
+          seeAll: true,
+        },
+      ];
+    });
+
+  // All: each lane the projection returned, and the Communities lane as its sentence alone when the
+  // member follows no host, placed among the lanes around it by the answer's `lane_order` (1160),
+  // never by a position held here.
   const followLane = sections.find((s) => s.section === "follow");
   const sentenceLane =
     lens === "all" && !!sentence && (!followLane || followLane.items.length === 0);
-  const laneList: { id: DiscoveryLaneId; body: ReactNode; seeAll: boolean }[] = [
-    ...sections
-      .filter((s) => s.items.length > 0)
-      .map((s) => ({
-        id: s.section,
-        body: laneRow(
-          s.section,
-          s.items.map((it) => card(it, s.section)),
-        ),
-        seeAll: lens === "all",
-      })),
-    ...(sentenceLane ? [{ id: "follow" as const, body: sentenceLine, seeAll: false }] : []),
-  ].sort((a, b) => (laneOrder.get(a.id) ?? 99) - (laneOrder.get(b.id) ?? 99));
-  const lanesView = (
+  const eventLanes = lens === "all" ? laneEntries(sections, data) : [];
+  // Search with no match (B9-SPEC's States): every lane dropped under the search, or the lens's own.
+  const noMatch =
+    !!lists.q &&
+    !!data &&
+    (lens === "all"
+      ? eventLanes.length === 0
+      : !sections.some((s) => s.section === lens && s.items.length > 0));
+  const laneList = [...eventLanes];
+  if (sentenceLane && !noMatch) {
+    const order = data?.laneOrder ?? [];
+    const at = order.indexOf("follow");
+    const after = at < 0 ? -1 : laneList.findIndex((l) => order.indexOf(l.id) > at);
+    laneList.splice(after < 0 ? laneList.length : after, 0, {
+      id: "follow",
+      body: sentenceLine,
+      seeAll: false,
+    });
+  }
+  // The search's EmptyState takes the search and every facet with it (1124), and fills its column
+  // (1147).
+  const noMatchState = (
+    <EmptyState
+      c="convene"
+      title="Nothing matches that search."
+      action={
+        <Button variant="secondary" onClick={clearFacets}>
+          Clear all
+        </Button>
+      }
+    />
+  );
+  const lanesView = noMatch ? (
+    <div data-empty-column style={{ display: "flex", flexDirection: "column", flex: "1 1 auto" }}>
+      {noMatchState}
+    </div>
+  ) : (
     <div data-lanes style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
       {laneList.map((l, i) => lane(l.id, i === 0, l.body, l.seeAll))}
     </div>
   );
 
-  // A lens (693, 1105): its one lane as a vertical list of the same card at 680 (handoff 32-B;
-  // B9-SPEC Revision 2's grid, 1125, is 1131's first handoff), or the EmptyState.
+  // A lens (693, 1105): its one lane as a grid of the same card filling the column (1125), or the
+  // EmptyState.
   const lensLane: DiscoveryLaneId | null = lens === "all" ? null : lens;
   const lensSection = lensLane ? sections.find((s) => s.section === lensLane) : undefined;
   // 1147 (handoff 33-D item 3): the lens's EmptyState fills its own column, which takes the rest of
   // the list's height; the surface root takes the visible height the shell publishes, and in the
   // pane the list column's own bounded height.
-  const lensEmpty =
-    !!lensLane &&
-    !(lensLane === "follow" && sentence && !lensSection?.items.length) &&
-    !(lensSection && lensSection.items.length > 0);
+  // Under a search that matched nothing, the lens shows the search's EmptyState in place of its own
+  // or of the Communities sentence (B9-SPEC's States).
+  const lensCards = !!lensSection && lensSection.items.length > 0;
+  const lensSentence = lensLane === "follow" && !!sentence && !lensCards && !noMatch;
+  const lensEmpty = !!lensLane && !lensCards && !lensSentence;
+
+  // More on Convene (1148). The grid's column count is read from the laid-out grid, wherever the
+  // pane puts it, on every resize, and never shown. While the lens's cards are fewer than those
+  // columns, All's lanes follow beneath them from a second read of the projection with the same
+  // facets under All, each lane less the lens's own events as the projection answered the lens. The
+  // projection applied each lane's floor when it answered (632) and the floors are its own
+  // (`private.convene_thresholds`), so the surface re-applies none and holds no count: a lane the
+  // removal empties is absent. A lens with no events keeps its EmptyState and reads nothing more.
+  const [columns, setColumns] = useState(0);
+  const gridRef = useCallback((el: HTMLDivElement | null) => {
+    if (!el) return;
+    const read = () =>
+      setColumns(getComputedStyle(el).gridTemplateColumns.split(" ").filter(Boolean).length);
+    read();
+    const ro = new ResizeObserver(read);
+    ro.observe(el);
+    return () => {
+      ro.disconnect();
+      setColumns(0);
+    };
+  }, []);
+  const shortHere =
+    !!lensLane && lensCards && columns > 0 && (lensSection?.items.length ?? 0) < columns;
+  // 688: the pane narrows the list to its own column, where the grid lays fewer tracks, but the lanes
+  // stay where the member left them. So More on Convene stays while the pane is open if it showed as
+  // the pane opened, and a card opened from it keeps its place, its ring and its steps (1044, 1083).
+  const [shortOutside, setShortOutside] = useState(false);
+  useEffect(() => {
+    if (!paneOpen) setShortOutside(shortHere);
+  }, [paneOpen, shortHere]);
+  const short = shortHere || (paneOpen && shortOutside && lensCards);
+  const allFacets = useMemo(() => ({ ...facets, lens: "all" as const }), [facets]);
+  const moreRead = useQuery({
+    // All's own key: the same facets under All are the same read, so All and this share it.
+    queryKey: ["discovery", member.id, allFacets],
+    queryFn: () => loadDiscovery(member, allFacets),
+    enabled: short,
+    refetchOnWindowFocus: true,
+  });
+  const more = short ? (moreRead.data ?? null) : null;
+  const lensIds = new Set(
+    (data?.sections ?? []).find((s) => s.section === lensLane)?.items.map((i) => i.event_id) ?? [],
+  );
+  // All's lanes less the lens's events, before this member's dismissals: stepping reads these, as it
+  // reads the lens's own lane before them (1044).
+  const moreLanes: DiscoverySection[] = (more?.sections ?? []).map((s) => ({
+    ...s,
+    items: s.items.filter((i) => !lensIds.has(i.event_id)),
+  }));
+  const moreEntries = laneEntries(
+    moreLanes.map((s) => ({
+      ...s,
+      items: s.items.filter((i) => !dismissed.has(s.section + ":" + i.event_id)),
+    })),
+    more,
+  );
+  const moreView = moreEntries.length ? (
+    <section
+      data-more-on-convene
+      aria-labelledby="more-on-convene"
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        gap: 12,
+        minWidth: 0,
+        borderTop: "1px solid var(--line)",
+        paddingTop: 20,
+        marginTop: 4,
+      }}
+    >
+      <h2 id="more-on-convene" style={H2}>
+        More on Convene
+      </h2>
+      <div data-lanes style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
+        {moreEntries.map((l, i) => lane(l.id, i === 0, l.body, l.seeAll))}
+      </div>
+    </section>
+  ) : null;
   const lensView = lensLane ? (
     <div
       data-lens-list={lensLane}
@@ -1165,27 +1521,43 @@ export function DiscoverySurface({
       }}
     >
       {laneName(lensLane) && <h2 style={H2}>{laneName(lensLane)}</h2>}
-      {lensLane === "follow" && sentence && !lensSection?.items.length ? (
+      {lensSentence ? (
         sentenceLine
-      ) : lensSection && lensSection.items.length > 0 ? (
-        <div data-lens-cards style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          {lensSection.items.map((it) => card(it, lensLane, true))}
-        </div>
+      ) : lensSection && lensCards ? (
+        <>
+          <div
+            ref={gridRef}
+            data-lens-cards
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fill, minmax(var(--lane-card-width), 1fr))",
+              gap: 12,
+              minWidth: 0,
+            }}
+          >
+            {lensSection.items.map((it) => card(it, lensLane, data, true))}
+          </div>
+          {moreView}
+        </>
       ) : (
         <div
           data-empty-column
           style={{ display: "flex", flexDirection: "column", flex: "1 1 auto" }}
         >
-          <EmptyState
-            c="convene"
-            title="Nothing in this lens yet."
-            body="Widen the lens or browse another way."
-            action={
-              <Button variant="secondary" onClick={() => setLens("all")}>
-                Back to All
-              </Button>
-            }
-          />
+          {noMatch ? (
+            noMatchState
+          ) : (
+            <EmptyState
+              c="convene"
+              title="Nothing in this lens yet."
+              body="Widen the lens or browse another way."
+              action={
+                <Button variant="secondary" onClick={() => setLens("all")}>
+                  Back to All
+                </Button>
+              }
+            />
+          )}
         </div>
       )}
     </div>
@@ -1204,14 +1576,18 @@ export function DiscoverySurface({
   ) : (
     lensView
   );
-  const emptyLensView = lensEmpty && !read.isError && !(!read.data && read.isPending);
+  // 1147: the column an EmptyState fills, the lens's own or the search's, takes the visible height.
+  const emptyLensView =
+    (lensEmpty || (lens === "all" && noMatch)) && !read.isError && !(!read.data && read.isPending);
 
   // Pane stepping (1083, 1044): Previous and Next across the lane the open card came from, in its
   // order, to the nearest neighbours the member has not dismissed. The open card is found in the lane
   // as the projection answered it, so dismissing the card that is open still steps from its place.
   // An event opened from outside Discovery, or not in the lane the projection answered, steps nowhere.
   const stepLane =
-    paneOpen && openLane ? (data?.sections ?? []).find((s) => s.section === openLane) : undefined;
+    paneOpen && openLane
+      ? [...(data?.sections ?? []), ...moreLanes].find((s) => s.section === openLane)
+      : undefined;
   const stepIds = stepLane ? stepLane.items.map((i) => i.event_id) : [];
   const at = paneId ? stepIds.indexOf(paneId) : -1;
   const kept = (id: string) => !dismissed.has(openLane + ":" + id);
@@ -1242,16 +1618,18 @@ export function DiscoverySurface({
   // The toolbar (Hide or show the list, Copy link, Share) and the cluster (Previous event, Next
   // event, Back to Discovery) share the pane's top row. Hide list keeps the list the same element,
   // hidden and inert with its scroll kept, and centres the pane at 720; it lasts while the pane is
-  // open and resets when it closes. Copy link and Share are the card menu's own (`handOver`, 1140,
-  // G120): the open event's address as its page builds it, from the read the pane already made, so
-  // they are present for every event the pane opens.
+  // open and resets when it closes. Copy link is the card menu's own (`handOver`, 1140, G120): the
+  // open event's address as its page builds it, from the read the pane already made, so it is
+  // present for every event the pane opens. Share opens the share view below (1156).
   const [listHidden, setListHidden] = useState(false);
   useEffect(() => {
     if (!paneOpen) setListHidden(false);
   }, [paneOpen]);
   const paneItem =
     paneOpen && paneId
-      ? (data?.sections ?? []).flatMap((s) => s.items).find((i) => i.event_id === paneId)
+      ? [...(data?.sections ?? []), ...moreLanes]
+          .flatMap((s) => s.items)
+          .find((i) => i.event_id === paneId)
       : undefined;
   // An observer only: EventSurface makes this read under the same key, and this never fetches.
   const paneRead = useQuery({
@@ -1272,11 +1650,89 @@ export function DiscoverySurface({
   useLayoutEffect(() => {
     paneRoot.current?.querySelector<HTMLElement>("[data-pane-body]")?.scrollTo({ top: 0 });
   }, [paneId]);
+
+  // The share view in the pane (1156, G130; handoff 34-A item 7). The toolbar's Share and the event
+  // page's own Share open one view, `EventShareView`, in the pane body in place of the page, which
+  // stays mounted and hidden beneath it. The toolbar's Share is its toggle and is pressed while it
+  // shows. The view's close control and Escape inside it return to the page, at the place the page
+  // was left and with focus back on the control that opened it; Previous, Next and closing the pane
+  // close it too, since it belongs to the event it opened on. Copy link and the card menu's Share are
+  // unchanged (1140).
+  const [shareFor, setShareFor] = useState<string | null>(null);
+  const shareOpen = paneOpen && !!paneId && shareFor === paneId;
+  useEffect(() => {
+    setShareFor(null);
+  }, [paneId, paneOpen]);
+  const shareBack = useRef<{ id: string; top: number; opener: HTMLElement | null } | null>(null);
+  const refocus = useRef(false);
+  const openShare = useCallback(() => {
+    if (!paneId) return;
+    const body = paneRoot.current?.querySelector<HTMLElement>("[data-pane-body]");
+    shareBack.current = {
+      id: paneId,
+      top: body?.scrollTop ?? 0,
+      opener: document.activeElement instanceof HTMLElement ? document.activeElement : null,
+    };
+    setShareFor(paneId);
+  }, [paneId]);
+  const closeShare = (toOpener: boolean) => {
+    refocus.current = toOpener;
+    setShareFor(null);
+  };
+  useLayoutEffect(() => {
+    const root = paneRoot.current;
+    const body = root?.querySelector<HTMLElement>("[data-pane-body]");
+    if (shareOpen) {
+      // As Sheet does for its own heading: the heading takes focus, so the view is read first.
+      body?.scrollTo({ top: 0 });
+      const h = root?.querySelector<HTMLElement>("[data-pane-share] [data-sheet-heading]");
+      if (h && !h.hasAttribute("tabindex")) h.setAttribute("tabindex", "-1");
+      h?.focus({ preventScroll: true });
+      return;
+    }
+    const back = shareBack.current;
+    shareBack.current = null;
+    // Only back to the page it opened on: Previous and Next start the next page at its top.
+    if (!back || back.id !== paneId) return;
+    if (body) body.scrollTop = back.top;
+    if (refocus.current && back.opener?.isConnected) back.opener.focus({ preventScroll: true });
+    refocus.current = false;
+  }, [shareOpen, paneId]);
+  // The part names no pressed state for its tools, so the surface writes it on the part's own Share
+  // button (844): true while the view shows, false otherwise. G141 asks Strand for the prop.
+  useLayoutEffect(() => {
+    paneRoot.current
+      ?.querySelector<HTMLElement>('[data-pane-toolbar] [data-tool="share"]')
+      ?.setAttribute("aria-pressed", shareOpen ? "true" : "false");
+  }, [shareOpen, paneOpen, paneId, listHidden]);
+  const shareEvent = paneRead.data?.event;
+  const shareView =
+    shareOpen && paneId ? (
+      <div
+        data-pane-share
+        onKeyDown={(e) => {
+          if (e.key !== "Escape" || e.defaultPrevented) return;
+          // Before the pane's own Escape, which closes the pane.
+          e.preventDefault();
+          closeShare(true);
+        }}
+        style={{ display: "flex", flexDirection: "column", minHeight: "100%" }}
+      >
+        <EventShareView
+          title={shareEvent?.title ?? paneTitle}
+          // Built as the page builds its own: the member address until the page's read answers.
+          url={eventShareUrl(window.location.origin, shareEvent ?? { id: paneId })}
+          isPublic={!!shareEvent?.public}
+          onClose={() => closeShare(true)}
+          onToast={say}
+        />
+      </div>
+    ) : null;
   // 688: the lanes stay where the member left them. With the pane bounded the feed column cannot
   // scroll (its offset clamps to 0) and the list column scrolls instead. So the card at the list
   // column's top is kept, with its distance from that top, and when the pane closes the feed column
-  // is scrolled to put the same card at the same distance. A card, not an offset: a lens list's
-  // cards are `min(680px, 100%)`, narrower and so shorter in the list column than in the full one.
+  // is scrolled to put the same card at the same distance. A card, not an offset: a lens's grid lays
+  // fewer and narrower tracks in the list column than in the full one, so its cards sit elsewhere.
   // While the list is hidden its layout has no width, so the place it was hidden at is the one kept.
   const listAnchor = useRef<{ item: string; section: string; at: number } | null>(null);
   const hiddenNow = useRef(listHidden);
@@ -1426,7 +1882,7 @@ export function DiscoverySurface({
           listHidden={listHidden}
           onToggleList={() => setListHidden((h) => !h)}
           onCopyLink={paneId ? () => handOver(paneId, "copy") : undefined}
-          onShare={paneId ? () => handOver(paneId, "share") : undefined}
+          onShare={paneId ? () => (shareOpen ? closeShare(false) : openShare()) : undefined}
           onClose={closePane}
           closeLabel={"Back to " + (fromElsewhere ? toOrigin.origin.label : "Discovery")}
           // Correction 30 (G128): Pane does not follow while the list is hidden, and on Show list
@@ -1434,7 +1890,13 @@ export function DiscoverySurface({
           selectedKey={paneId ?? undefined}
           {...stepping}
         >
-          {pane}
+          <PaneShareContext.Provider value={paneId ? openShare : null}>
+            {shareView}
+            {/* The page stays mounted beneath the view, laid out as the body's own child. */}
+            <div data-pane-page style={{ display: shareOpen ? "none" : "contents" }}>
+              {pane}
+            </div>
+          </PaneShareContext.Provider>
         </Pane>
         {toasts}
       </div>
@@ -1469,6 +1931,8 @@ export function DiscoverySurface({
           >
             {lensBar(true)}
           </div>
+          {/* B9-SPEC's compact line (1124): the search field full width under the lens bar. */}
+          {searchField}
           <div
             data-first-row
             // B9-SPEC's compact line: one row of the homes and the Filters trigger. FacetRail's compact
@@ -1511,7 +1975,8 @@ export function DiscoverySurface({
               )}
             />
           </div>
-          {/* B9-SPEC's compact line: the applied chips and Clear all, only when a facet is set. */}
+          {/* B9-SPEC's compact line: the applied chips and Clear all, only when a facet or a search
+              is set. */}
           {chipRow && (
             <div
               data-applied-row

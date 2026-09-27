@@ -34,6 +34,11 @@ const path = require("path");
 
 const OWNER_HANDLE = "owner-test";
 const MEMBER_HANDLE = "member-test";
+/** 1165: the two events Chat seeded with five going RSVPs each, which Filling up must carry. */
+const SEEDED_FILLING = [
+  "bfcc66ba-f436-4067-ab7f-2486a556e6eb",
+  "01e7c23d-5811-41fa-bb67-fe9b7a80cdbd",
+];
 
 function claims(uid) {
   return JSON.stringify({ sub: uid, role: "authenticated", aud: "authenticated" });
@@ -139,7 +144,7 @@ async function runLiveDbArms({ record, skip }) {
     claim:
       "Handoff 30-D (1033): a confirmed member claims their guest row with its edge, the drift function stays at zero, and a second claim does nothing",
     discovery:
-      "Handoff 32-B (1092, 1105): the owner's answer carries its lanes in convene_lanes order, curated among them",
+      "Handoff 34-A (1160): the owner's answer names every lane in lane_order and carries its lanes in that order, curated among them",
   };
   if (process.env.SKIP_REST) {
     for (const n of Object.values(names)) skip(n, "SKIP_REST");
@@ -1185,16 +1190,27 @@ async function runLiveDbArms({ record, skip }) {
     // culture_arts, dismisses the picked event from curated and writes a rail row inside this
     // transaction; all of it rolls back. The refusals are read at the grant (42501) and at the
     // projection's own checks (22023), and signed out is refused the projection outright (662).
+    // Handoff 34-A adds the search, Filling up with the going names on Chat's seed (1165), and the
+    // learned order's one writer, note_lane_act, each also rolled back; its addendum withdraws Browse
+    // (1172) and lifts the floors under a search (1173).
     // ------------------------------------------------------------------------------------------
     await inTransaction(client, async () => {
       await actAsSelf(client);
+      // 20260926170300 drops the eight-argument projection and creates it again with p_q, so the
+      // probe names the nine-argument signature; 20260926170400 keeps that signature and takes the
+      // browse row out of convene_lanes, so the probe reads that version's recorded row, as the drift
+      // arm reads it (444, 553: a paste records its version in the transaction that runs its DDL).
+      // The probe runs as live_arms, which holds select on supabase_migrations.schema_migrations
+      // (20260912090557) and none on convene_lanes: run 384's probe read the table itself, threw
+      // 42501 and took the whole live step down before its count (G143 names what a failed probe
+      // costs).
       const present = await client.query(
-        "select to_regprocedure('public.convene_discovery(text, text[], text[], text, text[], uuid, text[], text)') is not null as ok",
+        "select to_regprocedure('public.convene_discovery(text, text[], text[], text, text[], uuid, text[], text, text)') is not null and exists (select 1 from supabase_migrations.schema_migrations where version = '20260926170400') as ok",
       );
       if (!present.rows[0] || present.rows[0].ok !== true) {
         skip(
           names.discovery,
-          "20260924120000_p2_home_ladders_and_rail.sql is not on the project yet (Chat applies 32-B's four migrations before its enforcing run)",
+          "20260926170300 and 20260926170400 are not both on the project yet (Chat applies 34-A's five migrations before its enforcing run)",
         );
         return;
       }
@@ -1216,16 +1232,24 @@ async function runLiveDbArms({ record, skip }) {
       const lanes = vocab.ok && Array.isArray(vocab.d.convene_lanes) ? vocab.d.convene_lanes : [];
       const laneIds = lanes.map((l) => l.value);
 
+      // 1160: the order is the member's own, so the answer is read against its own lane_order,
+      // which names every lane, and never against the table's base order.
       const all = await ask("select public.convene_discovery('all') as d");
       const ids = all.ok ? sectionIds(all.d) : [];
+      const laneOrder = all.ok && all.d && Array.isArray(all.d.lane_order) ? all.d.lane_order : [];
+      const wholeOrder =
+        laneOrder.length === laneIds.length && laneIds.every((id) => laneOrder.includes(id));
       const inOrder = ids.every(
         (id, i) =>
-          laneIds.includes(id) && (i === 0 || laneIds.indexOf(ids[i - 1]) < laneIds.indexOf(id)),
+          laneOrder.includes(id) &&
+          (i === 0 || laneOrder.indexOf(ids[i - 1]) < laneOrder.indexOf(id)),
       );
       record(
         names.discovery,
-        all.ok && ids.length > 0 && inOrder && ids.includes("curated"),
-        all.ok ? "sections " + JSON.stringify(ids) : failed(all),
+        all.ok && ids.length > 0 && wholeOrder && inOrder && ids.includes("curated"),
+        all.ok
+          ? "sections " + JSON.stringify(ids) + " lane_order " + JSON.stringify(laneOrder)
+          : failed(all),
       );
 
       const curatedItem =
@@ -1241,6 +1265,116 @@ async function runLiveDbArms({ record, skip }) {
           typeof pick.line === "string" &&
           pick.line.trim() !== "",
         pick ? JSON.stringify(pick) : "no curated item in the owner's answer",
+      );
+
+      // 1124, 1159: the search narrows the corpus before the lanes form. The pick's own title keeps
+      // the pick in Curated; a search that matches nothing drops every lane; 100 characters are
+      // taken and 101 refused with 22023. Read before the dismissal below empties Curated inside
+      // this transaction.
+      const Q =
+        "select public.convene_discovery('all', null, null, null, null, null, null, null, $1) as d";
+      const titled = curatedItem
+        ? await attempt(client, "select title from public.events where id = $1::uuid", [
+            curatedItem.event_id,
+          ])
+        : null;
+      const pickTitle = titled && titled.ok && titled.rows[0] ? titled.rows[0].title : null;
+      const found = pickTitle ? await ask(Q, [pickTitle]) : null;
+      const foundCurated = found && found.ok ? section(found.d, "curated") : null;
+      const kept =
+        !!foundCurated && foundCurated.items.some((i) => i.event_id === curatedItem.event_id);
+      const nothing = await ask(Q, ["zq live arm matches no event 7c1"]);
+      const hundred = await attempt(client, Q, ["x".repeat(100)]);
+      const tooLong = await attempt(client, Q, ["x".repeat(101)]);
+      record(
+        "Handoff 34-A (1124, 1159): a search keeps the pick it names, one that matches nothing drops every lane, and past 100 characters it is refused with 22023",
+        kept &&
+          nothing.ok &&
+          sectionIds(nothing.d).length === 0 &&
+          hundred.ok &&
+          !tooLong.ok &&
+          tooLong.code === "22023",
+        (pickTitle
+          ? "found " + (found.ok ? JSON.stringify(sectionIds(found.d)) : failed(found))
+          : "no pick title to search for") +
+          " kept " +
+          kept +
+          " nothing " +
+          (nothing.ok ? JSON.stringify(sectionIds(nothing.d)) : failed(nothing)) +
+          " 100 " +
+          (hundred.ok ? "answered" : failed(hundred)) +
+          " 101 " +
+          (tooLong.ok ? "answered" : tooLong.code),
+      );
+
+      // 1173: under a search the floors do not apply. One seeded event's title (1165) names that event,
+      // and Filling up, whose floor is two, comes back holding it: a search whose matches sit one to
+      // a lane returns the lane. Read as the owner, before the dismissal below.
+      const seededTitle = await attempt(
+        client,
+        "select title from public.events where id = $1::uuid",
+        [SEEDED_FILLING[0]],
+      );
+      const title = seededTitle.ok && seededTitle.rows[0] ? seededTitle.rows[0].title : null;
+      const one = title ? await ask(Q, [title]) : null;
+      const oneFilling = one && one.ok ? section(one.d, "filling") : null;
+      const oneIds = one && one.ok ? sectionIds(one.d) : [];
+      record(
+        "Handoff 34-A addendum (1173): a search whose matches sit one to a lane returns the lane: the seeded event's title returns Filling up holding it",
+        !!one &&
+          one.ok &&
+          oneIds.length >= 1 &&
+          !!oneFilling &&
+          oneFilling.items.some((i) => i.event_id === SEEDED_FILLING[0]),
+        (title ? "title found" : "no title for the seeded event") +
+          " lanes " +
+          (one ? (one.ok ? JSON.stringify(oneIds) : failed(one)) : "not read") +
+          " filling " +
+          (oneFilling ? oneFilling.items.length + " item(s)" : "absent"),
+      );
+
+      // 1172: the Browse lane is withdrawn. No section is browse, no section carries tiles, and
+      // lane_order is the ten lanes.
+      const tiled = all.ok ? ((all.d && all.d.sections) || []).filter((x) => "tiles" in x) : [];
+      record(
+        "Handoff 34-A addendum (1172): no section is browse or carries tiles, and lane_order names the ten lanes",
+        all.ok && !section(all.d, "browse") && tiled.length === 0 && laneOrder.length === 10,
+        all.ok
+          ? "browse " +
+              (section(all.d, "browse") ? "present" : "absent") +
+              " tiled " +
+              tiled.length +
+              " lane_order " +
+              laneOrder.length
+          : failed(all),
+      );
+
+      // 1157, 1165: Chat seeded five going RSVPs on each of two events. Filling up carries both, as
+      // the owner's row policy counts them, and event_going_names gives each three first names, never
+      // the viewer's own (1128, 1138, 1158). The seed is canonical data, read and never written here.
+      const filling = all.ok ? section(all.d, "filling") : null;
+      const fillingIds = filling ? filling.items.map((i) => i.event_id) : [];
+      const going = await ask("select public.event_going_names($1::uuid[]) as d", [SEEDED_FILLING]);
+      const ownFirst = String(owner.name || "")
+        .trim()
+        .split(" ")[0];
+      const named = going.ok && going.d ? SEEDED_FILLING.map((id) => going.d[id]) : [];
+      record(
+        "Handoff 34-A (1157, 1165): Filling up carries both seeded events, and event_going_names gives each three first names, none the viewer's own",
+        !!filling &&
+          SEEDED_FILLING.every((id) => fillingIds.includes(id)) &&
+          going.ok &&
+          named.length === SEEDED_FILLING.length &&
+          named.every(
+            (n) =>
+              Array.isArray(n) &&
+              n.length === 3 &&
+              n.every((x) => typeof x === "string" && x !== "" && x !== ownFirst),
+          ),
+        "filling " +
+          JSON.stringify(fillingIds) +
+          " names " +
+          (going.ok ? JSON.stringify(named) : failed(going)),
       );
 
       const noCount = [];
@@ -1571,6 +1705,66 @@ async function runLiveDbArms({ record, skip }) {
           (forge.ok ? "written" : failed(forge)),
       );
 
+      // 1160: note_lane_act is the one writer of the learned order. It refuses a lane or an act it
+      // does not know with 22023; a noted act puts its lane first in the member's lane_order, and the
+      // owner reads their own row. A member's direct insert is refused at the grant (42501), and
+      // another member reads none of the owner's rows. The owner's committed rows, from the app, are
+      // left as they are: the noted act is an upsert and rolls back with the transaction.
+      await actAs(client, owner.id);
+      const badLane = await attempt(client, "select public.note_lane_act('nope', 'open')");
+      const badAct = await attempt(client, "select public.note_lane_act('soon', 'look')");
+      const noted = await attempt(client, "select public.note_lane_act('network', 'open')");
+      const reordered = noted.ok ? await ask("select public.convene_discovery('all') as d") : noted;
+      const firstLane =
+        reordered.ok && reordered.d && Array.isArray(reordered.d.lane_order)
+          ? reordered.d.lane_order[0]
+          : null;
+      const ownActs = await attempt(
+        client,
+        "select lane, act from public.member_lane_activity where member_id = $1::uuid",
+        [owner.id],
+      );
+      record(
+        "Handoff 34-A (1160): note_lane_act refuses an unknown lane or act with 22023, and a noted act moves its lane first in lane_order",
+        !badLane.ok &&
+          badLane.code === "22023" &&
+          !badAct.ok &&
+          badAct.code === "22023" &&
+          noted.ok &&
+          firstLane === "network" &&
+          ownActs.ok &&
+          ownActs.rows.some((r) => r.lane === "network" && r.act === "open"),
+        "lane " +
+          (badLane.ok ? "accepted" : badLane.code) +
+          " act " +
+          (badAct.ok ? "accepted" : badAct.code) +
+          " noted " +
+          (noted.ok ? "written" : failed(noted)) +
+          " first " +
+          firstLane +
+          " own " +
+          (ownActs.ok ? JSON.stringify(ownActs.rows) : failed(ownActs)),
+      );
+      await actAs(client, member.id);
+      const forgeAct = await attempt(
+        client,
+        "insert into public.member_lane_activity (member_id, lane, act) values ($1, 'soon', 'open')",
+        [member.id],
+      );
+      const peekActs = await attempt(
+        client,
+        "select lane from public.member_lane_activity where member_id = $1::uuid",
+        [owner.id],
+      );
+      record(
+        "Handoff 34-A (1160): a direct insert into member_lane_activity is refused for a member, and another member reads none of the owner's rows",
+        !forgeAct.ok && forgeAct.code === "42501" && peekActs.ok && peekActs.rows.length === 0,
+        "insert " +
+          (forgeAct.ok ? "written" : failed(forgeAct)) +
+          " peek " +
+          (peekActs.ok ? peekActs.rows.length + " row(s)" : failed(peekActs)),
+      );
+
       // 1080, 1081: the alias history and the reserved words are the database's alone.
       const aliases = await attempt(client, "select alias from public.event_aliases limit 1");
       const words = await attempt(client, "select word from public.reserved_link_words limit 1");
@@ -1584,11 +1778,12 @@ async function runLiveDbArms({ record, skip }) {
       );
 
       record(
-        "Handoff 32-B (1037, 1093, 1105): vocabularies() serves the nine families, the five lenses with their short words and the nine lanes in order",
+        "Handoff 34-A (1037, 1093, 1105, 1124, 1172): vocabularies() serves the nine families, the five lenses with their short words and the ten lanes in their base order",
         families.length === 9 &&
           lenses.map((l) => l.value).join(",") === "all,follow,taste,curated,network" &&
           lenses.every((l) => typeof l.short === "string" && l.short.trim() !== "") &&
-          laneIds.join(",") === "soon,weekend,online,fresh,curated,follow,taste,near,network" &&
+          laneIds.join(",") ===
+            "soon,weekend,online,filling,fresh,curated,follow,taste,near,network" &&
           lanes.every((l) => typeof l.name === "string" && l.name.trim() !== ""),
         vocab.ok
           ? "lenses " +
@@ -1603,6 +1798,10 @@ async function runLiveDbArms({ record, skip }) {
       const anon = await attempt(client, "select public.convene_discovery('all')");
       const anonPlaces = await attempt(client, "select public.convene_places()");
       const anonRail = await attempt(client, "select * from public.member_rail_state");
+      const anonGoing = await attempt(client, "select public.event_going_names($1::uuid[])", [
+        SEEDED_FILLING,
+      ]);
+      const anonAct = await attempt(client, "select public.note_lane_act('soon', 'open')");
       record(
         "Brief 9 (662): signed out cannot call convene_discovery or convene_places, or read a rail row",
         !anon.ok &&
@@ -1617,6 +1816,15 @@ async function runLiveDbArms({ record, skip }) {
           (anonPlaces.ok ? "answered" : anonPlaces.code) +
           " rail " +
           (anonRail.ok ? "read" : anonRail.code),
+      );
+      // The control is the owner's own call above, which answered.
+      record(
+        "Handoff 34-A (1128, 1160): signed out cannot call event_going_names or note_lane_act",
+        !anonGoing.ok && anonGoing.code === "42501" && !anonAct.ok && anonAct.code === "42501",
+        "going " +
+          (anonGoing.ok ? "answered" : anonGoing.code) +
+          " act " +
+          (anonAct.ok ? "written" : anonAct.code),
       );
     });
   } finally {
