@@ -6262,3 +6262,74 @@ surface's effect does not follow would drop the attribute until the next write.
 
 Owed: a Strand correction giving Pane's toolbar tools a pressed state, as a prop and a look. Once it
 lands, the surface passes the prop and the DOM write goes.
+
+---
+
+## G142. `tests/rsvp-drift.cjs` prints FAIL and exits 0
+
+**Severity: medium. The step that exists to go red on a derivation that drifts (ruling 1002) stays
+green when it finds one. Opened 27 September 2026 during handoff 34-A, filed under ruling 597. The
+number is assigned by this entry (ruling 638).**
+
+Three of the arm's failure paths set `code = 1` and `return` from inside the `try`
+(`tests/rsvp-drift.cjs:92` to `93`, `:125` to `126`, `:130` to `131`). A `return` there runs the
+`finally`, which closes the client, and leaves the async function, so `process.exit(code)` at `:149`
+is never reached. Node then exits on its own with status 0, and the workflow step `RSVP edge drift
+(ruling 1002)` in `pages.yml` reads green. Only the path that throws, `code = 1` in the `catch`,
+reaches the exit.
+
+What it hid. On run 382, the live job on `8e31309` after Chat's seed under 1165, the step printed
+ten `FAIL going without an edge` rows, one per seeded registration with no `event_rsvp` edge beside
+it. It exited 0. The disagreement reached a red reading only through the live-checks arms that read
+the drift function themselves (handoff 30-D's claim arm). The seed itself is Chat's and is reported
+on the PR (#71). This entry is the arm's exit.
+
+Owed: the three failure paths reach the exit with their status, and the step goes red on a
+disagreement. A one-line change in the test, outside 34-A's scope, so it is filed rather than made
+here.
+
+---
+
+## G143. A live-db block whose presence probe fails reports one name UNPROVEN and drops every other arm in it
+
+**Severity: medium. Arms that cannot run vanish instead of reading UNPROVEN, which is the failure mode
+ruling 228 exists to prevent. Opened 27 September 2026 during handoff 34-A, filed under ruling 597.
+The number is assigned by this entry (ruling 638).**
+
+`tests/live-db.cjs` opens each block with a presence probe, `to_regprocedure` on the function the
+block reads. When the probe answers null the block calls `skip(names.x, why)` for its first arm's
+name alone and returns. Every other arm in the block is recorded by a bare `record(...)` with a label
+of its own, so none of them is reported at all: not FAIL, not UNPROVEN. On run 382 the Discovery
+block's probe named `convene_discovery`'s eight-argument signature, which 20260926170300 drops. Of
+the block's nineteen arms it reported one UNPROVEN, its first, and the other eighteen were absent from
+the job's count, which read 141 of 143 (job `108539886763`). Handoff 34-A moves that probe to the
+nine-argument signature, so the block runs again. The mechanism is unchanged in this block and in
+the others built the same way.
+
+Owed: a block that cannot run reports every arm it carries as UNPROVEN with the probe's reason, for
+example by naming its arms up front in `names` and skipping each, so a missing function reads as the
+coverage it removes.
+
+---
+
+## G144. At medium, a centred lens bar leaves less than 140 beside it below a viewport of about 905
+
+**Severity: low. A reading of B9-SPEC Revision 6 that the geometry forced. Opened 27 September 2026
+during handoff 34-A (item 5), filed under ruling 597. The number is assigned by this entry (ruling
+638).**
+
+B9-SPEC Revision 6's medium line puts the search field in the lens row, "taking the width left beside
+the bar, 140 to 280" (1124), and its Lens bar line keeps the bar centred at medium and expanded
+(1145). The bar's width is its five words', 561 in Chromium at every width measured. The row is the
+canvas less 32 on each side. A centred bar leaves `(row - 561) / 2 - 12` beside it: 7 at 640, 59 at
+744, 97 at 820 and 199 at 1024. So from 640 to about 905 no reading gives the field 140 beside a
+centred bar, and below about 725 not even beside a bar at the row's start.
+
+What the tree does. `LensRow` in `src/components/dna/DiscoverySurface.tsx` measures the laid-out row
+and bar on every render and resize. Where a centred bar leaves 140 beside it, the field sits there at
+its end, 140 to 280, which is every expanded width. Where it does not, the field takes its own line
+under the bar, centred at up to 280, so 1145's centring holds and the bar is never squeezed. The
+discovery search arm reads the field beside the bar at 1280 and under it at 820.
+
+Owed: a ruling on the field's place at medium where the width beside a centred bar is under 140,
+whether that is this line under the bar or another.
