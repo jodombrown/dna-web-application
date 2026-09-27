@@ -1,9 +1,11 @@
 // Brief 9's route contract as handoff 32-B rebuilds it (items 1 and 2; rulings 586, 693, 1042, 1093,
-// 1095, 1110): the lens is the path (`/convene` for All, `/convene/{lens}` for one of the four
-// who-lenses) and the facets are the query. `format`, `price`, `family` and `place` are
-// comma-separated lists; `when`, `home` and `rung` single values, and `rung` is only ever kept beside
-// a `home`. An unknown value is dropped from the query and never sent to the projection, which refuses
-// one with 22023.
+// 1095, 1110) and the first Discovery handoff restores its search (1124, 1159): the lens is the path
+// (`/convene` for All, `/convene/{lens}` for one of the four who-lenses) and the facets are the query.
+// `format`, `price`, `family` and `place` are comma-separated lists; `when`, `home` and `rung` single
+// values, and `rung` is only ever kept beside a `home`. `q` is the search's text, trimmed, kept whole
+// (a comma in it is text, not a separator) and dropped past 100 characters, which the projection
+// refuses with 22023. An unknown value is dropped from the query and never sent to the projection,
+// which refuses one with 22023.
 //
 // Three axes are the projection's own structural values (its `p_format`, `p_price` and `p_when`
 // branches) and are checked here; Price is Free and Paid alone (1095). The rung is structural too (1110). A family
@@ -45,6 +47,8 @@ const LANE_IDS: Record<DiscoveryLaneId, true> = {
   soon: true,
   weekend: true,
   online: true,
+  browse: true,
+  filling: true,
   fresh: true,
   curated: true,
   follow: true,
@@ -79,9 +83,26 @@ export type DiscoverySearch = {
   home?: string;
   rung?: DiscoveryHomeRung;
   place?: string;
+  /** The search (1124): trimmed, 1 to 100 characters. */
+  q?: string;
 };
 
 const FAMILY_TOKEN = /^[a-z][a-z0-9_]{0,63}$/;
+/** 1159: the projection refuses a search past 100 characters with 22023. */
+const Q_MAX = 100;
+
+/** The search as the URL carries it. The router parses a value that reads as JSON (`?q=2026`), so a
+ *  number or a boolean is its text; a list is not a search. */
+function searchText(v: unknown): string | undefined {
+  const s =
+    typeof v === "string"
+      ? v
+      : typeof v === "number" || typeof v === "boolean"
+        ? String(v)
+        : undefined;
+  const t = s?.trim();
+  return t && t.length <= Q_MAX ? t : undefined;
+}
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** A place id in the shape `convene_places()` writes and the projection accepts (1095). */
@@ -127,6 +148,7 @@ export function validateDiscoverySearch(search: Record<string, unknown>): Discov
   const home = list(search["home"]).find((h) => UUID.test(h));
   const rung = list(search["rung"]).find((r) => has(RUNGS, r));
   const place = joined(placeList(search["place"]).filter(isPlaceId).map(escapeId));
+  const q = searchText(search["q"]);
   if (format) out.format = format;
   if (price) out.price = price;
   if (family) out.family = family;
@@ -136,6 +158,7 @@ export function validateDiscoverySearch(search: Record<string, unknown>): Discov
     if (rung && has(RUNGS, rung)) out.rung = rung;
   }
   if (place) out.place = place;
+  if (q) out.q = q;
   return out;
 }
 
@@ -149,6 +172,8 @@ export type FacetLists = {
   /** Only meaningful beside a home; `in` when a home is set and no rung is. */
   rung: DiscoveryHomeRung[];
   place: string[];
+  /** The search's text, trimmed; empty is no search. Not a rail axis: Clear all clears it with them. */
+  q: string;
 };
 
 export function facetLists(search: DiscoverySearch): FacetLists {
@@ -160,6 +185,7 @@ export function facetLists(search: DiscoverySearch): FacetLists {
     home: search.home ? [search.home] : [],
     rung: search.home && search.rung ? [search.rung] : [],
     place: placeList(search.place).filter(isPlaceId),
+    q: searchText(search.q) ?? "",
   };
 }
 
@@ -179,6 +205,8 @@ export function searchOf(f: FacetLists): DiscoverySearch {
     if (f.rung[0] && f.rung[0] !== "in") out.rung = f.rung[0];
   }
   if (place) out.place = place;
+  const q = searchText(f.q);
+  if (q) out.q = q;
   return out;
 }
 
@@ -190,6 +218,7 @@ export const NO_FACETS: FacetLists = {
   home: [],
   rung: [],
   place: [],
+  q: "",
 };
 
 /** What the reads have answered so far; null for a read that has not answered. */
@@ -224,6 +253,9 @@ export function discoveryFacets(f: FacetLists, known: Known): Omit<DiscoveryFace
   }
   const pl = places ? f.place.filter((x) => places.includes(x)) : [];
   if (pl.length) out.places = pl;
+  // The search needs no read to be known: its text is the value (1159).
+  const q = searchText(f.q);
+  if (q) out.q = q;
   return out;
 }
 

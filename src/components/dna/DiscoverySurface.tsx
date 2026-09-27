@@ -596,6 +596,8 @@ export function DiscoverySurface({
       home: homeId ? [homeId] : [],
       rung: homeId && step && step !== "in" ? [step as DiscoveryHomeRung] : [],
       place: next["place"] ?? [],
+      // The search is not a rail axis: a change in the rail keeps it (1159).
+      q: lists.q,
     });
   };
   const clearFacets = () => setFacets(NO_FACETS);
