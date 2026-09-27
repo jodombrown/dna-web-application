@@ -1577,11 +1577,13 @@ async function runDiscoveryFacets(browserType, bname, [w, h], theme) {
       JSON.stringify(sent.map((c) => c.p_price)),
     );
 
-    // 1145 (B9-SPEC Revision 5's Lens bar line): at medium and expanded each seat is its own label's
-    // width, never an equal share, and the bar sits centred in its row, the shell's lens row, never
-    // stretched across it. Read from the boxes and computed styles: each seat against its word, its
-    // glyph, the gap between them, its padding and its border (floored at its min-width); the track
-    // against the row's content box, narrower than it and centred on it within 1.
+    // 1145 with 1170 and 1171 (B9-SPEC Revision 7's Lens bar and tiers lines): at medium and expanded
+    // each seat is its own label's width, never an equal share, and the bar and the search field
+    // centre together as one unit on the line the header's five Cs centre on, the field 140 to 280
+    // beside the bar past a 12 gap, or on its own full-width row under the bar where that does not
+    // fit, the scope line under the bar either way. Read from the boxes and computed styles: each seat
+    // against its word, its glyph, the gap between them, its padding and its border (floored at its
+    // min-width); the unit's centre against the five Cs' centre within 1, the unit inside the row.
     if (tier !== "compact") {
       const lensRow = await page.evaluate(() => {
         const t = document.querySelector(
@@ -1596,6 +1598,16 @@ async function runDiscoveryFacets(browserType, bname, [w, h], theme) {
         const left = rb.left + px(rs.borderLeftWidth) + px(rs.paddingLeft);
         const right = rb.right - px(rs.borderRightWidth) - px(rs.paddingRight);
         const tb = t.getBoundingClientRect();
+        const cs = Array.from(document.querySelectorAll('nav[aria-label="Pulse"] button[data-c]'));
+        const csLeft = Math.min(...cs.map((c) => c.getBoundingClientRect().left));
+        const csRight = Math.max(...cs.map((c) => c.getBoundingClientRect().right));
+        const unit = t.closest("[data-lens-row]");
+        const mode = unit ? unit.getAttribute("data-lens-row") : null;
+        const field = unit && unit.querySelector("[data-discovery-search] input");
+        const fb = field && field.getBoundingClientRect();
+        const unitRight = mode === "beside" && fb ? fb.right : tb.right;
+        const scope = unit && unit.querySelector("[data-lens-scope]");
+        const sb = scope && scope.getBoundingClientRect();
         const seats = Array.from(t.querySelectorAll('[role="tab"]')).map((x) => {
           const cs = getComputedStyle(x);
           const word = x.querySelector(":scope > span:not([aria-hidden])");
@@ -1619,19 +1631,37 @@ async function runDiscoveryFacets(browserType, bname, [w, h], theme) {
         return {
           row: [r(left), r(right)],
           bar: [r(tb.left), r(tb.right)],
-          centre: r((tb.left + tb.right) / 2 - (left + right) / 2),
+          cs: cs.length,
+          dock: document.querySelector('nav[aria-label="Pulse"]')?.getAttribute("data-pulse"),
+          mode,
+          // The unit's centre less the five Cs' centre, in px.
+          centre: r((tb.left + unitRight) / 2 - (csLeft + csRight) / 2),
+          inRow: tb.left >= left - 0.5 && unitRight <= right + 0.5,
+          field: fb ? [r(fb.left), r(fb.right), r(fb.width)] : null,
+          gap: fb ? r(fb.left - tb.right) : null,
+          fieldFull: fb ? Math.abs(fb.width - (right - left)) <= 1 : null,
+          scopeUnder: sb ? sb.top >= tb.bottom - 0.5 && sb.left >= tb.left - 0.5 : null,
           scroll: [t.scrollWidth, t.clientWidth],
           seats,
         };
       });
+      const beside = !!lensRow && lensRow.mode === "beside";
       record(
         tag +
-          " lens bar: each seat its own label's width, the bar centred in its row and narrower than it (1145)",
+          " lens row: each seat its own label's width, the bar and the field one unit centred on the five Cs, the field 140 to 280 beside the bar or full width under it, the scope line under the bar (1145, 1170, 1171)",
         !!lensRow &&
           lensRow.seats.length === VOCAB.convene_lenses.length &&
           lensRow.seats.every((s) => s.label > 0 && Math.abs(s.seat - s.own) <= 1) &&
-          lensRow.bar[1] - lensRow.bar[0] < lensRow.row[1] - lensRow.row[0] - 1 &&
-          Math.abs(lensRow.centre) <= 1,
+          lensRow.cs === 5 &&
+          Math.abs(lensRow.centre) <= 1 &&
+          lensRow.inRow &&
+          lensRow.scopeUnder === true &&
+          !!lensRow.field &&
+          (beside
+            ? Math.abs(lensRow.gap - 12) <= 0.5 &&
+              lensRow.field[2] >= SEARCH_MIN_PX - 0.5 &&
+              lensRow.field[2] <= SEARCH_MAX_PX + 0.5
+            : lensRow.mode === "under" && lensRow.fieldFull === true),
         JSON.stringify(lensRow),
       );
     }
@@ -3825,9 +3855,15 @@ async function runDiscoverySearch(browserType, bname, [w, h], theme) {
         const right = tb.right - parseFloat(cs.paddingRight);
         const bb = bar.getBoundingClientRect();
         const fb = f.getBoundingClientRect();
-        out.centre = r1((bb.left + bb.right) / 2 - (left + right) / 2);
+        // 1170: the unit (the bar, or the bar and the field beside it) against the five Cs' centre.
+        const c = Array.from(document.querySelectorAll('nav[aria-label="Pulse"] button[data-c]'));
+        const cl = Math.min(...c.map((x) => x.getBoundingClientRect().left));
+        const cr = Math.max(...c.map((x) => x.getBoundingClientRect().right));
         out.beside = fb.left >= bb.right - 0.5 && fb.top < bb.bottom && fb.bottom > bb.top;
         out.under = fb.top >= bb.bottom - 0.5;
+        const unitRight = out.beside ? fb.right : bb.right;
+        out.centre = r1((bb.left + unitRight) / 2 - (cl + cr) / 2);
+        out.full = Math.abs(fb.width - (right - left)) <= 1;
       }
       return out;
     }, tier);
@@ -3913,14 +3949,16 @@ async function runDiscoverySearch(browserType, bname, [w, h], theme) {
       ? place.afterBar && place.full && !place.inRow
       : place.inRow &&
         Math.abs(place.centre) <= 1 &&
-        place.width <= SEARCH_MAX_PX + 0.5 &&
-        ((place.mode === "beside" && place.beside && place.width >= SEARCH_MIN_PX - 0.5) ||
-          (place.mode === "under" && place.under)));
+        ((place.mode === "beside" &&
+          place.beside &&
+          place.width >= SEARCH_MIN_PX - 0.5 &&
+          place.width <= SEARCH_MAX_PX + 0.5) ||
+          (place.mode === "under" && place.under && place.full)));
   record(
     tag +
       (tier === "compact"
         ? " search: one field named Search events, full width under the lens bar (1124)"
-        : " search: one field named Search events in the lens row, 140 to 280 beside the centred bar or on its own line under it (1124, 1145)"),
+        : " search: one field named Search events in the lens row, 140 to 280 beside the bar as one unit centred on the five Cs, or full width under the bar where the unit does not fit (1124, 1170, 1171)"),
     placed,
     JSON.stringify(place),
   );

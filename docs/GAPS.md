@@ -6312,7 +6312,7 @@ coverage it removes.
 
 ---
 
-## G144. At medium, a centred lens bar leaves less than 140 beside it below a viewport of about 905
+## G144. At medium, a centred lens bar leaves less than 140 beside it below a viewport of about 905 — closed (ruling 1171)
 
 **Severity: low. A reading of B9-SPEC Revision 6 that the geometry forced. Opened 27 September 2026
 during handoff 34-A (item 5), filed under ruling 597. The number is assigned by this entry (ruling
@@ -6333,3 +6333,14 @@ discovery search arm reads the field beside the bar at 1280 and under it at 820.
 
 Owed: a ruling on the field's place at medium where the width beside a centred bar is under 140,
 whether that is this line under the bar or another.
+
+**Closed 27 September 2026, in handoff 34-A's addendum item C, under ruling 1171.** Where the bar, a
+12 gap and a 140 field do not fit side by side in the lens row, the field takes its own full-width row
+under the bar, as at compact. With 1170 the bar and the field centre together as one unit on the line
+the header's five Cs centre on, so the fit is measured on the width available to a unit centred on
+that line: the row's width less twice the line's distance from the row's centre. `LensRow` in
+`src/components/dna/DiscoverySurface.tsx` measures the row, the bar and the dock, and measures again
+when any of them resizes. At medium the dock is the fixed one and its Cs centre on the viewport, so
+the flip is where the row's width reaches the bar's 560.77, the gap and 140: the field sits beside
+the bar from a viewport of 777 and under it at 776, read in Chromium after the fonts settle. The
+discovery facets arm reads the unit at 820, 1280 and 1440 and the search arm at 820 and 1280.

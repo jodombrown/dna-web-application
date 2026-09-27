@@ -223,7 +223,7 @@ const H2: CSSProperties = {
   color: "var(--ink)",
 };
 
-/** B9-SPEC's medium line (1124): the search field beside the bar takes 140 to 280. */
+/** B9-SPEC's medium line (1124, 1171): the search field beside the bar takes 140 to 280, past a 12 gap. */
 const SEARCH_MIN = 140;
 const SEARCH_MAX = 280;
 const SEARCH_GAP = 12;
@@ -264,71 +264,132 @@ function SearchField({ q, onApply }: { q: string; onApply: (text: string) => voi
   );
 }
 
-/** Whether a centred bar leaves the field its 140 beside it; null until the bar is laid out. */
-function besideFits(row: HTMLElement | null): boolean | null {
-  const root = row?.querySelector<HTMLElement>(":scope > [data-lens-row-bar] > *");
-  if (!row || !root) return null;
-  return (row.clientWidth - root.offsetWidth) / 2 - SEARCH_GAP >= SEARCH_MIN;
+/**
+ * The line the five Cs centre on (1170): the Pulse dock's five C buttons, in the header at expanded
+ * and in the fixed dock below expanded, read as the centre of the box their five faces span. Null when
+ * no dock is in the document, and the row centres on itself. Read from the DOM (844), never from a
+ * width held in code: the header's row is logo, dock, home and avatar, so where its Cs sit depends on
+ * the wordmark's width and the controls' at every viewport.
+ */
+function pulseAxis(): number | null {
+  const cs = document.querySelectorAll<HTMLElement>('nav[aria-label="Pulse"] button[data-c]');
+  if (cs.length === 0) return null;
+  let left = Infinity;
+  let right = -Infinity;
+  for (const c of cs) {
+    const b = c.getBoundingClientRect();
+    left = Math.min(left, b.left);
+    right = Math.max(right, b.right);
+  }
+  return Number.isFinite(left) && right > left ? (left + right) / 2 : null;
+}
+
+/** How the row lays the unit: beside with the field at `field` wide, or the field under the bar. Both
+ *  centre on the axis, which sits `shift` right of the row's own centre (negative: left). */
+type UnitLayout = { beside: boolean; field: number; shift: number };
+
+/**
+ * The unit's layout from the laid-out row, bar and dock (1170, 1171). The width available to a unit
+ * centred on the axis is the row's less twice the axis's distance from the row's centre. The field
+ * takes what that leaves beside the bar and its 12 gap, from 140 to 280; below 140 it takes its own
+ * full-width row under the bar. A bar too wide to centre on the axis inside the row centres on the
+ * row instead, so nothing is pushed out of it.
+ */
+function unitLayout(row: HTMLElement, root: HTMLElement): UnitLayout | null {
+  // Rects, not offsetWidth: the bar's width is its words' and is not whole, and a whole-pixel reading
+  // moves the medium flip by a pixel.
+  const box = row.getBoundingClientRect();
+  const width = box.width;
+  const bar = root.getBoundingClientRect().width;
+  if (!width || !bar) return null;
+  const centre = box.left + width / 2;
+  const axis = pulseAxis();
+  const shift = axis === null ? 0 : axis - centre;
+  const room = width - 2 * Math.abs(shift);
+  if (room < bar) return { beside: false, field: 0, shift: 0 };
+  const field = Math.min(SEARCH_MAX, room - bar - SEARCH_GAP);
+  return field >= SEARCH_MIN ? { beside: true, field, shift } : { beside: false, field: 0, shift };
 }
 
 /**
- * The lens row at medium and expanded (1124 with 1145): the bar keeps its centre in the row, and the
- * search field sits beside it at its end, taking the width left there from 140 to 280. Where a
- * centred bar leaves less than 140 beside it (at medium, the five lenses' words leave 7 at 640, 59 at
- * 744 and 97 at 820), the field takes its own line under the bar, centred at up to 280, so the bar is
- * never pushed off centre or squeezed to make room. Read from the laid-out row and bar at every
- * render and every resize, never from a width held in code: the bar's width is its words'.
+ * The lens row at medium and expanded (1170, 1171): the lens bar and the search field centre together
+ * as one unit on the page's axis, the line the header's five Cs centre on, with the scope line under
+ * the bar. The field takes 140 to 280 beside the bar; where the bar, the 12 gap and a 140 field do not
+ * fit side by side, the field takes its own full-width row under the bar, as at compact. Measured from
+ * the laid-out row, bar and dock, and measured again when any of them resizes (the bar's words settle
+ * with the fonts, the header's dock moves when the wordmark loads) and when the window does.
  */
 function LensRow({ bar, field }: { bar: ReactNode; field: ReactNode }) {
   const row = useRef<HTMLDivElement>(null);
-  const [beside, setBeside] = useState(true);
-  // Whenever the shell hands the row a bar (it arrives with the vocabulary, after the row) and every
-  // resize of the row.
-  useLayoutEffect(() => {
-    const fits = besideFits(row.current);
-    if (fits !== null) setBeside(fits);
-  }, [bar]);
+  const barRef = useRef<HTMLDivElement>(null);
+  const [layout, setLayout] = useState<UnitLayout>({ beside: false, field: 0, shift: 0 });
+  // Whenever the shell hands the row a bar (it arrives with the vocabulary, after the row), then on
+  // every resize of the row, the bar's root, the dock and the header's images.
   useLayoutEffect(() => {
     const el = row.current;
-    if (!el) return;
-    const ro = new ResizeObserver(() => {
-      const fits = besideFits(el);
-      if (fits !== null) setBeside(fits);
-    });
+    const root = barRef.current?.firstElementChild;
+    if (!el || !(root instanceof HTMLElement)) return;
+    const measure = () => {
+      const next = unitLayout(el, root);
+      if (next)
+        setLayout((was) =>
+          was.beside === next.beside &&
+          Math.abs(was.field - next.field) < 0.5 &&
+          Math.abs(was.shift - next.shift) < 0.5
+            ? was
+            : next,
+        );
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
     ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
+    ro.observe(root);
+    const dock = document.querySelector('nav[aria-label="Pulse"]');
+    if (dock) ro.observe(dock);
+    for (const img of document.querySelectorAll("header img")) ro.observe(img);
+    window.addEventListener("resize", measure);
+    let live = true;
+    void document.fonts?.ready.then(() => {
+      if (live) measure();
+    });
+    return () => {
+      live = false;
+      ro.disconnect();
+      window.removeEventListener("resize", measure);
+    };
+  }, [bar]);
+  const { beside, shift } = layout;
   return (
     <div
       ref={row}
       data-lens-row={beside ? "beside" : "under"}
-      style={{
-        display: "grid",
-        gridTemplateColumns: beside ? "minmax(0, 1fr) auto minmax(0, 1fr)" : "minmax(0, 1fr)",
-        columnGap: SEARCH_GAP,
-        rowGap: SEARCH_GAP,
-        alignItems: "start",
-      }}
+      style={{ display: "flex", flexDirection: "column", gap: SEARCH_GAP, minWidth: 0 }}
     >
-      <div data-lens-row-bar style={{ gridColumn: beside ? 2 : 1, minWidth: 0 }}>
-        {bar}
-      </div>
       <div
-        style={
-          beside
-            ? // Level with the seats: the track pads its 44 seats by --space-1 top and bottom.
-              {
-                gridColumn: 3,
-                width: "100%",
-                maxWidth: SEARCH_MAX,
-                marginTop: "var(--space-1)",
-                minWidth: 0,
-              }
-            : { gridColumn: 1, justifySelf: "center", width: "min(" + SEARCH_MAX + "px, 100%)" }
-        }
+        data-lens-unit
+        style={{
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "flex-start",
+          gap: SEARCH_GAP,
+          minWidth: 0,
+          // Centred in a box narrowed on the side away from the axis by twice the axis's offset, so
+          // the unit's centre is the axis and its edges stay inside the row.
+          marginLeft: shift > 0 ? 2 * shift : 0,
+          marginRight: shift < 0 ? -2 * shift : 0,
+        }}
       >
-        {field}
+        <div ref={barRef} data-lens-row-bar style={{ flex: "none", minWidth: 0 }}>
+          {bar}
+        </div>
+        {beside && (
+          // Level with the seats: the track pads its 44 seats by --space-1 top and bottom.
+          <div style={{ flex: "none", width: layout.field, marginTop: "var(--space-1)" }}>
+            {field}
+          </div>
+        )}
       </div>
+      {!beside && <div style={{ width: "100%", minWidth: 0 }}>{field}</div>}
     </div>
   );
 }
