@@ -289,7 +289,7 @@ const VOCAB = {
     { value: "family_kids", label: "Family and kids", schema_org: ["ChildrensEvent"] },
   ],
   // Handoff 32-B (1093, 1105): the five lenses and the lanes as 20260924100000 leaves them, with
-  // handoff 34-A's two (20260926170000).
+  // handoff 34-A's Filling up (20260926170000) and its Browse withdrawn again (20260926170400, 1172).
   convene_lenses: [
     {
       value: "all",
@@ -327,12 +327,11 @@ const VOCAB = {
       scope: "A connection hosting, or connections going.",
     },
   ],
-  // Handoff 34-A (1124): Browse and Filling up join at 3 and 4, as 20260926170000 leaves the table.
+  // Handoff 34-A (1124, 1172): Filling up at 3, as 20260926170400 leaves the table.
   convene_lanes: [
     { value: "soon", name: "Happening soon" },
     { value: "weekend", name: "This weekend" },
     { value: "online", name: "Join from anywhere" },
-    { value: "browse", name: "Browse" },
     { value: "filling", name: "Filling up" },
     { value: "fresh", name: "New this week" },
     { value: "curated", name: "Curated by Convene" },
@@ -343,7 +342,7 @@ const VOCAB = {
   ],
 };
 
-/** The projection's eleven lanes, in convene_lanes order (1092, 1105; 1124 adds two). */
+/** The projection's ten lanes, in convene_lanes order (1092, 1105; 1124 adds Filling up, 1172 withdraws Browse). */
 const DISCOVERY_SECTIONS = VOCAB.convene_lanes.map((l) => l.value);
 /** The four lenses under /convene/{lens}, each the one lane of the same id (1093, 1105). */
 const DISCOVERY_LENSES = VOCAB.convene_lenses.map((l) => l.value).filter((v) => v !== "all");
@@ -865,12 +864,9 @@ function makeMockDb() {
       subscriptionWrites: [],
       rail: [],
       railWrites: [],
-      // Handoff 34-A: Browse's tiles before narrowing ({ topics, places }, each kept only while an
-      // item left after the facets and the search carries its `_family` or one of its `_places`),
-      // the going names event_going_names gives per event id with every call it took (goingFail
-      // makes it answer 500), every note_lane_act write, and a lane order that overrides the
-      // learned one when set.
-      tiles: null,
+      // Handoff 34-A: the going names event_going_names gives per event id with every call it took
+      // (goingFail makes it answer 500), every note_lane_act write, and a lane order that overrides
+      // the learned one when set.
       goingNames: {},
       goingReads: [],
       goingFail: false,
@@ -1642,7 +1638,8 @@ async function mockSupabase(page, db, opts = {}) {
     // Brief 9 as handoff 32-B rebuilds it: the Discovery projection, its dismissal, Place's options
     // and the subscription write, with the projection's own refusals (22023) for a lens, a format, a
     // price, a when, a family, a home, a rung, a place or a search it does not take. Handoff 34-A
-    // adds the search, Browse's tiles, Filling up and the learned order (20260926170300).
+    // adds the search, Filling up and the learned order (20260926170300); its addendum withdraws
+    // Browse (20260926170400, 1172).
     if (p === "/rest/v1/rpc/convene_discovery") {
       const b = req.postDataJSON() || {};
       const d = db.discovery;
@@ -1738,26 +1735,9 @@ async function mockSupabase(page, db, opts = {}) {
             (latest[y] || 0) - (latest[x] || 0) ||
             DISCOVERY_SECTIONS.indexOf(x) - DISCOVERY_SECTIONS.indexOf(y),
         );
-      // Browse (1133): the tiles an item left after the facets and the search still carries; the
-      // corpus is every lane's, before dismissals, which are per lane (581). Its floor counts tiles.
-      const corpus = Object.entries(d.sections)
-        .filter(([k]) => k !== "browse")
-        .flatMap(([, v]) => v)
-        .filter(keep);
-      const tiles = d.tiles && {
-        topics: d.tiles.topics.filter((t) => corpus.some((i) => i._family === t.family)),
-        places: d.tiles.places.filter((pl) =>
-          corpus.some((i) => (i._places || []).includes(pl.id)),
-        ),
-      };
       const sections = [];
       for (const id of order) {
         if (lens !== "all" && lens !== id) continue;
-        if (id === "browse") {
-          if (lens === "all" && tiles && tiles.topics.length + tiles.places.length > 0)
-            sections.push({ section: id, items: [], tiles });
-          continue;
-        }
         let items = (d.sections[id] || []).filter(
           (i) => !d.dismissals.some((x) => x.p_section === id && x.p_event === i.event_id),
         );

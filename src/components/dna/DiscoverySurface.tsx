@@ -5,8 +5,9 @@
 // 33-A binds what Strand correction 28 added to them (1134): the face's link (G100) and its own title
 // clamp (G115), the pane at 520 with its height, toolbar and hidden list (G110, 1127), Topics in two
 // columns in the compact Sheet only (G102, 1144) and Clear all in the rail's heading row (G111). The
-// first Discovery handoff (34-A, 1124 to 1165) restores the search, the Browse lane on Strand's
-// BrowseTile (1133), Filling up, the member's learned lane order and the going row (1128, 1138, 1158).
+// first Discovery handoff (34-A, 1124 to 1174) restores the search, Filling up, the member's learned
+// lane order and the going row (1128, 1138, 1158); its addendum withdraws the Browse lane (1172) and
+// centres the lens bar and the search field as one unit (1170, 1171).
 //
 // One read projection and one write path per surface (CLAUDE.md): everything this surface shows comes
 // through `loadDiscovery` (the cards are the Feed's own views, hydrated by post id inside it, 660; the
@@ -21,7 +22,7 @@
 // heading and no placeholder (632).
 //
 // Two vocabularies, never one (1093, 1105): the five lenses switch who the events come from, the
-// eleven lanes are sections of the page. Every lens word comes from `convene_lenses` and every lane
+// ten lanes are sections of the page. Every lens word comes from `convene_lenses` and every lane
 // name from `convene_lanes`; the ids alone live in code.
 //
 // Layout (1082 as amended by 1094; item 7). The LensBar shows the five lenses with labels always and
@@ -38,9 +39,8 @@
 // and the page's read under the key EventSurface reads (1067). The read refetches on window focus and
 // never live.
 //
-// No digit renders except in a card's when line and a Browse topic's next date: the reason and going
-// rows are words (1096, 1138), the where line is a format word and places, and there is no count
-// anywhere, on a card or a tile.
+// No digit renders except in a card's when line: the reason and going rows are words (1096, 1138),
+// the where line is a format word and places, and there is no count anywhere.
 import { useQuery, useQueryClient, type QueryState } from "@tanstack/react-query";
 import { useLocation, useNavigate, useRouter } from "@tanstack/react-router";
 import {
@@ -57,7 +57,6 @@ import { EventShareView } from "@/components/dna/EventShareSheet";
 import { EVENT_PAGE_KEY } from "@/components/dna/EventSurface";
 import { Ghosts } from "@/components/dna/Ghosts";
 import { LoadError } from "@/components/dna/LoadError";
-import { BrowseTile } from "@/components/strand/BrowseTile";
 import { Button } from "@/components/strand/Button";
 import { Chip } from "@/components/strand/Chip";
 import { DiaLine } from "@/components/strand/DiaLine";
@@ -84,7 +83,6 @@ import {
   loadDiscovery,
   noteLaneAct,
   setSubscription,
-  type BrowseTiles,
   type ConveneLensId,
   type ConvenePlace,
   type Discovery,
@@ -119,7 +117,6 @@ import { readRailCollapsed, railBand, writeRailCollapsed, type RailBand } from "
 import { setLeftRail, setRightRail, setShellLayout } from "@/lib/rail-store";
 import { useShellScroll } from "@/lib/shell-scroll";
 import { useMode, useTier, useWide } from "@/lib/tier";
-import { browserZone, dateLine } from "@/lib/when";
 import { loadVocabularies } from "@/lib/vocabularies";
 import { toastStyle, useShare } from "./FeedSurface";
 
@@ -1254,7 +1251,7 @@ export function DiscoverySurface({
 
   // 1065: the router's element restoration keys each lane on its id, so Back returns every lane to
   // where the member left it. The shell's scrollToTopSelectors name the columns only, never a lane.
-  const laneRow = (id: string, children: ReactNode) => (
+  const laneRow = (id: DiscoveryLaneId, children: ReactNode) => (
     <div
       className="dna-lane"
       data-lane-row
@@ -1294,89 +1291,11 @@ export function DiscoverySurface({
     </div>
   );
 
-  // Browse (1124, 1133): the projection's tiles as two rows of Strand's BrowseTile, topics then places.
-  // A topic carries its next date, composed in the member's zone as a card's when line composes its
-  // date (none when the projection knows none); a city carries its country, and a country tile, whose
-  // name is its country, carries nothing more. A tap toggles the Topics or the Place facet with the
-  // tile's own id, and a tile is selected while its facet holds it. No See all, no count, and no lane
-  // act: a tile applies a facet and opens nothing (1160). A tile's address is the page it narrows: All,
-  // or under a lens the lens, where Browse is one of More on Convene's lanes (1148).
-  const zone = browserZone();
-  const toggled = (axis: "family" | "place", id: string): FacetLists => ({
-    ...lists,
-    [axis]: lists[axis].includes(id) ? lists[axis].filter((x) => x !== id) : [...lists[axis], id],
-  });
-  const tile = (
-    key: string,
-    kind: "topic" | "place",
-    name: string,
-    detail: string | undefined,
-    axis: "family" | "place",
-    id: string,
-  ) => {
-    const next = toggled(axis, id);
-    return (
-      <BrowseTile
-        key={key}
-        kind={kind}
-        name={name}
-        detail={detail}
-        selected={lists[axis].includes(id)}
-        href={
-          lens === "all"
-            ? router.buildLocation({ to: "/convene", search: searchOf(next) }).href
-            : router.buildLocation({
-                to: "/convene/$lens",
-                params: { lens },
-                search: searchOf(next),
-              }).href
-        }
-        onSelect={() => setFacets(next)}
-        style={{ scrollSnapAlign: "start" }}
-      />
-    );
-  };
-  const browseBody = (tiles: BrowseTiles): ReactNode => {
-    const topics = tiles.topics.map((t) => {
-      const at = t.next_at ? new Date(t.next_at) : null;
-      const next = at && !Number.isNaN(at.getTime()) ? dateLine(at, zone) : undefined;
-      return tile(
-        "family:" + t.family,
-        "topic",
-        familyLabel(t.family) ?? t.label,
-        next,
-        "family",
-        t.family,
-      );
-    });
-    const places = tiles.places.map((p) =>
-      tile(
-        "place:" + p.id,
-        "place",
-        p.name,
-        p.kind === "city" ? (p.country ?? undefined) : undefined,
-        "place",
-        p.id,
-      ),
-    );
-    if (!topics.length && !places.length) return null;
-    return (
-      <div data-browse style={{ display: "flex", flexDirection: "column", gap: 12, minWidth: 0 }}>
-        {topics.length > 0 && laneRow("browse-topics", topics)}
-        {places.length > 0 && laneRow("browse-places", places)}
-      </div>
-    );
-  };
-
-  // All's lanes (685, 1092) as an answer `src` gave them, in the order it answered them: Browse as
-  // its tiles, every other lane as its cards, and a lane with neither absent (632). See all applies as
-  // on All wherever All's lanes render, under All and in More on Convene (1148).
+  // All's lanes (685, 1092) as an answer `src` gave them, in the order it answered them, each as its
+  // cards, and a lane with none absent (632). See all applies as on All wherever All's lanes render,
+  // under All and in More on Convene (1148).
   const laneEntries = (from: DiscoverySection[], src: Discovery | null) =>
     from.flatMap<LaneEntry>((s) => {
-      if (s.section === "browse") {
-        const body = s.tiles ? browseBody(s.tiles) : null;
-        return body ? [{ id: s.section, body, seeAll: false }] : [];
-      }
       if (s.items.length === 0) return [];
       return [
         {

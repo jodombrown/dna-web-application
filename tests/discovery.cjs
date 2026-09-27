@@ -4,7 +4,7 @@
 // engine, viewport and theme, at the matrix's widths plus 1440 and 1600, where the pane and the rail
 // are read at three expanded widths (Done Means 3):
 //
-//   full density   the nine lanes in convene_lanes order, each named from the vocabulary in the
+//   full density   the ten lanes (1124, 1172) in convene_lanes order, each named from the vocabulary in the
 //                  display face at 22, none without items; every card PostCard's discovery face at
 //                  320 with 16:9 media and a title clamped to two lines whose height is held; the
 //                  reason row in words on the four relationship lanes and empty on the other five;
@@ -400,28 +400,8 @@ const item = (e, reason) => ({
   reason,
   _places: e.places,
   _rungs: e.rungs,
-  _family: e.family,
   _text: searchWords(e),
 });
-
-/** Browse's tiles (1133) before narrowing: a topic per family in the corpus with its next date, in
- *  the families' order, and a city tile per city with its country (every country here has a city). */
-function browseTiles(E) {
-  const events = Object.values(E);
-  const topics = VOCAB.convene_families
-    .filter((f) => events.some((e) => e.family === f.value))
-    .map((f) => {
-      const next = events
-        .filter((e) => e.family === f.value && e.starts_at)
-        .map((e) => e.starts_at)
-        .sort()[0];
-      return { family: f.value, label: f.label, next_at: next || null };
-    });
-  const places = PLACES.filter(
-    (pl) => pl.kind === "city" && events.some((e) => (e.places || []).includes(pl.id)),
-  ).map((pl) => ({ id: pl.id, kind: "city", name: pl.name, country: pl.country }));
-  return { topics, places };
-}
 
 /** The going row's names (1128, 1138): three first names per event, never the viewer's (1158). */
 const GOING_NAMES = ["Ama", "Kojo", "Efua"];
@@ -430,7 +410,7 @@ const GOING_NAMES = ["Ama", "Kojo", "Efua"];
 const GOING_SENTENCE = "Ama, Kojo, Efua and others are going.";
 
 /**
- * Full density (632, 1092, 1124): all eleven lanes. The member follows Kwame Mensah and Culture and
+ * Full density (632, 1092, 1124, 1172): all ten lanes. The member follows Kwame Mensah and Culture and
  * arts, is going to Corridor Suppers, which they have saved, and to an undated supper in Kilimani.
  * Corridor Suppers and Kente and code have five or more going, so they fill up and name three.
  */
@@ -471,7 +451,6 @@ function fullDensity(E) {
         item(E.stream, { kind: "network", going: [ADAEZE, NGOZI] }),
       ],
     },
-    tiles: browseTiles(E),
     goingNames: {
       [E.supper.event_id]: GOING_NAMES,
       [E.cloth.event_id]: GOING_NAMES,
@@ -491,7 +470,6 @@ function belowDensity(E) {
       curated: full.sections.curated.slice(0, 1),
       network: full.sections.network.slice(0, 1),
     },
-    tiles: null,
     goingNames: {},
     follows: [],
     subscriptions: [],
@@ -740,8 +718,7 @@ function onPath(url, path) {
   }
 }
 
-/** The text of the surface and its columns with every card's when line taken out, and every
- *  Browse topic's next date, the one digit a tile may carry (1133). */
+/** The text of the surface and its columns with every card's when line taken out. */
 async function digitsOutsideWhen(page) {
   return page.evaluate(() => {
     const parts = [
@@ -754,9 +731,7 @@ async function digitsOutsideWhen(page) {
       .filter(Boolean)
       .map((el) => el.innerText || "");
     let text = parts.join("\n");
-    for (const w of document.querySelectorAll(
-      '[data-discovery] [data-row="when"], [data-discovery] [data-browse-tile="topic"] [data-field="detail"]',
-    )) {
+    for (const w of document.querySelectorAll('[data-discovery] [data-row="when"]')) {
       const t = (w.innerText || "").trim();
       if (t) text = text.replace(t, "");
     }
@@ -796,32 +771,23 @@ async function runDiscovery(browserType, bname, [w, h], theme) {
     await signIn(page);
     await openDiscovery(page);
 
-    // Item 3 (1092, 1105) with handoff 34-A (1124, 1160): the eleven lanes in the order the answer
-    // gives, which is convene_lanes order for a member with no act in the week, each named from the
-    // vocabulary.
+    // Item 3 (1092, 1105) with handoff 34-A (1124, 1160, 1172): the ten lanes in the order the
+    // answer gives, which is convene_lanes order for a member with no act in the week, each named
+    // from the vocabulary.
     const order = await laneIds(page);
     record(
       tag +
-        " full: the lanes are the eleven in the answer's order, convene_lanes order before any act (1105, 1160)",
+        " full: the lanes are the ten in the answer's order, convene_lanes order before any act (1105, 1160, 1172)",
       order.join(",") === DISCOVERY_SECTIONS.join(","),
       order.join(","),
     );
-    // Browse (1133) is the one lane that carries no items: it renders its tiles.
     const emptyLanes = await page.$$eval("[data-discovery] [data-lanes] > [data-lane]", (els) =>
       els
-        .filter(
-          (e) =>
-            e.querySelectorAll("[data-discovery-item]").length === 0 &&
-            !(
-              e.getAttribute("data-lane") === "browse" &&
-              e.querySelectorAll("[data-browse-tile]").length > 0
-            ),
-        )
+        .filter((e) => e.querySelectorAll("[data-discovery-item]").length === 0)
         .map((e) => e.getAttribute("data-lane")),
     );
     record(
-      tag +
-        " full: no lane renders without items but Browse with its tiles, and no sentence without suggest (632, 650, 1133)",
+      tag + " full: no lane renders without items, and no sentence without suggest (632, 650)",
       emptyLanes.length === 0 &&
         !(await page.locator("[data-discovery]").innerText()).includes("You follow no host yet"),
       emptyLanes.join(","),
@@ -1062,7 +1028,7 @@ async function runDiscovery(browserType, bname, [w, h], theme) {
     );
     const digits = await digitsOutsideWhen(page);
     record(
-      tag + " full: no digit anywhere but a card's when line and a Browse topic's date (guardrail)",
+      tag + " full: no digit anywhere but a card's when line (guardrail)",
       digits === "",
       digits,
     );
@@ -3785,9 +3751,9 @@ async function runDiscoveryTooltip(browserType, bname, [w, h], theme) {
 }
 
 // ---------------------------------------------------------------------------------------------------
-// Handoff 34-A (1124 to 1165): the search, the learned order and the acts that teach it, Browse with
-// Filling up and the going row, the lens grid with More on Convene, and the share view in the pane.
-// One arm each, on its own cells.
+// Handoff 34-A (1124 to 1174): the search, the learned order and the acts that teach it, Filling up
+// and the going row, the lens grid with More on Convene, and the share view in the pane. One arm
+// each, on its own cells. The Browse lane's arm went with the lane (1172).
 // ---------------------------------------------------------------------------------------------------
 
 /** One cell per tier: the field's place differs at each (B9-SPEC's tiers, 1124). */
@@ -4021,7 +3987,7 @@ const ORDER_VIEWPORTS = [
  * week lead, with no re-sort in the surface; the Communities sentence takes its place by lane_order;
  * nothing is written on load; a card opened from a lane writes open for that lane once and the
  * pane's Previous and Next write nothing; Save and Follow from a card's menu write save and follow
- * for its lane, and undoing either writes nothing; a Browse tile writes no act.
+ * for its lane, and undoing either writes nothing.
  */
 async function runDiscoveryOrder(browserType, bname, [w, h], theme) {
   const tag = `${bname}-${w}x${h}-${theme}-discovery-order`;
@@ -4052,7 +4018,6 @@ async function runDiscoveryOrder(browserType, bname, [w, h], theme) {
   let stepped = null;
   let saved = null;
   let followed = null;
-  let tiled = null;
   let sentence = null;
   try {
     await signIn(page);
@@ -4115,15 +4080,6 @@ async function runDiscoveryOrder(browserType, bname, [w, h], theme) {
     await page.waitForTimeout(800);
     followed = { follow: acts(n).slice(0, afterFollow - n), unfollow: acts(afterFollow) };
 
-    // A Browse tile applies a facet and teaches nothing.
-    n = db.discovery.laneActs.length;
-    await page.locator('[data-lane="browse"] [data-browse-tile="topic"]').first().click();
-    await page.waitForFunction(() => new URL(location.href).searchParams.has("family"), null, {
-      timeout: 10000,
-    });
-    await page.waitForTimeout(600);
-    tiled = acts(n);
-
     // The Communities sentence (650) takes its place by lane_order: first when the order leads with
     // Communities, and between Curated and My network in the base order.
     setAnswer(db, belowDensity(E));
@@ -4173,11 +4129,6 @@ async function runDiscoveryOrder(browserType, bname, [w, h], theme) {
     JSON.stringify(followed),
   );
   record(
-    tag + " acts: a Browse tile applies its facet and writes no act (1160)",
-    !!tiled && tiled.length === 0,
-    JSON.stringify(tiled),
-  );
-  record(
     tag + " order: the Communities sentence takes its place by lane_order (650, 1160)",
     !!sentence &&
       sentence.led.join(",") === "follow,online,curated,network" &&
@@ -4189,41 +4140,24 @@ async function runDiscoveryOrder(browserType, bname, [w, h], theme) {
   await browser.close();
 }
 
-/** Browse, Filling up and the going row: compact and expanded. */
-const BROWSE_VIEWPORTS = [
+/** Filling up and the going row: compact and expanded. */
+const FILLING_VIEWPORTS = [
   [[390, 844], "light"],
   [[1280, 800], "dark"],
 ];
 
 /**
- * Browse (1124, 1133): two rows of BrowseTile, topics with their next date in the member's zone as a
- * card's when line composes it, then cities with their country; a tap toggles the Topics or Place
- * facet and the tile is pressed while its facet holds it; no See all. Filling up is an ordinary lane
- * with no See all (1157). The going row (1128, 1138, 1158) reads the three names outside the
- * relationship lanes and keeps the reason in them, from one event_going_names read that names no
- * event only a relationship lane carries; a failed read leaves the rows empty and the lanes up.
+ * Filling up is an ordinary lane with no See all (1157). The going row (1128, 1138, 1158) reads the
+ * three names outside the relationship lanes and keeps the reason in them, from one event_going_names
+ * read that names no event only a relationship lane carries; a failed read leaves the rows empty and
+ * the lanes up.
  */
-async function runDiscoveryBrowse(browserType, bname, [w, h], theme) {
-  const tag = `${bname}-${w}x${h}-${theme}-discovery-browse`;
+async function runDiscoveryFilling(browserType, bname, [w, h], theme) {
+  const tag = `${bname}-${w}x${h}-${theme}-discovery-filling`;
   M.armStart(tag);
   const db = makeMockDb();
   const E = seedDiscovery(db);
   const { browser, page, errors } = await context(browserType, [w, h], theme, db);
-  const tileState = (kind, name) =>
-    page.evaluate(
-      ({ kind, name }) => {
-        const t = Array.from(
-          document.querySelectorAll(`[data-lane="browse"] [data-browse-tile="${kind}"]`),
-        ).find((x) => (x.querySelector('[data-field="name"]')?.textContent || "").trim() === name);
-        return t ? t.getAttribute("aria-pressed") : null;
-      },
-      { kind, name },
-    );
-  const param = (k) => page.evaluate((k) => new URL(location.href).searchParams.get(k), k);
-  let tiles = null;
-  let expected = null;
-  let topic = null;
-  let placeT = null;
   let filling = null;
   let going = null;
   let failed = null;
@@ -4231,114 +4165,6 @@ async function runDiscoveryBrowse(browserType, bname, [w, h], theme) {
     await signIn(page);
     await openDiscovery(page);
     const firstRead = db.discovery.goingReads[0] || null;
-    tiles = await page.evaluate(() => {
-      const lane = document.querySelector('[data-lanes] > [data-lane="browse"]');
-      if (!lane) return null;
-      const read = (row) =>
-        Array.from(row.querySelectorAll("[data-browse-tile]")).map((t) => ({
-          kind: t.getAttribute("data-browse-tile"),
-          name: (t.querySelector('[data-field="name"]')?.textContent || "").trim(),
-          detail: (t.querySelector('[data-field="detail"]')?.textContent || "").trim(),
-          pressed: t.getAttribute("aria-pressed"),
-        }));
-      return {
-        head: (lane.querySelector("h2")?.textContent || "").trim(),
-        rows: Array.from(lane.querySelectorAll("[data-lane-row]")).map(read),
-        seeAll: !!lane.querySelector("[data-see-all]"),
-      };
-    });
-    // The next date as the card composes a date: the member's zone, weekday, day and month, and the
-    // year only outside the year it is read in (835), with the app's own month words.
-    expected = await page.evaluate((topics) => {
-      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-      const f = new Intl.DateTimeFormat("en-GB", {
-        timeZone: tz,
-        year: "numeric",
-        month: "numeric",
-        day: "numeric",
-      });
-      const parts = (d) =>
-        Object.fromEntries(f.formatToParts(d).map((x) => [x.type, Number(x.value)]));
-      const WD = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-      const MO = [
-        "Jan",
-        "Feb",
-        "Mar",
-        "Apr",
-        "May",
-        "Jun",
-        "Jul",
-        "Aug",
-        "Sep",
-        "Oct",
-        "Nov",
-        "Dec",
-      ];
-      const now = parts(new Date());
-      return topics.map((t) => {
-        if (!t.next_at) return "";
-        const p = parts(new Date(t.next_at));
-        const wd = new Date(Date.UTC(p.year, p.month - 1, p.day)).getUTCDay();
-        return (
-          WD[wd] + " " + p.day + " " + MO[p.month - 1] + (p.year !== now.year ? " " + p.year : "")
-        );
-      });
-    }, db.discovery.tiles.topics);
-
-    // A topic tile toggles Topics.
-    const culture = VOCAB.convene_families.find((f) => f.value === "culture_arts").label;
-    await page
-      .locator('[data-lane="browse"] [data-browse-tile="topic"]', { hasText: culture })
-      .click();
-    await page.waitForFunction(
-      () => new URL(location.href).searchParams.get("family") === "culture_arts",
-      null,
-      { timeout: 10000 },
-    );
-    await settled(page, db, (c) => (c.p_families || []).includes("culture_arts"));
-    topic = {
-      on: {
-        family: await param("family"),
-        sent: lastCall(db).p_families || null,
-        pressed: await tileState("topic", culture),
-      },
-    };
-    await page
-      .locator('[data-lane="browse"] [data-browse-tile="topic"]', { hasText: culture })
-      .click();
-    await page.waitForFunction(() => !new URL(location.href).searchParams.has("family"), null, {
-      timeout: 10000,
-    });
-    await settled(page, db, (c) => !c.p_families);
-    topic.off = { family: await param("family"), pressed: await tileState("topic", culture) };
-
-    // A place tile toggles Place.
-    const nairobi = "city|kenya|nairobi";
-    await page
-      .locator('[data-lane="browse"] [data-browse-tile="place"]', { hasText: "Nairobi" })
-      .click();
-    await page.waitForFunction(
-      (id) => new URL(location.href).searchParams.get("place") === id,
-      nairobi,
-      { timeout: 10000 },
-    );
-    await settled(page, db, (c) => (c.p_places || []).includes(nairobi));
-    placeT = {
-      on: {
-        place: await param("place"),
-        sent: lastCall(db).p_places || null,
-        pressed: await tileState("place", "Nairobi"),
-      },
-    };
-    await page
-      .locator('[data-lane="browse"] [data-browse-tile="place"]', { hasText: "Nairobi" })
-      .click();
-    await page.waitForFunction(() => !new URL(location.href).searchParams.has("place"), null, {
-      timeout: 10000,
-    });
-    await settled(page, db, (c) => !c.p_places);
-    placeT.off = { place: await param("place"), pressed: await tileState("place", "Nairobi") };
-
     // Filling up and the going row, on the full answer.
     await lanesUntil(page, (ids) => ids.includes(E.cloth.event_id));
     filling = await page.evaluate(() => {
@@ -4387,43 +4213,6 @@ async function runDiscoveryBrowse(browserType, bname, [w, h], theme) {
   } catch (e) {
     record(tag + " flow", false, String(e).slice(0, 400));
   }
-  const fixture = db.discovery.tiles;
-  record(
-    tag +
-      " browse: two rows of BrowseTile, topics with their next date in the member's zone, then cities with their country, none pressed and no See all (1124, 1133)",
-    !!tiles &&
-      tiles.head === "Browse" &&
-      tiles.rows.length === 2 &&
-      tiles.rows[0].every((t) => t.kind === "topic" && t.pressed === "false") &&
-      tiles.rows[0].map((t) => t.name).join("|") === fixture.topics.map((t) => t.label).join("|") &&
-      !!expected &&
-      tiles.rows[0].map((t) => t.detail).join("|") === expected.join("|") &&
-      tiles.rows[1].every((t) => t.kind === "place" && t.pressed === "false") &&
-      tiles.rows[1].map((t) => t.name + ":" + t.detail).join("|") ===
-        fixture.places.map((p) => p.name + ":" + p.country).join("|") &&
-      !tiles.seeAll,
-    JSON.stringify({ tiles, expected }),
-  );
-  record(
-    tag + " browse: a topic tile toggles the Topics facet and is pressed while it holds it (1133)",
-    !!topic &&
-      topic.on.family === "culture_arts" &&
-      (topic.on.sent || []).includes("culture_arts") &&
-      topic.on.pressed === "true" &&
-      topic.off.family === null &&
-      topic.off.pressed === "false",
-    JSON.stringify(topic),
-  );
-  record(
-    tag + " browse: a place tile toggles the Place facet and is pressed while it holds it (1133)",
-    !!placeT &&
-      placeT.on.place === "city|kenya|nairobi" &&
-      (placeT.on.sent || []).includes("city|kenya|nairobi") &&
-      placeT.on.pressed === "true" &&
-      placeT.off.place === null &&
-      placeT.off.pressed === "false",
-    JSON.stringify(placeT),
-  );
   record(
     tag + " filling: Filling up renders as an ordinary lane with no See all (1124, 1157)",
     !!filling &&
@@ -4806,7 +4595,7 @@ const FOLLOWUP_ARMS = [
   [runDiscoveryTooltip, TOOLTIP_VIEWPORTS],
   [runDiscoverySearch, SEARCH_VIEWPORTS],
   [runDiscoveryOrder, ORDER_VIEWPORTS],
-  [runDiscoveryBrowse, BROWSE_VIEWPORTS],
+  [runDiscoveryFilling, FILLING_VIEWPORTS],
   [runDiscoveryGrid, GRID_VIEWPORTS],
   [runDiscoveryShare, SHARE_VIEWPORTS],
 ];

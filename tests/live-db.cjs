@@ -1190,20 +1190,23 @@ async function runLiveDbArms({ record, skip }) {
     // culture_arts, dismisses the picked event from curated and writes a rail row inside this
     // transaction; all of it rolls back. The refusals are read at the grant (42501) and at the
     // projection's own checks (22023), and signed out is refused the projection outright (662).
-    // Handoff 34-A adds the search, Browse, Filling up with the going names on Chat's seed (1165),
-    // and the learned order's one writer, note_lane_act, each also rolled back.
+    // Handoff 34-A adds the search, Filling up with the going names on Chat's seed (1165), and the
+    // learned order's one writer, note_lane_act, each also rolled back; its addendum withdraws Browse
+    // (1172) and lifts the floors under a search (1173).
     // ------------------------------------------------------------------------------------------
     await inTransaction(client, async () => {
       await actAsSelf(client);
       // 20260926170300 drops the eight-argument projection and creates it again with p_q, so the
-      // probe names the nine-argument signature.
+      // probe names the nine-argument signature; 20260926170400 keeps that signature and takes the
+      // browse row out of convene_lanes, so the probe reads the table too (G143 names what a failed
+      // probe costs).
       const present = await client.query(
-        "select to_regprocedure('public.convene_discovery(text, text[], text[], text, text[], uuid, text[], text, text)') is not null as ok",
+        "select to_regprocedure('public.convene_discovery(text, text[], text[], text, text[], uuid, text[], text, text)') is not null and not exists (select 1 from public.convene_lanes where lane = 'browse') as ok",
       );
       if (!present.rows[0] || present.rows[0].ok !== true) {
         skip(
           names.discovery,
-          "20260926170300_p2_discovery_search_browse_filling.sql is not on the project yet (Chat applies 34-A's four migrations before its enforcing run)",
+          "20260926170300 and 20260926170400 are not both on the project yet (Chat applies 34-A's five migrations before its enforcing run)",
         );
         return;
       }
@@ -1261,9 +1264,9 @@ async function runLiveDbArms({ record, skip }) {
       );
 
       // 1124, 1159: the search narrows the corpus before the lanes form. The pick's own title keeps
-      // the pick in Curated; a search that matches nothing drops every lane, Browse included; 100
-      // characters are taken and 101 refused with 22023. Read before the dismissal below empties
-      // Curated inside this transaction.
+      // the pick in Curated; a search that matches nothing drops every lane; 100 characters are
+      // taken and 101 refused with 22023. Read before the dismissal below empties Curated inside
+      // this transaction.
       const Q =
         "select public.convene_discovery('all', null, null, null, null, null, null, null, $1) as d";
       const titled = curatedItem
@@ -1300,42 +1303,20 @@ async function runLiveDbArms({ record, skip }) {
           (tooLong.ok ? "answered" : tooLong.code),
       );
 
-      // 1124, 1133: Browse is a section with no items and tiles: topics carrying their family, label
-      // and next date where one is known, then places by convene_places() id, a city or a country.
-      const browse = all.ok ? section(all.d, "browse") : null;
-      const tiles = browse && browse.tiles;
-      const tileShape =
-        !!tiles &&
-        Array.isArray(tiles.topics) &&
-        Array.isArray(tiles.places) &&
-        tiles.topics.every(
-          (t) =>
-            typeof t.family === "string" &&
-            typeof t.label === "string" &&
-            t.label !== "" &&
-            (t.next_at === null || !Number.isNaN(Date.parse(t.next_at))),
-        ) &&
-        tiles.places.every(
-          (pl) =>
-            (pl.kind === "city" || pl.kind === "country") &&
-            String(pl.id).startsWith(pl.kind + "|") &&
-            typeof pl.name === "string" &&
-            pl.name !== "",
-        );
+      // 1172: the Browse lane is withdrawn. No section is browse, no section carries tiles, and
+      // lane_order is the ten lanes.
+      const tiled = all.ok ? ((all.d && all.d.sections) || []).filter((x) => "tiles" in x) : [];
       record(
-        "Handoff 34-A (1124, 1133): Browse answers as a section with no items and tiles of topics and places",
-        !!browse &&
-          (browse.items || []).length === 0 &&
-          tileShape &&
-          tiles.topics.length + tiles.places.length > 0,
-        browse
-          ? "items " +
-              (browse.items || []).length +
-              " topics " +
-              JSON.stringify((tiles && tiles.topics) || null).slice(0, 200) +
-              " places " +
-              JSON.stringify((tiles && tiles.places) || null).slice(0, 200)
-          : "no browse section in the owner's answer",
+        "Handoff 34-A addendum (1172): no section is browse or carries tiles, and lane_order names the ten lanes",
+        all.ok && !section(all.d, "browse") && tiled.length === 0 && laneOrder.length === 10,
+        all.ok
+          ? "browse " +
+              (section(all.d, "browse") ? "present" : "absent") +
+              " tiled " +
+              tiled.length +
+              " lane_order " +
+              laneOrder.length
+          : failed(all),
       );
 
       // 1157, 1165: Chat seeded five going RSVPs on each of two events. Filling up carries both, as
@@ -1767,12 +1748,12 @@ async function runLiveDbArms({ record, skip }) {
       );
 
       record(
-        "Handoff 34-A (1037, 1093, 1105, 1124): vocabularies() serves the nine families, the five lenses with their short words and the eleven lanes in their base order",
+        "Handoff 34-A (1037, 1093, 1105, 1124, 1172): vocabularies() serves the nine families, the five lenses with their short words and the ten lanes in their base order",
         families.length === 9 &&
           lenses.map((l) => l.value).join(",") === "all,follow,taste,curated,network" &&
           lenses.every((l) => typeof l.short === "string" && l.short.trim() !== "") &&
           laneIds.join(",") ===
-            "soon,weekend,online,browse,filling,fresh,curated,follow,taste,near,network" &&
+            "soon,weekend,online,filling,fresh,curated,follow,taste,near,network" &&
           lanes.every((l) => typeof l.name === "string" && l.name.trim() !== ""),
         vocab.ok
           ? "lenses " +

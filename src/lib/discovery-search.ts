@@ -47,7 +47,6 @@ const LANE_IDS: Record<DiscoveryLaneId, true> = {
   soon: true,
   weekend: true,
   online: true,
-  browse: true,
   filling: true,
   fresh: true,
   curated: true,
