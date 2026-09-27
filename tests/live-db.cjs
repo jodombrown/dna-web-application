@@ -1198,10 +1198,14 @@ async function runLiveDbArms({ record, skip }) {
       await actAsSelf(client);
       // 20260926170300 drops the eight-argument projection and creates it again with p_q, so the
       // probe names the nine-argument signature; 20260926170400 keeps that signature and takes the
-      // browse row out of convene_lanes, so the probe reads the table too (G143 names what a failed
-      // probe costs).
+      // browse row out of convene_lanes, so the probe reads that version's recorded row, as the drift
+      // arm reads it (444, 553: a paste records its version in the transaction that runs its DDL).
+      // The probe runs as live_arms, which holds select on supabase_migrations.schema_migrations
+      // (20260912090557) and none on convene_lanes: run 384's probe read the table itself, threw
+      // 42501 and took the whole live step down before its count (G143 names what a failed probe
+      // costs).
       const present = await client.query(
-        "select to_regprocedure('public.convene_discovery(text, text[], text[], text, text[], uuid, text[], text, text)') is not null and not exists (select 1 from public.convene_lanes where lane = 'browse') as ok",
+        "select to_regprocedure('public.convene_discovery(text, text[], text[], text, text[], uuid, text[], text, text)') is not null and exists (select 1 from supabase_migrations.schema_migrations where version = '20260926170400') as ok",
       );
       if (!present.rows[0] || present.rows[0].ok !== true) {
         skip(
