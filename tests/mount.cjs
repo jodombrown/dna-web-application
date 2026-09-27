@@ -395,11 +395,12 @@ function readDiscoveryRail(page, selector, { bound = null, heading: needHeading 
 }
 
 /** PostCard's discovery face as 32-B binds it (item 4; 1076 to 1079, 1083, 1087): every card in
- *  the scope the discovery face, 320 wide, media at 16:9, no feed face, and ringed only where
- *  `ringed` says (the event open in the pane), never elsewhere. */
-function readDiscoveryCards(page, scope, ringed = null, lensList = false) {
+ *  the scope the discovery face, 320 wide in a lane and filling its track of 320 or more in a lens's
+ *  grid (1125), media at 16:9, no feed face, and ringed only where `ringed` says (the event open in
+ *  the pane), never elsewhere. */
+function readDiscoveryCards(page, scope, ringed = null) {
   return page.evaluate(
-    ({ scope, ringed, lensList }) => {
+    ({ scope, ringed }) => {
       const slots = Array.from(document.querySelectorAll(scope));
       const bad = [];
       for (const s of slots) {
@@ -409,9 +410,11 @@ function readDiscoveryCards(page, scope, ringed = null, lensList = false) {
         if (!a || a.getAttribute("data-presentation") !== "discovery")
           why.push("not the discovery face");
         if (s.querySelector("article[data-c]")) why.push("a feed face");
-        // A lane's card is 320; a lens list's is the same card at 680, or the column when narrower
-        // (handoff 32-B; B9-SPEC Revision 2's lens grid, 1125, is 1131's first handoff).
-        const wide = lensList ? Math.min(680, s.parentElement.clientWidth) : 320;
+        // A lane's card is 320; in a lens's grid it is the same card filling its track, which is
+        // --lane-card-width at least (1125). More on Convene's cards are lanes' (1148).
+        const inGrid = !!s.closest("[data-lens-cards]");
+        const wide = inGrid ? s.getBoundingClientRect().width : 320;
+        if (inGrid && wide < 320 - 0.6) why.push("track " + wide + " under 320");
         if (a && Math.abs(a.getBoundingClientRect().width - wide) > 0.6)
           why.push("width " + a.getBoundingClientRect().width + " for " + wide);
         if (!m || !m.clientHeight || Math.abs(m.clientWidth / m.clientHeight - 16 / 9) > 0.02)
@@ -426,7 +429,7 @@ function readDiscoveryCards(page, scope, ringed = null, lensList = false) {
         detail: `${slots.length} card(s)` + (bad.length ? "; " + bad.slice(0, 3).join(" | ") : ""),
       };
     },
-    { scope, ringed, lensList },
+    { scope, ringed },
   );
 }
 
@@ -789,11 +792,11 @@ async function runMountConvene(bt, bname, [w, h], theme, path) {
           .count();
         record(tag + " LensBar: the route's lens is the selected tab", on === 1, on + " selected");
       }
-      const cards = await readDiscoveryCards(page, "[data-discovery-item]", null, lensArm);
+      const cards = await readDiscoveryCards(page, "[data-discovery-item]", null);
       record(
         tag +
           (lensArm
-            ? " PostCard: every card the discovery face in a vertical list at 680, media 16:9, none ringed (32-B)"
+            ? " PostCard: every card the discovery face, in the lens grid filling its track of 320 or more and at 320 in a lane, media 16:9, none ringed (1125, 1148)"
             : " PostCard: every card the discovery face at 320, media 16:9, none ringed (32-B)"),
         cards.ok,
         cards.detail,
@@ -1674,4 +1677,4 @@ async function runMount(bt, bname, vp, theme) {
   await runMountEmpty(bt, bname, vp, theme);
 }
 
-module.exports = { runMount, MOUNT_CELLS, runMountEmpty };
+module.exports = { runMount, MOUNT_CELLS, runMountEmpty, readEmpty, emptyFills };

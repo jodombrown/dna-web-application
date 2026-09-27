@@ -288,7 +288,8 @@ const VOCAB = {
     { value: "sport_wellness", label: "Sport and wellness", schema_org: ["SportsEvent"] },
     { value: "family_kids", label: "Family and kids", schema_org: ["ChildrensEvent"] },
   ],
-  // Handoff 32-B (1093, 1105): the five lenses and the nine lanes as 20260924100000 leaves them.
+  // Handoff 32-B (1093, 1105): the five lenses and the lanes as 20260924100000 leaves them, with
+  // handoff 34-A's two (20260926170000).
   convene_lenses: [
     {
       value: "all",
@@ -326,10 +327,13 @@ const VOCAB = {
       scope: "A connection hosting, or connections going.",
     },
   ],
+  // Handoff 34-A (1124): Browse and Filling up join at 3 and 4, as 20260926170000 leaves the table.
   convene_lanes: [
     { value: "soon", name: "Happening soon" },
     { value: "weekend", name: "This weekend" },
     { value: "online", name: "Join from anywhere" },
+    { value: "browse", name: "Browse" },
+    { value: "filling", name: "Filling up" },
     { value: "fresh", name: "New this week" },
     { value: "curated", name: "Curated by Convene" },
     { value: "follow", name: "From communities you follow" },
@@ -339,7 +343,7 @@ const VOCAB = {
   ],
 };
 
-/** Handoff 32-B: the projection's nine lanes, in convene_lanes order (1092, 1105). */
+/** The projection's eleven lanes, in convene_lanes order (1092, 1105; 1124 adds two). */
 const DISCOVERY_SECTIONS = VOCAB.convene_lanes.map((l) => l.value);
 /** The four lenses under /convene/{lens}, each the one lane of the same id (1093, 1105). */
 const DISCOVERY_LENSES = VOCAB.convene_lenses.map((l) => l.value).filter((v) => v !== "all");
@@ -861,6 +865,17 @@ function makeMockDb() {
       subscriptionWrites: [],
       rail: [],
       railWrites: [],
+      // Handoff 34-A: Browse's tiles before narrowing ({ topics, places }, each kept only while an
+      // item left after the facets and the search carries its `_family` or one of its `_places`),
+      // the going names event_going_names gives per event id with every call it took (goingFail
+      // makes it answer 500), every note_lane_act write, and a lane order that overrides the
+      // learned one when set.
+      tiles: null,
+      goingNames: {},
+      goingReads: [],
+      goingFail: false,
+      laneActs: [],
+      laneOrder: null,
     },
     // Brief 4: Connect's projection state and the writes the surface made.
     connect: {
@@ -1626,7 +1641,8 @@ async function mockSupabase(page, db, opts = {}) {
     }
     // Brief 9 as handoff 32-B rebuilds it: the Discovery projection, its dismissal, Place's options
     // and the subscription write, with the projection's own refusals (22023) for a lens, a format, a
-    // price, a when, a family, a home, a rung or a place it does not know.
+    // price, a when, a family, a home, a rung, a place or a search it does not take. Handoff 34-A
+    // adds the search, Browse's tiles, Filling up and the learned order (20260926170300).
     if (p === "/rest/v1/rpc/convene_discovery") {
       const b = req.postDataJSON() || {};
       const d = db.discovery;
@@ -1671,6 +1687,9 @@ async function mockSupabase(page, db, opts = {}) {
         return parts[0] === "country" && parts.length === 2 && !!parts[1];
       };
       if (b.p_places && b.p_places.some((x) => !placeOk(x))) return refuse("That is not a place.");
+      // 1159: trimmed, empty is no search, and past 100 characters the projection refuses it.
+      const q = b.p_q == null ? "" : String(b.p_q).trim().toLowerCase();
+      if (q.length > 100) return refuse("That search is too long.");
       // An in-person-only facet drops the online and curated lanes, as the live arm reads it.
       const inPersonOnly =
         Array.isArray(b.p_format) &&
@@ -1695,6 +1714,9 @@ async function mockSupabase(page, db, opts = {}) {
         }
         if (b.p_price && b.p_price.length && i._price && !b.p_price.includes(i._price))
           return false;
+        // `_text` is the item's searchable words, lower-cased: its title, host, presenter, places
+        // and family label, which the projection matches the search against (1159).
+        if (q && !(i._text || "").includes(q)) return false;
         return true;
       };
       const strip = (i) => {
@@ -1704,9 +1726,38 @@ async function mockSupabase(page, db, opts = {}) {
       };
       const city = (b.p_places || []).find((x) => x.startsWith("city|"));
       const cityName = city ? (d.places.find((x) => x.id === city) || {}).name || null : null;
+      // 1160: lanes acted in during the last seven days first, most recent first, then the base
+      // order; `lane_order` names every lane in it, and the sections come back in it.
+      const week = Date.now() - 7 * 86400e3;
+      const latest = {};
+      for (const a of d.laneActs) if (a.at >= week) latest[a.p_lane] = a.at;
+      const order =
+        d.laneOrder ||
+        [...DISCOVERY_SECTIONS].sort(
+          (x, y) =>
+            (latest[y] || 0) - (latest[x] || 0) ||
+            DISCOVERY_SECTIONS.indexOf(x) - DISCOVERY_SECTIONS.indexOf(y),
+        );
+      // Browse (1133): the tiles an item left after the facets and the search still carries; the
+      // corpus is every lane's, before dismissals, which are per lane (581). Its floor counts tiles.
+      const corpus = Object.entries(d.sections)
+        .filter(([k]) => k !== "browse")
+        .flatMap(([, v]) => v)
+        .filter(keep);
+      const tiles = d.tiles && {
+        topics: d.tiles.topics.filter((t) => corpus.some((i) => i._family === t.family)),
+        places: d.tiles.places.filter((pl) =>
+          corpus.some((i) => (i._places || []).includes(pl.id)),
+        ),
+      };
       const sections = [];
-      for (const id of DISCOVERY_SECTIONS) {
+      for (const id of order) {
         if (lens !== "all" && lens !== id) continue;
+        if (id === "browse") {
+          if (lens === "all" && tiles && tiles.topics.length + tiles.places.length > 0)
+            sections.push({ section: id, items: [], tiles });
+          continue;
+        }
         let items = (d.sections[id] || []).filter(
           (i) => !d.dismissals.some((x) => x.p_section === id && x.p_event === i.event_id),
         );
@@ -1720,6 +1771,7 @@ async function mockSupabase(page, db, opts = {}) {
       }
       return json({
         lens,
+        lane_order: order,
         homes,
         follows: d.follows,
         subscriptions: d.subscriptions,
@@ -1738,6 +1790,46 @@ async function mockSupabase(page, db, opts = {}) {
       return json(null, 204);
     }
     if (p === "/rest/v1/rpc/convene_places") return json(db.discovery.places);
+    // Handoff 34-A (20260926170200): the going row's three first names per event, for the member
+    // only; anon holds no execute grant, and more than 200 ids is the function's 22023.
+    if (p === "/rest/v1/rpc/event_going_names") {
+      const b = req.postDataJSON() || {};
+      const ids = Array.isArray(b.p_events) ? b.p_events : [];
+      const anon = !(req.headers()["authorization"] || "").includes(JWT);
+      db.discovery.goingReads.push({ ids, anon });
+      if (anon)
+        return json(
+          { code: "42501", message: "permission denied for function event_going_names" },
+          401,
+        );
+      if (db.discovery.goingFail)
+        return json(
+          { code: "PGRST", message: "forced going-names failure", details: null, hint: null },
+          500,
+        );
+      if (ids.length > 200)
+        return json({ code: "22023", message: "At most 200 events at a time." }, 400);
+      const out = {};
+      for (const id of ids) if (db.discovery.goingNames[id]) out[id] = db.discovery.goingNames[id];
+      return json(out);
+    }
+    // Handoff 34-A (20260926170100): the one writer of member_lane_activity, which refuses a lane or
+    // an act it does not know with 22023.
+    if (p === "/rest/v1/rpc/note_lane_act") {
+      const b = req.postDataJSON() || {};
+      if (!DISCOVERY_SECTIONS.includes(b.p_lane))
+        return json(
+          { code: "22023", message: "That is not a lane.", details: null, hint: null },
+          400,
+        );
+      if (!["open", "save", "follow"].includes(b.p_act))
+        return json(
+          { code: "22023", message: "That is not an act.", details: null, hint: null },
+          400,
+        );
+      db.discovery.laneActs.push({ p_lane: b.p_lane, p_act: b.p_act, at: Date.now() });
+      return json(null, 204);
+    }
     if (p === "/rest/v1/rpc/set_subscription") {
       const b = req.postDataJSON() || {};
       const d = db.discovery;

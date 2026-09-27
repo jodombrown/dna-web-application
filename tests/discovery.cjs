@@ -249,6 +249,7 @@ function seedEvent(db, key, { title, mode, days, cities = [], family = null, hos
   return {
     event_id: id,
     post_id: postId,
+    title,
     starts_at: starts ? starts.toISOString() : null,
     mode,
     cities,
@@ -269,6 +270,7 @@ function seedCorpus(db) {
     loaded: {
       event_id: LOADED,
       post_id: "post-e-loaded",
+      title: loadedPage.event.title,
       starts_at: loadedPage.event.starts_at,
       mode: "in_person",
       cities: ["Accra"],
@@ -379,17 +381,57 @@ function seedCorpus(db) {
   return E;
 }
 
+/** The words the projection matches a search against (1159), as the mock's `_text`. */
+const searchWords = (e) =>
+  [
+    e.title,
+    e.host && e.host.name,
+    ...(e.cities || []),
+    ...(e.cities || []).map((c) => CITY[c] && CITY[c].country),
+    (VOCAB.convene_families.find((f) => f.value === e.family) || {}).label,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
 const item = (e, reason) => ({
   event_id: e.event_id,
   post_id: e.post_id,
   reason,
   _places: e.places,
   _rungs: e.rungs,
+  _family: e.family,
+  _text: searchWords(e),
 });
 
+/** Browse's tiles (1133) before narrowing: a topic per family in the corpus with its next date, in
+ *  the families' order, and a city tile per city with its country (every country here has a city). */
+function browseTiles(E) {
+  const events = Object.values(E);
+  const topics = VOCAB.convene_families
+    .filter((f) => events.some((e) => e.family === f.value))
+    .map((f) => {
+      const next = events
+        .filter((e) => e.family === f.value && e.starts_at)
+        .map((e) => e.starts_at)
+        .sort()[0];
+      return { family: f.value, label: f.label, next_at: next || null };
+    });
+  const places = PLACES.filter(
+    (pl) => pl.kind === "city" && events.some((e) => (e.places || []).includes(pl.id)),
+  ).map((pl) => ({ id: pl.id, kind: "city", name: pl.name, country: pl.country }));
+  return { topics, places };
+}
+
+/** The going row's names (1128, 1138): three first names per event, never the viewer's (1158). */
+const GOING_NAMES = ["Ama", "Kojo", "Efua"];
+/** The sentence the surface composes from them (handoff 34-A item 5): joined, then the words. */
+const GOING_SENTENCE = "Ama, Kojo and Efua and others are going.";
+
 /**
- * Full density (632, 1092): all nine lanes. The member follows Kwame Mensah and Culture and arts,
- * is going to Corridor Suppers, which they have saved, and to an undated supper in Kilimani.
+ * Full density (632, 1092, 1124): all eleven lanes. The member follows Kwame Mensah and Culture and
+ * arts, is going to Corridor Suppers, which they have saved, and to an undated supper in Kilimani.
+ * Corridor Suppers and Kente and code have five or more going, so they fill up and name three.
  */
 function fullDensity(E) {
   const soon = (e) => item(e, { kind: "soon", starts_at: e.starts_at, mode: e.mode });
@@ -402,6 +444,9 @@ function fullDensity(E) {
       // Five, so the lane still scrolls sideways at 1600, the widest this arm runs (1123: no maximum).
       online: [E.readers, E.stream, E.harvest, E.cloth, E.table].map((e) =>
         item(e, { kind: "online", starts_at: e.starts_at, mode: e.mode }),
+      ),
+      filling: [E.cloth, E.supper].map((e) =>
+        item(e, { kind: "filling", starts_at: e.starts_at, mode: e.mode }),
       ),
       fresh: [E.kumasi, E.table, E.undated].map((e) =>
         item(e, { kind: "fresh", published_at: new Date(Date.now() - 86400e3).toISOString() }),
@@ -425,6 +470,11 @@ function fullDensity(E) {
         item(E.stream, { kind: "network", going: [ADAEZE, NGOZI] }),
       ],
     },
+    tiles: browseTiles(E),
+    goingNames: {
+      [E.supper.event_id]: GOING_NAMES,
+      [E.cloth.event_id]: GOING_NAMES,
+    },
     follows: [{ ...KWAME, avatar_path: null }],
     subscriptions: [{ family: "culture_arts", label: "Culture and arts" }],
     suggest: null,
@@ -440,6 +490,8 @@ function belowDensity(E) {
       curated: full.sections.curated.slice(0, 1),
       network: full.sections.network.slice(0, 1),
     },
+    tiles: null,
+    goingNames: {},
     follows: [],
     subscriptions: [],
     suggest: {
@@ -687,7 +739,8 @@ function onPath(url, path) {
   }
 }
 
-/** The text of the surface and its columns with every card's when line taken out. */
+/** The text of the surface and its columns with every card's when line taken out, and every
+ *  Browse topic's next date, the one digit a tile may carry (1133). */
 async function digitsOutsideWhen(page) {
   return page.evaluate(() => {
     const parts = [
@@ -700,7 +753,9 @@ async function digitsOutsideWhen(page) {
       .filter(Boolean)
       .map((el) => el.innerText || "");
     let text = parts.join("\n");
-    for (const w of document.querySelectorAll('[data-discovery] [data-row="when"]')) {
+    for (const w of document.querySelectorAll(
+      '[data-discovery] [data-row="when"], [data-discovery] [data-browse-tile="topic"] [data-field="detail"]',
+    )) {
       const t = (w.innerText || "").trim();
       if (t) text = text.replace(t, "");
     }
@@ -740,20 +795,32 @@ async function runDiscovery(browserType, bname, [w, h], theme) {
     await signIn(page);
     await openDiscovery(page);
 
-    // Item 3 (1092, 1105): the nine lanes in convene_lanes order, each named from the vocabulary.
+    // Item 3 (1092, 1105) with handoff 34-A (1124, 1160): the eleven lanes in the order the answer
+    // gives, which is convene_lanes order for a member with no act in the week, each named from the
+    // vocabulary.
     const order = await laneIds(page);
     record(
-      tag + " full: the lanes are the nine in convene_lanes order (1092, 1105)",
+      tag +
+        " full: the lanes are the eleven in the answer's order, convene_lanes order before any act (1105, 1160)",
       order.join(",") === DISCOVERY_SECTIONS.join(","),
       order.join(","),
     );
+    // Browse (1133) is the one lane that carries no items: it renders its tiles.
     const emptyLanes = await page.$$eval("[data-discovery] [data-lanes] > [data-lane]", (els) =>
       els
-        .filter((e) => e.querySelectorAll("[data-discovery-item]").length === 0)
+        .filter(
+          (e) =>
+            e.querySelectorAll("[data-discovery-item]").length === 0 &&
+            !(
+              e.getAttribute("data-lane") === "browse" &&
+              e.querySelectorAll("[data-browse-tile]").length > 0
+            ),
+        )
         .map((e) => e.getAttribute("data-lane")),
     );
     record(
-      tag + " full: no lane renders without items, and no sentence without suggest (632, 650)",
+      tag +
+        " full: no lane renders without items but Browse with its tiles, and no sentence without suggest (632, 650, 1133)",
       emptyLanes.length === 0 &&
         !(await page.locator("[data-discovery]").innerText()).includes("You follow no host yet"),
       emptyLanes.join(","),
@@ -932,8 +999,10 @@ async function runDiscovery(browserType, bname, [w, h], theme) {
       for (const l of document.querySelectorAll("[data-discovery] [data-lanes] > [data-lane]")) {
         const rows = Array.from(l.querySelectorAll('[data-row="reason"]'));
         out[l.getAttribute("data-lane")] = rows.map((r) => ({
+          id: r.closest("[data-discovery-item]")?.getAttribute("data-discovery-item") ?? null,
           text: (r.textContent || "").trim(),
           hidden: r.getAttribute("aria-hidden") === "true",
+          going: r.hasAttribute("data-going"),
           h: Math.round(r.getBoundingClientRect().height),
         }));
       }
@@ -942,21 +1011,35 @@ async function runDiscovery(browserType, bname, [w, h], theme) {
     const speaks = ["follow", "taste", "curated", "network"];
     const firstReason = (lane, n = 0) =>
       reasons[lane] && reasons[lane][n] ? reasons[lane][n].text : "";
+    // Handoff 34-A (1124, 1138): outside the relationship lanes the row is the going sentence for an
+    // event event_going_names named, and empty for every other; the relationship lanes keep their
+    // reason even on a named event, since the reason wins in the part.
+    const goingIds = Object.keys(db.discovery.goingNames);
     const quiet = Object.entries(reasons)
       .filter(([lane]) => !speaks.includes(lane))
-      .flatMap(([lane, rows]) => rows.filter((r) => r.text || !r.hidden).map(() => lane));
+      .flatMap(([lane, rows]) =>
+        rows
+          .filter((r) =>
+            goingIds.includes(r.id) ? r.text !== GOING_SENTENCE || !r.going : r.text || !r.hidden,
+          )
+          .map(() => lane),
+      );
+    const spoke = Object.entries(reasons)
+      .filter(([lane]) => !speaks.includes(lane))
+      .some(([, rows]) => rows.some((r) => r.text === GOING_SENTENCE));
     const heights = new Set(Object.values(reasons).flatMap((rows) => rows.map((r) => r.h)));
     record(
       tag +
-        " full: the reason row speaks on the four relationship lanes only, its height held (1096)",
+        " full: the reason row speaks on the four relationship lanes and the going names elsewhere, only for a named event, its height held (1096, 1138)",
       firstReason("follow") === "Because you follow Kwame Mensah." &&
         firstReason("taste") === "Because you follow culture and arts." &&
         firstReason("curated") === "Curated by Sefa Owusu." &&
         firstReason("network", 0) === "Adaeze Nwosu, a connection, is hosting." &&
         firstReason("network", 1) === "Adaeze Nwosu and Ngozi Eze are going." &&
         quiet.length === 0 &&
+        spoke &&
         heights.size === 1,
-      JSON.stringify({ quiet, heights: [...heights], follow: firstReason("follow") }),
+      JSON.stringify({ quiet, spoke, heights: [...heights], follow: firstReason("follow") }),
     );
     const where = await page.evaluate(
       (ids) => {
@@ -978,7 +1061,7 @@ async function runDiscovery(browserType, bname, [w, h], theme) {
     );
     const digits = await digitsOutsideWhen(page);
     record(
-      tag + " full: no digit anywhere but a card's when line (guardrail)",
+      tag + " full: no digit anywhere but a card's when line and a Browse topic's date (guardrail)",
       digits === "",
       digits,
     );
@@ -3055,28 +3138,45 @@ async function runDiscoveryWidth(browserType, bname, [w, h], theme) {
       JSON.stringify({ shown: insetShown, hidden: insetHidden }),
     );
 
-    // Copy link and Share: the open event's public address under /e/, as its page builds it and
-    // the card menu hands it over (1140, G120). The seeded page is public, its slug "discovery-{id}".
+    // Copy link hands over the open event's public address under /e/, as its page builds it and
+    // the card menu hands it over (1140, G120). Share opens the page's share view in the pane
+    // (1156, G130), whose row carries the same address, and hands nothing over itself; pressed again
+    // it closes. The seeded page is public, its slug "discovery-{id}".
     let handed = null;
-    if (open && open.tools.includes("Copy link") && open.tools.includes("Share"))
+    let view = null;
+    if (open && open.tools.includes("Copy link") && open.tools.includes("Share")) {
       handed = await handedOver(
         page,
         async () => {
           await page.locator('[data-pane-toolbar] [data-tool="copy"]').click();
           await page.locator('[data-pane-toolbar] [data-tool="share"]').click();
+          await page.waitForSelector("[data-pane-share] [data-share-url]", { timeout: 5000 });
         },
-        { copied: 1, shared: 1 },
+        { copied: 1 },
       );
+      view = await page.evaluate(() => ({
+        url: document.querySelector("[data-pane-share] [data-share-url] span")?.textContent ?? null,
+        pressed: document
+          .querySelector('[data-pane-toolbar] [data-tool="share"]')
+          ?.getAttribute("aria-pressed"),
+      }));
+      await page.locator('[data-pane-toolbar] [data-tool="share"]').click();
+      await page.waitForTimeout(300);
+      view.closed = !(await page.$("[data-pane-share]"));
+    }
     const publicPath = "/e/discovery-" + E.supper.event_id;
     record(
       tag +
-        " pane (G110): Copy link and Share hand over the open event's public address under /e/, as its page builds it (1140, G120)",
+        " pane (G110, 1156): Copy link hands over the open event's public address under /e/, and Share opens the share view carrying it, pressed while it shows (1140, G120, G130)",
       !!handed &&
         handed.copied.length === 1 &&
         onPath(handed.copied[0], publicPath) &&
-        handed.shared.length === 1 &&
-        onPath(handed.shared[0], publicPath),
-      JSON.stringify(handed),
+        handed.shared.length === 0 &&
+        !!view &&
+        onPath(view.url, publicPath) &&
+        view.pressed === "true" &&
+        view.closed,
+      JSON.stringify({ handed, view }),
     );
 
     // Every other surface keeps its caps: the Feed at 1920 is still its 1440 columns.
@@ -3377,7 +3477,14 @@ async function runDiscoveryPaneTools(browserType, bname, [w, h], theme) {
   let hidden = null;
   try {
     await signIn(page);
-    // A lens list: the network lens's two cards, each at the column's width (G123's sides).
+    // A lens grid: the network lens's cards, each at its one track's width in the list column
+    // (G123's sides). A third card, first in the lane, fills a row of the full column's grid at
+    // 1280 and 1440, so More on Convene (1148) does not follow the lens and its last card is the
+    // list's last.
+    db.discovery.sections.network = [
+      item(E.table, { kind: "network", host: { id: ADAEZE.id, name: ADAEZE.name } }),
+      ...db.discovery.sections.network,
+    ];
     await openDiscovery(page, "/convene/network");
     await openCard(cardSel(E.cloth, "network"));
     lensTop = await ring();
@@ -3676,6 +3783,1003 @@ async function runDiscoveryTooltip(browserType, bname, [w, h], theme) {
   await browser.close();
 }
 
+// ---------------------------------------------------------------------------------------------------
+// Handoff 34-A (1124 to 1165): the search, the learned order and the acts that teach it, Browse with
+// Filling up and the going row, the lens grid with More on Convene, and the share view in the pane.
+// One arm each, on its own cells.
+// ---------------------------------------------------------------------------------------------------
+
+/** One cell per tier: the field's place differs at each (B9-SPEC's tiers, 1124). */
+const SEARCH_VIEWPORTS = [
+  [[390, 844], "light"],
+  [[820, 1180], "dark"],
+  [[1280, 800], "light"],
+];
+const SEARCH_FIELD = '[data-discovery-search] input[role="searchbox"]';
+
+/**
+ * The search (1124, 1159): one field in its tier's place; Enter applies the trimmed text as q, sends
+ * it as p_q and shows it as the first applied chip; Escape clears the draft alone; when every lane
+ * drops, the search's EmptyState with Clear all fills its column; and Clear all takes the search with
+ * the facets. The mock narrows each item by its `_text`, the words the projection matches.
+ */
+async function runDiscoverySearch(browserType, bname, [w, h], theme) {
+  const tag = `${bname}-${w}x${h}-${theme}-discovery-search`;
+  M.armStart(tag);
+  const { readEmpty, emptyFills } = require("./mount.cjs");
+  const tier = tierOf(w);
+  const db = makeMockDb();
+  const E = seedDiscovery(db);
+  const kente = [E.kumasi.event_id, E.cloth.event_id];
+  const { browser, page, errors } = await context(browserType, [w, h], theme, db);
+  const q = () => page.evaluate(() => new URL(location.href).searchParams.get("q"));
+  let place = null;
+  let applied = null;
+  let escaped = null;
+  let none = null;
+  let cleared = null;
+  try {
+    await signIn(page);
+    await openDiscovery(page);
+    place = await page.evaluate((tier) => {
+      const fields = Array.from(
+        document.querySelectorAll('[data-discovery-search] input[role="searchbox"]'),
+      );
+      const f = fields[0];
+      if (!f) return { count: 0 };
+      const r1 = (v) => Math.round(v * 10) / 10;
+      const out = {
+        count: fields.length,
+        name: f.getAttribute("aria-label"),
+        placeholder: f.getAttribute("placeholder"),
+        max: f.maxLength,
+        width: r1(f.getBoundingClientRect().width),
+        inRow: !!f.closest("[data-layout-top]"),
+      };
+      const wrap = f.closest("[data-discovery-search]");
+      if (tier === "compact") {
+        const anchor = document.querySelector("[data-discovery] [data-lens-anchor]");
+        const root = document.querySelector("[data-discovery]");
+        out.afterBar =
+          !!anchor && !!(anchor.compareDocumentPosition(wrap) & Node.DOCUMENT_POSITION_FOLLOWING);
+        out.full =
+          !!root &&
+          Math.abs(wrap.getBoundingClientRect().width - root.getBoundingClientRect().width) <= 1;
+        return out;
+      }
+      const row = f.closest("[data-lens-row]");
+      const bar = row && row.querySelector('[role="tablist"]');
+      const top = f.closest("[data-layout-top]");
+      out.mode = row ? row.getAttribute("data-lens-row") : null;
+      if (row && bar && top) {
+        const tb = top.getBoundingClientRect();
+        const cs = getComputedStyle(top);
+        const left = tb.left + parseFloat(cs.paddingLeft);
+        const right = tb.right - parseFloat(cs.paddingRight);
+        const bb = bar.getBoundingClientRect();
+        const fb = f.getBoundingClientRect();
+        out.centre = r1((bb.left + bb.right) / 2 - (left + right) / 2);
+        out.beside = fb.left >= bb.right - 0.5 && fb.top < bb.bottom && fb.bottom > bb.top;
+        out.under = fb.top >= bb.bottom - 0.5;
+      }
+      return out;
+    }, tier);
+
+    const field = page.locator(SEARCH_FIELD);
+    await field.click();
+    await field.fill("  kente  ");
+    await field.press("Enter");
+    await page.waitForFunction(
+      () => new URL(location.href).searchParams.get("q") === "kente",
+      null,
+      { timeout: 10000 },
+    );
+    await settled(page, db, (c) => c.p_q === "kente");
+    const ids = await lanesUntil(
+      page,
+      (ids) => ids.length > 0 && ids.every((id) => kente.includes(id)),
+    );
+    applied = {
+      ...(await page.evaluate(() => {
+        const chips = Array.from(document.querySelectorAll("[data-applied-facets] > *"));
+        const first = chips[0];
+        return {
+          first: first ? (first.innerText || "").trim() : null,
+          search: !!(first && first.querySelector("[data-search-chip]")),
+          value: document.querySelector('[data-discovery-search] input[role="searchbox"]').value,
+        };
+      })),
+      q: await q(),
+      call: lastCall(db).p_q ?? null,
+      ids: [...new Set(ids)],
+    };
+
+    const calls = db.discovery.calls.length;
+    await field.fill("harbour");
+    await field.press("Escape");
+    await page.waitForTimeout(400);
+    escaped = {
+      value: await field.inputValue(),
+      q: await q(),
+      calls: db.discovery.calls.length - calls,
+    };
+
+    await field.fill("zzzz");
+    await field.press("Enter");
+    await page.getByText("Nothing matches that search.").waitFor({ timeout: 10000 });
+    await page.waitForTimeout(400);
+    none = await page.evaluate(() => ({
+      lanes: document.querySelectorAll("[data-discovery] [data-lane]").length,
+      states: document.querySelectorAll("[data-discovery] [data-empty-state]").length,
+      actions: Array.from(
+        document.querySelectorAll("[data-discovery] [data-empty-state] button"),
+      ).map((b) => (b.textContent || "").trim()),
+    }));
+    none.fill = emptyFills(await readEmpty(page));
+    none.digits = await digitsOutsideWhen(page);
+
+    await page
+      .locator("[data-discovery] [data-empty-state]")
+      .getByRole("button", { name: "Clear all" })
+      .click();
+    await page.waitForFunction(() => !new URL(location.href).searchParams.has("q"), null, {
+      timeout: 10000,
+    });
+    await settled(page, db, (c) => c.p_q == null);
+    const back = await lanesUntil(page, (ids) => ids.length > 0);
+    cleared = {
+      q: await q(),
+      value: await field.inputValue(),
+      call: lastCall(db).p_q ?? null,
+      lanes: (await laneIds(page)).length,
+      items: back.length,
+    };
+  } catch (e) {
+    record(tag + " flow", false, String(e).slice(0, 400));
+  }
+  const placed =
+    !!place &&
+    place.count === 1 &&
+    place.name === "Search events" &&
+    place.placeholder === "Search events, hosts, places" &&
+    (tier === "compact"
+      ? place.afterBar && place.full && !place.inRow
+      : place.inRow &&
+        Math.abs(place.centre) <= 1 &&
+        place.width <= SEARCH_MAX_PX + 0.5 &&
+        ((place.mode === "beside" && place.beside && place.width >= SEARCH_MIN_PX - 0.5) ||
+          (place.mode === "under" && place.under)));
+  record(
+    tag +
+      (tier === "compact"
+        ? " search: one field named Search events, full width under the lens bar (1124)"
+        : " search: one field named Search events in the lens row, 140 to 280 beside the centred bar or on its own line under it (1124, 1145)"),
+    placed,
+    JSON.stringify(place),
+  );
+  record(
+    tag +
+      " search: Enter applies the trimmed text as q, sends it as p_q and shows it as the first applied chip, and the lanes narrow to what matches (1124, 1159)",
+    !!applied &&
+      applied.q === "kente" &&
+      applied.call === "kente" &&
+      applied.first === "kente" &&
+      applied.search &&
+      applied.value === "kente" &&
+      applied.ids.length > 0 &&
+      applied.ids.every((id) => kente.includes(id)),
+    JSON.stringify(applied),
+  );
+  record(
+    tag + " search: Escape clears the draft and leaves the applied search as it is (1124)",
+    !!escaped && escaped.value === "" && escaped.q === "kente" && escaped.calls === 0,
+    JSON.stringify(escaped),
+  );
+  record(
+    tag +
+      " search: when every lane drops, one EmptyState, Nothing matches that search., with Clear all, filling its column and counting nothing (B9-SPEC States, 1147)",
+    !!none &&
+      none.lanes === 0 &&
+      none.states === 1 &&
+      none.actions.join("|") === "Clear all" &&
+      none.fill.ok &&
+      none.digits === "",
+    JSON.stringify(none),
+  );
+  record(
+    tag + " search: Clear all takes the search with the facets, and the lanes return (1124)",
+    !!cleared &&
+      cleared.q === null &&
+      cleared.value === "" &&
+      cleared.call === null &&
+      cleared.lanes > 0 &&
+      cleared.items > 0,
+    JSON.stringify(cleared),
+  );
+  record(
+    tag + " search: the field holds 100 characters, the most the projection takes (1159)",
+    !!place && place.max === 100,
+    place ? "maxLength " + place.max : "no field",
+  );
+  record(tag + " no page errors", errors.length === 0, errors.join(" | ").slice(0, 300));
+  await browser.close();
+}
+
+/** The search field's bounds beside the bar (B9-SPEC's medium line, 1124). */
+const SEARCH_MIN_PX = 140;
+const SEARCH_MAX_PX = 280;
+
+/** Learned order and its acts (1160): the pane's cell, and compact's, where a card opens a route. */
+const ORDER_VIEWPORTS = [
+  [[1280, 800], "light"],
+  [[390, 844], "dark"],
+];
+
+/**
+ * Learned order (1124, 1160): the lanes render in the answer's order, which the member's acts in the
+ * week lead, with no re-sort in the surface; the Communities sentence takes its place by lane_order;
+ * nothing is written on load; a card opened from a lane writes open for that lane once and the
+ * pane's Previous and Next write nothing; Save and Follow from a card's menu write save and follow
+ * for its lane, and undoing either writes nothing; a Browse tile writes no act.
+ */
+async function runDiscoveryOrder(browserType, bname, [w, h], theme) {
+  const tag = `${bname}-${w}x${h}-${theme}-discovery-order`;
+  M.armStart(tag);
+  const expanded = tierOf(w) === "expanded";
+  const db = makeMockDb();
+  const E = seedDiscovery(db);
+  // Two acts in the week, the older from New this week and the newer from My network: the mock
+  // answers those lanes first, most recent first, as the projection does.
+  const hour = 3600e3;
+  db.discovery.laneActs.push(
+    { p_lane: "fresh", p_act: "save", at: Date.now() - 2 * hour },
+    { p_lane: "network", p_act: "open", at: Date.now() - hour },
+  );
+  const learned = [
+    "network",
+    "fresh",
+    ...DISCOVERY_SECTIONS.filter((x) => x !== "network" && x !== "fresh"),
+  ];
+  const { browser, page, errors } = await context(browserType, [w, h], theme, db);
+  const acts = (from) => db.discovery.laneActs.slice(from).map((a) => a.p_lane + ":" + a.p_act);
+  const until = async (n) => {
+    for (let t = 0; t < 50 && db.discovery.laneActs.length < n; t++) await page.waitForTimeout(100);
+  };
+  let onLoad = null;
+  let rendered = null;
+  let opened = null;
+  let stepped = null;
+  let saved = null;
+  let followed = null;
+  let tiled = null;
+  let sentence = null;
+  try {
+    await signIn(page);
+    let n = db.discovery.laneActs.length;
+    await openDiscovery(page);
+    await page.waitForTimeout(400);
+    onLoad = acts(n);
+    rendered = await laneIds(page);
+
+    // A card opened from This weekend: the pane at expanded, the event's route below it.
+    n = db.discovery.laneActs.length;
+    await page
+      .locator(`${cardSel(E.supper, "weekend")} [data-card-open]`)
+      .first()
+      .click();
+    if (expanded) {
+      await page.waitForSelector('[data-discovery][data-pane-open="1"] [data-event-page]', {
+        timeout: 20000,
+      });
+      await until(n + 1);
+      await page.waitForTimeout(300);
+      opened = acts(n);
+      const m = db.discovery.laneActs.length;
+      await page.locator('[data-pane-cluster] button[aria-label="Next event"]').click();
+      await page.waitForURL((u) => u.pathname.endsWith("/" + E.tema.event_id), { timeout: 10000 });
+      await page.waitForTimeout(600);
+      stepped = acts(m);
+      await page.locator('button[aria-label="Back to Discovery"]').first().click();
+      await page.waitForSelector("[data-discovery]:not([data-pane-open]) [data-lanes]", {
+        timeout: 20000,
+      });
+    } else {
+      await page.waitForURL((u) => u.pathname.endsWith("/" + E.supper.event_id), {
+        timeout: 20000,
+      });
+      await until(n + 1);
+      await page.waitForTimeout(300);
+      opened = acts(n);
+      stepped = [];
+      await openDiscovery(page);
+    }
+
+    // Save from a card's menu in a lane, then unsave.
+    n = db.discovery.laneActs.length;
+    await menuSelect(page, cardSel(E.tema, "weekend"), "Save");
+    await until(n + 1);
+    await page.waitForTimeout(300);
+    const afterSave = db.discovery.laneActs.length;
+    await menuSelect(page, cardSel(E.tema, "weekend"), "Saved");
+    await page.waitForTimeout(800);
+    saved = { save: acts(n).slice(0, afterSave - n), unsave: acts(afterSave) };
+
+    // Follow the presenter from a card's menu in a lane, then unfollow.
+    n = db.discovery.laneActs.length;
+    await menuSelect(page, cardSel(E.stream, "online"), "Follow " + ADAEZE.name);
+    await until(n + 1);
+    await page.waitForTimeout(300);
+    const afterFollow = db.discovery.laneActs.length;
+    await menuSelect(page, cardSel(E.stream, "online"), "Following " + ADAEZE.name);
+    await page.waitForTimeout(800);
+    followed = { follow: acts(n).slice(0, afterFollow - n), unfollow: acts(afterFollow) };
+
+    // A Browse tile applies a facet and teaches nothing.
+    n = db.discovery.laneActs.length;
+    await page.locator('[data-lane="browse"] [data-browse-tile="topic"]').first().click();
+    await page.waitForFunction(() => new URL(location.href).searchParams.has("family"), null, {
+      timeout: 10000,
+    });
+    await page.waitForTimeout(600);
+    tiled = acts(n);
+
+    // The Communities sentence (650) takes its place by lane_order: first when the order leads with
+    // Communities, and between Curated and My network in the base order.
+    setAnswer(db, belowDensity(E));
+    db.discovery.laneActs = [];
+    db.discovery.laneOrder = ["follow", ...DISCOVERY_SECTIONS.filter((x) => x !== "follow")];
+    await openDiscovery(page);
+    const led = await laneIds(page);
+    const text = await page
+      .locator('[data-lanes] > [data-lane="follow"]')
+      .innerText()
+      .catch(() => "");
+    db.discovery.laneOrder = null;
+    await openDiscovery(page);
+    sentence = { led, text: text.includes("You follow no host yet."), base: await laneIds(page) };
+  } catch (e) {
+    record(tag + " flow", false, String(e).slice(0, 400));
+  }
+  record(
+    tag + " order: nothing is written on load (1160)",
+    !!onLoad && onLoad.length === 0,
+    JSON.stringify(onLoad),
+  );
+  record(
+    tag +
+      " order: the lanes render in the answer's order, the member's acts in the week first, with no re-sort (1160)",
+    !!rendered && rendered.join(",") === learned.join(","),
+    JSON.stringify(rendered),
+  );
+  record(
+    tag +
+      (expanded
+        ? " acts: a card opened from a lane writes open for that lane once, and the pane's Next writes nothing (1160)"
+        : " acts: a card opened from a lane writes open for that lane once (1160)"),
+    !!opened && opened.join(",") === "weekend:open" && !!stepped && stepped.length === 0,
+    JSON.stringify({ opened, stepped }),
+  );
+  record(
+    tag +
+      " acts: Save from a card's menu writes save for its lane, and unsaving writes nothing (1160)",
+    !!saved && saved.save.join(",") === "weekend:save" && saved.unsave.length === 0,
+    JSON.stringify(saved),
+  );
+  record(
+    tag +
+      " acts: Follow from a card's menu writes follow for its lane, and unfollowing writes nothing (1160)",
+    !!followed && followed.follow.join(",") === "online:follow" && followed.unfollow.length === 0,
+    JSON.stringify(followed),
+  );
+  record(
+    tag + " acts: a Browse tile applies its facet and writes no act (1160)",
+    !!tiled && tiled.length === 0,
+    JSON.stringify(tiled),
+  );
+  record(
+    tag + " order: the Communities sentence takes its place by lane_order (650, 1160)",
+    !!sentence &&
+      sentence.led.join(",") === "follow,online,curated,network" &&
+      sentence.text &&
+      sentence.base.join(",") === "online,curated,follow,network",
+    JSON.stringify(sentence),
+  );
+  record(tag + " no page errors", errors.length === 0, errors.join(" | ").slice(0, 300));
+  await browser.close();
+}
+
+/** Browse, Filling up and the going row: compact and expanded. */
+const BROWSE_VIEWPORTS = [
+  [[390, 844], "light"],
+  [[1280, 800], "dark"],
+];
+
+/**
+ * Browse (1124, 1133): two rows of BrowseTile, topics with their next date in the member's zone as a
+ * card's when line composes it, then cities with their country; a tap toggles the Topics or Place
+ * facet and the tile is pressed while its facet holds it; no See all. Filling up is an ordinary lane
+ * with no See all (1157). The going row (1128, 1138, 1158) reads the three names outside the
+ * relationship lanes and keeps the reason in them, from one event_going_names read that names no
+ * event only a relationship lane carries; a failed read leaves the rows empty and the lanes up.
+ */
+async function runDiscoveryBrowse(browserType, bname, [w, h], theme) {
+  const tag = `${bname}-${w}x${h}-${theme}-discovery-browse`;
+  M.armStart(tag);
+  const db = makeMockDb();
+  const E = seedDiscovery(db);
+  const { browser, page, errors } = await context(browserType, [w, h], theme, db);
+  const tileState = (kind, name) =>
+    page.evaluate(
+      ({ kind, name }) => {
+        const t = Array.from(
+          document.querySelectorAll(`[data-lane="browse"] [data-browse-tile="${kind}"]`),
+        ).find((x) => (x.querySelector('[data-field="name"]')?.textContent || "").trim() === name);
+        return t ? t.getAttribute("aria-pressed") : null;
+      },
+      { kind, name },
+    );
+  const param = (k) => page.evaluate((k) => new URL(location.href).searchParams.get(k), k);
+  let tiles = null;
+  let expected = null;
+  let topic = null;
+  let placeT = null;
+  let filling = null;
+  let going = null;
+  let failed = null;
+  try {
+    await signIn(page);
+    await openDiscovery(page);
+    const firstRead = db.discovery.goingReads[0] || null;
+    tiles = await page.evaluate(() => {
+      const lane = document.querySelector('[data-lanes] > [data-lane="browse"]');
+      if (!lane) return null;
+      const read = (row) =>
+        Array.from(row.querySelectorAll("[data-browse-tile]")).map((t) => ({
+          kind: t.getAttribute("data-browse-tile"),
+          name: (t.querySelector('[data-field="name"]')?.textContent || "").trim(),
+          detail: (t.querySelector('[data-field="detail"]')?.textContent || "").trim(),
+          pressed: t.getAttribute("aria-pressed"),
+        }));
+      return {
+        head: (lane.querySelector("h2")?.textContent || "").trim(),
+        rows: Array.from(lane.querySelectorAll("[data-lane-row]")).map(read),
+        seeAll: !!lane.querySelector("[data-see-all]"),
+      };
+    });
+    // The next date as the card composes a date: the member's zone, weekday, day and month, and the
+    // year only outside the year it is read in (835), with the app's own month words.
+    expected = await page.evaluate((topics) => {
+      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      const f = new Intl.DateTimeFormat("en-GB", {
+        timeZone: tz,
+        year: "numeric",
+        month: "numeric",
+        day: "numeric",
+      });
+      const parts = (d) =>
+        Object.fromEntries(f.formatToParts(d).map((x) => [x.type, Number(x.value)]));
+      const WD = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+      const MO = [
+        "Jan",
+        "Feb",
+        "Mar",
+        "Apr",
+        "May",
+        "Jun",
+        "Jul",
+        "Aug",
+        "Sep",
+        "Oct",
+        "Nov",
+        "Dec",
+      ];
+      const now = parts(new Date());
+      return topics.map((t) => {
+        if (!t.next_at) return "";
+        const p = parts(new Date(t.next_at));
+        const wd = new Date(Date.UTC(p.year, p.month - 1, p.day)).getUTCDay();
+        return (
+          WD[wd] + " " + p.day + " " + MO[p.month - 1] + (p.year !== now.year ? " " + p.year : "")
+        );
+      });
+    }, db.discovery.tiles.topics);
+
+    // A topic tile toggles Topics.
+    const culture = VOCAB.convene_families.find((f) => f.value === "culture_arts").label;
+    await page
+      .locator('[data-lane="browse"] [data-browse-tile="topic"]', { hasText: culture })
+      .click();
+    await page.waitForFunction(
+      () => new URL(location.href).searchParams.get("family") === "culture_arts",
+      null,
+      { timeout: 10000 },
+    );
+    await settled(page, db, (c) => (c.p_families || []).includes("culture_arts"));
+    topic = {
+      on: {
+        family: await param("family"),
+        sent: lastCall(db).p_families || null,
+        pressed: await tileState("topic", culture),
+      },
+    };
+    await page
+      .locator('[data-lane="browse"] [data-browse-tile="topic"]', { hasText: culture })
+      .click();
+    await page.waitForFunction(() => !new URL(location.href).searchParams.has("family"), null, {
+      timeout: 10000,
+    });
+    await settled(page, db, (c) => !c.p_families);
+    topic.off = { family: await param("family"), pressed: await tileState("topic", culture) };
+
+    // A place tile toggles Place.
+    const nairobi = "city|kenya|nairobi";
+    await page
+      .locator('[data-lane="browse"] [data-browse-tile="place"]', { hasText: "Nairobi" })
+      .click();
+    await page.waitForFunction(
+      (id) => new URL(location.href).searchParams.get("place") === id,
+      nairobi,
+      { timeout: 10000 },
+    );
+    await settled(page, db, (c) => (c.p_places || []).includes(nairobi));
+    placeT = {
+      on: {
+        place: await param("place"),
+        sent: lastCall(db).p_places || null,
+        pressed: await tileState("place", "Nairobi"),
+      },
+    };
+    await page
+      .locator('[data-lane="browse"] [data-browse-tile="place"]', { hasText: "Nairobi" })
+      .click();
+    await page.waitForFunction(() => !new URL(location.href).searchParams.has("place"), null, {
+      timeout: 10000,
+    });
+    await settled(page, db, (c) => !c.p_places);
+    placeT.off = { place: await param("place"), pressed: await tileState("place", "Nairobi") };
+
+    // Filling up and the going row, on the full answer.
+    await lanesUntil(page, (ids) => ids.includes(E.cloth.event_id));
+    filling = await page.evaluate(() => {
+      const lane = document.querySelector('[data-lanes] > [data-lane="filling"]');
+      return lane
+        ? {
+            head: (lane.querySelector("h2")?.textContent || "").trim(),
+            items: Array.from(lane.querySelectorAll("[data-discovery-item]")).map((e) =>
+              e.getAttribute("data-discovery-item"),
+            ),
+            seeAll: !!lane.querySelector("[data-see-all]"),
+          }
+        : null;
+    });
+    going = await page.evaluate(
+      ({ cloth }) => {
+        const row = (sel) => {
+          const r = document.querySelector(sel + ' [data-row="reason"]');
+          return r
+            ? { text: (r.textContent || "").trim(), going: r.hasAttribute("data-going") }
+            : null;
+        };
+        return {
+          filling: Array.from(
+            document.querySelectorAll('[data-lanes] > [data-lane="filling"] [data-row="reason"]'),
+          ).map((r) => ({
+            text: (r.textContent || "").trim(),
+            going: r.hasAttribute("data-going"),
+          })),
+          curated: row(`[data-discovery-item="${cloth}"][data-section="curated"]`),
+        };
+      },
+      { cloth: E.cloth.event_id },
+    );
+    going.read = firstRead;
+
+    // A failed names read: the lanes stay, the rows stay empty.
+    db.discovery.goingFail = true;
+    await openDiscovery(page);
+    await page.waitForTimeout(400);
+    failed = await page.evaluate(() => ({
+      lanes: document.querySelectorAll("[data-discovery] [data-lanes] > [data-lane]").length,
+      going: document.querySelectorAll("[data-discovery] [data-going]").length,
+      alert: !!document.querySelector("[data-discovery] [role=alert]"),
+    }));
+  } catch (e) {
+    record(tag + " flow", false, String(e).slice(0, 400));
+  }
+  const fixture = db.discovery.tiles;
+  record(
+    tag +
+      " browse: two rows of BrowseTile, topics with their next date in the member's zone, then cities with their country, none pressed and no See all (1124, 1133)",
+    !!tiles &&
+      tiles.head === "Browse" &&
+      tiles.rows.length === 2 &&
+      tiles.rows[0].every((t) => t.kind === "topic" && t.pressed === "false") &&
+      tiles.rows[0].map((t) => t.name).join("|") === fixture.topics.map((t) => t.label).join("|") &&
+      !!expected &&
+      tiles.rows[0].map((t) => t.detail).join("|") === expected.join("|") &&
+      tiles.rows[1].every((t) => t.kind === "place" && t.pressed === "false") &&
+      tiles.rows[1].map((t) => t.name + ":" + t.detail).join("|") ===
+        fixture.places.map((p) => p.name + ":" + p.country).join("|") &&
+      !tiles.seeAll,
+    JSON.stringify({ tiles, expected }),
+  );
+  record(
+    tag + " browse: a topic tile toggles the Topics facet and is pressed while it holds it (1133)",
+    !!topic &&
+      topic.on.family === "culture_arts" &&
+      (topic.on.sent || []).includes("culture_arts") &&
+      topic.on.pressed === "true" &&
+      topic.off.family === null &&
+      topic.off.pressed === "false",
+    JSON.stringify(topic),
+  );
+  record(
+    tag + " browse: a place tile toggles the Place facet and is pressed while it holds it (1133)",
+    !!placeT &&
+      placeT.on.place === "city|kenya|nairobi" &&
+      (placeT.on.sent || []).includes("city|kenya|nairobi") &&
+      placeT.on.pressed === "true" &&
+      placeT.off.place === null &&
+      placeT.off.pressed === "false",
+    JSON.stringify(placeT),
+  );
+  record(
+    tag + " filling: Filling up renders as an ordinary lane with no See all (1124, 1157)",
+    !!filling &&
+      filling.head === "Filling up" &&
+      filling.items.join(",") === [E.cloth.event_id, E.supper.event_id].join(",") &&
+      !filling.seeAll,
+    JSON.stringify(filling),
+  );
+  record(
+    tag +
+      " going: the three names in a non-relationship lane's last row and the reason in a relationship lane's, from one event_going_names read that names no event only a relationship lane carries (1128, 1138, 1158)",
+    !!going &&
+      going.filling.length === 2 &&
+      going.filling.every((r) => r.text === GOING_SENTENCE && r.going) &&
+      !!going.curated &&
+      going.curated.text === "Curated by Sefa Owusu." &&
+      !going.curated.going &&
+      !!going.read &&
+      !going.read.anon &&
+      going.read.ids.includes(E.supper.event_id) &&
+      going.read.ids.includes(E.cloth.event_id) &&
+      !going.read.ids.includes(E.loaded.event_id),
+    JSON.stringify(going),
+  );
+  record(
+    tag + " going: a failed names read leaves the rows empty and the lanes up (item 4)",
+    !!failed && failed.lanes > 0 && failed.going === 0 && !failed.alert,
+    JSON.stringify(failed),
+  );
+  record(tag + " no page errors", errors.length === 0, errors.join(" | ").slice(0, 300));
+  await browser.close();
+}
+
+/** B9-SPEC's exit check reads a lens grid at 1280 and 1920 (1125); compact lays one track. */
+const GRID_VIEWPORTS = [
+  [[390, 844], "light"],
+  [[1280, 800], "dark"],
+  [[1920, 1080], "light"],
+];
+
+/**
+ * The lens grid (1125) and More on Convene (1148): a lens is a grid of the same card on auto-fill
+ * tracks of --lane-card-width or more, gap 12, filling the column, each card filling its track. A lens
+ * short of a row at the column's width is followed by All's lanes under an h2 at 22, less the lens's
+ * own events, from a second read under All with the lens's facets; a lens that fills its row reads
+ * nothing more; an empty lens keeps its EmptyState and shows no More on Convene.
+ */
+async function runDiscoveryGrid(browserType, bname, [w, h], theme) {
+  const tag = `${bname}-${w}x${h}-${theme}-discovery-grid`;
+  M.armStart(tag);
+  const db = makeMockDb();
+  seedDiscovery(db);
+  const { browser, page, errors } = await context(browserType, [w, h], theme, db);
+  let grid = null;
+  let more = null;
+  let empty = null;
+  try {
+    await signIn(page);
+    await openDiscovery(page, "/convene/curated?price=free");
+    await page.waitForSelector("[data-lens-cards] [data-discovery-item]", { timeout: 20000 });
+    await page.waitForTimeout(800);
+    grid = await page.evaluate(() => {
+      const g = document.querySelector("[data-lens-cards]");
+      const cs = getComputedStyle(g);
+      const r1 = (v) => Math.round(v * 10) / 10;
+      return {
+        tracks: cs.gridTemplateColumns.split(" ").map((t) => r1(parseFloat(t))),
+        gap: cs.columnGap,
+        width: r1(g.getBoundingClientRect().width),
+        column: r1(g.parentElement.getBoundingClientRect().width),
+        cards: Array.from(g.querySelectorAll("[data-discovery-item]")).map((s) => [
+          r1(s.getBoundingClientRect().width),
+          r1(s.querySelector("article").getBoundingClientRect().width),
+        ]),
+      };
+    });
+    more = await page.evaluate(() => {
+      const m = document.querySelector("[data-more-on-convene]");
+      if (!m) return null;
+      const h2 = m.querySelector("h2#more-on-convene");
+      const lensIds = new Set(
+        Array.from(document.querySelectorAll("[data-lens-cards] [data-discovery-item]")).map((e) =>
+          e.getAttribute("data-discovery-item"),
+        ),
+      );
+      const ids = Array.from(m.querySelectorAll("[data-discovery-item]")).map((e) =>
+        e.getAttribute("data-discovery-item"),
+      );
+      return {
+        head: h2 ? (h2.textContent || "").trim() : null,
+        size: h2 ? getComputedStyle(h2).fontSize : null,
+        lanes: Array.from(m.querySelectorAll("[data-lanes] > [data-lane]")).map((l) =>
+          l.getAttribute("data-lane"),
+        ),
+        overlap: ids.filter((id) => lensIds.has(id)).length,
+        cards: ids.length,
+      };
+    });
+    const calls = db.discovery.calls.map((c) => ({
+      lens: c.p_lens || "all",
+      price: c.p_price || null,
+    }));
+    more = { view: more, calls };
+    // An empty lens.
+    db.discovery.sections = { ...db.discovery.sections, curated: [] };
+    const before = db.discovery.calls.length;
+    await openDiscovery(page, "/convene/curated");
+    await page.getByText("Nothing in this lens yet.").waitFor({ timeout: 20000 });
+    await page.waitForTimeout(600);
+    empty = {
+      more: !!(await page.$("[data-more-on-convene]")),
+      lenses: db.discovery.calls.slice(before).map((c) => c.p_lens || "all"),
+    };
+  } catch (e) {
+    record(tag + " flow", false, String(e).slice(0, 400));
+  }
+  const n = grid ? grid.tracks.length : 0;
+  const filled =
+    !!grid &&
+    n > 0 &&
+    grid.tracks.every((t) => t >= 319.5) &&
+    Math.abs(grid.tracks.reduce((a, b) => a + b, 0) + 12 * (n - 1) - grid.width) <= 1 &&
+    Math.abs(grid.width - grid.column) <= 1 &&
+    grid.gap === "12px" &&
+    grid.cards.length > 0 &&
+    grid.cards.every(
+      ([slot, card]) => Math.abs(slot - card) <= 0.6 && Math.abs(slot - grid.tracks[0]) <= 1,
+    );
+  record(
+    tag +
+      " grid: a lens is a grid of the same card on auto-fill tracks of 320 or more, gap 12, filling the column, each card filling its track (1125)",
+    filled,
+    JSON.stringify(grid),
+  );
+  const short = !!grid && grid.cards.length < n;
+  const view = more && more.view;
+  const alls = more ? more.calls.filter((c) => c.lens === "all") : [];
+  record(
+    tag +
+      " more: only a lens short of a row is followed by All's lanes under More on Convene at 22, less the lens's events, from a second read under All with its facets (1148)",
+    !!more &&
+      (short
+        ? !!view &&
+          view.head === "More on Convene" &&
+          view.size === "22px" &&
+          view.lanes.length > 0 &&
+          !view.lanes.includes("curated") &&
+          view.cards > 0 &&
+          view.overlap === 0 &&
+          alls.length > 0 &&
+          alls.every((c) => JSON.stringify(c.price) === JSON.stringify(["free"]))
+        : !view && alls.length === 0),
+    JSON.stringify({ short, tracks: n, more }),
+  );
+  record(
+    tag +
+      " more: an empty lens keeps its EmptyState, shows no More on Convene and reads nothing more (724, 1148)",
+    !!empty && !empty.more && empty.lenses.length > 0 && empty.lenses.every((l) => l === "curated"),
+    JSON.stringify(empty),
+  );
+  record(tag + " no page errors", errors.length === 0, errors.join(" | ").slice(0, 300));
+  await browser.close();
+}
+
+/** The share view is the pane's, which opens at expanded only (1156). */
+const SHARE_VIEWPORTS = [
+  [[1280, 800], "light"],
+  [[1440, 900], "dark"],
+];
+
+/**
+ * The share view in the pane (1156, G130): the toolbar's Share and the page's own Share open one
+ * view in the pane body in place of the page, never a Sheet, carrying the page's share content; the
+ * toolbar's Share is pressed while it shows; its close control at top right and Escape inside it
+ * return to the page, with focus on the control that opened it; Copy hands over the row's address;
+ * Next and closing the pane close it.
+ */
+async function runDiscoveryShare(browserType, bname, [w, h], theme) {
+  const tag = `${bname}-${w}x${h}-${theme}-discovery-share`;
+  M.armStart(tag);
+  const db = makeMockDb();
+  const E = seedDiscovery(db);
+  const { browser, page, errors } = await context(browserType, [w, h], theme, db);
+  await stubHandOver(page);
+  const publicPath = "/e/discovery-" + E.supper.event_id;
+  const read = () =>
+    page.evaluate(() => {
+      const v = document.querySelector("[data-pane-share]");
+      const tool = document.querySelector('[data-pane-toolbar] [data-tool="share"]');
+      const wrap = document.querySelector("[data-pane-page]");
+      const a = document.activeElement;
+      const close = v && v.querySelector('button[aria-label="Close"]');
+      const code = v && v.querySelector('[data-share-code] [role="img"]');
+      const vb = v && v.getBoundingClientRect();
+      const cb = close && close.getBoundingClientRect();
+      return {
+        view: !!v,
+        heading: v ? (v.querySelector("[data-sheet-heading]")?.textContent || "").trim() : null,
+        url: v ? (v.querySelector("[data-share-url] span")?.textContent || "").trim() : null,
+        copy: !!v && !!v.querySelector('[data-testid="share-copy"]'),
+        code: code
+          ? Math.round(code.getBoundingClientRect().width) +
+            "x" +
+            Math.round(code.getBoundingClientRect().height)
+          : null,
+        line: !!v && (v.textContent || "").includes("It is not a ticket and admits nobody."),
+        via: !!v && !!v.querySelector('[data-testid="share-via"]'),
+        corner: vb && cb ? [Math.round(vb.right - cb.right), Math.round(cb.top - vb.top)] : null,
+        inBody: !!v && !!v.closest("[data-pane-body]"),
+        dialog: !!document.querySelector('[role="dialog"][aria-label="Share this event"]'),
+        page: wrap ? getComputedStyle(wrap).display : null,
+        pressed: tool ? tool.getAttribute("aria-pressed") : null,
+        focus: a
+          ? a.getAttribute("data-tool") ||
+            a.getAttribute("data-testid") ||
+            (a.hasAttribute("data-sheet-heading") ? "heading" : a.tagName.toLowerCase())
+          : null,
+        pane: !!document.querySelector('[data-discovery][data-pane-open="1"]'),
+        event: location.pathname.split("/").pop(),
+      };
+    });
+  const openSupper = async () => {
+    await page
+      .locator(`${cardSel(E.supper, "soon")} [data-card-open]`)
+      .first()
+      .click();
+    await page.waitForSelector(
+      '[data-discovery][data-pane-open="1"] [data-event-page][data-event-state="loaded"]',
+      {
+        timeout: 20000,
+      },
+    );
+    await page.waitForTimeout(400);
+  };
+  const toolbarShare = async () => {
+    await page.locator('[data-pane-toolbar] [data-tool="share"]').click();
+    await page.waitForSelector("[data-pane-share] [data-share-url]", { timeout: 5000 });
+    await page.waitForTimeout(200);
+  };
+  let s0 = null;
+  let s1 = null;
+  let copied = null;
+  let s2 = null;
+  let s3 = null;
+  let s4 = null;
+  let s5 = null;
+  let s6 = null;
+  try {
+    await signIn(page);
+    await openDiscovery(page);
+    await openSupper();
+    s0 = await read();
+    await toolbarShare();
+    s1 = await read();
+    copied = await handedOver(
+      page,
+      () => page.locator('[data-pane-share] [data-testid="share-copy"]').click(),
+      { copied: 1 },
+    );
+    await page.locator('[data-pane-share] button[aria-label="Close"]').click();
+    await page.waitForTimeout(300);
+    s2 = await read();
+    await page.locator('[data-pane-body] [data-testid="event-share"]').click();
+    await page.waitForSelector("[data-pane-share] [data-share-url]", { timeout: 5000 });
+    await page.waitForTimeout(200);
+    s3 = await read();
+    await page.keyboard.press("Escape");
+    await page.waitForTimeout(300);
+    s4 = await read();
+    await toolbarShare();
+    await page.locator('[data-pane-cluster] button[aria-label="Next event"]').click();
+    await page.waitForURL((u) => u.pathname.endsWith("/" + E.madina.event_id), { timeout: 10000 });
+    await page.waitForTimeout(500);
+    s5 = await read();
+    await toolbarShare();
+    await page.locator('button[aria-label="Back to Discovery"]').first().click();
+    await page.waitForSelector("[data-discovery]:not([data-pane-open]) [data-lanes]", {
+      timeout: 20000,
+    });
+    await openSupper();
+    s6 = await read();
+  } catch (e) {
+    record(tag + " flow", false, String(e).slice(0, 400));
+  }
+  record(
+    tag +
+      " share: the toolbar's Share opens the share view in the pane body in place of the page, never a Sheet: the heading, the address with Copy, the 120 page-link code and its line, Share via, and its close at top right (1156)",
+    !!s1 &&
+      s1.view &&
+      s1.inBody &&
+      !s1.dialog &&
+      s1.page === "none" &&
+      s1.heading === "Share this event" &&
+      onPath(s1.url, publicPath) &&
+      s1.copy &&
+      s1.code === "120x120" &&
+      s1.line &&
+      s1.via &&
+      !!s1.corner &&
+      s1.corner.every((v) => v >= 0 && v <= 16),
+    JSON.stringify(s1),
+  );
+  record(
+    tag + " share: the toolbar's Share is pressed while the view shows and not otherwise (1156)",
+    !!s0 &&
+      s0.pressed === "false" &&
+      !!s1 &&
+      s1.pressed === "true" &&
+      !!s2 &&
+      s2.pressed === "false",
+    JSON.stringify([s0 && s0.pressed, s1 && s1.pressed, s2 && s2.pressed]),
+  );
+  record(
+    tag + " share: Copy in the view hands over the address its row carries (1140)",
+    !!copied && copied.copied.length === 1 && onPath(copied.copied[0], publicPath),
+    JSON.stringify(copied),
+  );
+  record(
+    tag +
+      " share: the view's close returns to the page, with focus on the control that opened it (1156)",
+    !!s2 && !s2.view && s2.page === "contents" && s2.pane && s2.focus === "share",
+    JSON.stringify(s2),
+  );
+  record(
+    tag +
+      " share: the page's own Share opens the same view, and Escape inside it returns to the page with the pane open (1156, G130)",
+    !!s3 &&
+      s3.view &&
+      s3.inBody &&
+      !s3.dialog &&
+      s3.heading === "Share this event" &&
+      onPath(s3.url, publicPath) &&
+      s3.pressed === "true" &&
+      !!s4 &&
+      !s4.view &&
+      s4.pane &&
+      s4.page === "contents" &&
+      s4.focus === "event-share",
+    JSON.stringify({ s3, s4 }),
+  );
+  record(
+    tag +
+      " share: Next closes the view, and closing the pane leaves none when the event opens again (1156)",
+    !!s5 &&
+      !s5.view &&
+      s5.event === E.madina.event_id &&
+      s5.pressed === "false" &&
+      !!s6 &&
+      !s6.view &&
+      s6.page === "contents" &&
+      s6.pressed === "false",
+    JSON.stringify({ s5, s6 }),
+  );
+  record(tag + " no page errors", errors.length === 0, errors.join(" | ").slice(0, 300));
+  await browser.close();
+}
+
 /** Handoff 33-D's cells: Pane's tools at 1280 and 1440 (G123's widths); the Tooltip on a pointer
  *  cell and a touch cell. */
 const PANE_TOOLS_VIEWPORTS = [
@@ -3687,8 +4791,8 @@ const TOOLTIP_VIEWPORTS = [
   [[820, 1180], "dark"],
 ];
 
-/** Addendum 4's and 5's arms and their cells, in item order, then handoff 33-A's link arm (G100)
- *  and handoff 33-D's Pane tools and Tooltip arms. */
+/** Addendum 4's and 5's arms and their cells, in item order, then handoff 33-A's link arm (G100),
+ *  handoff 33-D's Pane tools and Tooltip arms, and handoff 34-A's five. */
 const FOLLOWUP_ARMS = [
   [runDiscoveryPresenter, FOLLOWUP_VIEWPORTS],
   [runDiscoveryOnline, FOLLOWUP_VIEWPORTS],
@@ -3699,6 +4803,11 @@ const FOLLOWUP_ARMS = [
   [runDiscoveryLink, FOLLOWUP_VIEWPORTS],
   [runDiscoveryPaneTools, PANE_TOOLS_VIEWPORTS],
   [runDiscoveryTooltip, TOOLTIP_VIEWPORTS],
+  [runDiscoverySearch, SEARCH_VIEWPORTS],
+  [runDiscoveryOrder, ORDER_VIEWPORTS],
+  [runDiscoveryBrowse, BROWSE_VIEWPORTS],
+  [runDiscoveryGrid, GRID_VIEWPORTS],
+  [runDiscoveryShare, SHARE_VIEWPORTS],
 ];
 
 module.exports = {

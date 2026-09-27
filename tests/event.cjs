@@ -755,9 +755,19 @@ async function runEventFlows(browserType, bname, [w, h], theme) {
     await page.keyboard.press("Escape");
     await dlg.waitFor({ state: "detached", timeout: 8000 });
 
-    // Share: the public URL and the code for a public event (1028); no code for a private one.
+    // Share: the public URL and the code for a public event (1028); no code for a private one. At
+    // expanded the page is the content of Discovery's pane, and its Share opens the pane's share view
+    // in place of the page, closed by the view's own Close (1156, G130); below expanded it opens the
+    // Sheet, closed by Done. One view renders in both.
+    const inPane = w > 1024;
+    const shareView = () =>
+      inPane ? page.locator("[data-pane-share]") : dialog("Share this event");
+    const closeShare = async (view) => {
+      await view.getByRole("button", { name: inPane ? "Close" : "Done", exact: true }).click();
+      await view.waitFor({ state: "detached", timeout: 8000 });
+    };
     await page.click('[data-testid="event-share"]');
-    let share = dialog("Share this event");
+    let share = shareView();
     await share.waitFor({ timeout: 8000 });
     await share.locator('[data-share-code] img[src^="data:image"]').waitFor({ timeout: 8000 });
     const origin = new URL(BASE).origin;
@@ -767,11 +777,10 @@ async function runEventFlows(browserType, bname, [w, h], theme) {
         /Page link, as a code/.test(await share.textContent()) &&
         /It is not a ticket and admits nobody\./.test(await share.textContent()),
     );
-    await share.getByRole("button", { name: "Done" }).click();
-    await share.waitFor({ state: "detached", timeout: 8000 });
+    await closeShare(share);
     await open(page, "private", "loaded");
     await page.click('[data-testid="event-share"]');
-    share = dialog("Share this event");
+    share = shareView();
     await share.waitFor({ timeout: 8000 });
     record(
       tag + " share: a connections event carries the member link and no code",
@@ -779,8 +788,7 @@ async function runEventFlows(browserType, bname, [w, h], theme) {
         origin + "/convene/events/" + EV.private,
       ) && (await share.locator("[data-share-code]").count()) === 0,
     );
-    await share.getByRole("button", { name: "Done" }).click();
-    await share.waitFor({ state: "detached", timeout: 8000 });
+    await closeShare(share);
 
     // The invitation notice and sheet (736, 1027): no profile line, Accept answers, the row leaves.
     await open(page, "loaded", "loaded");
