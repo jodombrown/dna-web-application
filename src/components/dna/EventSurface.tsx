@@ -24,7 +24,7 @@
 // projection; nothing here counts anything for display.
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { useContext, useState, type CSSProperties } from "react";
+import { useContext, useEffect, useRef, useState, type CSSProperties } from "react";
 import { Avatar } from "@/components/strand/Avatar";
 import { BackRow } from "@/components/strand/BackRow";
 import { Button } from "@/components/strand/Button";
@@ -165,10 +165,21 @@ export function EventSurface({
     onSettled: () => void qc.invalidateQueries({ queryKey: ["event-follow", member.id] }),
   });
 
+  // The timer lives in a ref and the one before it is cleared, so a toast raised inside the last one's
+  // 2.6s is not blanked by the older timer (G96); the component clears it on unmount, as ConnectSurface
+  // does.
+  const toastTimer = useRef<number | null>(null);
   const say = (text: string) => {
     setToast(text);
-    window.setTimeout(() => setToast(null), 2600);
+    if (toastTimer.current != null) window.clearTimeout(toastTimer.current);
+    toastTimer.current = window.setTimeout(() => setToast(null), 2600);
   };
+  useEffect(
+    () => () => {
+      if (toastTimer.current != null) window.clearTimeout(toastTimer.current);
+    },
+    [],
+  );
   const reread = () => qc.invalidateQueries({ queryKey: [EVENT_PAGE_KEY, member.id, id] });
   const { origin: back, go: goBack } = useBackToOrigin();
 
