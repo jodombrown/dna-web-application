@@ -4902,7 +4902,7 @@ direct-load check has always used and which WebKit passes. Owed: read it in WebK
 follows a link or types an address while a post is open in place is sent back to that post, it is a
 defect in the in-place route, not in the harness.
 
-## G96. The event page's toast is blanked by the timer of the toast before it
+## G96. The event page's toast is blanked by the timer of the toast before it — closed (handoff 35-A)
 
 **Severity: low. Opened 24 September 2026 during handoff 32-A, filed under ruling 597. The number is
 assigned by this entry (ruling 638).**
@@ -4919,6 +4919,10 @@ already come and gone: one of three isolated runs at 1280 dark, and the local fu
 The arm now waits the going toast out before withdrawing, and the Withdrawn toast is still required.
 Owed, in a brief that may touch `EventSurface`: `say()` clears its previous timer, as the other two
 surfaces do. This PR changes no page (handoff 32-A item 6).
+
+**Closed 28 September 2026, in handoff 35-A item 3, by `888fc00`.** `say()` keeps its timer in a ref
+and clears the one before it, and the component clears it on unmount, as `ConnectSurface` does.
+`tests/event.cjs`'s arm that waits out the going toast is unchanged.
 
 Found in the same run and closed by this PR: `pages.yml` run 332 failed "notification: Respond opens
 the event page and marks the row read" at chromium 1280 dark because the check read the mock's reads
@@ -6265,7 +6269,7 @@ lands, the surface passes the prop and the DOM write goes.
 
 ---
 
-## G142. `tests/rsvp-drift.cjs` prints FAIL and exits 0
+## G142. `tests/rsvp-drift.cjs` prints FAIL and exits 0 — closed (handoff 35-A)
 
 **Severity: medium. The step that exists to go red on a derivation that drifts (ruling 1002) stays
 green when it finds one. Opened 27 September 2026 during handoff 34-A, filed under ruling 597. The
@@ -6288,9 +6292,15 @@ Owed: the three failure paths reach the exit with their status, and the step goe
 disagreement. A one-line change in the test, outside 34-A's scope, so it is filed rather than made
 here.
 
+**Closed 28 September 2026, in handoff 35-A item 1, by `7d98e99`.** `process.exit(code)` moved into
+the `finally`, after the client closes, so a `return` from the `try` reaches it with its status; the
+messages are unchanged. Proved once with a scratch stub of `pg` answering one drift row: the arm
+printed its FAIL and exited 1, and exited 0 on `84d1f2c`. The stub is not committed, since a fake
+client proves the path runs and not that the arm passes.
+
 ---
 
-## G143. A live-db block whose presence probe fails reports one name UNPROVEN and drops every other arm in it
+## G143. A live-db block whose presence probe fails reports one name UNPROVEN and drops every other arm in it — closed (handoff 35-A)
 
 **Severity: medium. Arms that cannot run vanish instead of reading UNPROVEN, which is the failure mode
 ruling 228 exists to prevent. Opened 27 September 2026 during handoff 34-A, filed under ruling 597.
@@ -6309,6 +6319,20 @@ the others built the same way.
 Owed: a block that cannot run reports every arm it carries as UNPROVEN with the probe's reason, for
 example by naming its arms up front in `names` and skipping each, so a missing function reads as the
 coverage it removes.
+
+**Closed 28 September 2026, in handoff 35-A item 2, by `6d18b20`.** The three blocks that open with a
+presence probe are attend (`to_regprocedure` on `event_page` and `event_public_page`), guest and claim
+(the guest path's three functions) and Discovery (`convene_discovery`'s signature and its recorded
+version). Every arm of each is now a key in `names`, under the block's prefix, and every `record` in
+those blocks reads its label from there; `armsOf(prefix)` lists a block's arms, so a probe that fails
+skips each with its reason, and the attend block's two early returns after the probe skip the arms
+they leave unreached. `tests/live-checks.cjs` prints `arms named: N passed, F failed, U unproven`,
+where the total is the same whichever way a probe answers. Read against a scratch stub of `pg` whose
+probes all answer null (not committed): the three blocks report 34 arms UNPROVEN where `84d1f2c`
+reports 4, and every key with a block's prefix is reached by a `record`. Not proved on push 1's own
+run, which the handoff expected to show the Discovery probe failing: the probe still names the
+nine-argument signature and `20260926170400`, both on the project, and moves to the ten-argument one
+in push 2 (item 9), so no probe fails on that run.
 
 ---
 
