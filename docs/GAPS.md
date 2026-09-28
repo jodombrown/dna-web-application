@@ -4244,6 +4244,13 @@ grants there removes a path a Convene surface may already use. A harness arm tha
 `role_table_grants` and fails on any of the four for `anon` or `authenticated` would keep it closed,
 in `tests/migration-drift.cjs`'s shape.
 
+**Narrowed 28 September 2026, in handoff 35-A (items 5 and 10).** The four privileges are revoked from
+every table in `public` and from the default by `20260927120100`, and the live arm "G61 (Session 35)"
+keeps them closed: it reads `pg_class.relacl` through `aclexplode` and `pg_default_acl`, not
+`role_table_grants`, which lists only the grants where the reading role is grantor or grantee and so
+reads zero as `live_arms` whatever the truth. The entry stays open for the direct INSERT, UPDATE and
+DELETE on `event_delivery` and `event_host_settings`, which are filed as G145.
+
 ## G62. Strand's `Segment.tsx` still names `SegmentBlock` in its own header, one line the rename under 1007 was told not to touch
 
 **Severity: cosmetic. Opened 22 September 2026 during handoff 30-B, filed under ruling 597. The
@@ -6368,3 +6375,29 @@ when any of them resizes. At medium the dock is the fixed one and its Cs centre 
 the flip is where the row's width reaches the bar's 560.77, the gap and 140: the field sits beside
 the bar from a viewport of 777 and under it at 776, read in Chromium after the fonts settle. The
 discovery facets arm reads the unit at 820, 1280 and 1440 and the search arm at 820 and 1280.
+
+---
+
+## G145. `event_delivery` and `event_host_settings` carry direct write grants that are `publish_post`'s own permission, a second door for a host
+
+**Severity: low, an invite-boundary gate under prototype posture (ruling 140). Opened 28 September
+2026 during handoff 35-A, filed under ruling 597 and split out of G61. The number is assigned by this
+entry (ruling 638).**
+
+`public.publish_post` is security invoker, so it writes `public.event_delivery` and
+`public.event_host_settings` as the member, and `authenticated` holds INSERT, UPDATE and DELETE on
+both tables so that it can (`event_delivery_host_all` and `event_host_settings_host_all`,
+`20260916120100_p1_convene_place_columns.sql`). Those grants are the one write path's own permission,
+and they are also a way in that skips it: a host can write their own event's delivery rows through
+PostgREST without passing through `publish_post`, held shut only by the host predicate in the policy.
+Under the one-write-path absolute that is a second door on each table.
+
+What it costs today: a host can change the physical, meeting-link and capacity rows of their own event
+without the checks `publish_post` makes, and nothing else, since the policy limits each to the host's
+own event.
+
+Owed: a ruling, then one migration from Chat. Closing it means making `publish_post` security definer
+first, so that it no longer needs the member's own write grants, and only then revoking INSERT, UPDATE
+and DELETE on both tables from `authenticated`. Revoking first would break publishing.
+
+---
