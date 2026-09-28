@@ -1759,7 +1759,7 @@ async function mockSupabase(page, db, opts = {}) {
       const sections = [];
       for (const id of order) {
         if (lens !== "all" && lens !== id) continue;
-        const items = laneItems(id)
+        let items = laneItems(id)
           .filter((i) => !leftOut.has(i.event_id))
           .map(strip);
         // With a city chosen in Place, Near reads the place rather than a home (1095).
