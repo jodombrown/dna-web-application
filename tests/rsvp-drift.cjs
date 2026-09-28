@@ -145,8 +145,10 @@ const unproven = (why) => {
     code = 1;
   } finally {
     await client.end().catch(() => {});
+    // The exit sits in the finally, not after it: the three failure paths above set code = 1 and
+    // return from the try, and a return skips every statement after the finally (G142).
+    process.exit(code);
   }
-  process.exit(code);
 })().catch((e) => {
   console.error(e);
   process.exit(1);
