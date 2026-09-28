@@ -2391,6 +2391,7 @@ export type Database = {
           p_price?: string[];
           p_q?: string;
           p_when?: string;
+          p_without?: string;
         };
         Returns: Json;
       };

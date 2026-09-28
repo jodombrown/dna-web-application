@@ -4383,6 +4383,7 @@ async function runDiscoveryGrid(browserType, bname, [w, h], theme) {
     const calls = db.discovery.calls.map((c) => ({
       lens: c.p_lens || "all",
       price: c.p_price || null,
+      without: c.p_without || null,
     }));
     more = { view: more, calls };
     // An empty lens.
@@ -4421,7 +4422,7 @@ async function runDiscoveryGrid(browserType, bname, [w, h], theme) {
   const alls = more ? more.calls.filter((c) => c.lens === "all") : [];
   record(
     tag +
-      " more: only a lens short of a row is followed by All's lanes under More on Convene at 22, less the lens's events, from a second read under All with its facets (1148)",
+      " more: only a lens short of a row is followed by All's lanes under More on Convene at 22, less the lens's events, from a second read under All with its facets and the lens as p_without (1148, 1174)",
     !!more &&
       (short
         ? !!view &&
@@ -4432,7 +4433,8 @@ async function runDiscoveryGrid(browserType, bname, [w, h], theme) {
           view.cards > 0 &&
           view.overlap === 0 &&
           alls.length > 0 &&
-          alls.every((c) => JSON.stringify(c.price) === JSON.stringify(["free"]))
+          alls.every((c) => JSON.stringify(c.price) === JSON.stringify(["free"])) &&
+          alls.some((c) => c.without === "curated")
         : !view && alls.length === 0),
     JSON.stringify({ short, tracks: n, more }),
   );

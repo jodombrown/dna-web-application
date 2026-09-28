@@ -154,6 +154,11 @@ export type DiscoveryFacets = {
   places?: string[];
   /** The search (1124, 1159): sent only when its trimmed text is non-empty. */
   q?: string;
+  /**
+   * The lens whose events a read of All leaves out before the floors apply (1174): More on Convene's
+   * read. The projection refuses it with any lens but All, and with All itself.
+   */
+  without?: Exclude<ConveneLensId, "all">;
 };
 
 type RawSection = {
@@ -195,6 +200,7 @@ function discoveryArgs(f: DiscoveryFacets): DiscoveryArgs {
   if (f.places?.some(() => true)) args.p_places = f.places;
   const q = f.q?.trim();
   if (q) args.p_q = q;
+  if (f.without) args.p_without = f.without;
   return args;
 }
 
