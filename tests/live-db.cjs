@@ -191,6 +191,13 @@ async function runLiveDbArms({ record, skip }) {
       "Brief 9 (662): signed out cannot call convene_discovery or convene_places, or read a rail row",
     discoveryGoingSignedOut:
       "Handoff 34-A (1128, 1160): signed out cannot call event_going_names or note_lane_act",
+    discoveryWithout:
+      "Handoff 35-A (1174): a read of All with p_without => 'follow' carries none of the events the follow lens returns",
+    discoveryWithoutLens:
+      "Handoff 35-A (1174): p_without with a lens other than All is refused with 22023",
+    discoveryWithoutAll: "Handoff 35-A (1174): p_without => 'all' is refused with 22023",
+    grants:
+      "G61 (Session 35): no table in public carries TRUNCATE, REFERENCES, TRIGGER or MAINTAIN for anon or authenticated, and the default ACL for postgres in public grants none of them",
     discoveryDismiss:
       "Brief 9 (1044, 1105): a dismissal in curated empties that lane and is keyed on the lane alone",
   };
@@ -1260,8 +1267,10 @@ async function runLiveDbArms({ record, skip }) {
     // ------------------------------------------------------------------------------------------
     await inTransaction(client, async () => {
       await actAsSelf(client);
+      // 20260927120000 drops the nine-argument projection and creates it again with p_without, so the
+      // probe names the ten-argument signature and that version's recorded row. Before it:
       // 20260926170300 drops the eight-argument projection and creates it again with p_q, so the
-      // probe names the nine-argument signature; 20260926170400 keeps that signature and takes the
+      // probe named the nine-argument signature; 20260926170400 keeps that signature and takes the
       // browse row out of convene_lanes, so the probe reads that version's recorded row, as the drift
       // arm reads it (444, 553: a paste records its version in the transaction that runs its DDL).
       // The probe runs as live_arms, which holds select on supabase_migrations.schema_migrations
@@ -1269,13 +1278,13 @@ async function runLiveDbArms({ record, skip }) {
       // 42501 and took the whole live step down before its count (G143 names what a failed probe
       // costs).
       const present = await client.query(
-        "select to_regprocedure('public.convene_discovery(text, text[], text[], text, text[], uuid, text[], text, text)') is not null and exists (select 1 from supabase_migrations.schema_migrations where version = '20260926170400') as ok",
+        "select to_regprocedure('public.convene_discovery(text, text[], text[], text, text[], uuid, text[], text, text, text)') is not null and exists (select 1 from supabase_migrations.schema_migrations where version = '20260927120000') as ok",
       );
       if (!present.rows[0] || present.rows[0].ok !== true) {
         for (const n of armsOf("discovery"))
           skip(
             n,
-            "20260926170300 and 20260926170400 are not both on the project yet (Chat applies 34-A's five migrations before its enforcing run)",
+            "20260927120000 is not on the project yet (Chat applies 35-A's two migrations before its enforcing run)",
           );
         return;
       }
@@ -1571,6 +1580,58 @@ async function runLiveDbArms({ record, skip }) {
         names.discoveryDonation,
         !donation.ok && donation.code === "22023",
         donation.ok ? "answered" : failed(donation),
+      );
+      // 1174 (handoff 35-A): p_without leaves a lens's events out of a read of All before the floors
+      // apply. The follow lens's ids are read as the owner, then All without them, and none may
+      // appear in any lane; the arm reads nothing if the follow lens holds no event, since an empty
+      // lens leaves nothing to leave out (UNPROVEN, never a pass).
+      const followLens = await ask("select public.convene_discovery('follow') as d");
+      const followIds = new Set(
+        followLens.ok ? (section(followLens.d, "follow")?.items.map((i) => i.event_id) ?? []) : [],
+      );
+      const without = await ask(
+        "select public.convene_discovery('all', p_without => 'follow') as d",
+      );
+      const leaked = without.ok
+        ? ((without.d && without.d.sections) || []).flatMap((s) =>
+            s.items
+              .filter((i) => followIds.has(i.event_id))
+              .map((i) => s.section + ":" + i.event_id),
+          )
+        : [];
+      if (followLens.ok && followIds.size === 0)
+        skip(names.discoveryWithout, "the owner's follow lens holds no event to leave out");
+      else
+        record(
+          names.discoveryWithout,
+          followLens.ok && without.ok && leaked.length === 0,
+          !followLens.ok
+            ? failed(followLens)
+            : without.ok
+              ? followIds.size +
+                " follow event(s) left out, sections " +
+                JSON.stringify(sectionIds(without.d)) +
+                " leaked " +
+                JSON.stringify(leaked)
+              : failed(without),
+        );
+      const withoutLens = await attempt(
+        client,
+        "select public.convene_discovery('follow', p_without => 'curated')",
+      );
+      record(
+        names.discoveryWithoutLens,
+        !withoutLens.ok && withoutLens.code === "22023",
+        withoutLens.ok ? "answered" : failed(withoutLens),
+      );
+      const withoutAll = await attempt(
+        client,
+        "select public.convene_discovery('all', p_without => 'all')",
+      );
+      record(
+        names.discoveryWithoutAll,
+        !withoutAll.ok && withoutAll.code === "22023",
+        withoutAll.ok ? "answered" : failed(withoutAll),
       );
       // 1095: Place's options are grounded places, and the projection takes one and refuses a
       // malformed id. The project's own upcoming events carry no city (run 349 read one option,
@@ -1888,6 +1949,52 @@ async function runLiveDbArms({ record, skip }) {
           (anonGoing.ok ? "answered" : anonGoing.code) +
           " act " +
           (anonAct.ok ? "written" : anonAct.code),
+      );
+    });
+
+    // ------------------------------------------------------------------------------------------
+    // G61 (Session 35, 20260927120100): TRUNCATE, REFERENCES, TRIGGER and MAINTAIN, which Supabase's
+    // default privileges hand anon and authenticated on every table postgres creates in public, are
+    // revoked from every table and from the default. Read from pg_class.relacl through aclexplode and
+    // from pg_default_acl, never from information_schema.role_table_grants: that view lists only the
+    // grants where the reading role is grantor or grantee, so as live_arms it would read zero whatever
+    // the truth. Both catalogues are readable by every role.
+    // ------------------------------------------------------------------------------------------
+    await inTransaction(client, async () => {
+      await actAsSelf(client);
+      const held = await attempt(
+        client,
+        `select
+           (select coalesce(jsonb_agg(distinct c.relname || ':' || r.rolname || ':' || a.privilege_type), '[]'::jsonb)
+            from pg_class c
+            cross join lateral aclexplode(c.relacl) a
+            join pg_roles r on r.oid = a.grantee
+            where c.relnamespace = 'public'::regnamespace
+              and c.relkind in ('r', 'p')
+              and r.rolname in ('anon', 'authenticated')
+              and a.privilege_type in ('TRUNCATE', 'REFERENCES', 'TRIGGER', 'MAINTAIN')) as tables,
+           (select coalesce(jsonb_agg(distinct r.rolname || ':' || a.privilege_type), '[]'::jsonb)
+            from pg_default_acl d
+            cross join lateral aclexplode(d.defaclacl) a
+            join pg_roles r on r.oid = a.grantee
+            where d.defaclnamespace = 'public'::regnamespace
+              and d.defaclrole = 'postgres'::regrole
+              and d.defaclobjtype = 'r'
+              and r.rolname in ('anon', 'authenticated')
+              and a.privilege_type in ('TRUNCATE', 'REFERENCES', 'TRIGGER', 'MAINTAIN')) as defaults`,
+      );
+      const row = held.ok ? held.rows[0] : null;
+      record(
+        names.grants,
+        !!row && row.tables.length === 0 && row.defaults.length === 0,
+        row
+          ? "tables " +
+              JSON.stringify(row.tables.slice(0, 5)) +
+              " (" +
+              row.tables.length +
+              ") default ACL " +
+              JSON.stringify(row.defaults)
+          : held.code + " " + held.message,
       );
     });
   } finally {
