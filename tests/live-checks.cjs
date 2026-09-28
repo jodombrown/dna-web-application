@@ -1684,6 +1684,11 @@ async function get(url, headers = {}) {
 
   const fails = results.filter((r) => !r.ok);
   console.log(`\n${results.length - fails.length}/${results.length} live checks passed`);
+  // G143: the total counts every arm the run names, so a block that could not run moves arms from the
+  // passing column to the unproven one and leaves this number where it was.
+  console.log(
+    `${results.length + unproven.length} arms named: ${results.length - fails.length} passed, ${fails.length} failed, ${unproven.length} unproven`,
+  );
   // Ruling 228: unproven is its own outcome. It does not fail the run, and it is never folded into
   // the passing count, so a suite that could not exercise an arm cannot read as one that did.
   if (unproven.length) {
