@@ -6336,10 +6336,14 @@ skips each with its reason, and the attend block's two early returns after the p
 they leave unreached. `tests/live-checks.cjs` prints `arms named: N passed, F failed, U unproven`,
 where the total is the same whichever way a probe answers. Read against a scratch stub of `pg` whose
 probes all answer null (not committed): the three blocks report 34 arms UNPROVEN where `84d1f2c`
-reports 4, and every key with a block's prefix is reached by a `record`. Not proved on push 1's own
-run, which the handoff expected to show the Discovery probe failing: the probe still names the
-nine-argument signature and `20260926170400`, both on the project, and moves to the ten-argument one
-in push 2 (item 9), so no probe fails on that run.
+reports 4, and every key with a block's prefix is reached by a `record`. Push 1's first live job did
+not show the probe failing, since the probe still named the nine-argument signature and `20260926170400`,
+both then on the project, and it straddled Chat's apply. Its re-run, run 387 attempt 2 (job
+`109168680013`, 28 September 2026, on `0f86bf5` after both migrations were recorded), did: the Discovery
+probe found the nine-argument function gone, the block's 26 arms read UNPROVEN with the probe's reason
+and the total read `172 arms named: 143 passed, 0 failed, 29 unproven`, the same 172 as the first job's
+`169 passed, 3 unproven`. The three other unproven arms are the ones that read UNPROVEN before this
+change.
 
 ---
 
