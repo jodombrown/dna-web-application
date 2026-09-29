@@ -1,6 +1,7 @@
 // Generated from the canonical Supabase project (dgspjevjoblujcoljvkn) with the Supabase MCP
-// generate_typescript_types tool on the first Discovery handoff's branch (#71, handoff 34-A), after
-// 20260926170000 to 20260926170300 were applied and recorded.
+// generate_typescript_types tool on the second Discovery handoff's branch (#76, handoff 37-A), after
+// 20260928120000 was applied and recorded (pages.yml run 407 read its drift arm green and the four
+// save_event_blocks arms passing).
 //
 // Nothing here is hand-written except this header and the `Views` helper at the end, which the
 // generator drops and every regeneration restores (`src/lib/feed.ts` reads it). The regeneration
@@ -10,12 +11,13 @@
 // file byte for byte, and `tests/migration-drift.cjs` reads it, so the generator returns it. Every
 // object the generator returns is explained by a migration in this tree, so nothing is left out.
 //
-// What the four add here (1124, 1131, 1157 to 1160): the table `member_lane_activity`, a member's
-// latest act from each Discovery lane, which only `note_lane_act` writes and the member reads and
-// deletes under row policy; the function `note_lane_act`, that one writer; the function
-// `event_going_names`, the going row's first names for many events at once, resolved as the event
-// page resolves them, authenticated only, at most 200 ids a call; and `convene_discovery`'s `p_q`,
-// the search. `convene_lanes` gains two rows, Browse and Filling up, which are data and not types.
+// What 20260928120000 adds here (1186, 1189): the tables `event_block_kinds`, the kinds of
+// host-written block and the heading each shows, and `event_blocks`, one row per block of an event
+// page; and the function `save_event_blocks`, the one writer, acting for the host. `event_page`,
+// `event_public_page` and `vocabularies()` gain a key each inside their jsonb answers, which the
+// generator does not see; `src/lib/event-page.ts`, `event-public.ts` and `vocabularies.ts` carry them.
+// Earlier regenerations' additions (34-A's `member_lane_activity`, `note_lane_act`, `event_going_names`
+// and `convene_discovery`'s `p_q`; 35-A's `p_without`) stand as their headers described them.
 //
 // The private functions they read are absent by design: the private schema is not exposed by
 // PostgREST, so the generator does not see it and no surface may reach it.
@@ -436,6 +438,69 @@ export type Database = {
             isOneToOne: false;
             referencedRelation: "events";
             referencedColumns: ["id"];
+          },
+        ];
+      };
+      event_block_kinds: {
+        Row: {
+          kind: string;
+          label: string;
+          position: number;
+        };
+        Insert: {
+          kind: string;
+          label: string;
+          position: number;
+        };
+        Update: {
+          kind?: string;
+          label?: string;
+          position?: number;
+        };
+        Relationships: [];
+      };
+      event_blocks: {
+        Row: {
+          created_at: string;
+          event_id: string;
+          id: string;
+          kind: string;
+          payload: Json;
+          position: number;
+          updated_at: string;
+        };
+        Insert: {
+          created_at?: string;
+          event_id: string;
+          id?: string;
+          kind: string;
+          payload: Json;
+          position: number;
+          updated_at?: string;
+        };
+        Update: {
+          created_at?: string;
+          event_id?: string;
+          id?: string;
+          kind?: string;
+          payload?: Json;
+          position?: number;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "event_blocks_event_id_fkey";
+            columns: ["event_id"];
+            isOneToOne: false;
+            referencedRelation: "events";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "event_blocks_kind_fkey";
+            columns: ["kind"];
+            isOneToOne: false;
+            referencedRelation: "event_block_kinds";
+            referencedColumns: ["kind"];
           },
         ];
       };
@@ -2488,6 +2553,10 @@ export type Database = {
           p_event: string;
           p_status: Database["public"]["Enums"]["registration_status"];
         };
+        Returns: Json;
+      };
+      save_event_blocks: {
+        Args: { p_blocks: Json; p_event: string };
         Returns: Json;
       };
       save_profile_section: {
