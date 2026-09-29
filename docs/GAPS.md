@@ -6641,6 +6641,23 @@ of the same exit) and leaves it out of the judgment; it stays in the record as `
 
 Owed: why WebKit's screencast holds the first frame of the exit back, which nothing here reads.
 
+**Closed 29 September 2026, in handoff 37-D item 8, by the commit that changes `tests/sheet.cjs`'s
+`judgeExit`.** Run 407 (id `36604862039`, head `a969789`) went red on `webkit-390x844-light-sheet-composer`
+exit: painted `840:168 ... 1160:839, 1200:346`, gone at 1240, against a geometry-exit record of
+`... 63:354.7 ...`. The G154 rule missed it because it wanted a sample within two chroma blocks (4 px)
+and 346 is 8.7 px from the nearest one: the sampler runs once per animation frame, about 16 ms apart,
+which mid-slide is 70 to 140 px, so a video frame taken at another instant is rarely within a block of
+a sample and is always between two. G154's two matches (637.2 as 638, 1003.6 as 1000) sat at the ease's
+tail where the samples are dense. `reordered` in `tests/sheet.cjs` is the rule the enter shares (G160), narrowed by Chat after the first
+draft matched almost any position inside the motion. A frame is excused only in WebKit (Chromium is fully
+strict); when the geometry record over the same motion is itself one-way (a reversal there is real motion
+and fails); when it is the first frame that moves the wrong way and removing it leaves the painted series
+one-way; when it lies between two consecutive samples and is not past rest; and, on an enter, when the
+series without it ends at the geometry's rest. One frame per arm, and one arm per engine per run may use
+the allowance: the first arm to use it holds it and a second arm's frame fails. The excused frame, its time
+and its bracketing samples are printed in the arm's detail, pass or fail. Proved against the recorded
+series in a scratch that is not committed (results in PR #77's body).
+
 ---
 
 ## G155. Headless WebKit at 2560 by 1440 on the runner paints no frame of Sheet's 300 ms transition
@@ -6750,6 +6767,15 @@ Owed: if a second run reads the same shape, the function's own log for that wind
 lifetime against the step's wall-clock, before any arm is touched. Not a flake by assertion (a failing
 arm is never called one); a failure whose cause was not read.
 
+**Second sighting, 29 September 2026 (handoff 37-D, PR #77).** `pages.yml` run 412 (id `36624735921`, head
+`b40046f`), `live` job `109599248223`: `place-resolve` answered HTTP 520 for Timor-Leste, so three arms
+failed on that one name (194 of 195 passed): `every world_countries name anchors or is unavailable, never
+a third thing`, `anchors to its own current alpha-2 code` and `carries the country's IANA zones`. A
+different status from the first sighting (520, an edge-layer answer, against 401) on the same function,
+one name, and `live` on main run 409 (`ff916a1`) passed all 195. The head changes no Edge Function,
+migration or live-check file. Not attributed either: the function's log was not read. The failed `live`
+job was not re-run, because the next push is the enforcing run's head.
+
 ---
 
 ## G160. One WebKit enter frame on the Share sheet at 390 read the hidden edge after rest, then rest again
@@ -6775,5 +6801,47 @@ artefact under `sheet-video/`.
 Owed: whether the enter judgment should learn G154's geometry match, decided with the video read, not
 from this entry. The same run's `webkit-390x844-light-block-flow` lost its web process (G5's class,
 reported UNPROVEN under 228) and is not a new gap.
+
+**Closed 29 September 2026, in handoff 37-D item 8.** Run 406's `SHEET` lines: the enter's painted
+series was `80:687 ... 360:170, 400:578, 440:168`, a frame at 578 between 170 and 168, against the
+geometry's `123:569.5` and `106:712.1`. It is on the record's path and 8.5 px from the nearest sample,
+so it would have escaped a two-block match on the exit's own rule as well, which is why 37-D's rule is
+the path and not the sample, under the narrowing G154's closing note lists. `judgeEnter` names such a
+frame, prints `late=`, and holds the engine's one allowance for the run. Owed: the enforcing run on 37-D's final head.
+
+---
+
+## G161. The tree's Sheet has no title row, so Strand's 57px header (1217, 1222) reaches only the composer
+
+**Severity: low. Opened 29 September 2026 during handoff 37-D item 6, filed under ruling 597. The number is
+assigned by this entry (ruling 638).**
+
+Strand's Sheet renders its own header from a `title` or `onClose` prop, so its 57px change reached every
+titled sheet at once. The tree's `Sheet.tsx` has no title row: each mount draws its own, and 37-D changed
+the composer's alone. Measured in Chromium at 1280 by 800, light, pointer, on the mocked app, panel top 0,
+721 wide; a header row is the row holding the title and the close control, border-box, so the 1px bottom
+border is in it:
+
+| Mount                                                        | Header row                                                                                                                              |
+| ------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
+| Composer (after 37-D)                                        | 57, and 57 at 390 and 820                                                                                                               |
+| IntroSheet (Profile's Connect with, and Connect's Suggested) | 56                                                                                                                                      |
+| GuestSheet ("I am going")                                    | 56                                                                                                                                      |
+| RsvpSheet                                                    | 56                                                                                                                                      |
+| RoleInvitationSheet                                          | 56                                                                                                                                      |
+| ProfileSurface's C sheet ("About Connect")                   | no header row, no close control; title band bottom 112.0, title text bottom 59.2                                                        |
+| OnboardingSurface's explainer                                | no header row, close is the footer "Got it"; heading bottom 71.2                                                                        |
+| ConveneForm's venue-info sheet                               | no header row, no close; heading bottom 42.4                                                                                            |
+| ProfileBlockControl's block sheet                            | no header row, no close; heading bottom 55.2                                                                                            |
+| EventShareSheet                                              | not reachable at 1280: the event page is in Discovery's pane and Share opens the pane's own share; the Sheet mounts only below expanded |
+| NotificationPanel                                            | not reachable as a Sheet at 1280 pointer: it is the 380 popover; the Sheet is touch only                                                |
+| FacetRail, ConnectSurface's Filters                          | compact only                                                                                                                            |
+
+Five mounts draw a 56 row against Strand's 57, four draw none, three are not reachable at 1280 and were
+not measured. Compact was not measured on those; the composer's compact header was 53 by its padding
+(0 top, 8 bottom, 44 Close, 1 border) before 37-D and reads 57 after, under Sheet's 24 px handle.
+
+It stays a finding until the founder rules on moving the header into Sheet for every mount; 37-D changes
+none of them. Measured once by scratch scripts that are not committed.
 
 ---

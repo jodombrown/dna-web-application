@@ -26,6 +26,7 @@ const VIEWPORTS = [
   [1536, 960],
 ];
 const FULL_PREVIEW_AT = new Set([390, 820, 1280]);
+const COMPOSE_SEL = 'section[role="dialog"][aria-label="Compose"]';
 // Mirrors DRAFT_DEBOUNCE in src/components/strand/Composer.tsx.
 const DRAFT_DEBOUNCE_MS = 800;
 const THEMES = ["light", "dark"];
@@ -2672,6 +2673,48 @@ async function noOverflow(page, label) {
  *  held on Chromium and lost on WebKit, which starts the transform a frame later and runs it slower
  *  under CI load: the composer's publish row measured 189px below the viewport on a panel that was
  *  still moving. */
+/**
+ * The resolved width of a --sheet-* token (1219, handoff 37-D): a probe given `width: var(token)`
+ * is placed in the panel's own scrim, so a percentage resolves against the same box the panel's
+ * does, viewport for a fixed sheet and host for a contained one, and its measured width is the
+ * token's value. Assertions compare against this, never against a number.
+ */
+async function sheetTokenWidth(page, selector, token) {
+  return page.evaluate(
+    ({ sel, token }) => {
+      const panel = document.querySelector(sel);
+      if (!panel || !panel.parentElement) return null;
+      const probe = document.createElement("div");
+      probe.setAttribute("data-sheet-probe", token);
+      probe.style.cssText =
+        "position:absolute;left:0;top:0;height:0;visibility:hidden;pointer-events:none;width:var(" +
+        token +
+        ");";
+      panel.parentElement.appendChild(probe);
+      const width = probe.getBoundingClientRect().width;
+      probe.remove();
+      return width;
+    },
+    { sel: selector, token },
+  );
+}
+
+/** Whether a side sheet's panel is the token's width within 1 px and flush to the right edge. */
+async function sheetWidthIs(page, selector, token) {
+  const want = await sheetTokenWidth(page, selector, token);
+  const box = await page.locator(selector).boundingBox();
+  const iw = await page.evaluate(() => window.innerWidth);
+  return {
+    want,
+    box,
+    ok:
+      want !== null &&
+      !!box &&
+      Math.abs(box.width - want) < 1 &&
+      Math.abs(box.x + box.width - iw) < 1,
+  };
+}
+
 async function sheetSettled(page, selector) {
   await page.waitForFunction(
     (sel) => {
@@ -2952,15 +2995,22 @@ async function runViewport(browserType, bname, [w, h], theme) {
         (await dialog.getByRole("button", { name: "Publish" }).isDisabled()),
     );
     // Ruling 492, superseding ruling 106's geometry: no sheet is full screen. A bottom sheet is 80
-    // percent tall on compact; a side sheet is 40 percent wide on medium and expanded, and the
-    // composer alone takes 50 percent for its stacked preview.
+    // percent tall on compact; a side sheet is --sheet-composer-ratio wide on medium and expanded,
+    // read in the page and never written as a number here (1219, 1220; handoff 37-D).
     const box = await dialog.boundingBox();
+    const composerWidth =
+      w >= 640 ? await sheetWidthIs(page, COMPOSE_SEL, "--sheet-composer-ratio") : null;
     record(
-      tag + (w >= 640 ? " composer: 50% side sheet" : " compact: 80% bottom sheet"),
+      tag +
+        (w >= 640
+          ? " composer: side sheet at --sheet-composer-ratio, flush right"
+          : " compact: 80% bottom sheet"),
       w >= 640
-        ? Math.abs(box.width - 0.5 * w) < 2 && Math.abs(box.x + box.width - w) < 2
+        ? composerWidth.ok
         : Math.abs(box.width - w) < 2 && Math.abs(box.height - 0.8 * h) < 2,
-      `box ${JSON.stringify(box)}`,
+      w >= 640
+        ? `token ${composerWidth.want}, box ${JSON.stringify(box)}`
+        : `box ${JSON.stringify(box)}`,
     );
     const pub = dialog.getByRole("button", { name: "Publish" });
     const pb = await pub.boundingBox();
@@ -3019,6 +3069,66 @@ async function runViewport(browserType, bname, [w, h], theme) {
       (await preview.getAttribute("data-c")) === "contribute" &&
         (await preview.textContent()).includes("Volunteer accountant"),
     );
+    // Handoff 37-D (1217, 1219, 1221): the header is Strand's 57px toolbar row above compact, the
+    // body has no cap of its own so the card is the feed card's width, and the footer is one line
+    // above compact and the full-width bar at compact. Widths are read from tokens; 57 is the
+    // toolbar row's own height (1217), not a sheet width.
+    {
+      const TOOLBAR_ROW = 57;
+      const contentMax = await sheetTokenWidth(page, COMPOSE_SEL, "--content-max");
+      const sideMax = await sheetTokenWidth(page, COMPOSE_SEL, "--sheet-side-max-width");
+      const g = await page.evaluate((sel) => {
+        const panel = document.querySelector(sel);
+        const rect = (el) => {
+          if (!el) return null;
+          const r = el.getBoundingClientRect();
+          return { x: r.x, y: r.y, w: r.width, h: r.height };
+        };
+        const pub = [...panel.querySelectorAll("button")].find(
+          (b) => b.textContent.trim() === "Publish",
+        );
+        // Sheet's own action row, not the preview card's footer.
+        const foot = pub && pub.closest("footer");
+        const cs = foot ? getComputedStyle(foot) : null;
+        return {
+          panel: rect(panel),
+          header: rect(panel.querySelector("header")),
+          card: rect(panel.querySelector("article[aria-label='Preview of your post']")),
+          foot: rect(foot),
+          footPad: cs ? parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight) : 0,
+          hint: rect(foot && foot.querySelector("span")),
+          pub: rect(pub),
+        };
+      }, COMPOSE_SEL);
+      console.log(`COMPOSER ${tag} ${JSON.stringify({ contentMax, sideMax, ...g })}`);
+      if (w >= 640) {
+        record(
+          tag + " composer header is the 57px toolbar row (1217)",
+          Math.abs(g.header.h - TOOLBAR_ROW) < 0.5,
+          `header ${g.header.h}`,
+        );
+        record(
+          tag +
+            " composer body is uncapped: the card is the feed card's width, or the sheet's inside its padding (1217, 1219)",
+          Math.abs(g.card.w - Math.min(contentMax, g.panel.w - (sideMax - contentMax))) < 1,
+          `card ${g.card.w}, panel ${g.panel.w}, content-max ${contentMax}, side-max ${sideMax}`,
+        );
+        record(
+          tag +
+            " composer footer is one line: the hint and Publish share a row, Publish is not full width (1221)",
+          !!g.hint &&
+            Math.abs(g.hint.y + g.hint.h / 2 - (g.pub.y + g.pub.h / 2)) < 2 &&
+            g.pub.w < (g.foot.w - g.footPad) / 2,
+          JSON.stringify({ hint: g.hint, pub: g.pub, foot: g.foot }),
+        );
+      } else {
+        record(
+          tag + " composer footer at compact: Publish is the full-width bar, no hint (1221)",
+          !g.hint && Math.abs(g.pub.w - (g.foot.w - g.footPad)) < 1,
+          JSON.stringify({ pub: g.pub, foot: g.foot, footPad: g.footPad }),
+        );
+      }
+    }
     await shot(page, `${tag}-03-populated`);
     await noOverflow(page, tag + " populated");
 
@@ -6002,6 +6112,8 @@ module.exports = {
   noOverflow,
   measureWidth,
   sheetSettled,
+  sheetTokenWidth,
+  sheetWidthIs,
   fadeProbe,
   FADE_UNDER_DISTANCE,
   BASE,

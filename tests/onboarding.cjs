@@ -9,7 +9,18 @@
 // Usage: BASE=https://<preview>.dna-web-application.pages.dev SPECIAL=onboarding node tests/matrix.cjs
 const M = require("./matrix.cjs");
 
-const { launch, makeMockDb, seedPosts, mockSupabase, record, noOverflow, shot, BASE, UID } = M;
+const {
+  launch,
+  makeMockDb,
+  seedPosts,
+  mockSupabase,
+  record,
+  noOverflow,
+  shot,
+  sheetWidthIs,
+  BASE,
+  UID,
+} = M;
 
 /** SPEC section 3, verbatim. The arm fails on any drift from these strings. */
 const COPY = {
@@ -382,18 +393,20 @@ async function runOnboardingLayout(browserType, bname, [w, h], theme) {
       noNumeral(dtext) && !dtext.includes("Convene") && !dtext.includes("Collaborate"),
     );
     const db2 = await dlg.boundingBox();
-    // Ruling 492: one size on every sheet. 80 percent tall on compact, 40 percent wide above; the
-    // 65 percent drawers are retired.
+    // Ruling 492: one size on every sheet. 80 percent tall on compact; above, the side sheet is
+    // --sheet-expanded-width, read in the page (1219, 1220; handoff 37-D).
+    const side = compact
+      ? null
+      : await sheetWidthIs(page, 'section[role="dialog"]', "--sheet-expanded-width");
     record(
       tag +
         (compact
           ? ": compact opens an 80 percent sheet"
-          : ": medium and expanded open a 40 percent side sheet"),
-      !!db2 &&
-        (compact
-          ? Math.abs(db2.height - h * 0.8) < h * 0.05
-          : Math.abs(db2.width - w * 0.4) < w * 0.03),
-      db2 ? `${Math.round(db2.width)}x${Math.round(db2.height)}` : "no dialog",
+          : ": medium and expanded open a side sheet at --sheet-expanded-width"),
+      !!db2 && (compact ? Math.abs(db2.height - h * 0.8) < h * 0.05 : side.ok),
+      db2
+        ? `${Math.round(db2.width)}x${Math.round(db2.height)}${side ? `, token ${side.want}` : ""}`
+        : "no dialog",
     );
     record(
       tag + ": focus lands on the sheet heading (ruling 222)",

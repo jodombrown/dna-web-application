@@ -14,7 +14,9 @@
 // - Scroll lock cancels the scrim only (ruling 493). Inside the dialog a vertical scroller is
 //   consumed at its edges, a horizontal scroller keeps its wheel, and touch is left to the browser.
 // - One size on every sheet (ruling 492): a bottom sheet 80 percent tall on compact, a side sheet
-//   40 percent wide on medium and expanded. Never full screen. The composer alone takes 50 percent.
+//   `min(60%, the feed card's width plus Sheet's padding and hairline)` on medium and expanded
+//   (1219, 1220), read from the --sheet-* tokens in strand.css and never written as a number here.
+//   Never full screen. The composer takes the same width through its own token (1200, 1219).
 // Production addition: keyboardHeight (px, from visualViewport) insets the dialog above the
 // software keyboard so the sheet sits above it, and marks the panel with data-kb="1".
 import {
@@ -32,15 +34,16 @@ export const SHEET_DUR = 300;
 
 /** Ruling 492, canonical and not overridable per surface. */
 export const SHEET_HEIGHT = "80%";
-export const SHEET_WIDTH = "40%";
-export const COMPOSER_SHEET_WIDTH = "50%";
+// The medium and expanded tokens are equal (1220), so one default serves both tiers.
+export const SHEET_WIDTH = "var(--sheet-expanded-width)";
+export const COMPOSER_SHEET_WIDTH = "var(--sheet-composer-ratio)";
 
 export type SheetProps = {
   open: boolean;
   onClose?: (() => void) | undefined;
   variant?: "sheet" | "drawer";
   label?: string;
-  /** Side-sheet width. Defaults to the canonical 40%; the composer alone passes 50%. */
+  /** Side-sheet width. Defaults to --sheet-expanded-width; the composer passes --sheet-composer-ratio (equal, 1219). */
   width?: number | string | undefined;
   /** Bottom-sheet height. Defaults to the canonical 80%. */
   height?: number | string | undefined;

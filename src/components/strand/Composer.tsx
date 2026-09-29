@@ -6,8 +6,8 @@
 //    scroller and its fade are one thing, and a vertical wheel over it scrolls it sideways (493).
 // 2. Four chips in C order; connect has left the composer and VERB_SCHEMA with it (417, 498).
 // 3. `columns`: 2 is B1's drawer with the preview beside the fields; 1 stacks the preview under the
-//    fields, for the 40 percent side sheet on medium and expanded where two columns do not fit.
-// 4. Sheet geometry (ruling 492): 80 percent tall on compact, a 50 percent side sheet on medium and
+//    fields, for the side sheet on medium and expanded where two columns do not fit (1219).
+// 4. Sheet geometry (ruling 492): 80 percent tall on compact, a side sheet of --sheet-composer-ratio on medium and
 //    expanded. B1's 1000px two-column drawer is retired.
 // 5. A saved draft returns by invitation (ruling 497): the composer opens empty and offers
 //    "Continue your draft" with a discard. Autosave and "Draft saved" are unchanged, and ruling
@@ -256,7 +256,7 @@ export function Composer({
 }: ComposerProps) {
   const touch = (mode || (tier === "expanded" ? "pointer" : "touch")) === "touch";
   /**
-   * Ruling 492: at 50 percent of a medium or expanded viewport two columns do not fit, so the
+   * Ruling 492: in the side sheet on a medium or expanded viewport two columns do not fit, so the
    * preview stacks under the fields at every tier unless the host asks for B1's two-column drawer.
    * Compact and medium already shared the stacked layout (ruling 58).
    */
@@ -1093,7 +1093,7 @@ export function Composer({
         display: "flex",
         alignItems: "center",
         gap: 8,
-        padding: tier === "compact" ? "0 8px 8px 16px" : "12px 12px 12px 24px",
+        padding: "calc(var(--space-3) / 2) var(--space-2) calc(var(--space-3) / 2) var(--space-5)", // 1217: the 57px toolbar row at every tier
         borderBottom: "1px solid var(--line)",
         flex: "none",
       }}
@@ -1167,15 +1167,13 @@ export function Composer({
       disabled={!canPublish}
       aria-busy={pending || undefined}
       onClick={() => void publish()}
-      full={stacked}
+      full={tier === "compact"}
     >
       {pending ? "Publishing" : "Publish"}
     </Button>
   );
   const col = {
     width: "100%",
-    maxWidth: "var(--content-max, 680px)",
-    margin: "0 auto",
     boxSizing: "border-box" as const,
   };
   const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
@@ -1188,14 +1186,14 @@ export function Composer({
       label="Compose"
       contained={contained}
       keyboardHeight={kb}
-      // Ruling 492: 80 percent tall on compact, and the composer alone takes 50 percent of the
-      // width on medium and expanded. Never full screen; B1's 1000px drawer is retired.
+      // Ruling 492: 80 percent tall on compact; on medium and expanded the width is
+      // --sheet-composer-ratio, min(60%, the feed card's width plus padding) (1219, 1220). Never full screen; B1's 1000px drawer is retired.
       width={COMPOSER_SHEET_WIDTH}
       // Ruling 665: the caller's failure message, above the action row, with the draft intact.
       error={fail}
       // Ruling 480: the action row is a footer in the dialog's flex column, never an overlay.
       actions={
-        stacked ? (
+        tier === "compact" ? (
           <div style={{ ...col, display: "flex" }}>{publishBtn}</div>
         ) : (
           <>

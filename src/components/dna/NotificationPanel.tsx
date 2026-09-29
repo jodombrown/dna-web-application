@@ -195,7 +195,7 @@ export function NotificationPanel({
           </>
         )
       ) : (
-        // Ruling 492: 80 percent tall on compact, a 40 percent side sheet on medium. A full-width
+        // Ruling 492: 80 percent tall on compact, a side sheet of --sheet-expanded-width on medium and expanded (1219, 1220). A full-width
         // bottom sheet at 820 is the tablet full screen the ruling forbids.
         <Sheet
           open={open}

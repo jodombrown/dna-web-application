@@ -7,8 +7,19 @@
 const path = require("path");
 const M = require("./matrix.cjs");
 
-const { launch, makeMockDb, seedPosts, mockSupabase, signIn, record, shot, noOverflow, BASE, SB } =
-  M;
+const {
+  launch,
+  makeMockDb,
+  seedPosts,
+  mockSupabase,
+  signIn,
+  record,
+  shot,
+  noOverflow,
+  sheetWidthIs,
+  BASE,
+  SB,
+} = M;
 const HANDLE = "thandiwe-dube";
 const SB_RE = SB.replace(/\./g, "\\.");
 /**
@@ -912,15 +923,18 @@ async function runPublic(browserType, bname, vp, theme) {
       const sheet = await page.locator('[data-testid="c-sheet"]').boundingBox();
       const dialog = await page.locator('[role="dialog"]').last().boundingBox();
       // Ruling 492 supersedes B3's own size: one size on every sheet. 80 percent tall on compact,
-      // 40 percent wide on medium and expanded, never full screen. The type still fills whatever
-      // column that leaves.
+      // --sheet-expanded-width on medium and expanded (1219, 1220), never full screen. The type
+      // still fills whatever column that leaves.
+      const side = compact
+        ? null
+        : await sheetWidthIs(page, 'section[role="dialog"]', "--sheet-expanded-width");
       record(
         tag + ": tap opens the sheet at the canonical size and the type fills the column (check 8)",
         !!sheet &&
           !!dialog &&
           (compact
             ? Math.abs(dialog.width - w) < 2 && Math.abs(dialog.height - 0.8 * h) < 2
-            : Math.abs(dialog.width - 0.4 * w) < 2 && dialog.y + dialog.height >= h - 2) &&
+            : side.ok && dialog.y + dialog.height >= h - 2) &&
           sheet.width >= dialog.width - 48,
         JSON.stringify({ sheet, dialog, w, h }),
       );
