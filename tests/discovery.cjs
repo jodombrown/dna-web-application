@@ -4641,19 +4641,81 @@ async function runDiscoveryShare(browserType, bname, [w, h], theme) {
   await browser.close();
 }
 
+/**
+ * The five Cs on the page's axis (1175, 1190): the header's row is three tracks with equal sides at
+ * expanded, so the box the five Cs' faces span centres on the viewport's centre within 0.5, the faces
+ * keep their 44 hit area and sit inside the row, and the dock is the header's own. At 1024 the tier
+ * is medium (`tierFor`: expanded is wider than 1024), so the Cs are in the fixed dock below and are
+ * read the same way. Discovery's row is narrowest just above 1024, where G149 names a two-pixel band.
+ */
+async function runDiscoveryAxis(browserType, bname, [w, h], theme) {
+  const tag = `${bname}-${w}x${h}-${theme}-discovery-axis`;
+  M.armStart(tag);
+  const tier = tierOf(w);
+  const db = makeMockDb();
+  seedDiscovery(db);
+  const { browser, page, errors } = await context(browserType, [w, h], theme, db);
+  try {
+    await signIn(page);
+    await openDiscovery(page);
+    const a = await page.evaluate(() => {
+      const r = (n) => Math.round(n * 100) / 100;
+      const nav = document.querySelector('nav[aria-label="Pulse"]');
+      const cs = Array.from(document.querySelectorAll('nav[aria-label="Pulse"] button[data-c]'));
+      const boxes = cs.map((c) => c.getBoundingClientRect());
+      const left = Math.min(...boxes.map((b) => b.left));
+      const right = Math.max(...boxes.map((b) => b.right));
+      const hdr = document.querySelector("[data-app-header]");
+      const hb = hdr && hdr.getBoundingClientRect();
+      return {
+        n: cs.length,
+        inHeader: !!hdr && !!nav && hdr.contains(nav),
+        // The five Cs' centre less the viewport's, in px.
+        off: r((left + right) / 2 - document.documentElement.clientWidth / 2),
+        min: r(Math.min(...boxes.map((b) => Math.min(b.width, b.height)))),
+        inside: !!hb && left >= hb.left && right <= hb.right,
+        gap: r(boxes[1].left - boxes[0].right),
+      };
+    });
+    record(
+      tag + " the five Cs' centre is the viewport's centre within 0.5 (1175, 1190)",
+      a.n === 5 && Math.abs(a.off) <= 0.5,
+      JSON.stringify(a),
+    );
+    record(
+      tag +
+        (tier === "expanded"
+          ? " the Cs are in the header's row, inside it, each face at least 44 (1190)"
+          : " the Cs are in the dock below the header, each face at least 44 (99)"),
+      a.n === 5 &&
+        a.min >= 44 &&
+        a.inHeader === (tier === "expanded") &&
+        (tier !== "expanded" || a.inside),
+      JSON.stringify(a),
+    );
+  } catch (e) {
+    record(tag + " flow", false, String(e).slice(0, 300));
+  }
+  record(tag + " no page errors", errors.length === 0, errors.join(" | ").slice(0, 300));
+  await browser.close();
+}
+
 /** Handoff 33-D's cells: Pane's tools at 1280 and 1440 (G123's widths); the Tooltip on a pointer
  *  cell and a touch cell. */
 const PANE_TOOLS_VIEWPORTS = [
   [[1280, 800], "light"],
   [[1440, 900], "dark"],
 ];
+const AXIS_VIEWPORTS = [1024, 1280, 1536, 2560].flatMap((w) =>
+  ["light", "dark"].map((theme) => [[w, w === 1024 ? 768 : 800], theme]),
+);
 const TOOLTIP_VIEWPORTS = [
   [[1280, 800], "light"],
   [[820, 1180], "dark"],
 ];
 
 /** Addendum 4's and 5's arms and their cells, in item order, then handoff 33-A's link arm (G100),
- *  handoff 33-D's Pane tools and Tooltip arms, and handoff 34-A's five. */
+ *  handoff 33-D's Pane tools and Tooltip arms, and handoff 34-A's five, then handoff 35-B's axis arm. */
 const FOLLOWUP_ARMS = [
   [runDiscoveryPresenter, FOLLOWUP_VIEWPORTS],
   [runDiscoveryOnline, FOLLOWUP_VIEWPORTS],
@@ -4669,6 +4731,7 @@ const FOLLOWUP_ARMS = [
   [runDiscoveryFilling, FILLING_VIEWPORTS],
   [runDiscoveryGrid, GRID_VIEWPORTS],
   [runDiscoveryShare, SHARE_VIEWPORTS],
+  [runDiscoveryAxis, AXIS_VIEWPORTS],
 ];
 
 module.exports = {

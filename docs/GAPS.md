@@ -6486,3 +6486,28 @@ the page held when they gave up, so the next failure of this kind says which cal
 was doing. Nothing about the arm's pass conditions changes.
 
 ---
+
+## G149. On Discovery, the five Cs sit 0.84px left of the viewport's centre from 1025 to about 1026
+
+**Severity: low. Opened 29 September 2026 during handoff 35-B, filed under ruling 597. The number is
+assigned by this entry (ruling 638).**
+
+Ruling 1190's row is three tracks with the controls' width (148) reserved on both sides. On Discovery
+the header's row takes 5% of the viewport each side (1123), so at 1025 it is 922.5 wide and the dock
+between the tracks is 610.5. The dock is 48 of padding, five faces of 99.95, 102.39, 120.23, 115.47
+and 94.13 (532.17) and four 8 gaps (32): 612.17, which is 1.67 more than the track. `space-evenly` with
+negative free space falls back to start alignment, so the five Cs' box runs 1.67 to the right of its
+track and its centre reads 0.84 off (measured 0.8359 at 1025 and 0.0078 at 1040, on Chromium against
+the built worker). The faces are whole and inside the header's row, each 44 tall, and the Feed at 1025
+reads 0.04 off because its row is 961 wide. The band is where 0.9 of the viewport less 892.17 is
+under 32, that is a viewport under about 1026.9, so 1025 and 1026.
+
+Not fixed: it needs the dock's padding or gap to give at expanded's floor, which changes the faces'
+spacing the handoff holds still, and the band is two pixels wide. The axis arm (`runDiscoveryAxis`)
+holds the four widths the handoff names and does not read 1025.
+
+Owed: the dock keeps `justify-content: space-evenly` and gives its side padding first below the
+width where the faces and the gaps stop fitting, or the reserved track is the controls' measured
+width and not the constant.
+
+---
