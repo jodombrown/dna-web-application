@@ -6457,3 +6457,57 @@ or a `response` listener for statuses of 400 and above, so the next failure of t
 failed. Nothing about the arms' pass conditions changes.
 
 ---
+
+## G148. `webkit-390x844-light-discovery-facets` timed out in `page.waitForURL` on run 391 attempt 1 and passed on re-run, not root-caused
+
+**Severity: low. Opened 29 September 2026 at the start of handoff 35-B, filed under ruling 597 on the
+closing note of PR #72. The number is assigned by this entry (ruling 638).**
+
+Run 391 on `e70d59c`, attempt 1: `matrix (webkit)` failed
+`FAIL [no crash] webkit-390x844-light-discovery-facets flow TimeoutError: page.waitForURL: Timeout
+10000ms exceeded.`, with the call log reading only "waiting for navigation until load". The arm
+emitted 8 of its 19 declared checks before it stopped, so ruling 292's check named it UNPROVEN (228)
+and the 11 checks behind the failure never ran. The same job's other failure was classified, a web
+process lost in `webkit-1280x800-dark-event-flows` (G5), and this one was not: the failed-arm
+classifier counted it among the 2 unclassified, and it is not behind a crash. The one re-run of the
+failed job (attempt 2, same head, same deployment) passed, and so did every other job from attempt 1.
+
+What is not known. Which of the arm's `waitForURL` calls (`tests/discovery.cjs` 1689, 1748, 1784 and
+1817 are the ones inside `runDiscoveryFacets`) timed out: the 8 emitted checks and the log's
+"until load" wording do not say, and the artifact `matrix-webkit-run-391` was not read by the
+session that filed this. Whether the URL never changed (a click on a facet option that did not
+register at 390 wide on WebKit) or changed to a value the predicate did not match is likewise not
+known. It is recorded as unexplained, neither called a flake nor traced to a change: run 391's head
+touched only `tests/matrix.cjs` and `docs/GAPS.md`.
+
+Owed: read the artifact's screenshot and the arm's recorded URL for the timed-out call, and give the
+four `waitForURL` calls in this arm a message that names the URL they were waiting for and the URL
+the page held when they gave up, so the next failure of this kind says which call and what the page
+was doing. Nothing about the arm's pass conditions changes.
+
+---
+
+## G149. On Discovery, the five Cs sit 0.84px left of the viewport's centre from 1025 to about 1026
+
+**Severity: low. Opened 29 September 2026 during handoff 35-B, filed under ruling 597. The number is
+assigned by this entry (ruling 638).**
+
+Ruling 1190's row is three tracks with the controls' width (148) reserved on both sides. On Discovery
+the header's row takes 5% of the viewport each side (1123), so at 1025 it is 922.5 wide and the dock
+between the tracks is 610.5. The dock is 48 of padding, five faces of 99.95, 102.39, 120.23, 115.47
+and 94.13 (532.17) and four 8 gaps (32): 612.17, which is 1.67 more than the track. `space-evenly` with
+negative free space falls back to start alignment, so the five Cs' box runs 1.67 to the right of its
+track and its centre reads 0.84 off (measured 0.8359 at 1025 and 0.0078 at 1040, on Chromium against
+the built worker). The faces are whole and inside the header's row, each 44 tall, and the Feed at 1025
+reads 0.04 off because its row is 961 wide. The band is where 0.9 of the viewport less 892.17 is
+under 32, that is a viewport under about 1026.9, so 1025 and 1026.
+
+Not fixed: it needs the dock's padding or gap to give at expanded's floor, which changes the faces'
+spacing the handoff holds still, and the band is two pixels wide. The axis arm (`runDiscoveryAxis`)
+holds the four widths the handoff names and does not read 1025.
+
+Owed: the dock keeps `justify-content: space-evenly` and gives its side padding first below the
+width where the faces and the gaps stop fitting, or the reserved track is the controls' measured
+width and not the constant.
+
+---

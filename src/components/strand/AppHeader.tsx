@@ -12,15 +12,27 @@
 // `variant` stays the layout switch — expanded is a different row — and `tier` is the shell's own
 // three-way tier, which is the axis the bell asks about, because `variant` reads "compact" at the
 // medium tier too and the bell belongs in the row there.
+// Ruling 1175, built as 1190: at expanded the row is three tracks, the sides equal (`SIDE_TRACK`), so the
+// five Cs centre on the row's centre rather than on what is left between the logo and the controls.
 // Production additions: homeHref renders the logo and Home item as real links (hover-intent prefetch,
 // ruling 84); onIntentC prefetches a C route from the inline dock; maxWidth takes "none", so the
 // expanded row can take a surface's own edges, as Discovery's canvas under 1123.
-import { useState, type CSSProperties, type MouseEvent, type ReactNode } from "react";
+import { Fragment, useState, type CSSProperties, type MouseEvent, type ReactNode } from "react";
 import { Avatar } from "./Avatar";
 import { Icon } from "./Icon";
 import { LensBar, type Lens } from "./LensBar";
 import { PulseDock, type PulseState } from "./PulseDock";
 import { assetBase, type C } from "./cmeta";
+
+/**
+ * Expanded: the row is three tracks, the two sides this wide and the dock between them (1175, 1190),
+ * so the five Cs centre on the row's centre whatever the wordmark's width. It is the controls'
+ * group: Home 44, the bell 44, the avatar's button 44 and the two 8 gaps between them. The
+ * side tracks are equal by construction, not by what sits in them, and the controls' group is the
+ * wider of the two, so the row reserves its width on both sides. `minmax(0, 1fr) auto minmax(0, 1fr)`
+ * would size the dock to its content and pack the Cs; the dock is meant to keep filling its track.
+ */
+const SIDE_TRACK = 44 * 3 + 8 * 2;
 
 export type HeaderLensBar<Id extends string = string> = {
   lenses: Lens<Id>[];
@@ -82,6 +94,9 @@ export function AppHeader({
   const HomeTag = homeHref ? "a" : "button";
   const homeProps = homeHref ? { href: homeHref } : { type: "button" as const };
   const showLens = !exp && !!lensBar;
+  // Expanded groups Home, the bell and the avatar into the row's third track; below it they stay the
+  // row's own children, so compact and medium are the DOM they were.
+  const Ctl = exp ? "div" : Fragment;
   return (
     <header
       data-app-header
@@ -110,6 +125,12 @@ export function AppHeader({
           display: "flex",
           alignItems: "center",
           gap: exp ? 8 : 6,
+          ...(exp
+            ? {
+                display: "grid",
+                gridTemplateColumns: `${SIDE_TRACK}px minmax(0, 1fr) ${SIDE_TRACK}px`,
+              }
+            : {}),
           width: "100%",
           maxWidth: exp ? maxWidth : undefined,
           margin: "0 auto",
@@ -130,6 +151,7 @@ export function AppHeader({
             alignItems: "center",
             minHeight: 44,
             flex: "none",
+            justifySelf: "start",
           }}
         >
           <img src={logo} alt="DNA" style={{ height: exp ? 28 : 24, display: "block" }} />
@@ -186,57 +208,63 @@ export function AppHeader({
             style={{ flex: 1, justifyContent: "space-evenly", minWidth: 0, padding: "0 24px" }}
           />
         )}
-        {exp && (
-          <HomeTag
-            {...homeProps}
-            onClick={onHome}
-            aria-label="Home"
-            aria-current={homeActive ? "page" : undefined}
-            onMouseEnter={() => {
-              setHh(true);
-              onHomeIntent?.();
-            }}
-            onMouseLeave={() => setHh(false)}
-            data-testid="home-item"
+        <Ctl
+          {...(exp
+            ? { style: { display: "flex", alignItems: "center", gap: 8, justifySelf: "end" } }
+            : {})}
+        >
+          {exp && (
+            <HomeTag
+              {...homeProps}
+              onClick={onHome}
+              aria-label="Home"
+              aria-current={homeActive ? "page" : undefined}
+              onMouseEnter={() => {
+                setHh(true);
+                onHomeIntent?.();
+              }}
+              onMouseLeave={() => setHh(false)}
+              data-testid="home-item"
+              style={{
+                all: "unset",
+                cursor: "pointer",
+                width: 44,
+                height: 44,
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                borderRadius: 10,
+                flex: "none",
+                color: homeActive ? "var(--ink)" : "var(--ink-3)",
+                background: hh ? "var(--bg-sunken)" : "transparent",
+                transition:
+                  "background var(--dur-default) var(--ease), color var(--dur-default) var(--ease)",
+              }}
+            >
+              <Icon name="house" size={22} />
+            </HomeTag>
+          )}
+          {!(showLens && tier === "compact") && children}
+          <button
+            type="button"
+            onClick={onAvatar}
+            aria-label="Your profile"
+            aria-expanded={avatarActive === undefined ? undefined : !!avatarActive}
+            data-testid="avatar"
             style={{
               all: "unset",
               cursor: "pointer",
-              width: 44,
-              height: 44,
               display: "inline-flex",
+              minWidth: 44,
+              minHeight: 44,
               alignItems: "center",
               justifyContent: "center",
-              borderRadius: 10,
               flex: "none",
-              color: homeActive ? "var(--ink)" : "var(--ink-3)",
-              background: hh ? "var(--bg-sunken)" : "transparent",
-              transition:
-                "background var(--dur-default) var(--ease), color var(--dur-default) var(--ease)",
             }}
           >
-            <Icon name="house" size={22} />
-          </HomeTag>
-        )}
-        {!(showLens && tier === "compact") && children}
-        <button
-          type="button"
-          onClick={onAvatar}
-          aria-label="Your profile"
-          aria-expanded={avatarActive === undefined ? undefined : !!avatarActive}
-          data-testid="avatar"
-          style={{
-            all: "unset",
-            cursor: "pointer",
-            display: "inline-flex",
-            minWidth: 44,
-            minHeight: 44,
-            alignItems: "center",
-            justifyContent: "center",
-            flex: "none",
-          }}
-        >
-          <Avatar name={member.name ?? ""} src={member.src} size={exp ? 36 : 32} />
-        </button>
+            <Avatar name={member.name ?? ""} src={member.src} size={exp ? 36 : 32} />
+          </button>
+        </Ctl>
       </div>
     </header>
   );
