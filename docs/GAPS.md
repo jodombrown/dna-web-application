@@ -6457,3 +6457,32 @@ or a `response` listener for statuses of 400 and above, so the next failure of t
 failed. Nothing about the arms' pass conditions changes.
 
 ---
+
+## G148. `webkit-390x844-light-discovery-facets` timed out in `page.waitForURL` on run 391 attempt 1 and passed on re-run, not root-caused
+
+**Severity: low. Opened 29 September 2026 at the start of handoff 35-B, filed under ruling 597 on the
+closing note of PR #72. The number is assigned by this entry (ruling 638).**
+
+Run 391 on `e70d59c`, attempt 1: `matrix (webkit)` failed
+`FAIL [no crash] webkit-390x844-light-discovery-facets flow TimeoutError: page.waitForURL: Timeout
+10000ms exceeded.`, with the call log reading only "waiting for navigation until load". The arm
+emitted 8 of its 19 declared checks before it stopped, so ruling 292's check named it UNPROVEN (228)
+and the 11 checks behind the failure never ran. The same job's other failure was classified, a web
+process lost in `webkit-1280x800-dark-event-flows` (G5), and this one was not: the failed-arm
+classifier counted it among the 2 unclassified, and it is not behind a crash. The one re-run of the
+failed job (attempt 2, same head, same deployment) passed, and so did every other job from attempt 1.
+
+What is not known. Which of the arm's `waitForURL` calls (`tests/discovery.cjs` 1689, 1748, 1784 and
+1817 are the ones inside `runDiscoveryFacets`) timed out: the 8 emitted checks and the log's
+"until load" wording do not say, and the artifact `matrix-webkit-run-391` was not read by the
+session that filed this. Whether the URL never changed (a click on a facet option that did not
+register at 390 wide on WebKit) or changed to a value the predicate did not match is likewise not
+known. It is recorded as unexplained, neither called a flake nor traced to a change: run 391's head
+touched only `tests/matrix.cjs` and `docs/GAPS.md`.
+
+Owed: read the artifact's screenshot and the arm's recorded URL for the timed-out call, and give the
+four `waitForURL` calls in this arm a message that names the URL they were waiting for and the URL
+the page held when they gave up, so the next failure of this kind says which call and what the page
+was doing. Nothing about the arm's pass conditions changes.
+
+---
