@@ -6546,3 +6546,124 @@ Owed: one listener in a shared module that each suite's ignore pattern is passed
 no suite listens for console errors on its own.
 
 ---
+
+## G151. Every Sheet opens the wrong way and snaps to rest, in WebKit and in Chromium — closed (handoff 37-B)
+
+**Severity: high for the member; the fix is in this PR. Opened 29 September 2026 during handoff 37-B,
+filed under ruling 597. The number is assigned by this entry (ruling 638).**
+
+The founder's two Safari recordings (29 September) show every sheet's panel moving away from its rest
+position on open and then snapping to it: the composer's drawer at 1278 rests with its left edge at
+640, runs to the window's left edge over about 270 ms and jumps back; the compact composer, Discovery's
+Filters and the event page's Share rise past the top of the window and drop. Ruling 1201's candidate (a
+style flush before `shown`) and handoff 37-B's first reading (the top layer) were both wrong, and
+`tests/sheet.cjs` read the motion from painted pixels on both engines before anything was changed:
+on pages.yml run 398 (`8d798cf`, deployment `3de853a7`), WebKit painted the 1280 drawer's left edge
+at 640, 640, 637, 214, 166, 104, 64, 24, 8, 0 and then 640 over eleven 40 ms frames, and the 430
+composer sheet's top at 420, 420, 10, 670, 644, 574, 486, 452, 424, 413 and then 186; Chromium
+painted the 2560 drawer at 1280, 1234, 1072, 1016 and back to 1280, and its drawers at 820 and 1280
+at rest from the first frame with no slide at all. Every other arm of the run's 372 per engine passed.
+
+Cause, isolated by bisecting the real `Sheet.tsx` in a harness and proved by reading the dialog's
+scroll offset per frame: `dialog.strand-sheet` had `overflow: hidden`, which makes the dialog a scroll
+container, and the focus on open scrolls its target into view. The panel is translated its own size
+off screen when that focus lands, so the dialog scrolls by exactly the transform's offset to reach it
+(`scrollLeft` 639 with `translateX(639px)` on every frame at 1278), and the panel is painted at layout
+plus transform minus scroll, which is the transform alone, until the transition ends, the overflow
+vanishes and the offset clamps back to zero. On the top-layer path `showModal()`'s own focusing steps
+do the scrolling before the component's focus effect runs; on the `contained` path (Filters) the
+component's focus does it, and with no scroll container of its own it would scroll the ancestor.
+That is also why `getBoundingClientRect` and the paint disagreed (item 5 of the handoff's Update): the
+geometry includes the clamped offset on the same frame and the compositor applies the previous one.
+
+Closed in this PR by two lines in Sheet's own code: `overflow: clip` on `dialog.strand-sheet`
+(clips the same, is never a scroll container) and `focus({ preventScroll: true })` in the focus-in
+effect. Read by `tests/sheet.cjs` on both engines after the change; the arrays are in the PR. The fix
+lands in the tree first and is carried back to Strand as correction 35, as 604 did for tokens.
+
+---
+
+## G152. The contained Sheet's scroll lock locks its parent element, not the shell's scroller
+
+**Severity: low. Opened 29 September 2026 during handoff 37-B, filed under ruling 597. The number is
+assigned by this entry (ruling 638).**
+
+`Sheet.tsx`'s scroll lock sets `overflow: hidden` on `document.documentElement` and `body` for the
+top-layer path and on `d.parentElement` for the `contained` path. Discovery mounts FacetRail's compact
+Filters Sheet inside `[data-first-row]`, a flex row that scrolls nothing, so the lock lands on an
+element whose overflow does not matter and the shell's own scroller under the sheet keeps scrolling.
+Seen while bisecting G151, where a scrolled ancestor was one of the readings; not the founder's
+report, and not changed here.
+
+Owed: the contained path locks the nearest ancestor that actually scrolls (the shell's scroller under
+ruling 104), found the way the wheel handler already finds a scroller, or the caller names it.
+
+---
+
+## G153. FacetRail's compact Filters Sheet closes by unmount, with no exit transition
+
+**Severity: low. Opened 29 September 2026 during handoff 37-B, filed under ruling 597. The number is
+assigned by this entry (ruling 638).**
+
+`src/components/strand/FacetRail.tsx` renders `{open && <Sheet open …>}`, so closing sets `open`
+false on the parent and unmounts the Sheet at once: the 300 ms exit every other sheet runs never
+starts. `tests/sheet.cjs`'s exit check on the Filters arms passes with zero painted frames, because
+"gone" is the whole of what it can read there. Not the founder's report and not changed here.
+
+Owed: FacetRail keeps the Sheet mounted and passes `open` through, so its exit is Sheet's exit and the
+arm reads it.
+
+---
+
+## G154. One WebKit exit frame read the drawer's edge at 1000 after 1277, then gone
+
+**Severity: low. Opened 29 September 2026 during handoff 37-B, filed under ruling 597. The number is
+assigned by this entry (ruling 638).**
+
+On pages.yml run 399 (`053f7d0`, the fix head), `webkit-1280x800-dark-sheet-composer` painted its
+exit at 640, 642, 1046, 1096, 1130, 1184, 1235, 1264, 1277 over nine 40 ms frames and then, on the
+tenth, 1000, and on the eleventh nothing, so the exit check read one frame turned back toward rest.
+Every other exit of the run's eighteen sheet arms, and every exit of run 398's, ran one way. A
+position of 1000 lies between the second and third frames of the same exit, and the panel unmounts
+at the end of its 300 ms transition, so the frame is consistent with a screencast frame delivered
+late and written in arrival order, and with nothing the component does. Not root-caused: the video
+is in run 399's artefact under `sheet-video/`, and the arm stays strict rather than learning to
+forgive a single frame, because the enter's real excursions at 430 were single frames too.
+
+Recurred on run 400 (`5f9055a`), `webkit-820x1180-light-sheet-composer`: 663, 695, 720, 768, 797,
+808, 818, then 638, then gone. The geometry record of the same exits answers it: the late frame
+equals the exit's first moving frame in the geometry to the pixel (637.2 at 106 ms after Escape
+painted as 638; 1003.6 as 1000 on run 399), and that frame is missing from the video's own order,
+whose first moving frames read 663 and 1046. WebKit's screencast delivered the exit's first frame
+last. `judgeExit` in `tests/sheet.cjs` now names such a frame by that match (the last painted frame,
+followed by nothing, reading back toward rest within two chroma blocks of an earlier geometry reading
+of the same exit) and leaves it out of the judgment; it stays in the record as `late=`.
+
+Owed: why WebKit's screencast holds the first frame of the exit back, which nothing here reads.
+
+---
+
+## G155. Headless WebKit at 2560 by 1440 on the runner paints no frame of Sheet's 300 ms transition
+
+**Severity: low. Opened 29 September 2026 during handoff 37-B, filed under ruling 597. The number is
+assigned by this entry (ruling 638).**
+
+`webkit-2560x1440-light-sheet-composer` on pages.yml run 402 (`c9ea761`): the geometry sampler read
+the panel at 2560 (its hidden position) on four animation frames to 254 ms after the click, then no
+animation frame at all until 558 ms, where it read 1280, at rest, with the transform already `none`;
+the video painted nothing until 560 ms and then rest. The main thread ran no frame while the whole
+300 ms transition played, so no frame could show the slide, and the check "the first painted frame
+after the click is not at rest, so the slide ran" failed with nothing to read. On runs 399 to 401
+the same cell passed only because the hidden edge stayed painted for three frames before the same
+jump to rest: the slide was not rendered on any of them. Chromium at 2560 paints it in ten frames.
+This is the runner's rendering capacity at that surface and not the component: the geometry shows
+hidden then rest with no excursion, and the fix's arrays at 820 and 1280 on WebKit are one-way slides.
+
+`tests/sheet.cjs` now records that check as UNPROVEN under ruling 228 where the geometry shows the
+gap (the last frame off rest and the first at rest the transition's duration apart), never as a pass
+and never as a failure; the other checks on the cell judge the frames that exist.
+
+Owed: the 2560 slide on WebKit read on hardware that renders it, which is the founder's Safari check
+of Done Means 3, or a runner that can.
+
+---

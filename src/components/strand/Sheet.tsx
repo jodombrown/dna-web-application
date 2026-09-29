@@ -142,6 +142,16 @@ export function Sheet({
 
   // Focus in on open: the heading first, so the first thing read is the content; otherwise the
   // first focusable control that is not destructive (222). Focus out on close, to the opener (423).
+  //
+  // Handoff 37-B (1201): the focus never scrolls. On open the panel is translated its own size off
+  // screen, and a focus that scrolls its target into view scrolls the nearest scroll container to
+  // reach it: the dialog itself while it was a scroll container (its `overflow: hidden`, now
+  // `clip` in strand.css), the shell's scroller on the contained path. The panel is then painted
+  // at layout plus transform minus that offset, which is the transform alone, until the transition
+  // ends and the offset clamps back to zero: the drawer runs from its rest to the window's left
+  // edge and snaps back, the bottom sheet rises past the top and drops. Read frame by frame from
+  // painted pixels by tests/sheet.cjs on WebKit and Chromium. showModal()'s own focusing steps
+  // scroll too, which is what the `clip` is for; this is the component's own focus.
   const restore = useCallback(() => {
     const target =
       returnFocus && "current" in returnFocus
@@ -160,7 +170,7 @@ export function Sheet({
       const target = explicit ?? heading ?? safe ?? p;
       if (target === heading && heading && !heading.hasAttribute("tabindex"))
         heading.setAttribute("tabindex", "-1");
-      target.focus?.();
+      target.focus?.({ preventScroll: true });
     });
     return () => cancelAnimationFrame(id);
   }, [open, mounted, initialFocus]);

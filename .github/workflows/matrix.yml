@@ -18,7 +18,7 @@ on:
         required: false
         default: ""
       special:
-        description: Run flows only (publish, keyboard, silence, shell, width, targeted, profile, connect, event, discovery, vocab, block, auth, onboarding, mount)
+        description: Run flows only (publish, keyboard, silence, shell, width, targeted, profile, connect, event, discovery, vocab, block, auth, onboarding, mount, sheet)
         required: false
         default: ""
       only:

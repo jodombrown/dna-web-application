@@ -536,7 +536,12 @@ dialog.strand-sheet {
   padding: 0;
   border: 0;
   background: transparent;
-  overflow: hidden;
+  /* Handoff 37-B (1201): clip, never hidden. Hidden made the dialog a scroll container, and
+     showModal()'s focusing steps scrolled it to the panel translated off screen, so the panel
+     was painted at the transform alone until the transition ended and the offset clamped back:
+     the drawer ran the wrong way and snapped, the sheet rose past the top and dropped, in WebKit
+     and Chromium alike. Clip paints the same and nothing can scroll it. */
+  overflow: clip;
 }
 dialog.strand-sheet::backdrop {
   background: var(--scrim);

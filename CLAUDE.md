@@ -251,6 +251,7 @@ The live Strand compile is `v1790410319010950` (1153): every part in `src/compon
 EmptyState fills the column it sits in, and the caller gives that column its height (1147): a bounded column, a Pane's list or body, by its own height, and a page's column by the visible height the shell publishes as `--_shell-visible`.
 Every IconButton names itself through Strand's Tooltip, and never through a native `title=` (1146).
 `--z-menu` is 62 in the stacking order, between `--z-sheet` (60) and `--z-dialog` (65) in `src/styles/strand.css` (1103): a Menu opens above the pane, the sticky chrome and a sheet it is summoned from, and below a dialog and the notification panel.
+Sheet's enter and exit are proven by a per-frame arm on WebKit and Chromium (`tests/sheet.cjs`, painted pixels, never geometry); the dialog is never a scroll container (`overflow: clip`, not `hidden`) and the focus on open never scrolls, because a focus that scrolls the translated panel into view drags the dialog's scroll offset with it and the panel is painted at the transform alone until the transition ends, which is the wrong-way slide and snap the founder recorded (1201, 37-B, G151).
 Exit check for every surface is the responsive test matrix on the deployed URL: 360, 390, 430, 744, 820, 1024 both orientations, 1280, 1536, both themes, Safari and Chrome (ruling 61).
 
 The shell owns one scroller per tier and the document never scrolls inside it (ruling 104), so the

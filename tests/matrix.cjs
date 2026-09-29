@@ -4,7 +4,7 @@
 // layer, so the real client code paths run against a deterministic backend. Backend behaviour
 // (RLS, the feed view) is verified separately in SQL against the live project.
 // Usage: BASE=https://b2-shell-feed.dna-web-application.pages.dev WEBKIT=1 node tests/matrix.cjs
-// Env: ONLY='[390,844]' runs one viewport; SPECIAL=publish,guards,keyboard,silence,shell,width,targeted,profile,connect,event,discovery,vocab,block,auth,onboarding,mount runs flows only.
+// Env: ONLY='[390,844]' runs one viewport; SPECIAL=publish,guards,keyboard,silence,shell,width,targeted,profile,connect,event,discovery,vocab,block,auth,onboarding,mount,sheet runs flows only.
 // Brief 3 profile flows live in tests/profile.cjs and Brief 4 Connect flows in tests/connect.cjs; both share this mock.
 const { chromium, webkit } = require("playwright");
 const fs = require("fs");
@@ -3879,7 +3879,13 @@ async function runConvene(browserType, bname, [w, h], theme) {
         (await pub().isDisabled()),
     );
     await field("when_time").fill("19:30");
-    await page.waitForTimeout(100);
+    // A wait on the signal, not a fixed 100 ms: the when line is derived from the picker in an
+    // effect, and on run 401 WebKit at 390 read it before the effect had run (handoff 37-B).
+    await dialog
+      .locator('[data-convene="when-line"]')
+      .getByText(/19:30/)
+      .waitFor({ timeout: 5000 })
+      .catch(() => {});
     record(
       tag + " the picker completes the moment and Publish returns",
       !(await pub().isDisabled()) &&
@@ -5989,6 +5995,7 @@ module.exports = {
   shot,
   noOverflow,
   measureWidth,
+  sheetSettled,
   fadeProbe,
   FADE_UNDER_DISTANCE,
   BASE,
@@ -6191,6 +6198,11 @@ if (require.main === module)
             if (!only || (vp[0] === only[0] && vp[1] === only[1]))
               await runMount(bt, bname, vp, theme);
         }
+        // Handoff 37-B (1201): every Sheet's enter and exit, frame by frame (tests/sheet.cjs).
+        if (process.env.SPECIAL.includes("sheet")) {
+          const { runSheets } = require("./sheet.cjs");
+          await runSheets(bt, bname, only);
+        }
         // Brief 4B (rulings 230 to 236, 240): sign-in's additions, the two reset routes and the
         // signed-in change-password path. The layout pass runs everywhere; the state flows run on
         // the two representative layouts, as vocab and block do.
@@ -6330,6 +6342,10 @@ if (require.main === module)
       // v1790212533284400 changed, read after its open gate, one cell per tier (tests/mount.cjs).
       const { runMount, MOUNT_CELLS } = require("./mount.cjs");
       for (const [vp, theme] of MOUNT_CELLS) await runMount(bt, bname, vp, theme);
+      // Handoff 37-B (1201): every Sheet's enter and exit, frame by frame, on both shapes
+      // (tests/sheet.cjs).
+      const { runSheets } = require("./sheet.cjs");
+      await runSheets(bt, bname);
     }
     finish({ full: true, engines: engines.map(([n]) => n) });
   })().catch((e) => {
