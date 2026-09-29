@@ -6546,3 +6546,71 @@ Owed: one listener in a shared module that each suite's ignore pattern is passed
 no suite listens for console errors on its own.
 
 ---
+
+## G151. Every Sheet opens the wrong way and snaps to rest, in WebKit and in Chromium — closed (handoff 37-B)
+
+**Severity: high for the member; the fix is in this PR. Opened 29 September 2026 during handoff 37-B,
+filed under ruling 597. The number is assigned by this entry (ruling 638).**
+
+The founder's two Safari recordings (29 September) show every sheet's panel moving away from its rest
+position on open and then snapping to it: the composer's drawer at 1278 rests with its left edge at
+640, runs to the window's left edge over about 270 ms and jumps back; the compact composer, Discovery's
+Filters and the event page's Share rise past the top of the window and drop. Ruling 1201's candidate (a
+style flush before `shown`) and handoff 37-B's first reading (the top layer) were both wrong, and
+`tests/sheet.cjs` read the motion from painted pixels on both engines before anything was changed:
+on pages.yml run 398 (`8d798cf`, deployment `3de853a7`), WebKit painted the 1280 drawer's left edge
+at 640, 640, 637, 214, 166, 104, 64, 24, 8, 0 and then 640 over eleven 40 ms frames, and the 430
+composer sheet's top at 420, 420, 10, 670, 644, 574, 486, 452, 424, 413 and then 186; Chromium
+painted the 2560 drawer at 1280, 1234, 1072, 1016 and back to 1280, and its drawers at 820 and 1280
+at rest from the first frame with no slide at all. Every other arm of the run's 372 per engine passed.
+
+Cause, isolated by bisecting the real `Sheet.tsx` in a harness and proved by reading the dialog's
+scroll offset per frame: `dialog.strand-sheet` had `overflow: hidden`, which makes the dialog a scroll
+container, and the focus on open scrolls its target into view. The panel is translated its own size
+off screen when that focus lands, so the dialog scrolls by exactly the transform's offset to reach it
+(`scrollLeft` 639 with `translateX(639px)` on every frame at 1278), and the panel is painted at layout
+plus transform minus scroll, which is the transform alone, until the transition ends, the overflow
+vanishes and the offset clamps back to zero. On the top-layer path `showModal()`'s own focusing steps
+do the scrolling before the component's focus effect runs; on the `contained` path (Filters) the
+component's focus does it, and with no scroll container of its own it would scroll the ancestor.
+That is also why `getBoundingClientRect` and the paint disagreed (item 5 of the handoff's Update): the
+geometry includes the clamped offset on the same frame and the compositor applies the previous one.
+
+Closed in this PR by two lines in Sheet's own code: `overflow: clip` on `dialog.strand-sheet`
+(clips the same, is never a scroll container) and `focus({ preventScroll: true })` in the focus-in
+effect. Read by `tests/sheet.cjs` on both engines after the change; the arrays are in the PR. The fix
+lands in the tree first and is carried back to Strand as correction 35, as 604 did for tokens.
+
+---
+
+## G152. The contained Sheet's scroll lock locks its parent element, not the shell's scroller
+
+**Severity: low. Opened 29 September 2026 during handoff 37-B, filed under ruling 597. The number is
+assigned by this entry (ruling 638).**
+
+`Sheet.tsx`'s scroll lock sets `overflow: hidden` on `document.documentElement` and `body` for the
+top-layer path and on `d.parentElement` for the `contained` path. Discovery mounts FacetRail's compact
+Filters Sheet inside `[data-first-row]`, a flex row that scrolls nothing, so the lock lands on an
+element whose overflow does not matter and the shell's own scroller under the sheet keeps scrolling.
+Seen while bisecting G151, where a scrolled ancestor was one of the readings; not the founder's
+report, and not changed here.
+
+Owed: the contained path locks the nearest ancestor that actually scrolls (the shell's scroller under
+ruling 104), found the way the wheel handler already finds a scroller, or the caller names it.
+
+---
+
+## G153. FacetRail's compact Filters Sheet closes by unmount, with no exit transition
+
+**Severity: low. Opened 29 September 2026 during handoff 37-B, filed under ruling 597. The number is
+assigned by this entry (ruling 638).**
+
+`src/components/strand/FacetRail.tsx` renders `{open && <Sheet open …>}`, so closing sets `open`
+false on the parent and unmounts the Sheet at once: the 300 ms exit every other sheet runs never
+starts. `tests/sheet.cjs`'s exit check on the Filters arms passes with zero painted frames, because
+"gone" is the whole of what it can read there. Not the founder's report and not changed here.
+
+Owed: FacetRail keeps the Sheet mounted and passes `open` through, so its exit is Sheet's exit and the
+arm reads it.
+
+---
