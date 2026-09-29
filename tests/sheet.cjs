@@ -480,9 +480,13 @@ function fmtSeries(list) {
  * last such frame's edge, so "the wrong side" is an edge below rest on either axis: left of a
  * drawer's rest, above a bottom sheet's.
  */
-function judgeEnter(enter, tol) {
-  const pos = enter.filter((f) => f.pos !== null).map((f) => f.pos);
-  if (!pos.length) return { painted: 0 };
+function judgeEnter(enter, tol, geometry) {
+  const raw = enter.filter((f) => f.pos !== null).map((f) => f.pos);
+  if (!raw.length) return { painted: 0 };
+  // G154, G160: one frame WebKit delivered out of arrival order is named and left out, on the
+  // enter as on the exit, by `reordered`.
+  const late = reordered(raw, "enter", geometry, tol);
+  const pos = late ? raw.filter((_, i) => i !== late.index) : raw;
   const rest = pos[pos.length - 1];
   const wrongSide = pos.filter((p) => p < rest - tol);
   const away = [];
@@ -492,6 +496,7 @@ function judgeEnter(enter, tol) {
     rest,
     wrongSide,
     away,
+    late,
     atRest: Math.abs(pos[pos.length - 1] - rest) <= tol,
     slid: pos[0] > rest + tol,
     first: pos[0],
@@ -502,35 +507,55 @@ function judgeEnter(enter, tol) {
 }
 
 /**
+ * Whether a painted position lies on the path the geometry record held in the same motion: within
+ * two chroma blocks of a sample, or between two consecutive samples. The sampler runs once per
+ * animation frame, about 16 ms apart, which mid-slide is 70 to 140 px, so the video's frame, taken
+ * at another instant, is rarely within a block of a sample (runs 406 and 407 read 8.5 and 8.7 px
+ * off the nearest one) and is always between two.
+ */
+function onRecord(p, geometry, tol2) {
+  return geometry.some(
+    (g, i) =>
+      Math.abs(g - p) <= tol2 ||
+      (i > 0 && p >= Math.min(g, geometry[i - 1]) && p <= Math.max(g, geometry[i - 1])),
+  );
+}
+
+/**
+ * G154 and G160: WebKit's screencast can deliver one frame out of the video's order, reading a
+ * position the motion had already passed. Recognised by one rule on the enter and the exit: the
+ * first frame that moves the wrong way (away from rest on an enter, back toward it on an exit)
+ * is left out when the series is then one-way throughout and its position is on the geometry
+ * record's path. At most one frame per motion; a second violation, or a frame off the record's
+ * path, is not recognised and the check fails on it. The frame stays in the printed series.
+ */
+function reordered(pos, dir, geometry, tol) {
+  const wrong = (a, i) => (dir === "enter" ? a[i] > a[i - 1] + tol : a[i] < a[i - 1] - tol);
+  const first = pos.findIndex((_, i) => i > 0 && wrong(pos, i));
+  if (first < 0) return null;
+  const rest = pos.filter((_, i) => i !== first);
+  for (let i = 1; i < rest.length; i++) if (wrong(rest, i)) return null;
+  if (!onRecord(pos[first], geometry, 2 * tol)) return null;
+  return { index: first, pos: pos[first] };
+}
+
+/**
  * The exit: from the rest the enter reached, the painted edge may only ever move away from it,
  * never below it and never back toward it between two frames, until no lime is painted.
  *
- * G154: WebKit's screencast can deliver the exit's first moving frame last. On runs 399 and 400
- * one WebKit exit in eighteen read its last painted frame, the one before the panel was gone,
- * back at exactly the position the geometry record holds for the exit's first moving frame
- * (637.2 painted as 638 at 820, 1003.6 as 1000 at 1280), a frame the video's own order had
- * skipped. Such a frame is named here by that match and left out of the judgment: the final
- * painted frame, followed by nothing, reading back toward rest, within two chroma blocks of an
- * earlier reading of the same exit's geometry. It stays in the record. The geometry is used only
- * to recognise a duplicate, never to judge the motion.
+ * G154: WebKit's screencast can deliver a frame out of the video's order. Runs 399 and 400 read one
+ * exit's last painted frame back at the position the geometry held for the exit's first moving
+ * frame (637.2 painted as 638, 1003.6 as 1000), and run 407 read 346 after 839 at 390. The frame
+ * is named by `reordered`, the rule the enter shares (G160), and left out of the judgment; it stays
+ * in the printed series. The geometry recognises such a frame and never judges the motion.
  */
 function judgeExit(exit, rest, tol, geometry) {
   const painted = exit.filter((f) => f.pos !== null);
-  const pos = painted.map((f) => f.pos);
+  const raw = painted.map((f) => f.pos);
   const gone = exit.length > 0 && exit[exit.length - 1].pos === null;
-  let late = null;
-  if (gone && pos.length >= 2) {
-    const last = pos[pos.length - 1];
-    const before = pos[pos.length - 2];
-    const earlier = geometry.filter((g) => g < before - tol);
-    // Two chroma blocks for the match: the painted edge quantises to the block and the geometry
-    // is fractional, so 1003.6 painted as 1000 is the same frame.
-    const match = earlier.find((g) => Math.abs(g - last) <= 2 * tol);
-    if (last < before - tol && match !== undefined) {
-      late = { t: painted[painted.length - 1].t, pos: last, geometry: Math.round(match * 10) / 10 };
-      pos.pop();
-    }
-  }
+  const found = reordered(raw, "exit", geometry, tol);
+  const late = found ? { t: painted[found.index].t, pos: found.pos } : null;
+  const pos = found ? raw.filter((_, i) => i !== found.index) : raw;
   const wrongSide = pos.filter((p) => p < rest - tol);
   const back = [];
   for (let i = 1; i < pos.length; i++) if (pos[i] < pos[i - 1] - tol) back.push(i);
@@ -629,19 +654,21 @@ async function readSheet(session, tag, { label, shape, trigger }) {
   // Closing the context is what finishes the video file.
   await ctx.close();
   const painted = paintedSeries(video, shape, scale, w / scale, h / scale);
-  const e = judgeEnter(painted.enter, tol);
+  const geometryEnter = present.map((f) => axisOf(f, shape).pos);
+  const e = judgeEnter(painted.enter, tol, geometryEnter);
   console.log(
     `SHEET ${tag} enter shape=${shape} scale=${scale} decoded=${painted.decoded} click=${painted.click} escape=${painted.esc} ` +
+      (e.late ? `late=${e.late.pos} (out of order, on the geometry's path; G160) ` : "") +
       `rest=${fmt(e.rest)} painted=${e.painted} first=${fmt(e.first)} min=${fmt(e.min)} max=${fmt(e.max)} last=${fmt(e.last)} ` +
       `series=[${fmtSeries(painted.enter)}]`,
   );
-  const detail = `rest ${fmt(e.rest)}; first ${fmt(e.first)}, min ${fmt(e.min)}, max ${fmt(e.max)}, last ${fmt(e.last)}; ${e.painted} painted frames of ${painted.enter.length} from the click`;
+  const detail = `rest ${fmt(e.rest)}; first ${fmt(e.first)}, min ${fmt(e.min)}, max ${fmt(e.max)}, last ${fmt(e.last)}; ${e.painted} painted frames of ${painted.enter.length} from the click${e.late ? `; one delivered out of order at ${e.late.pos} and left out (G160)` : ""}`;
   const geometryExit = geoExit.frames.filter((f) => !f.none).map((f) => axisOf(f, shape).pos);
   const x = judgeExit(painted.exit, e.rest ?? 0, tol, geometryExit);
   console.log(
     `SHEET ${tag} exit shape=${shape} from=${fmt(e.rest)} painted=${x.count} gone=${x.gone} ` +
       (x.late
-        ? `late=${x.late.t}:${x.late.pos} (the geometry's ${x.late.geometry}, delivered last; G154) `
+        ? `late=${x.late.t}:${x.late.pos} (out of order, on the geometry's path; G154) `
         : "") +
       `series=[${fmtSeries(painted.exit)}]`,
   );
@@ -674,7 +701,7 @@ async function readSheet(session, tag, { label, shape, trigger }) {
     [
       " exit: the painted edge leaves one way, never past its rest and never back toward it, and is gone (37-B)",
       e.painted > 0 && x.wrongSide.length === 0 && x.back.length === 0 && x.gone,
-      `from ${fmt(e.rest)}; ${x.count} painted frames${x.late ? ` and one delivered late (G154)` : ""}; ${x.wrongSide.length} past rest; turned back at ${x.back.join(",") || "none"}; gone ${x.gone}`,
+      `from ${fmt(e.rest)}; ${x.count} painted frames${x.late ? ` and one delivered out of order (G154, G160)` : ""}; ${x.wrongSide.length} past rest; turned back at ${x.back.join(",") || "none"}; gone ${x.gone}`,
     ],
   ];
   for (const [name, ok, why, gap] of checks) {

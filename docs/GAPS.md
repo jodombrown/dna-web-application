@@ -6641,6 +6641,21 @@ of the same exit) and leaves it out of the judgment; it stays in the record as `
 
 Owed: why WebKit's screencast holds the first frame of the exit back, which nothing here reads.
 
+**Closed 29 September 2026, in handoff 37-D item 8, by the commit that changes `tests/sheet.cjs`'s
+`judgeExit`.** Run 407 (id `36604862039`, head `a969789`) went red on `webkit-390x844-light-sheet-composer`
+exit: painted `840:168 ... 1160:839, 1200:346`, gone at 1240, against a geometry-exit record of
+`... 63:354.7 ...`. The G154 rule missed it because it wanted a sample within two chroma blocks (4 px)
+and 346 is 8.7 px from the nearest one: the sampler runs once per animation frame, about 16 ms apart,
+which mid-slide is 70 to 140 px, so a video frame taken at another instant is rarely within a block of
+a sample and is always between two. G154's two matches (637.2 as 638, 1003.6 as 1000) sat at the ease's
+tail where the samples are dense. `reordered` now recognises a frame on the record's path, between two
+consecutive samples, and the enter shares it (G160). The rule is a widening of 1201's and of G154's own
+wording, which Chat rules on with the merge. Confidence that it hides no real defect: moderate. It
+recognises one frame per motion, only the first that moves the wrong way, only when removing it leaves
+the series one-way, so a sustained excursion, the shape 1201's defect had, still fails. Proved against
+the two recorded series in a scratch that is not committed: 406's enter and 407's exit recognised, two
+reordered frames in one motion and a bounce after the recognised frame not.
+
 ---
 
 ## G155. Headless WebKit at 2560 by 1440 on the runner paints no frame of Sheet's 300 ms transition
@@ -6775,5 +6790,12 @@ artefact under `sheet-video/`.
 Owed: whether the enter judgment should learn G154's geometry match, decided with the video read, not
 from this entry. The same run's `webkit-390x844-light-block-flow` lost its web process (G5's class,
 reported UNPROVEN under 228) and is not a new gap.
+
+**Closed 29 September 2026, in handoff 37-D item 8.** Run 406's `SHEET` lines: the enter's painted
+series was `80:687 ... 360:170, 400:578, 440:168`, a frame at 578 between 170 and 168, against the
+geometry's `123:569.5` and `106:712.1`. It is on the record's path and 8.5 px from the nearest sample,
+so it would have escaped a two-block match on the exit's own rule as well, which is why 37-D's rule is
+the path and not the sample (see G154's closing note). `judgeEnter` names such a frame, prints
+`late=`, and counts one per arm. Owed: the enforcing run on 37-D's final head.
 
 ---
