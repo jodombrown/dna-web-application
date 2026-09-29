@@ -10,7 +10,7 @@
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "./database.types";
 import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL } from "./supabase";
-import type { EventPageEvent } from "./event-page";
+import type { EventBlock, EventPageEvent } from "./event-page";
 
 export type PublicEventPage = {
   event: Omit<EventPageEvent, "id" | "status" | "full" | "public">;
@@ -30,6 +30,8 @@ export type PublicEventPage = {
   /** 678: a pending invitation is the role alone on the public page. */
   pending_roles: { role: string; label: string }[];
   partners: never[];
+  /** 1186: the host's blocks, each carrying its own label; none for a cancelled event. */
+  blocks: EventBlock[];
 };
 
 /** A client with no session, no storage and no URL detection: all an anonymous read needs. */

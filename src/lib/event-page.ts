@@ -96,6 +96,19 @@ export type GoingRow = {
   shared: boolean;
 };
 
+/**
+ * Handoff 37-A (1186, 1189): one host-written block of the event page, as `private.event_blocks_json`
+ * serves it inside `event_page` and `event_public_page`. The union on `kind` discriminates the
+ * payload's shape for rendering and is structure, not a vocabulary: the kinds' list and their
+ * headings come from `vocabularies().event_block_kinds`, and the heading a page shows over a block's
+ * section is the block's own `label`, never a string kept here. A `programme` block's `at` is the
+ * event's local wall-clock time, "HH:MM", and is the only digits a block carries.
+ */
+export type EventBlock =
+  | { kind: "link"; label: string; payload: { url: string; label?: string } }
+  | { kind: "programme"; label: string; payload: { at: string; line: string } }
+  | { kind: "note"; label: string; payload: { text: string } };
+
 export type EventCalendar = {
   uid: string;
   title: string;
@@ -127,6 +140,8 @@ export type EventPage = {
   invitations: EventInvitation[];
   speakers: EventSpeaker[];
   partners: never[];
+  /** 1186: the host's blocks, in the kinds' page order and then the host's; empty until one is saved. */
+  blocks: EventBlock[];
   /** Null below the floor (508, 645); the rows this viewer's policy returns at five or more. */
   going: GoingRow[] | null;
   calendar: EventCalendar;

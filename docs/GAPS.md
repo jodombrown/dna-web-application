@@ -6667,3 +6667,87 @@ Owed: the 2560 slide on WebKit read on hardware that renders it, which is the fo
 of Done Means 3, or a runner that can.
 
 ---
+
+## G156. A block's media has no store: `public.media` admits only three image types, three kinds and two image buckets
+
+**Severity: moderate. Opened 29 September 2026 during handoff 37-A, filed under ruling 597. The number
+is assigned by this entry (ruling 638).**
+
+Ruling 1186 says an event page's block media are held by reference to `public.media`. Read live on 28
+September before `20260928120000_p2_event_blocks.sql` was written: `media_mime_check` admits `image/jpeg`,
+`image/png` and `image/webp` and nothing else, `media_kind_check` admits the kinds `avatar`, `cover` and
+`post`, and the rows sit in the buckets `profile-media` and `post-media`. A file, and the PDF a Resources
+block would carry, cannot be a row there, so the file kind is not seeded and `event_blocks` carries no
+media column: nothing is seeded that cannot be rendered, and the two departures are named in the
+migration's own header.
+
+Owed: one migration that adds a file bucket, its media kind and its mime types, and the block's media
+reference together, after Strand's file part exists (ruling 1194). Item 6(i) of handoff 37-A.
+
+---
+
+## G157. `events.attachments` is empty on every event, named by no database function, and read by nothing in the tree
+
+**Severity: low. Opened 29 September 2026 during handoff 37-A, filed under ruling 597. The number is
+assigned by this entry (ruling 638).**
+
+Read live on 28 September: `events.attachments` (jsonb) is empty on all 12 events and no function body
+names it. Ruling 1186 retires it into file blocks when the file kind lands, and the file kind cannot land
+in `20260928120000` (G156), so the column is not dropped there: a destructive schema change needs an
+instruction naming the table (absolute), and the retirement migration is written from a list of readers,
+not from an assumption. That list, from a grep of `src`, `supabase/functions` and `tests` on 29
+September (main `a3a085d`):
+
+- `src/lib/database.types.ts`: the generated `events` Row, Insert and Update types carry `attachments:
+Json` and `attachments?: Json`. Generated, read by no surface by that name.
+- `tests/matrix.cjs`, the mock database's two `events` row constructors (the composer's publish and the
+  seeded event kinds) carry `attachments: []` to mirror the column's shape. Nothing reads the field.
+- Nothing else. `src` has no component, loader or lib that reads `attachments` off an event.
+  `supabase/functions` matches only Resend mail attachments (`_shared/mail.ts`'s `MailAttachment`,
+  `event-mail`, `guest-rsvp`), which are unrelated to the column.
+
+Owed: the retirement migration with the file kind (G156), dropping the column under an instruction that
+names `events`, then a types regeneration and the two mock constructors losing their mirror field.
+Item 6(ii) of handoff 37-A.
+
+---
+
+## G158. `event_media_object` serves the post's images by position and accepted parties' photos; a block image has no branch
+
+**Severity: low. Opened 29 September 2026 during handoff 37-A, filed under ruling 597. The number is
+assigned by this entry (ruling 638).**
+
+`public.event_media_object(slug, kind, key)` answers the `event-media` Edge Function two things: an image
+of the event's post by position, and an accepted party's photo. A block image on a public page, when an
+image kind lands, has no branch there and the function's own row policy decides nothing about a block.
+
+Owed: the branch, recorded against the same file-and-image migration as G156, so the image kind, its
+store and its public-page read land together. Item 6(iii) of handoff 37-A.
+
+---
+
+## G159. Run 395's live job: nine place-resolve arms answered 401 on `b61830b`, unattributed
+
+**Severity: low. Opened 29 September 2026 during handoff 37-A, filed under ruling 597. The number is
+assigned by this entry (ruling 638).**
+
+`pages.yml` run 395 (id `36527272574`), head `b61830b` on PR #74's branch: the live job's step 8 read
+`164/173 live checks passed, 176 arms named: 164 passed, 9 failed, 3 unproven`, and all nine failures were
+place-resolve arms. `a call without a JWT returns 401` passed, and the signed-in calls that follow it
+passed through Cabo Verde; then the two 195-name arms broke at Madagascar and stayed broken (`every
+world_countries name anchors or is unavailable`, `every world_countries name anchors to its own current
+alpha-2 code`), `anchor carries the country's IANA zones` failed on the names it could not reach, and
+five later arms (`Osu near Accra`, `every place carries a region`, `a nonsense string returns none`, `an
+invalid session_token is a 400`, `no home and no country is unavailable without a call`, `under three
+characters is none`) each answered `401 {"state":"unavailable"}` or `status 401`. The function refused a
+signed-in caller partway through one run. Nothing in `b61830b` touches `place-resolve` or the JWT the
+arms send. Not attributed: the function's log for that window was not read.
+
+Not recurring: the live job passed on `7c1fa7d` (run 396, the same branch's next head), on main
+`c17d1a0` (run 397, PR #74's merge) and on `c9ea761` (run 402). One run, one head, superseded.
+
+Owed: if a second run reads the same shape, the function's own log for that window and the arms' JWT
+lifetime against the step's wall-clock, before any arm is touched. Not a flake by assertion (a failing
+arm is never called one); a failure whose cause was not read.
+
+---
