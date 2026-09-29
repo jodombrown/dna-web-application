@@ -373,6 +373,11 @@ verification off. What they may return is decided in the database, never in the 
 Convene's emails are plain text from approved copy until Design draws a template, sent from
 `NOTIFICATION_SENDER` through `supabase/functions/_shared/mail.ts` (387, 1035).
 
+Host-written event page content is `public.event_blocks`, its kinds `public.event_block_kinds`, served by
+`vocabularies()` as `event_block_kinds`; the only writer is `public.save_event_blocks`, acting for the
+host, and it is read only inside `event_page` and `event_public_page` through
+`private.event_blocks_json`. A heading is a block's own `label`, never a string in a surface (1186, 1189).
+
 ## Brand assets (ruling 184)
 
 A brand or logo change is its own change with its own ruling and never rides in another brief's PR.

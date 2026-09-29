@@ -200,6 +200,14 @@ async function runLiveDbArms({ record, skip }) {
       "G61 (Session 35): no table in public carries TRUNCATE, REFERENCES, TRIGGER or MAINTAIN for anon or authenticated, and the default ACL for postgres in public grants none of them",
     discoveryDismiss:
       "Brief 9 (1044, 1105): a dismissal in curated empties that lane and is keyed on the lane alone",
+    blocksNotHost:
+      "Handoff 37-A (1186): a member who is not the event's host is refused by save_event_blocks with 42501",
+    blocksSignedOut:
+      "Handoff 37-A (1186): signed out cannot execute save_event_blocks and cannot select from event_blocks",
+    blocksSave:
+      "Handoff 37-A (1186, 1189): the host's save of one note block returns it, event_page shows it as the host, and event_public_page shows it for an event with a public page",
+    blocksRefused:
+      "Handoff 37-A (1186): a save with a programme payload missing its line is refused with 22023 and leaves the earlier blocks in place, and an empty list clears them",
   };
   // G143: a block that opens with a presence probe carries every arm it holds in `names`, under one key
   // prefix, so a probe that fails reports each of them UNPROVEN and the job's total does not fall with
@@ -980,6 +988,188 @@ async function runLiveDbArms({ record, skip }) {
         names.attendMedia,
         !media.ok && media.code === "42501",
         media.ok ? "answered " + media.rows.length + " row(s)" : media.code + " " + media.message,
+      );
+    });
+    // ------------------------------------------------------------------------------------------
+    // Handoff 37-A (rulings 1186, 1189; 20260928120000). The owner publishes a free public event and
+    // becomes its host. The member's save is refused as not the host (42501); signed out can neither
+    // execute the write nor read the table (42501); the host's save of one note block comes back
+    // as the block with its kind's label, event_page carries it for the host and event_public_page
+    // carries it for the slug; a save whose programme block has no line is refused with 22023 and
+    // the note block is still there when read back, never counted in advance; and an empty list
+    // clears the page through the same function, so the arm leaves no row before the rollback.
+    // ------------------------------------------------------------------------------------------
+    await inTransaction(client, async () => {
+      await actAsSelf(client);
+      const present = await client.query(
+        "select (to_regprocedure('public.save_event_blocks(uuid, jsonb)') is not null and to_regclass('public.event_blocks') is not null) as ok",
+      );
+      if (!present.rows[0] || present.rows[0].ok !== true) {
+        for (const n of armsOf("blocks"))
+          skip(n, "20260928120000_p2_event_blocks.sql is not on the project yet");
+        return;
+      }
+      await actAs(client, owner.id);
+      const starts = new Date(Date.now() + 28 * 86400e3);
+      starts.setUTCHours(18, 30, 0, 0);
+      const published = await attempt(client, "select public.publish_post($1::jsonb) as id", [
+        JSON.stringify({
+          verb: "convene",
+          body: "Handoff 37-A blocks arm. Rolled back by the same run.",
+          author_kind: "member",
+          author_id: owner.id,
+          audience: "everyone",
+          host_context: "live-checks",
+          fields: {
+            "convene.title": "Blocks arm reading",
+            "convene.format": "in_person",
+            "convene.when": "in four weeks at 18:30",
+            "convene.starts_at": starts.toISOString(),
+            "convene.timezone": "Africa/Accra",
+            "convene.place_id": "live-arms-place",
+            "convene.place_name": "Front Room",
+            "convene.city": "Accra",
+            "convene.country": "Ghana",
+            "convene.lng": "-0.1747",
+            "convene.lat": "5.5559",
+            "convene.price_nature": "free",
+            "convene.delivery_intent": "In the room, with the programme on the page.",
+          },
+        }),
+      ]);
+      const ev = published.ok
+        ? await attempt(
+            client,
+            "select e.id, e.slug from public.posts p join public.events e on e.id = p.created_object_id where p.id = $1",
+            [published.rows[0].id],
+          )
+        : null;
+      const eventId = ev && ev.ok && ev.rows[0] ? ev.rows[0].id : null;
+      const slug = ev && ev.ok && ev.rows[0] ? ev.rows[0].slug : null;
+      if (!eventId || !slug) {
+        const why = !published.ok
+          ? "publish_post refused: " + published.code + " " + published.message
+          : "the published post carries no event with a slug";
+        for (const n of armsOf("blocks")) skip(n, why + ", so this arm did not run");
+        return;
+      }
+      const NOTE = "Doors open at six. The reading starts when the room is full.";
+      const one = JSON.stringify([{ kind: "note", payload: { text: NOTE } }]);
+
+      // (a) The member, who is not the host, is refused before any row is touched.
+      await actAs(client, member.id);
+      const notHost = await attempt(
+        client,
+        "select public.save_event_blocks($1::uuid, $2::jsonb) as b",
+        [eventId, one],
+      );
+      record(
+        names.blocksNotHost,
+        !notHost.ok && notHost.code === "42501",
+        notHost.ok ? "the save was accepted" : notHost.code + " " + notHost.message,
+      );
+
+      // (b) Signed out holds no execute on the write and no select on the table.
+      await client.query("set local role anon");
+      await client.query("select set_config('request.jwt.claims', '', true)");
+      const anonSave = await attempt(
+        client,
+        "select public.save_event_blocks($1::uuid, $2::jsonb) as b",
+        [eventId, one],
+      );
+      const anonRead = await attempt(
+        client,
+        "select b.id from public.event_blocks b where b.event_id = $1",
+        [eventId],
+      );
+      record(
+        names.blocksSignedOut,
+        !anonSave.ok && anonSave.code === "42501" && !anonRead.ok && anonRead.code === "42501",
+        "save " +
+          (anonSave.ok ? "accepted" : anonSave.code) +
+          " read " +
+          (anonRead.ok ? "answered " + anonRead.rows.length + " row(s)" : anonRead.code),
+      );
+
+      // (c) The host's save returns the block with its kind's label, and both reads carry it.
+      await actAs(client, owner.id);
+      const saved = await attempt(
+        client,
+        "select public.save_event_blocks($1::uuid, $2::jsonb) as b",
+        [eventId, one],
+      );
+      const mine = await attempt(client, "select public.event_page($1::uuid) as p", [eventId]);
+      const page = mine.ok ? mine.rows[0].p : null;
+      await client.query("set local role anon");
+      await client.query("select set_config('request.jwt.claims', '', true)");
+      const pub = await attempt(client, "select public.event_public_page($1) as p", [slug]);
+      const pp = pub.ok ? pub.rows[0].p : null;
+      const isNote = (list) =>
+        Array.isArray(list) &&
+        list.length === 1 &&
+        list[0].kind === "note" &&
+        list[0].label === "Good to know" &&
+        !!list[0].payload &&
+        list[0].payload.text === NOTE;
+      record(
+        names.blocksSave,
+        saved.ok &&
+          isNote(saved.rows[0].b) &&
+          !!page &&
+          page.viewer &&
+          page.viewer.is_host === true &&
+          isNote(page.blocks) &&
+          !!pp &&
+          isNote(pp.blocks),
+        "save " +
+          (saved.ok ? JSON.stringify(saved.rows[0].b) : saved.code + " " + saved.message) +
+          " page " +
+          (mine.ok ? JSON.stringify(page && page.blocks) : mine.code + " " + mine.message) +
+          " public " +
+          (pub.ok ? JSON.stringify(pp && pp.blocks) : pub.code + " " + pub.message),
+      );
+
+      // (d) A programme block without its line is refused as a whole, the note is still there when
+      // read back, and an empty list clears the page through the same function.
+      await actAs(client, owner.id);
+      const refused = await attempt(
+        client,
+        "select public.save_event_blocks($1::uuid, $2::jsonb) as b",
+        [
+          eventId,
+          JSON.stringify([
+            { kind: "note", payload: { text: NOTE } },
+            { kind: "programme", payload: { at: "18:30" } },
+          ]),
+        ],
+      );
+      const after = await attempt(client, "select public.event_page($1::uuid) as p", [eventId]);
+      const kept = after.ok && after.rows[0].p ? after.rows[0].p.blocks : null;
+      const cleared = await attempt(
+        client,
+        "select public.save_event_blocks($1::uuid, '[]'::jsonb) as b",
+        [eventId],
+      );
+      const none = await attempt(client, "select public.event_page($1::uuid) as p", [eventId]);
+      const left = none.ok && none.rows[0].p ? none.rows[0].p.blocks : null;
+      record(
+        names.blocksRefused,
+        !refused.ok &&
+          refused.code === "22023" &&
+          isNote(kept) &&
+          cleared.ok &&
+          Array.isArray(cleared.rows[0].b) &&
+          cleared.rows[0].b.length === 0 &&
+          Array.isArray(left) &&
+          left.length === 0,
+        "refusal " +
+          (refused.ok ? "accepted" : refused.code + " " + refused.message) +
+          " kept " +
+          (after.ok ? JSON.stringify(kept) : after.code + " " + after.message) +
+          " cleared " +
+          (cleared.ok ? JSON.stringify(cleared.rows[0].b) : cleared.code + " " + cleared.message) +
+          " left " +
+          (none.ok ? JSON.stringify(left) : none.code + " " + none.message),
       );
     });
     // ------------------------------------------------------------------------------------------

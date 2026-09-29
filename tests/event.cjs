@@ -205,6 +205,8 @@ function attendPage(kind) {
           },
         ],
     partners: [],
+    // Handoff 37-A (1186): the page's blocks; none are rendered in this handoff.
+    blocks: [],
     going: cancelled || kind === "full" ? null : going,
     calendar: {
       uid: id,
@@ -917,6 +919,7 @@ function publicPage(kind, overrides = {}) {
     })),
     pending_roles: [],
     partners: [],
+    blocks: [],
   };
 }
 

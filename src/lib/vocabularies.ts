@@ -47,6 +47,11 @@ export type Vocabularies = {
   }[];
   /** Rulings 1092, 1105, 1124 and 1172: Discovery's ten lanes, in their base order, each with its name. */
   convene_lanes: { value: DiscoveryLaneId; name: string }[];
+  /**
+   * Ruling 1186: the kinds of host-written block an event page holds, in page order, each with the
+   * heading its section shows. No surface keeps a heading map; the first consumer is Brief 8's Hub.
+   */
+  event_block_kinds: { value: string; label: string }[];
 };
 
 export async function loadVocabularies(): Promise<Vocabularies | null> {

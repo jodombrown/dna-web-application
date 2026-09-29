@@ -340,6 +340,12 @@ const VOCAB = {
     { value: "near", name: "Near your homes" },
     { value: "network", name: "Connected to your network" },
   ],
+  // Handoff 37-A (1186): the kinds of host-written block, as 20260928120000 seeds them.
+  event_block_kinds: [
+    { value: "link", label: "Links" },
+    { value: "programme", label: "Programme" },
+    { value: "note", label: "Good to know" },
+  ],
 };
 
 /** The projection's ten lanes, in convene_lanes order (1092, 1105; 1124 adds Filling up, 1172 withdraws Browse). */
