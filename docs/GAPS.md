@@ -6433,7 +6433,7 @@ Owed: a script in `scripts/` that regenerates the file, formats it, and restores
 
 ---
 
-## G147. The matrix's "no page errors" arms record a failed request's status and not its URL
+## G147. The matrix's "no page errors" arms record a failed request's status and not its URL — closed (handoff 35-C)
 
 **Severity: low. Opened 29 September 2026 during handoff 35-A, filed under ruling 597. The number is
 assigned by this entry (ruling 638).**
@@ -6455,6 +6455,20 @@ unexplained, neither called a flake nor traced to this PR.
 Owed: the check's message carries the request's URL, from `m.location().url` on the console message
 or a `response` listener for statuses of 400 and above, so the next failure of this kind names what
 failed. Nothing about the arms' pass conditions changes.
+
+**Closed 29 September 2026, in handoff 35-C, by `8a24bc2`.** Every console `error` the five suites'
+listeners push now reads `<url> <text>`, the URL first so the arms' `slice(0, 300)` cannot cut it off,
+from `m.location().url`. Chromium fills the location on a real 500 (probed first: the URL, line 0),
+so the `response` listener added beside it does not fail an arm; it only records `METHOD status URL`
+for statuses of 400 and above, and stands in for the URL where an engine gives the message none,
+prefixed `(last failed response, unconfirmed)` because it can name a different request from the one
+that raised the message; a URL from `m.location()` carries no prefix. No
+pass condition changed, and the exclusions are as they were. Proved once with a scratch page whose
+mocked route answered 500 and then 502, on Chromium only, since WebKit could not be installed in the
+session (the Playwright download hosts are outside the network allowlist): the arm's message named
+`https://mock.example/rest/v1/members?select=id&status=500` and `...status=502`. WebKit's location on
+a failed subresource is unproven here and is read from the first WebKit failure of this kind. The
+scratch is not committed.
 
 ---
 
@@ -6509,5 +6523,26 @@ holds the four widths the handoff names and does not read 1025.
 Owed: the dock keeps `justify-content: space-evenly` and gives its side padding first below the
 width where the faces and the gaps stop fitting, or the reserved track is the controls' measured
 width and not the constant.
+
+---
+
+---
+
+## G150. The console-error listener is copied across five suites
+
+**Severity: low. Opened 29 September 2026 during handoff 35-C, filed under ruling 597. The number is
+assigned by this entry (ruling 638).**
+
+`grep -n 'page.on("console"' tests/*.cjs` finds the same listener in `tests/connect.cjs`,
+`tests/discovery.cjs`, `tests/matrix.cjs`, `tests/mount.cjs` and `tests/profile.cjs`: each keeps its own
+ignore pattern (`IGNORED_CONSOLE` in four, an inline regex in the matrix) and, since handoff 35-C, its own
+`failedResponses` list. G147 was closed by editing all five, and the next change to what a page error
+is will need the same five edits, with nothing to say when one copy drifts from the others.
+
+Not fixed: the handoff asked for the copies to be extended and for the duplication to be filed, not
+refactored.
+
+Owed: one listener in a shared module that each suite's ignore pattern is passed to, and a check that
+no suite listens for console errors on its own.
 
 ---
