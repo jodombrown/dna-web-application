@@ -145,6 +145,71 @@ async function runLiveDbArms({ record, skip }) {
       "Handoff 30-D (1033): a confirmed member claims their guest row with its edge, the drift function stays at zero, and a second claim does nothing",
     discovery:
       "Handoff 34-A (1160): the owner's answer names every lane in lane_order and carries its lanes in that order, curated among them",
+    attendPresenters:
+      "Addendum 4 item 1 (1121): event_presenters answers an event's presenter and host exactly as event_page does",
+    attendPublic:
+      "Brief 10 (680, 1028): the signed-out page carries no registrant name, no going list, no viewer block and no meeting link",
+    attendMemberRefused: "Brief 10 (1023): signed out cannot call the member projection",
+    attendPresentersAnon: "Addendum 4 item 1 (1121): signed out cannot call event_presenters",
+    attendMedia: "Brief 10 (1029): a client role may not call event_media_object",
+    discoveryPick: "Brief 9 (1040): a pick renders as the editor's name and line",
+    discoverySearch:
+      "Handoff 34-A (1124, 1159): a search keeps the pick it names, one that matches nothing drops every lane, and past 100 characters it is refused with 22023",
+    discoverySearchOne:
+      "Handoff 34-A addendum (1173): a search whose matches sit one to a lane returns the lane: the seeded event's title returns Filling up holding it",
+    discoveryBrowse:
+      "Handoff 34-A addendum (1172): no section is browse or carries tiles, and lane_order names the ten lanes",
+    discoveryFilling:
+      "Handoff 34-A (1157, 1165): Filling up carries both seeded events, and event_going_names gives each three first names, none the viewer's own",
+    discoveryNoCount: "Brief 9 (581, 632): the answer carries no count key",
+    discoveryTaste:
+      "Brief 9 (658, 1039): after set_subscription('culture_arts'), the taste lens carries that family",
+    discoveryFormat: "Brief 9 (586, 693): an in-person facet drops the online lane",
+    discoverySubInsert: "Brief 9 (1039): a direct insert into member_subscriptions is refused",
+    discoveryThresholds: "Brief 9 (1045): a member cannot read private.convene_thresholds",
+    discoveryEditors: "Brief 9 (1040): a member cannot read public.editors",
+    discoveryRetired:
+      "Brief 9 (1041, 1093): events and the retired soon, online and near lenses are refused with 22023",
+    discoveryDismissAll: "Brief 9 (1044): a dismissal in all is refused with 22023",
+    discoveryDonation: "Handoff 32-B (1095): a price of donation is refused with 22023",
+    discoveryPlaces:
+      "Handoff 32-B (1095): convene_places() answers grounded places by kind; a city narrows and Near reads the place; a malformed place is refused",
+    discoveryRungs:
+      "Handoff 32-B (1110): each rung of a home answers; a rung without a home or an unknown rung is refused with 22023",
+    discoveryForeignHome: "Brief 9 (1042): another member's home is refused as a facet with 22023",
+    discoveryRail:
+      "Handoff 32-B (1111): a member writes their own rail row; another member reads none of it and cannot write it",
+    discoveryLaneAct:
+      "Handoff 34-A (1160): note_lane_act refuses an unknown lane or act with 22023, and a noted act moves its lane first in lane_order",
+    discoveryLaneInsert:
+      "Handoff 34-A (1160): a direct insert into member_lane_activity is refused for a member, and another member reads none of the owner's rows",
+    discoveryAliases:
+      "Handoff 32-B (1080, 1100): a member cannot read event_aliases or reserved_link_words",
+    discoveryVocab:
+      "Handoff 34-A (1037, 1093, 1105, 1124, 1172): vocabularies() serves the nine families, the five lenses with their short words and the ten lanes in their base order",
+    discoverySignedOut:
+      "Brief 9 (662): signed out cannot call convene_discovery or convene_places, or read a rail row",
+    discoveryGoingSignedOut:
+      "Handoff 34-A (1128, 1160): signed out cannot call event_going_names or note_lane_act",
+    discoveryWithout:
+      "Handoff 35-A (1174): a read of All with p_without => 'follow' carries none of the events the follow lens returns",
+    discoveryWithoutLens:
+      "Handoff 35-A (1174): p_without with a lens other than All is refused with 22023",
+    discoveryWithoutAll: "Handoff 35-A (1174): p_without => 'all' is refused with 22023",
+    grants:
+      "G61 (Session 35): no table in public carries TRUNCATE, REFERENCES, TRIGGER or MAINTAIN for anon or authenticated, and the default ACL for postgres in public grants none of them",
+    discoveryDismiss:
+      "Brief 9 (1044, 1105): a dismissal in curated empties that lane and is keyed on the lane alone",
+  };
+  // G143: a block that opens with a presence probe carries every arm it holds in `names`, under one key
+  // prefix, so a probe that fails reports each of them UNPROVEN and the job's total does not fall with
+  // the coverage it lost. A key added here joins its block's list by its prefix.
+  const armsOf = (prefix) =>
+    Object.keys(names)
+      .filter((k) => k.startsWith(prefix))
+      .map((k) => names[k]);
+  const unreachedIn = (prefix, why) => {
+    for (const n of armsOf(prefix).filter((n) => n !== names[prefix])) skip(n, why);
   };
   if (process.env.SKIP_REST) {
     for (const n of Object.values(names)) skip(n, "SKIP_REST");
@@ -746,7 +811,8 @@ async function runLiveDbArms({ record, skip }) {
         "select (to_regprocedure('public.event_page(uuid)') is not null and to_regprocedure('public.event_public_page(text)') is not null) as ok",
       );
       if (!present.rows[0] || present.rows[0].ok !== true) {
-        skip(names.attend, "20260921160100_p2_event_page.sql is not on the project yet");
+        for (const n of armsOf("attend"))
+          skip(n, "20260921160100_p2_event_page.sql is not on the project yet");
         return;
       }
       await actAs(client, owner.id);
@@ -783,6 +849,7 @@ async function runLiveDbArms({ record, skip }) {
           false,
           "publish_post refused: " + published.code + " " + published.message,
         );
+        unreachedIn("attend", "no event was published to read, so this arm did not run");
         return;
       }
       const ev = await attempt(
@@ -798,6 +865,10 @@ async function runLiveDbArms({ record, skip }) {
           false,
           "the published post carries no event with a slug: " +
             (ev.ok ? "no row" : ev.code + " " + ev.message),
+        );
+        unreachedIn(
+          "attend",
+          "the published post carries no event with a slug, so this arm did not run",
         );
         return;
       }
@@ -852,7 +923,7 @@ async function runLiveDbArms({ record, skip }) {
       );
       const line = presenters.ok && presenters.rows[0].p ? presenters.rows[0].p[eventId] : null;
       record(
-        "Addendum 4 item 1 (1121): event_presenters answers an event's presenter and host exactly as event_page does",
+        names.attendPresenters,
         !!page &&
           !!line &&
           !!line.presented_by &&
@@ -871,7 +942,7 @@ async function runLiveDbArms({ record, skip }) {
       const pp = pub.ok ? pub.rows[0].p : null;
       const text = pp ? JSON.stringify(pp) : "";
       record(
-        "Brief 10 (680, 1028): the signed-out page carries no registrant name, no going list, no viewer block and no meeting link",
+        names.attendPublic,
         !!pp &&
           pp.event &&
           pp.event.slug === slug &&
@@ -885,7 +956,7 @@ async function runLiveDbArms({ record, skip }) {
       );
       const refused = await attempt(client, "select public.event_page($1::uuid) as p", [eventId]);
       record(
-        "Brief 10 (1023): signed out cannot call the member projection",
+        names.attendMemberRefused,
         !refused.ok && refused.code === "42501",
         refused.ok ? "answered" : refused.code + " " + refused.message,
       );
@@ -895,7 +966,7 @@ async function runLiveDbArms({ record, skip }) {
         [eventId],
       );
       record(
-        "Addendum 4 item 1 (1121): signed out cannot call event_presenters",
+        names.attendPresentersAnon,
         !anonPresenters.ok && anonPresenters.code === "42501",
         anonPresenters.ok ? "answered" : anonPresenters.code + " " + anonPresenters.message,
       );
@@ -906,7 +977,7 @@ async function runLiveDbArms({ record, skip }) {
         [slug],
       );
       record(
-        "Brief 10 (1029): a client role may not call event_media_object",
+        names.attendMedia,
         !media.ok && media.code === "42501",
         media.ok ? "answered " + media.rows.length + " row(s)" : media.code + " " + media.message,
       );
@@ -1196,8 +1267,10 @@ async function runLiveDbArms({ record, skip }) {
     // ------------------------------------------------------------------------------------------
     await inTransaction(client, async () => {
       await actAsSelf(client);
+      // 20260927120000 drops the nine-argument projection and creates it again with p_without, so the
+      // probe names the ten-argument signature and that version's recorded row. Before it:
       // 20260926170300 drops the eight-argument projection and creates it again with p_q, so the
-      // probe names the nine-argument signature; 20260926170400 keeps that signature and takes the
+      // probe named the nine-argument signature; 20260926170400 keeps that signature and takes the
       // browse row out of convene_lanes, so the probe reads that version's recorded row, as the drift
       // arm reads it (444, 553: a paste records its version in the transaction that runs its DDL).
       // The probe runs as live_arms, which holds select on supabase_migrations.schema_migrations
@@ -1205,13 +1278,14 @@ async function runLiveDbArms({ record, skip }) {
       // 42501 and took the whole live step down before its count (G143 names what a failed probe
       // costs).
       const present = await client.query(
-        "select to_regprocedure('public.convene_discovery(text, text[], text[], text, text[], uuid, text[], text, text)') is not null and exists (select 1 from supabase_migrations.schema_migrations where version = '20260926170400') as ok",
+        "select to_regprocedure('public.convene_discovery(text, text[], text[], text, text[], uuid, text[], text, text, text)') is not null and exists (select 1 from supabase_migrations.schema_migrations where version = '20260927120000') as ok",
       );
       if (!present.rows[0] || present.rows[0].ok !== true) {
-        skip(
-          names.discovery,
-          "20260926170300 and 20260926170400 are not both on the project yet (Chat applies 34-A's five migrations before its enforcing run)",
-        );
+        for (const n of armsOf("discovery"))
+          skip(
+            n,
+            "20260927120000 is not on the project yet (Chat applies 35-A's two migrations before its enforcing run)",
+          );
         return;
       }
       const ask = async (sql, values) => {
@@ -1256,7 +1330,7 @@ async function runLiveDbArms({ record, skip }) {
         all.ok && section(all.d, "curated") ? section(all.d, "curated").items[0] : null;
       const pick = curatedItem && curatedItem.reason;
       record(
-        "Brief 9 (1040): a pick renders as the editor's name and line",
+        names.discoveryPick,
         !!pick &&
           pick.kind === "curated" &&
           !!pick.editor &&
@@ -1287,7 +1361,7 @@ async function runLiveDbArms({ record, skip }) {
       const hundred = await attempt(client, Q, ["x".repeat(100)]);
       const tooLong = await attempt(client, Q, ["x".repeat(101)]);
       record(
-        "Handoff 34-A (1124, 1159): a search keeps the pick it names, one that matches nothing drops every lane, and past 100 characters it is refused with 22023",
+        names.discoverySearch,
         kept &&
           nothing.ok &&
           sectionIds(nothing.d).length === 0 &&
@@ -1320,7 +1394,7 @@ async function runLiveDbArms({ record, skip }) {
       const oneFilling = one && one.ok ? section(one.d, "filling") : null;
       const oneIds = one && one.ok ? sectionIds(one.d) : [];
       record(
-        "Handoff 34-A addendum (1173): a search whose matches sit one to a lane returns the lane: the seeded event's title returns Filling up holding it",
+        names.discoverySearchOne,
         !!one &&
           one.ok &&
           oneIds.length >= 1 &&
@@ -1337,7 +1411,7 @@ async function runLiveDbArms({ record, skip }) {
       // lane_order is the ten lanes.
       const tiled = all.ok ? ((all.d && all.d.sections) || []).filter((x) => "tiles" in x) : [];
       record(
-        "Handoff 34-A addendum (1172): no section is browse or carries tiles, and lane_order names the ten lanes",
+        names.discoveryBrowse,
         all.ok && !section(all.d, "browse") && tiled.length === 0 && laneOrder.length === 10,
         all.ok
           ? "browse " +
@@ -1360,7 +1434,7 @@ async function runLiveDbArms({ record, skip }) {
         .split(" ")[0];
       const named = going.ok && going.d ? SEEDED_FILLING.map((id) => going.d[id]) : [];
       record(
-        "Handoff 34-A (1157, 1165): Filling up carries both seeded events, and event_going_names gives each three first names, none the viewer's own",
+        names.discoveryFilling,
         !!filling &&
           SEEDED_FILLING.every((id) => fillingIds.includes(id)) &&
           going.ok &&
@@ -1388,7 +1462,7 @@ async function runLiveDbArms({ record, skip }) {
       };
       if (all.ok) walk(all.d, "answer");
       record(
-        "Brief 9 (581, 632): the answer carries no count key",
+        names.discoveryNoCount,
         all.ok && noCount.length === 0,
         all.ok ? (noCount.length ? "keys " + noCount.join(",") : "none") : failed(all),
       );
@@ -1398,7 +1472,7 @@ async function runLiveDbArms({ record, skip }) {
       const tasteItems =
         taste.ok && section(taste.d, "taste") ? section(taste.d, "taste").items : [];
       record(
-        "Brief 9 (658, 1039): after set_subscription('culture_arts'), the taste lens carries that family",
+        names.discoveryTaste,
         taste.ok &&
           tasteItems.length > 0 &&
           tasteItems.every((i) => i.reason && i.reason.family === "culture_arts"),
@@ -1407,8 +1481,6 @@ async function runLiveDbArms({ record, skip }) {
           : failed(taste),
       );
 
-      const dismissName =
-        "Brief 9 (1044, 1105): a dismissal in curated empties that lane and is keyed on the lane alone";
       if (curatedItem) {
         const eventId = curatedItem.event_id;
         // The owner may hold committed dismissals of this event in other lanes from the app, so
@@ -1434,7 +1506,7 @@ async function runLiveDbArms({ record, skip }) {
         const curatedSection = curated.ok ? section(curated.d, "curated") : null;
         const added = before && after ? after.filter((x) => !before.includes(x)) : null;
         record(
-          dismissName,
+          names.discoveryDismiss,
           !!curatedSection &&
             curatedSection.items.length === 0 &&
             !!added &&
@@ -1444,12 +1516,12 @@ async function runLiveDbArms({ record, skip }) {
             " added " +
             JSON.stringify(added),
         );
-      } else record(dismissName, false, "no curated item to dismiss");
+      } else record(names.discoveryDismiss, false, "no curated item to dismiss");
 
       const inPerson = await ask("select public.convene_discovery('all', array['in_person']) as d");
       const inPersonIds = inPerson.ok ? sectionIds(inPerson.d) : [];
       record(
-        "Brief 9 (586, 693): an in-person facet drops the online lane",
+        names.discoveryFormat,
         inPerson.ok && !inPersonIds.includes("online"),
         inPerson.ok ? "sections " + JSON.stringify(inPersonIds) : failed(inPerson),
       );
@@ -1460,19 +1532,19 @@ async function runLiveDbArms({ record, skip }) {
         [owner.id],
       );
       record(
-        "Brief 9 (1039): a direct insert into member_subscriptions is refused",
+        names.discoverySubInsert,
         !insert.ok && insert.code === "42501",
         insert.ok ? "inserted" : failed(insert),
       );
       const floors = await attempt(client, "select * from private.convene_thresholds");
       record(
-        "Brief 9 (1045): a member cannot read private.convene_thresholds",
+        names.discoveryThresholds,
         !floors.ok && floors.code === "42501",
         floors.ok ? "read " + floors.rows.length + " row(s)" : failed(floors),
       );
       const editors = await attempt(client, "select * from public.editors");
       record(
-        "Brief 9 (1040): a member cannot read public.editors",
+        names.discoveryEditors,
         !editors.ok && editors.code === "42501",
         editors.ok ? "read " + editors.rows.length + " row(s)" : failed(editors),
       );
@@ -1485,7 +1557,7 @@ async function runLiveDbArms({ record, skip }) {
           refusedLenses.push(l + " " + (r.ok ? "answered" : failed(r)));
       }
       record(
-        "Brief 9 (1041, 1093): events and the retired soon, online and near lenses are refused with 22023",
+        names.discoveryRetired,
         refusedLenses.length === 0,
         refusedLenses.join("; ") || "all four refused",
       );
@@ -1495,7 +1567,7 @@ async function runLiveDbArms({ record, skip }) {
         [curatedItem ? curatedItem.event_id : "00000000-0000-0000-0000-000000000000"],
       );
       record(
-        "Brief 9 (1044): a dismissal in all is refused with 22023",
+        names.discoveryDismissAll,
         !badSection.ok && badSection.code === "22023",
         badSection.ok ? "accepted" : failed(badSection),
       );
@@ -1505,9 +1577,61 @@ async function runLiveDbArms({ record, skip }) {
         "select public.convene_discovery('all', null, array['donation'])",
       );
       record(
-        "Handoff 32-B (1095): a price of donation is refused with 22023",
+        names.discoveryDonation,
         !donation.ok && donation.code === "22023",
         donation.ok ? "answered" : failed(donation),
+      );
+      // 1174 (handoff 35-A): p_without leaves a lens's events out of a read of All before the floors
+      // apply. The follow lens's ids are read as the owner, then All without them, and none may
+      // appear in any lane; the arm reads nothing if the follow lens holds no event, since an empty
+      // lens leaves nothing to leave out (UNPROVEN, never a pass).
+      const followLens = await ask("select public.convene_discovery('follow') as d");
+      const followIds = new Set(
+        followLens.ok ? (section(followLens.d, "follow")?.items.map((i) => i.event_id) ?? []) : [],
+      );
+      const without = await ask(
+        "select public.convene_discovery('all', p_without => 'follow') as d",
+      );
+      const leaked = without.ok
+        ? ((without.d && without.d.sections) || []).flatMap((s) =>
+            s.items
+              .filter((i) => followIds.has(i.event_id))
+              .map((i) => s.section + ":" + i.event_id),
+          )
+        : [];
+      if (followLens.ok && followIds.size === 0)
+        skip(names.discoveryWithout, "the owner's follow lens holds no event to leave out");
+      else
+        record(
+          names.discoveryWithout,
+          followLens.ok && without.ok && leaked.length === 0,
+          !followLens.ok
+            ? failed(followLens)
+            : without.ok
+              ? followIds.size +
+                " follow event(s) left out, sections " +
+                JSON.stringify(sectionIds(without.d)) +
+                " leaked " +
+                JSON.stringify(leaked)
+              : failed(without),
+        );
+      const withoutLens = await attempt(
+        client,
+        "select public.convene_discovery('follow', p_without => 'curated')",
+      );
+      record(
+        names.discoveryWithoutLens,
+        !withoutLens.ok && withoutLens.code === "22023",
+        withoutLens.ok ? "answered" : failed(withoutLens),
+      );
+      const withoutAll = await attempt(
+        client,
+        "select public.convene_discovery('all', p_without => 'all')",
+      );
+      record(
+        names.discoveryWithoutAll,
+        !withoutAll.ok && withoutAll.code === "22023",
+        withoutAll.ok ? "answered" : failed(withoutAll),
       );
       // 1095: Place's options are grounded places, and the projection takes one and refuses a
       // malformed id. The project's own upcoming events carry no city (run 349 read one option,
@@ -1591,7 +1715,7 @@ async function runLiveDbArms({ record, skip }) {
       );
       await client.query("rollback to savepoint places_fixture");
       record(
-        "Handoff 32-B (1095): convene_places() answers grounded places by kind; a city narrows and Near reads the place; a malformed place is refused",
+        names.discoveryPlaces,
         !refused &&
           places.ok &&
           opts.length > 0 &&
@@ -1641,7 +1765,7 @@ async function runLiveDbArms({ record, skip }) {
           )
         : { ok: true };
       record(
-        "Handoff 32-B (1110): each rung of a home answers; a rung without a home or an unknown rung is refused with 22023",
+        names.discoveryRungs,
         !!ownerHome &&
           rungNotes.length === 0 &&
           !lonely.ok &&
@@ -1662,13 +1786,13 @@ async function runLiveDbArms({ record, skip }) {
           [ownerHome],
         );
         record(
-          "Brief 9 (1042): another member's home is refused as a facet with 22023",
+          names.discoveryForeignHome,
           !foreign.ok && foreign.code === "22023",
           foreign.ok ? "answered" : failed(foreign),
         );
       } else {
         record(
-          "Brief 9 (1042): another member's home is refused as a facet with 22023",
+          names.discoveryForeignHome,
           false,
           "the owner's answer carries no home to offer another member",
         );
@@ -1695,7 +1819,7 @@ async function runLiveDbArms({ record, skip }) {
         [owner.id],
       );
       record(
-        "Handoff 32-B (1111): a member writes their own rail row; another member reads none of it and cannot write it",
+        names.discoveryRail,
         own.ok && peek.ok && peek.rows.length === 0 && !forge.ok && forge.code === "42501",
         "own " +
           (own.ok ? "written" : failed(own)) +
@@ -1725,7 +1849,7 @@ async function runLiveDbArms({ record, skip }) {
         [owner.id],
       );
       record(
-        "Handoff 34-A (1160): note_lane_act refuses an unknown lane or act with 22023, and a noted act moves its lane first in lane_order",
+        names.discoveryLaneAct,
         !badLane.ok &&
           badLane.code === "22023" &&
           !badAct.ok &&
@@ -1757,7 +1881,7 @@ async function runLiveDbArms({ record, skip }) {
         [owner.id],
       );
       record(
-        "Handoff 34-A (1160): a direct insert into member_lane_activity is refused for a member, and another member reads none of the owner's rows",
+        names.discoveryLaneInsert,
         !forgeAct.ok && forgeAct.code === "42501" && peekActs.ok && peekActs.rows.length === 0,
         "insert " +
           (forgeAct.ok ? "written" : failed(forgeAct)) +
@@ -1769,7 +1893,7 @@ async function runLiveDbArms({ record, skip }) {
       const aliases = await attempt(client, "select alias from public.event_aliases limit 1");
       const words = await attempt(client, "select word from public.reserved_link_words limit 1");
       record(
-        "Handoff 32-B (1080, 1100): a member cannot read event_aliases or reserved_link_words",
+        names.discoveryAliases,
         !aliases.ok && aliases.code === "42501" && !words.ok && words.code === "42501",
         "aliases " +
           (aliases.ok ? "read" : aliases.code) +
@@ -1778,7 +1902,7 @@ async function runLiveDbArms({ record, skip }) {
       );
 
       record(
-        "Handoff 34-A (1037, 1093, 1105, 1124, 1172): vocabularies() serves the nine families, the five lenses with their short words and the ten lanes in their base order",
+        names.discoveryVocab,
         families.length === 9 &&
           lenses.map((l) => l.value).join(",") === "all,follow,taste,curated,network" &&
           lenses.every((l) => typeof l.short === "string" && l.short.trim() !== "") &&
@@ -1803,7 +1927,7 @@ async function runLiveDbArms({ record, skip }) {
       ]);
       const anonAct = await attempt(client, "select public.note_lane_act('soon', 'open')");
       record(
-        "Brief 9 (662): signed out cannot call convene_discovery or convene_places, or read a rail row",
+        names.discoverySignedOut,
         !anon.ok &&
           anon.code === "42501" &&
           !anonPlaces.ok &&
@@ -1819,12 +1943,58 @@ async function runLiveDbArms({ record, skip }) {
       );
       // The control is the owner's own call above, which answered.
       record(
-        "Handoff 34-A (1128, 1160): signed out cannot call event_going_names or note_lane_act",
+        names.discoveryGoingSignedOut,
         !anonGoing.ok && anonGoing.code === "42501" && !anonAct.ok && anonAct.code === "42501",
         "going " +
           (anonGoing.ok ? "answered" : anonGoing.code) +
           " act " +
           (anonAct.ok ? "written" : anonAct.code),
+      );
+    });
+
+    // ------------------------------------------------------------------------------------------
+    // G61 (Session 35, 20260927120100): TRUNCATE, REFERENCES, TRIGGER and MAINTAIN, which Supabase's
+    // default privileges hand anon and authenticated on every table postgres creates in public, are
+    // revoked from every table and from the default. Read from pg_class.relacl through aclexplode and
+    // from pg_default_acl, never from information_schema.role_table_grants: that view lists only the
+    // grants where the reading role is grantor or grantee, so as live_arms it would read zero whatever
+    // the truth. Both catalogues are readable by every role.
+    // ------------------------------------------------------------------------------------------
+    await inTransaction(client, async () => {
+      await actAsSelf(client);
+      const held = await attempt(
+        client,
+        `select
+           (select coalesce(jsonb_agg(distinct c.relname || ':' || r.rolname || ':' || a.privilege_type), '[]'::jsonb)
+            from pg_class c
+            cross join lateral aclexplode(c.relacl) a
+            join pg_roles r on r.oid = a.grantee
+            where c.relnamespace = 'public'::regnamespace
+              and c.relkind in ('r', 'p')
+              and r.rolname in ('anon', 'authenticated')
+              and a.privilege_type in ('TRUNCATE', 'REFERENCES', 'TRIGGER', 'MAINTAIN')) as tables,
+           (select coalesce(jsonb_agg(distinct r.rolname || ':' || a.privilege_type), '[]'::jsonb)
+            from pg_default_acl d
+            cross join lateral aclexplode(d.defaclacl) a
+            join pg_roles r on r.oid = a.grantee
+            where d.defaclnamespace = 'public'::regnamespace
+              and d.defaclrole = 'postgres'::regrole
+              and d.defaclobjtype = 'r'
+              and r.rolname in ('anon', 'authenticated')
+              and a.privilege_type in ('TRUNCATE', 'REFERENCES', 'TRIGGER', 'MAINTAIN')) as defaults`,
+      );
+      const row = held.ok ? held.rows[0] : null;
+      record(
+        names.grants,
+        !!row && row.tables.length === 0 && row.defaults.length === 0,
+        row
+          ? "tables " +
+              JSON.stringify(row.tables.slice(0, 5)) +
+              " (" +
+              row.tables.length +
+              ") default ACL " +
+              JSON.stringify(row.defaults)
+          : held.code + " " + held.message,
       );
     });
   } finally {

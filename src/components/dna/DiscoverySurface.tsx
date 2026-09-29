@@ -1431,13 +1431,13 @@ export function DiscoverySurface({
   const lensSentence = lensLane === "follow" && !!sentence && !lensCards && !noMatch;
   const lensEmpty = !!lensLane && !lensCards && !lensSentence;
 
-  // More on Convene (1148). The grid's column count is read from the laid-out grid, wherever the
+  // More on Convene (1148, 1174). The grid's column count is read from the laid-out grid, wherever the
   // pane puts it, on every resize, and never shown. While the lens's cards are fewer than those
   // columns, All's lanes follow beneath them from a second read of the projection with the same
-  // facets under All, each lane less the lens's own events as the projection answered the lens. The
-  // projection applied each lane's floor when it answered (632) and the floors are its own
-  // (`private.convene_thresholds`), so the surface re-applies none and holds no count: a lane the
-  // removal empties is absent. A lens with no events keeps its EmptyState and reads nothing more.
+  // facets under All and `without` set to the lens. The projection removes the lens's events, exactly
+  // the ones that lens's own read returns, before it applies the floors (`private.convene_thresholds`),
+  // so a lane the removal thins below its floor is absent, and the surface removes nothing and holds no
+  // count. A lens with no events keeps its EmptyState and reads nothing more.
   const [columns, setColumns] = useState(0);
   const gridRef = useCallback((el: HTMLDivElement | null) => {
     if (!el) return;
@@ -1461,24 +1461,22 @@ export function DiscoverySurface({
     if (!paneOpen) setShortOutside(shortHere);
   }, [paneOpen, shortHere]);
   const short = shortHere || (paneOpen && shortOutside && lensCards);
-  const allFacets = useMemo(() => ({ ...facets, lens: "all" as const }), [facets]);
+  const allFacets = useMemo(
+    () => ({ ...facets, lens: "all" as const, ...(lensLane ? { without: lensLane } : {}) }),
+    [facets, lensLane],
+  );
   const moreRead = useQuery({
-    // All's own key: the same facets under All are the same read, so All and this share it.
+    // Its own key: the same facets under All with the lens left out are not All's read, so this no
+    // longer shares All's cache and carries `without` in the key.
     queryKey: ["discovery", member.id, allFacets],
     queryFn: () => loadDiscovery(member, allFacets),
     enabled: short,
     refetchOnWindowFocus: true,
   });
   const more = short ? (moreRead.data ?? null) : null;
-  const lensIds = new Set(
-    (data?.sections ?? []).find((s) => s.section === lensLane)?.items.map((i) => i.event_id) ?? [],
-  );
-  // All's lanes less the lens's events, before this member's dismissals: stepping reads these, as it
-  // reads the lens's own lane before them (1044).
-  const moreLanes: DiscoverySection[] = (more?.sections ?? []).map((s) => ({
-    ...s,
-    items: s.items.filter((i) => !lensIds.has(i.event_id)),
-  }));
+  // The answer's sections are More on Convene's lanes, before this member's dismissals: stepping reads
+  // these, as it reads the lens's own lane before them (1044).
+  const moreLanes: DiscoverySection[] = more?.sections ?? [];
   const moreEntries = laneEntries(
     moreLanes.map((s) => ({
       ...s,

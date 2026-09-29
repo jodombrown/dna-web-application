@@ -1661,6 +1661,10 @@ async function mockSupabase(page, db, opts = {}) {
           country: h.country,
         }));
       if (lens !== "all" && !DISCOVERY_LENSES.includes(lens)) return refuse("That is not a lens.");
+      // 1174: p_without names the lens a read of All leaves out, and only All takes it.
+      const without = b.p_without == null ? "" : String(b.p_without).trim();
+      if (without && (lens !== "all" || !DISCOVERY_LENSES.includes(without)))
+        return refuse("That is not a lens to leave out.");
       if (b.p_when && !["two_weeks", "this_month", "later"].includes(b.p_when))
         return refuse("That is not a when.");
       if (b.p_format && b.p_format.some((f) => !["in_person", "online", "hybrid"].includes(f)))
@@ -1735,14 +1739,29 @@ async function mockSupabase(page, db, opts = {}) {
             (latest[y] || 0) - (latest[x] || 0) ||
             DISCOVERY_SECTIONS.indexOf(x) - DISCOVERY_SECTIONS.indexOf(y),
         );
-      const sections = [];
-      for (const id of order) {
-        if (lens !== "all" && lens !== id) continue;
+      // A lane as that lane's own read returns it, before the strip.
+      const laneItems = (id) => {
         let items = (d.sections[id] || []).filter(
           (i) => !d.dismissals.some((x) => x.p_section === id && x.p_event === i.event_id),
         );
         if (inPersonOnly && (id === "online" || id === "curated")) items = [];
-        items = items.filter(keep).map(strip);
+        return items.filter(keep);
+      };
+      // 1174: the lens's own events, the first 60 as its read returns them, leave every lane before
+      // any floor applies.
+      const leftOut = new Set(
+        without
+          ? laneItems(without)
+              .slice(0, 60)
+              .map((i) => i.event_id)
+          : [],
+      );
+      const sections = [];
+      for (const id of order) {
+        if (lens !== "all" && lens !== id) continue;
+        let items = laneItems(id)
+          .filter((i) => !leftOut.has(i.event_id))
+          .map(strip);
         // With a city chosen in Place, Near reads the place rather than a home (1095).
         if (id === "near" && cityName)
           items = items.map((i) => ({ ...i, reason: { kind: "near", place: { city: cityName } } }));

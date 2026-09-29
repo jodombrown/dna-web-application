@@ -95,6 +95,9 @@ batch has to be applied in pieces the repo carries the whole batch before the fi
 (ruling 225). Applying first leaves the canonical database ahead of every checkout, so a `db reset`
 reverts work nobody knew was there and a concurrent session audits a state no migration explains,
 which is exactly what happened on 9 September and became PASS-01's 18:30 addendum.
+Prototype and test data is written through the canonical write path, never by direct insert into a table
+whose derived state another function keeps; an RSVP goes through `private.rsvp_write`, which writes its
+`event_rsvp` edge (Session 34's seed, 1165).
 A migration file is never amended after it is applied; a change is a new migration (ruling 466).
 `tests/migration-lint.cjs` enforces 466 in the harness rather than by assertion: it compares the
 migration files at the merge base with the default branch against the ones in the working tree, keyed

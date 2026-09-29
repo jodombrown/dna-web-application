@@ -4244,6 +4244,13 @@ grants there removes a path a Convene surface may already use. A harness arm tha
 `role_table_grants` and fails on any of the four for `anon` or `authenticated` would keep it closed,
 in `tests/migration-drift.cjs`'s shape.
 
+**Narrowed 28 September 2026, in handoff 35-A (items 5 and 10).** The four privileges are revoked from
+every table in `public` and from the default by `20260927120100`, and the live arm "G61 (Session 35)"
+keeps them closed: it reads `pg_class.relacl` through `aclexplode` and `pg_default_acl`, not
+`role_table_grants`, which lists only the grants where the reading role is grantor or grantee and so
+reads zero as `live_arms` whatever the truth. The entry stays open for the direct INSERT, UPDATE and
+DELETE on `event_delivery` and `event_host_settings`, which are filed as G145.
+
 ## G62. Strand's `Segment.tsx` still names `SegmentBlock` in its own header, one line the rename under 1007 was told not to touch
 
 **Severity: cosmetic. Opened 22 September 2026 during handoff 30-B, filed under ruling 597. The
@@ -4902,7 +4909,7 @@ direct-load check has always used and which WebKit passes. Owed: read it in WebK
 follows a link or types an address while a post is open in place is sent back to that post, it is a
 defect in the in-place route, not in the harness.
 
-## G96. The event page's toast is blanked by the timer of the toast before it
+## G96. The event page's toast is blanked by the timer of the toast before it — closed (handoff 35-A)
 
 **Severity: low. Opened 24 September 2026 during handoff 32-A, filed under ruling 597. The number is
 assigned by this entry (ruling 638).**
@@ -4919,6 +4926,10 @@ already come and gone: one of three isolated runs at 1280 dark, and the local fu
 The arm now waits the going toast out before withdrawing, and the Withdrawn toast is still required.
 Owed, in a brief that may touch `EventSurface`: `say()` clears its previous timer, as the other two
 surfaces do. This PR changes no page (handoff 32-A item 6).
+
+**Closed 28 September 2026, in handoff 35-A item 3, by `888fc00`.** `say()` keeps its timer in a ref
+and clears the one before it, and the component clears it on unmount, as `ConnectSurface` does.
+`tests/event.cjs`'s arm that waits out the going toast is unchanged.
 
 Found in the same run and closed by this PR: `pages.yml` run 332 failed "notification: Respond opens
 the event page and marks the row read" at chromium 1280 dark because the check read the mock's reads
@@ -6265,7 +6276,7 @@ lands, the surface passes the prop and the DOM write goes.
 
 ---
 
-## G142. `tests/rsvp-drift.cjs` prints FAIL and exits 0
+## G142. `tests/rsvp-drift.cjs` prints FAIL and exits 0 — closed (handoff 35-A)
 
 **Severity: medium. The step that exists to go red on a derivation that drifts (ruling 1002) stays
 green when it finds one. Opened 27 September 2026 during handoff 34-A, filed under ruling 597. The
@@ -6288,9 +6299,15 @@ Owed: the three failure paths reach the exit with their status, and the step goe
 disagreement. A one-line change in the test, outside 34-A's scope, so it is filed rather than made
 here.
 
+**Closed 28 September 2026, in handoff 35-A item 1, by `7d98e99`.** `process.exit(code)` moved into
+the `finally`, after the client closes, so a `return` from the `try` reaches it with its status; the
+messages are unchanged. Proved once with a scratch stub of `pg` answering one drift row: the arm
+printed its FAIL and exited 1, and exited 0 on `84d1f2c`. The stub is not committed, since a fake
+client proves the path runs and not that the arm passes.
+
 ---
 
-## G143. A live-db block whose presence probe fails reports one name UNPROVEN and drops every other arm in it
+## G143. A live-db block whose presence probe fails reports one name UNPROVEN and drops every other arm in it — closed (handoff 35-A)
 
 **Severity: medium. Arms that cannot run vanish instead of reading UNPROVEN, which is the failure mode
 ruling 228 exists to prevent. Opened 27 September 2026 during handoff 34-A, filed under ruling 597.
@@ -6309,6 +6326,24 @@ the others built the same way.
 Owed: a block that cannot run reports every arm it carries as UNPROVEN with the probe's reason, for
 example by naming its arms up front in `names` and skipping each, so a missing function reads as the
 coverage it removes.
+
+**Closed 28 September 2026, in handoff 35-A item 2, by `6d18b20`.** The three blocks that open with a
+presence probe are attend (`to_regprocedure` on `event_page` and `event_public_page`), guest and claim
+(the guest path's three functions) and Discovery (`convene_discovery`'s signature and its recorded
+version). Every arm of each is now a key in `names`, under the block's prefix, and every `record` in
+those blocks reads its label from there; `armsOf(prefix)` lists a block's arms, so a probe that fails
+skips each with its reason, and the attend block's two early returns after the probe skip the arms
+they leave unreached. `tests/live-checks.cjs` prints `arms named: N passed, F failed, U unproven`,
+where the total is the same whichever way a probe answers. Read against a scratch stub of `pg` whose
+probes all answer null (not committed): the three blocks report 34 arms UNPROVEN where `84d1f2c`
+reports 4, and every key with a block's prefix is reached by a `record`. Push 1's first live job did
+not show the probe failing, since the probe still named the nine-argument signature and `20260926170400`,
+both then on the project, and it straddled Chat's apply. Its re-run, run 387 attempt 2 (job
+`109168680013`, 28 September 2026, on `0f86bf5` after both migrations were recorded), did: the Discovery
+probe found the nine-argument function gone, the block's 26 arms read UNPROVEN with the probe's reason
+and the total read `172 arms named: 143 passed, 0 failed, 29 unproven`, the same 172 as the first job's
+`169 passed, 3 unproven`. The three other unproven arms are the ones that read UNPROVEN before this
+change.
 
 ---
 
@@ -6344,3 +6379,81 @@ when any of them resizes. At medium the dock is the fixed one and its Cs centre 
 the flip is where the row's width reaches the bar's 560.77, the gap and 140: the field sits beside
 the bar from a viewport of 777 and under it at 776, read in Chromium after the fonts settle. The
 discovery facets arm reads the unit at 820, 1280 and 1440 and the search arm at 820 and 1280.
+
+---
+
+## G145. `event_delivery` and `event_host_settings` carry direct write grants that are `publish_post`'s own permission, a second door for a host
+
+**Severity: low, an invite-boundary gate under prototype posture (ruling 140). Opened 28 September
+2026 during handoff 35-A, filed under ruling 597 and split out of G61. The number is assigned by this
+entry (ruling 638).**
+
+`public.publish_post` is security invoker, so it writes `public.event_delivery` and
+`public.event_host_settings` as the member, and `authenticated` holds INSERT, UPDATE and DELETE on
+both tables so that it can (`event_delivery_host_all` and `event_host_settings_host_all`,
+`20260916120100_p1_convene_place_columns.sql`). Those grants are the one write path's own permission,
+and they are also a way in that skips it: a host can write their own event's delivery rows through
+PostgREST without passing through `publish_post`, held shut only by the host predicate in the policy.
+Under the one-write-path absolute that is a second door on each table.
+
+What it costs today: a host can change the physical, meeting-link and capacity rows of their own event
+without the checks `publish_post` makes, and nothing else, since the policy limits each to the host's
+own event.
+
+Owed: a ruling, then one migration from Chat. Closing it means making `publish_post` security definer
+first, so that it no longer needs the member's own write grants, and only then revoking INSERT, UPDATE
+and DELETE on both tables from `authenticated`. Revoking first would break publishing.
+
+---
+
+## G146. `src/lib/database.types.ts` is regenerated by hand, and nothing checks the file against the project
+
+**Severity: low. Opened 28 September 2026 during handoff 35-A, filed under ruling 597. The number is
+assigned by this entry (ruling 638).**
+
+Found while regenerating for item 8. The Supabase MCP's `generate_typescript_types` returns the types
+as one unformatted line of JSON text, without the file's header, and without the `Views` helper at the
+end, which the generator drops and CLAUDE.md says every regeneration restores. Formatted with the
+pinned prettier and compared with the tree, the generated text differed from `database.types.ts` in
+three ways only: prettier's own line-breaking of a few long unions, `Json`'s layout, and the one
+change item 8 needed, `p_without?: string` on `convene_discovery`. That agreement is what makes the
+file's header claim true today, that nothing in it is hand-written but the header and `Views`.
+
+What it costs. The regeneration is a manual procedure with two hand steps, the header and `Views`,
+and the file's header is prose that goes stale: it still describes the file as taken after handoff
+34-A's migrations and does not name `p_without`. Nothing in the harness compares the file with the
+project, so a migration that changes a signature or a column reaches the types only when someone
+regenerates, and a `Views` restore that is forgotten breaks `src/lib/feed.ts` at the typecheck, not at
+the regeneration. This branch took the one line by hand rather than replacing the file, because a
+whole-file replacement would have carried the prettier differences into the diff.
+
+Owed: a script in `scripts/` that regenerates the file, formats it, and restores the header and
+`Views`, and a check that fails when the result differs from the tree, in
+`tests/migration-drift.cjs`'s shape.
+
+---
+
+## G147. The matrix's "no page errors" arms record a failed request's status and not its URL
+
+**Severity: low. Opened 29 September 2026 during handoff 35-A, filed under ruling 597. The number is
+assigned by this entry (ruling 638).**
+
+The arms that watch a page for errors push `m.text()` for every `console` message of type `error`,
+except fonts and connection resets (`tests/matrix.cjs`, and the same line in the other suites that
+copy it). For a subresource that fails to load, that text is Chromium's own "Failed to load resource:
+the server responded with a status of 500 ()", which names the status and not the request. So a red
+"no page errors" check cannot say which URL answered 500, whether it was the mock, the deployment or
+a third party, and the failure has to be attributed from the logs around it or not at all.
+
+What it cost. Run 390 on `9424c5d`, attempt 1: `matrix (chromium)` passed 6963 of 6964 and failed
+`chromium-360x800-light no page errors` with that message. The arm is the first Feed arm of the run
+and loads no Discovery route. The one re-run of the failed job passed 6964 of 6964, with webkit, live
+and deploy from attempt 1 on the same head. The 500 was not attributed: the artifact could not be
+fetched from the session that read the run, and the message carries no URL. It is recorded here as
+unexplained, neither called a flake nor traced to this PR.
+
+Owed: the check's message carries the request's URL, from `m.location().url` on the console message
+or a `response` listener for statuses of 400 and above, so the next failure of this kind names what
+failed. Nothing about the arms' pass conditions changes.
+
+---
