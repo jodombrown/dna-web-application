@@ -6799,3 +6799,38 @@ the path and not the sample (see G154's closing note). `judgeEnter` names such a
 `late=`, and counts one per arm. Owed: the enforcing run on 37-D's final head.
 
 ---
+
+## G161. The tree's Sheet has no title row, so Strand's 57px header (1217, 1222) reaches only the composer
+
+**Severity: low. Opened 29 September 2026 during handoff 37-D item 6, filed under ruling 597. The number is
+assigned by this entry (ruling 638).**
+
+Strand's Sheet renders its own header from a `title` or `onClose` prop, so its 57px change reached every
+titled sheet at once. The tree's `Sheet.tsx` has no title row: each mount draws its own, and 37-D changed
+the composer's alone. Measured in Chromium at 1280 by 800, light, pointer, on the mocked app, panel top 0,
+721 wide; a header row is the row holding the title and the close control, border-box, so the 1px bottom
+border is in it:
+
+| Mount                                                        | Header row                                                                                                                              |
+| ------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
+| Composer (after 37-D)                                        | 57, and 57 at 390 and 820                                                                                                               |
+| IntroSheet (Profile's Connect with, and Connect's Suggested) | 56                                                                                                                                      |
+| GuestSheet ("I am going")                                    | 56                                                                                                                                      |
+| RsvpSheet                                                    | 56                                                                                                                                      |
+| RoleInvitationSheet                                          | 56                                                                                                                                      |
+| ProfileSurface's C sheet ("About Connect")                   | no header row, no close control; title band bottom 112.0, title text bottom 59.2                                                        |
+| OnboardingSurface's explainer                                | no header row, close is the footer "Got it"; heading bottom 71.2                                                                        |
+| ConveneForm's venue-info sheet                               | no header row, no close; heading bottom 42.4                                                                                            |
+| ProfileBlockControl's block sheet                            | no header row, no close; heading bottom 55.2                                                                                            |
+| EventShareSheet                                              | not reachable at 1280: the event page is in Discovery's pane and Share opens the pane's own share; the Sheet mounts only below expanded |
+| NotificationPanel                                            | not reachable as a Sheet at 1280 pointer: it is the 380 popover; the Sheet is touch only                                                |
+| FacetRail, ConnectSurface's Filters                          | compact only                                                                                                                            |
+
+Five mounts draw a 56 row against Strand's 57, four draw none, three are not reachable at 1280 and were
+not measured. Compact was not measured on those; the composer's compact header was 53 by its padding
+(0 top, 8 bottom, 44 Close, 1 border) before 37-D and reads 57 after, under Sheet's 24 px handle.
+
+It stays a finding until the founder rules on moving the header into Sheet for every mount; 37-D changes
+none of them. Measured once by scratch scripts that are not committed.
+
+---
