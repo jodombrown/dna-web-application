@@ -60,6 +60,8 @@ const {
   SB,
 } = M;
 
+/** The engine's one allowance for a frame delivered out of order, per run: engine -> the arm that used it (37-D item 8). */
+const ALLOWANCE = new Map();
 /** 0.5 px, the handoff's tolerance, on the geometry record. */
 const TOL = 0.5;
 /** One 4:2:0 chroma block, the video's own resolution for a colour edge, on the painted reading. */
@@ -478,15 +480,15 @@ function fmtSeries(list) {
 /**
  * The four enter assertions of the handoff, on the painted frames that show the panel. Rest is the
  * last such frame's edge, so "the wrong side" is an edge below rest on either axis: left of a
- * drawer's rest, above a bottom sheet's.
+ * drawer's rest, above a bottom sheet's. `allow` is whether one out-of-order frame may be excused
+ * (see `reordered`).
  */
-function judgeEnter(enter, tol, geometry) {
-  const raw = enter.filter((f) => f.pos !== null).map((f) => f.pos);
-  if (!raw.length) return { painted: 0 };
-  // G154, G160: one frame WebKit delivered out of arrival order is named and left out, on the
-  // enter as on the exit, by `reordered`.
-  const late = reordered(raw, "enter", geometry, tol);
-  const pos = late ? raw.filter((_, i) => i !== late.index) : raw;
+function judgeEnter(enter, tol, geometry, allow) {
+  const frames = enter.filter((f) => f.pos !== null);
+  if (!frames.length) return { painted: 0 };
+  const geoRest = geometry[geometry.length - 1];
+  const found = reordered(frames, "enter", geometry, tol, geoRest, allow);
+  const pos = frames.filter((_, i) => i !== found.late?.index).map((f) => f.pos);
   const rest = pos[pos.length - 1];
   const wrongSide = pos.filter((p) => p < rest - tol);
   const away = [];
@@ -496,7 +498,8 @@ function judgeEnter(enter, tol, geometry) {
     rest,
     wrongSide,
     away,
-    late,
+    late: found.late,
+    refused: found.refused,
     atRest: Math.abs(pos[pos.length - 1] - rest) <= tol,
     slid: pos[0] > rest + tol,
     first: pos[0],
@@ -507,59 +510,69 @@ function judgeEnter(enter, tol, geometry) {
 }
 
 /**
- * Whether a painted position lies on the path the geometry record held in the same motion: within
- * two chroma blocks of a sample, or between two consecutive samples. The sampler runs once per
- * animation frame, about 16 ms apart, which mid-slide is 70 to 140 px, so the video's frame, taken
- * at another instant, is rarely within a block of a sample (runs 406 and 407 read 8.5 and 8.7 px
- * off the nearest one) and is always between two.
+ * G154, G160 (handoff 37-D item 8, narrowed by Chat): WebKit's screencast can deliver one frame
+ * out of the video's order, reading a position the motion had already passed. Seen only in WebKit,
+ * so Chromium never has the allowance. A frame is excused only when all of these hold:
+ * - the geometry record over the same motion is itself one-way (a reversal there is real motion);
+ * - the frame is the first that moves the wrong way (away from rest on an enter, back toward it
+ *   on an exit) and removing it leaves the painted series one-way;
+ * - it lies between two consecutive samples of that record and is not past rest;
+ * - on an enter, the series that remains ends at the record's rest.
+ * `allow` is decided by the caller: one frame per arm and one arm per engine per run. The frame
+ * stays in the printed series, and a refusal names its reason so a failing arm says why.
+ * Returns { late: {index, t, pos, between: [a, b]} | null, refused: string | null }.
  */
-function onRecord(p, geometry, tol2) {
-  return geometry.some(
-    (g, i) =>
-      Math.abs(g - p) <= tol2 ||
-      (i > 0 && p >= Math.min(g, geometry[i - 1]) && p <= Math.max(g, geometry[i - 1])),
-  );
-}
-
-/**
- * G154 and G160: WebKit's screencast can deliver one frame out of the video's order, reading a
- * position the motion had already passed. Recognised by one rule on the enter and the exit: the
- * first frame that moves the wrong way (away from rest on an enter, back toward it on an exit)
- * is left out when the series is then one-way throughout and its position is on the geometry
- * record's path. At most one frame per motion; a second violation, or a frame off the record's
- * path, is not recognised and the check fails on it. The frame stays in the printed series.
- */
-function reordered(pos, dir, geometry, tol) {
+function reordered(frames, dir, geometry, tol, geoRest, allow) {
+  const pos = frames.map((f) => f.pos);
   const wrong = (a, i) => (dir === "enter" ? a[i] > a[i - 1] + tol : a[i] < a[i - 1] - tol);
   const first = pos.findIndex((_, i) => i > 0 && wrong(pos, i));
-  if (first < 0) return null;
+  if (first < 0) return { late: null, refused: null };
+  const no = (why) => ({ late: null, refused: why });
+  if (!allow) return no("the reorder allowance is not available to this arm");
+  for (let i = 1; i < geometry.length; i++)
+    if (dir === "enter" ? geometry[i] > geometry[i - 1] + TOL : geometry[i] < geometry[i - 1] - TOL)
+      return no(
+        `the geometry reverses at sample ${i} (${geometry[i - 1]} to ${geometry[i]}): real motion`,
+      );
   const rest = pos.filter((_, i) => i !== first);
-  for (let i = 1; i < rest.length; i++) if (wrong(rest, i)) return null;
-  if (!onRecord(pos[first], geometry, 2 * tol)) return null;
-  return { index: first, pos: pos[first] };
+  for (let i = 1; i < rest.length; i++)
+    if (wrong(rest, i)) return no("a second frame moves the wrong way");
+  const p = pos[first];
+  if (p < geoRest - tol) return no(`the frame at ${fmt(p)} is past rest ${fmt(geoRest)}`);
+  const at = geometry.findIndex(
+    (g, i) => i > 0 && p >= Math.min(g, geometry[i - 1]) && p <= Math.max(g, geometry[i - 1]),
+  );
+  if (at < 0) return no(`the frame at ${fmt(p)} is between no two samples of the geometry`);
+  if (dir === "enter" && Math.abs(rest[rest.length - 1] - geoRest) > 2 * tol)
+    return no(
+      `the series without it ends at ${fmt(rest[rest.length - 1])}, not the geometry's rest ${fmt(geoRest)}`,
+    );
+  return {
+    late: { index: first, t: frames[first].t, pos: p, between: [geometry[at - 1], geometry[at]] },
+    refused: null,
+  };
 }
+
+/** "excused: the frame at 578, 400 ms, between samples 712.1 and 569.5" for an arm's detail. */
+const excused = (late) =>
+  late
+    ? `; excused one frame delivered out of order: ${fmt(late.pos)} at ${late.t} ms, between geometry samples ${fmt(late.between[0])} and ${fmt(late.between[1])}`
+    : "";
 
 /**
  * The exit: from the rest the enter reached, the painted edge may only ever move away from it,
- * never below it and never back toward it between two frames, until no lime is painted.
- *
- * G154: WebKit's screencast can deliver a frame out of the video's order. Runs 399 and 400 read one
- * exit's last painted frame back at the position the geometry held for the exit's first moving
- * frame (637.2 painted as 638, 1003.6 as 1000), and run 407 read 346 after 839 at 390. The frame
- * is named by `reordered`, the rule the enter shares (G160), and left out of the judgment; it stays
- * in the printed series. The geometry recognises such a frame and never judges the motion.
+ * never below it and never back toward it between two frames, until no lime is painted. A frame
+ * WebKit delivered out of order (runs 399, 400 and 407) is excused only by `reordered`'s rule.
  */
-function judgeExit(exit, rest, tol, geometry) {
+function judgeExit(exit, rest, tol, geometry, allow) {
   const painted = exit.filter((f) => f.pos !== null);
-  const raw = painted.map((f) => f.pos);
   const gone = exit.length > 0 && exit[exit.length - 1].pos === null;
-  const found = reordered(raw, "exit", geometry, tol);
-  const late = found ? { t: painted[found.index].t, pos: found.pos } : null;
-  const pos = found ? raw.filter((_, i) => i !== found.index) : raw;
+  const found = reordered(painted, "exit", geometry, tol, rest, allow);
+  const pos = painted.filter((_, i) => i !== found.late?.index).map((f) => f.pos);
   const wrongSide = pos.filter((p) => p < rest - tol);
   const back = [];
   for (let i = 1; i < pos.length; i++) if (pos[i] < pos[i - 1] - tol) back.push(i);
-  return { wrongSide, back, gone, late, count: pos.length };
+  return { wrongSide, back, gone, late: found.late, refused: found.refused, count: pos.length };
 }
 
 const fmt = (n) => (n == null ? "null" : Math.round(n * 10) / 10);
@@ -655,21 +668,31 @@ async function readSheet(session, tag, { label, shape, trigger }) {
   await ctx.close();
   const painted = paintedSeries(video, shape, scale, w / scale, h / scale);
   const geometryEnter = present.map((f) => axisOf(f, shape).pos);
-  const e = judgeEnter(painted.enter, tol, geometryEnter);
+  // The allowance for one out-of-order frame: WebKit only, one frame per arm, one arm per engine
+  // per run (37-D item 8). The first arm to use it holds it; a later arm's frame fails.
+  const engine = tag.split("-")[0];
+  const held = ALLOWANCE.get(engine);
+  const allow = engine === "webkit" && held === undefined;
+  const e = judgeEnter(painted.enter, tol, geometryEnter, allow);
   console.log(
     `SHEET ${tag} enter shape=${shape} scale=${scale} decoded=${painted.decoded} click=${painted.click} escape=${painted.esc} ` +
-      (e.late ? `late=${e.late.pos} (out of order, on the geometry's path; G160) ` : "") +
+      (e.late
+        ? `late=${e.late.t}:${e.late.pos} (between geometry samples ${fmt(e.late.between[0])} and ${fmt(e.late.between[1])}; G160) `
+        : "") +
+      (e.refused ? `refused=${JSON.stringify(e.refused)} ` : "") +
       `rest=${fmt(e.rest)} painted=${e.painted} first=${fmt(e.first)} min=${fmt(e.min)} max=${fmt(e.max)} last=${fmt(e.last)} ` +
       `series=[${fmtSeries(painted.enter)}]`,
   );
-  const detail = `rest ${fmt(e.rest)}; first ${fmt(e.first)}, min ${fmt(e.min)}, max ${fmt(e.max)}, last ${fmt(e.last)}; ${e.painted} painted frames of ${painted.enter.length} from the click${e.late ? `; one delivered out of order at ${e.late.pos} and left out (G160)` : ""}`;
+  const detail = `rest ${fmt(e.rest)}; first ${fmt(e.first)}, min ${fmt(e.min)}, max ${fmt(e.max)}, last ${fmt(e.last)}; ${e.painted} painted frames of ${painted.enter.length} from the click${excused(e.late)}${e.refused ? `; not excused: ${e.refused}${held ? ` (held by ${held})` : ""}` : ""}`;
   const geometryExit = geoExit.frames.filter((f) => !f.none).map((f) => axisOf(f, shape).pos);
-  const x = judgeExit(painted.exit, e.rest ?? 0, tol, geometryExit);
+  const x = judgeExit(painted.exit, e.rest ?? 0, tol, geometryExit, allow && !e.late);
+  if (e.late || x.late) ALLOWANCE.set(engine, tag);
   console.log(
     `SHEET ${tag} exit shape=${shape} from=${fmt(e.rest)} painted=${x.count} gone=${x.gone} ` +
       (x.late
-        ? `late=${x.late.t}:${x.late.pos} (out of order, on the geometry's path; G154) `
+        ? `late=${x.late.t}:${x.late.pos} (between geometry samples ${fmt(x.late.between[0])} and ${fmt(x.late.between[1])}; G154) `
         : "") +
+      (x.refused ? `refused=${JSON.stringify(x.refused)} ` : "") +
       `series=[${fmtSeries(painted.exit)}]`,
   );
   const checks = [
@@ -701,7 +724,7 @@ async function readSheet(session, tag, { label, shape, trigger }) {
     [
       " exit: the painted edge leaves one way, never past its rest and never back toward it, and is gone (37-B)",
       e.painted > 0 && x.wrongSide.length === 0 && x.back.length === 0 && x.gone,
-      `from ${fmt(e.rest)}; ${x.count} painted frames${x.late ? ` and one delivered out of order (G154, G160)` : ""}; ${x.wrongSide.length} past rest; turned back at ${x.back.join(",") || "none"}; gone ${x.gone}`,
+      `from ${fmt(e.rest)}; ${x.count} painted frames${excused(x.late)}${x.refused ? `; not excused: ${x.refused}${held ? ` (held by ${held})` : ""}` : ""}; ${x.wrongSide.length} past rest; turned back at ${x.back.join(",") || "none"}; gone ${x.gone}`,
     ],
   ];
   for (const [name, ok, why, gap] of checks) {

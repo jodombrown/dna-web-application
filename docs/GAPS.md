@@ -6648,13 +6648,15 @@ exit: painted `840:168 ... 1160:839, 1200:346`, gone at 1240, against a geometry
 and 346 is 8.7 px from the nearest one: the sampler runs once per animation frame, about 16 ms apart,
 which mid-slide is 70 to 140 px, so a video frame taken at another instant is rarely within a block of
 a sample and is always between two. G154's two matches (637.2 as 638, 1003.6 as 1000) sat at the ease's
-tail where the samples are dense. `reordered` now recognises a frame on the record's path, between two
-consecutive samples, and the enter shares it (G160). The rule is a widening of 1201's and of G154's own
-wording, which Chat rules on with the merge. Confidence that it hides no real defect: moderate. It
-recognises one frame per motion, only the first that moves the wrong way, only when removing it leaves
-the series one-way, so a sustained excursion, the shape 1201's defect had, still fails. Proved against
-the two recorded series in a scratch that is not committed: 406's enter and 407's exit recognised, two
-reordered frames in one motion and a bounce after the recognised frame not.
+tail where the samples are dense. `reordered` in `tests/sheet.cjs` is the rule the enter shares (G160), narrowed by Chat after the first
+draft matched almost any position inside the motion. A frame is excused only in WebKit (Chromium is fully
+strict); when the geometry record over the same motion is itself one-way (a reversal there is real motion
+and fails); when it is the first frame that moves the wrong way and removing it leaves the painted series
+one-way; when it lies between two consecutive samples and is not past rest; and, on an enter, when the
+series without it ends at the geometry's rest. One frame per arm, and one arm per engine per run may use
+the allowance: the first arm to use it holds it and a second arm's frame fails. The excused frame, its time
+and its bracketing samples are printed in the arm's detail, pass or fail. Proved against the recorded
+series in a scratch that is not committed (results in PR #77's body).
 
 ---
 
@@ -6765,6 +6767,15 @@ Owed: if a second run reads the same shape, the function's own log for that wind
 lifetime against the step's wall-clock, before any arm is touched. Not a flake by assertion (a failing
 arm is never called one); a failure whose cause was not read.
 
+**Second sighting, 29 September 2026 (handoff 37-D, PR #77).** `pages.yml` run 412 (id `36624735921`, head
+`b40046f`), `live` job `109599248223`: `place-resolve` answered HTTP 520 for Timor-Leste, so three arms
+failed on that one name (194 of 195 passed): `every world_countries name anchors or is unavailable, never
+a third thing`, `anchors to its own current alpha-2 code` and `carries the country's IANA zones`. A
+different status from the first sighting (520, an edge-layer answer, against 401) on the same function,
+one name, and `live` on main run 409 (`ff916a1`) passed all 195. The head changes no Edge Function,
+migration or live-check file. Not attributed either: the function's log was not read. The failed `live`
+job was not re-run, because the next push is the enforcing run's head.
+
 ---
 
 ## G160. One WebKit enter frame on the Share sheet at 390 read the hidden edge after rest, then rest again
@@ -6795,8 +6806,8 @@ reported UNPROVEN under 228) and is not a new gap.
 series was `80:687 ... 360:170, 400:578, 440:168`, a frame at 578 between 170 and 168, against the
 geometry's `123:569.5` and `106:712.1`. It is on the record's path and 8.5 px from the nearest sample,
 so it would have escaped a two-block match on the exit's own rule as well, which is why 37-D's rule is
-the path and not the sample (see G154's closing note). `judgeEnter` names such a frame, prints
-`late=`, and counts one per arm. Owed: the enforcing run on 37-D's final head.
+the path and not the sample, under the narrowing G154's closing note lists. `judgeEnter` names such a
+frame, prints `late=`, and holds the engine's one allowance for the run. Owed: the enforcing run on 37-D's final head.
 
 ---
 
