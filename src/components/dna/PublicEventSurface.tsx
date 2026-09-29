@@ -233,13 +233,12 @@ export function PublicEventSurface({ page, slug }: { page: PublicEventPage; slug
   ) : twoCol ? (
     <>
       {coverEl}
-      {headEl}
       <div
         data-public-columns
         style={{
           display: "grid",
           gridTemplateColumns: "var(--pane-list-width) minmax(0, 1fr)",
-          columnGap: "var(--pane-gap)",
+          columnGap: "var(--space-8)",
           alignItems: "start",
         }}
       >
@@ -255,9 +254,30 @@ export function PublicEventSurface({ page, slug }: { page: PublicEventPage; slug
         >
           {presenterEl}
           {factsEl}
-          {rsvpEl}
+          {rsvpEl && (
+            <div
+              data-public-rsvp-card
+              style={{
+                padding: "var(--space-4)",
+                borderRadius: "var(--radius-l)",
+                border: "1px solid var(--line)",
+                background: "var(--surface)",
+              }}
+            >
+              {rsvpEl}
+            </div>
+          )}
         </div>
-        <div data-public-story style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+        <div
+          data-public-story
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: 20,
+            maxWidth: "var(--content-max)",
+          }}
+        >
+          {headEl}
           {story}
         </div>
       </div>

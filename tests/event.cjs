@@ -1443,6 +1443,17 @@ async function runEventBlocks(browserType, bname, [w, h], theme) {
         story: width("[data-public-story]"),
         main: width("main"),
         cover: width("main img") || width("main [data-media]"),
+        gap:
+          q("[data-public-story]") && q("[data-public-aside]")
+            ? q("[data-public-story]").getBoundingClientRect().left -
+              q("[data-public-aside]").getBoundingClientRect().right
+            : null,
+        space8: parseFloat(
+          getComputedStyle(document.documentElement).getPropertyValue("--space-8"),
+        ),
+        contentMax: parseFloat(
+          getComputedStyle(document.documentElement).getPropertyValue("--content-max"),
+        ),
       };
     });
     const pubSections = await sections();
@@ -1454,12 +1465,18 @@ async function runEventBlocks(browserType, bname, [w, h], theme) {
     record(
       tag +
         (w > 1024
-          ? " public: two columns, the facts left and the story right"
+          ? " public: two columns, the facts and the RSVP card left, the title and the story right"
           : " public: one column"),
       w > 1024
         ? pub.columns === 1 &&
             pub.aside > 0 &&
             pub.story > pub.aside &&
+            pub.story <= pub.contentMax + 0.5 &&
+            Math.abs(pub.gap - pub.space8) < 0.5 &&
+            (await page.locator("[data-public-story] [data-event-title]").count()) === 1 &&
+            (await page
+              .locator("[data-public-aside] [data-public-rsvp-card] [data-guest-rsvp]")
+              .count()) === 1 &&
             (await page.locator("[data-public-aside] [data-event-facts]").count()) === 1 &&
             (await page.locator("[data-public-story] [data-event-block-section]").count()) === 3
         : pub.columns === 0,

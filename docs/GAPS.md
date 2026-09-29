@@ -6876,3 +6876,17 @@ compile (1222), and a static PersonCard or a URL-aware LinkRow is Strand's corre
 a direct `member_follows` select beside the page's one read, and writes it through `setFollow` in the same
 file. `src/lib/connect.ts` carries a second wrapper of the same `set_follow` RPC, `setFollowing`. Neither
 is changed by 37-C.
+
+---
+
+## G164. The approved public event frame's left column is a 320px literal, and Strand has no token for it
+
+**Severity: low. Opened 29 September 2026 during handoff 37-C, filed under ruling 597. The number is
+assigned by this entry (ruling 638).**
+
+`B10-Event-Page-v2` draws the public page's left column (facts, RSVP card) at 320px with no token. The
+only token in `src/styles/strand.css` that resolves to 320 is `--lane-card-width`, Discovery's lane card,
+which names a different thing, and borrowing it would tie the event page's column to Discovery's card (one
+axis, one meaning). The tree keeps `--pane-list-width` (360), so the left column reads 40px wider than the
+frame. Owed: Strand to token the public page's left column, after which the page takes it and the
+measured widths at 1536 (aside, gap `--space-8`, story) are re-read.
