@@ -3879,7 +3879,13 @@ async function runConvene(browserType, bname, [w, h], theme) {
         (await pub().isDisabled()),
     );
     await field("when_time").fill("19:30");
-    await page.waitForTimeout(100);
+    // A wait on the signal, not a fixed 100 ms: the when line is derived from the picker in an
+    // effect, and on run 401 WebKit at 390 read it before the effect had run (handoff 37-B).
+    await dialog
+      .locator('[data-convene="when-line"]')
+      .getByText(/19:30/)
+      .waitFor({ timeout: 5000 })
+      .catch(() => {});
     record(
       tag + " the picker completes the moment and Publish returns",
       !(await pub().isDisabled()) &&
