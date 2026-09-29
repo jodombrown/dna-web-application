@@ -66,14 +66,17 @@ async function newPage(browserType, [w, h], theme, connect = {}) {
   });
   // Handoff 35-C (1191, G147): a console error names its request. The URL comes first so the arms'
   // slice(0, 300) cannot cut it off; where the engine gives the message no location, the last
-  // response of 400 or above stands in. The response listener records and never fails an arm.
+  // response of 400 or above stands in, marked unconfirmed since it can be a different request
+  // from the one that raised the message. The response listener records and never fails an arm.
   const failedResponses = [];
   page.on("response", (r) => {
     if (r.status() >= 400) failedResponses.push(`${r.request().method()} ${r.status()} ${r.url()}`);
   });
   page.on("console", (m) => {
     if (m.type() === "error" && !IGNORED_CONSOLE.test(m.text()))
-      errors.push(`${m.location().url || failedResponses.at(-1) || "(no url)"} ${m.text()}`);
+      errors.push(
+        `${m.location().url || (failedResponses.length ? "(last failed response, unconfirmed) " + failedResponses.at(-1) : "(no url)")} ${m.text()}`,
+      );
   });
   return { browser, page, db, errors };
 }

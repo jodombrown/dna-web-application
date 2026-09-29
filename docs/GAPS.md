@@ -6460,7 +6460,9 @@ failed. Nothing about the arms' pass conditions changes.
 listeners push now reads `<url> <text>`, the URL first so the arms' `slice(0, 300)` cannot cut it off,
 from `m.location().url`. Chromium fills the location on a real 500 (probed first: the URL, line 0),
 so the `response` listener added beside it does not fail an arm; it only records `METHOD status URL`
-for statuses of 400 and above, and stands in for the URL where an engine gives the message none. No
+for statuses of 400 and above, and stands in for the URL where an engine gives the message none,
+prefixed `(last failed response, unconfirmed)` because it can name a different request from the one
+that raised the message; a URL from `m.location()` carries no prefix. No
 pass condition changed, and the exclusions are as they were. Proved once with a scratch page whose
 mocked route answered 500 and then 502, on Chromium only, since WebKit could not be installed in the
 session (the Playwright download hosts are outside the network allowlist): the arm's message named
