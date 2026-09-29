@@ -46,7 +46,19 @@ const M = require("./matrix.cjs");
 const { seedAttend } = require("./event.cjs");
 const { __seedDiscovery: seedDiscovery } = require("./discovery.cjs");
 
-const { launch, makeMockDb, seedPosts, mockSupabase, signIn, record, eventId, BASE, OUT, SB } = M;
+const {
+  launch,
+  makeMockDb,
+  seedPosts,
+  mockSupabase,
+  signIn,
+  record,
+  unproven,
+  eventId,
+  BASE,
+  OUT,
+  SB,
+} = M;
 
 /** 0.5 px, the handoff's tolerance, on the geometry record. */
 const TOL = 0.5;
@@ -62,6 +74,8 @@ const VIDEO_MAX_W = 1280;
 const BAND = 64;
 /** The lime outline painted inside the panel's box, in CSS pixels. */
 const OUTLINE = 8;
+/** Sheet's transition, SHEET_DUR in src/components/strand/Sheet.tsx. */
+const SHEET_DUR = 300;
 /** Where the failing arms' videos are kept, under OUT so the job's artefact carries them. */
 const VIDEO_DIR = path.join(OUT, "sheet-video");
 
@@ -526,6 +540,26 @@ function judgeExit(exit, rest, tol, geometry) {
 const fmt = (n) => (n == null ? "null" : Math.round(n * 10) / 10);
 
 /**
+ * G155: whether the engine ran no animation frame at all while the enter's transition played,
+ * read from the geometry sampler: the last frame off rest and the first frame at rest are the
+ * transition's whole duration apart, so no frame existed in which the slide could have been
+ * painted. Headless WebKit at 2560 by 1440 on the runner does this (run 402: 2560 at 254 ms, then
+ * 1280 at 558 ms, nothing between). A check on the slide is then unprovable there (ruling 228).
+ */
+function unpaintedTransition(frames, shape, tol) {
+  const present = frames.filter((f) => !f.none).map((f) => ({ t: f.t, pos: axisOf(f, shape).pos }));
+  if (present.length < 2) return null;
+  const rest = present[present.length - 1].pos;
+  let lastOff = null;
+  for (const f of present) if (f.pos > rest + tol) lastOff = f;
+  if (!lastOff) return null;
+  const firstAt = present.find((f) => f.t > lastOff.t && f.pos <= rest + tol);
+  if (!firstAt) return null;
+  const gap = firstAt.t - lastOff.t;
+  return gap >= SHEET_DUR - 40 ? { from: lastOff.t, to: firstAt.t, gap: Math.round(gap) } : null;
+}
+
+/**
  * One sheet, opened by the trigger's own click, read on its enter and its exit: four checks and
  * one on the painted edge, and the geometry beside it as a record. `label` is the panel's
  * accessible name, `shape` "drawer" or "sheet", `trigger` the selector whose click opens it.
@@ -634,6 +668,8 @@ async function readSheet(session, tag, { label, shape, trigger }) {
       " enter: the first painted frame after the click is not at rest, so the slide ran (1201, 37-B)",
       e.painted > 0 && e.slid,
       detail,
+      // Unprovable, not failed, where the engine painted no frame of the transition (G155, 228).
+      e.painted > 0 && !e.slid ? unpaintedTransition(geo.frames, shape, tol) : null,
     ],
     [
       " exit: the painted edge leaves one way, never past its rest and never back toward it, and is gone (37-B)",
@@ -641,9 +677,16 @@ async function readSheet(session, tag, { label, shape, trigger }) {
       `from ${fmt(e.rest)}; ${x.count} painted frames${x.late ? ` and one delivered late (G154)` : ""}; ${x.wrongSide.length} past rest; turned back at ${x.back.join(",") || "none"}; gone ${x.gone}`,
     ],
   ];
-  for (const [name, ok, why] of checks) record(tag + name, ok, why);
-  // A failing arm keeps its video in the artefact; a passing arm's is deleted.
-  if (checks.every(([, ok]) => ok))
+  for (const [name, ok, why, gap] of checks) {
+    if (gap)
+      unproven(
+        tag + name,
+        `the engine ran no animation frame while the ${SHEET_DUR} ms transition played: off rest at ${gap.from} ms, at rest at ${gap.to} ms, ${gap.gap} ms apart, so no frame could show the slide (G155, 228); ${detail}`,
+      );
+    else record(tag + name, ok, why);
+  }
+  // A failing arm keeps its video in the artefact; a passing or unprovable arm's is deleted.
+  if (checks.every(([, ok, , gap]) => ok || gap))
     fs.rmSync(path.dirname(video), { recursive: true, force: true });
   else console.log(`SHEET ${tag} video kept at ${path.relative(OUT, video)}`);
 }

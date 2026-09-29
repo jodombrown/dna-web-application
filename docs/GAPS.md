@@ -6642,3 +6642,28 @@ of the same exit) and leaves it out of the judgment; it stays in the record as `
 Owed: why WebKit's screencast holds the first frame of the exit back, which nothing here reads.
 
 ---
+
+## G155. Headless WebKit at 2560 by 1440 on the runner paints no frame of Sheet's 300 ms transition
+
+**Severity: low. Opened 29 September 2026 during handoff 37-B, filed under ruling 597. The number is
+assigned by this entry (ruling 638).**
+
+`webkit-2560x1440-light-sheet-composer` on pages.yml run 402 (`c9ea761`): the geometry sampler read
+the panel at 2560 (its hidden position) on four animation frames to 254 ms after the click, then no
+animation frame at all until 558 ms, where it read 1280, at rest, with the transform already `none`;
+the video painted nothing until 560 ms and then rest. The main thread ran no frame while the whole
+300 ms transition played, so no frame could show the slide, and the check "the first painted frame
+after the click is not at rest, so the slide ran" failed with nothing to read. On runs 399 to 401
+the same cell passed only because the hidden edge stayed painted for three frames before the same
+jump to rest: the slide was not rendered on any of them. Chromium at 2560 paints it in ten frames.
+This is the runner's rendering capacity at that surface and not the component: the geometry shows
+hidden then rest with no excursion, and the fix's arrays at 820 and 1280 on WebKit are one-way slides.
+
+`tests/sheet.cjs` now records that check as UNPROVEN under ruling 228 where the geometry shows the
+gap (the last frame off rest and the first at rest the transition's duration apart), never as a pass
+and never as a failure; the other checks on the cell judge the frames that exist.
+
+Owed: the 2560 slide on WebKit read on hardware that renders it, which is the founder's Safari check
+of Done Means 3, or a runner that can.
+
+---
