@@ -6630,7 +6630,15 @@ late and written in arrival order, and with nothing the component does. Not root
 is in run 399's artefact under `sheet-video/`, and the arm stays strict rather than learning to
 forgive a single frame, because the enter's real excursions at 430 were single frames too.
 
-Owed: the reading on the next run of the same head, per handoff 37-B guardrail 4; if it recurs,
-the frame's own pixels against the geometry record of the same instant.
+Recurred on run 400 (`5f9055a`), `webkit-820x1180-light-sheet-composer`: 663, 695, 720, 768, 797,
+808, 818, then 638, then gone. The geometry record of the same exits answers it: the late frame
+equals the exit's first moving frame in the geometry to the pixel (637.2 at 106 ms after Escape
+painted as 638; 1003.6 as 1000 on run 399), and that frame is missing from the video's own order,
+whose first moving frames read 663 and 1046. WebKit's screencast delivered the exit's first frame
+last. `judgeExit` in `tests/sheet.cjs` now names such a frame by that match (the last painted frame,
+followed by nothing, reading back toward rest within two chroma blocks of an earlier geometry reading
+of the same exit) and leaves it out of the judgment; it stays in the record as `late=`.
+
+Owed: why WebKit's screencast holds the first frame of the exit back, which nothing here reads.
 
 ---

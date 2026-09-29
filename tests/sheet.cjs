@@ -490,14 +490,37 @@ function judgeEnter(enter, tol) {
 /**
  * The exit: from the rest the enter reached, the painted edge may only ever move away from it,
  * never below it and never back toward it between two frames, until no lime is painted.
+ *
+ * G154: WebKit's screencast can deliver the exit's first moving frame last. On runs 399 and 400
+ * one WebKit exit in eighteen read its last painted frame, the one before the panel was gone,
+ * back at exactly the position the geometry record holds for the exit's first moving frame
+ * (637.2 painted as 638 at 820, 1003.6 as 1000 at 1280), a frame the video's own order had
+ * skipped. Such a frame is named here by that match and left out of the judgment: the final
+ * painted frame, followed by nothing, reading back toward rest, within two chroma blocks of an
+ * earlier reading of the same exit's geometry. It stays in the record. The geometry is used only
+ * to recognise a duplicate, never to judge the motion.
  */
-function judgeExit(exit, rest, tol) {
-  const pos = exit.filter((f) => f.pos !== null).map((f) => f.pos);
+function judgeExit(exit, rest, tol, geometry) {
+  const painted = exit.filter((f) => f.pos !== null);
+  const pos = painted.map((f) => f.pos);
+  const gone = exit.length > 0 && exit[exit.length - 1].pos === null;
+  let late = null;
+  if (gone && pos.length >= 2) {
+    const last = pos[pos.length - 1];
+    const before = pos[pos.length - 2];
+    const earlier = geometry.filter((g) => g < before - tol);
+    // Two chroma blocks for the match: the painted edge quantises to the block and the geometry
+    // is fractional, so 1003.6 painted as 1000 is the same frame.
+    const match = earlier.find((g) => Math.abs(g - last) <= 2 * tol);
+    if (last < before - tol && match !== undefined) {
+      late = { t: painted[painted.length - 1].t, pos: last, geometry: Math.round(match * 10) / 10 };
+      pos.pop();
+    }
+  }
   const wrongSide = pos.filter((p) => p < rest - tol);
   const back = [];
   for (let i = 1; i < pos.length; i++) if (pos[i] < pos[i - 1] - tol) back.push(i);
-  const gone = exit.length > 0 && exit[exit.length - 1].pos === null;
-  return { wrongSide, back, gone, count: pos.length };
+  return { wrongSide, back, gone, late, count: pos.length };
 }
 
 const fmt = (n) => (n == null ? "null" : Math.round(n * 10) / 10);
@@ -579,9 +602,14 @@ async function readSheet(session, tag, { label, shape, trigger }) {
       `series=[${fmtSeries(painted.enter)}]`,
   );
   const detail = `rest ${fmt(e.rest)}; first ${fmt(e.first)}, min ${fmt(e.min)}, max ${fmt(e.max)}, last ${fmt(e.last)}; ${e.painted} painted frames of ${painted.enter.length} from the click`;
-  const x = judgeExit(painted.exit, e.rest ?? 0, tol);
+  const geometryExit = geoExit.frames.filter((f) => !f.none).map((f) => axisOf(f, shape).pos);
+  const x = judgeExit(painted.exit, e.rest ?? 0, tol, geometryExit);
   console.log(
-    `SHEET ${tag} exit shape=${shape} from=${fmt(e.rest)} painted=${x.count} gone=${x.gone} series=[${fmtSeries(painted.exit)}]`,
+    `SHEET ${tag} exit shape=${shape} from=${fmt(e.rest)} painted=${x.count} gone=${x.gone} ` +
+      (x.late
+        ? `late=${x.late.t}:${x.late.pos} (the geometry's ${x.late.geometry}, delivered last; G154) `
+        : "") +
+      `series=[${fmtSeries(painted.exit)}]`,
   );
   const checks = [
     [
@@ -610,7 +638,7 @@ async function readSheet(session, tag, { label, shape, trigger }) {
     [
       " exit: the painted edge leaves one way, never past its rest and never back toward it, and is gone (37-B)",
       e.painted > 0 && x.wrongSide.length === 0 && x.back.length === 0 && x.gone,
-      `from ${fmt(e.rest)}; ${x.count} painted frames; ${x.wrongSide.length} past rest; turned back at ${x.back.join(",") || "none"}; gone ${x.gone}`,
+      `from ${fmt(e.rest)}; ${x.count} painted frames${x.late ? ` and one delivered late (G154)` : ""}; ${x.wrongSide.length} past rest; turned back at ${x.back.join(",") || "none"}; gone ${x.gone}`,
     ],
   ];
   for (const [name, ok, why] of checks) record(tag + name, ok, why);
