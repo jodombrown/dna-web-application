@@ -6432,3 +6432,28 @@ Owed: a script in `scripts/` that regenerates the file, formats it, and restores
 `tests/migration-drift.cjs`'s shape.
 
 ---
+
+## G147. The matrix's "no page errors" arms record a failed request's status and not its URL
+
+**Severity: low. Opened 29 September 2026 during handoff 35-A, filed under ruling 597. The number is
+assigned by this entry (ruling 638).**
+
+The arms that watch a page for errors push `m.text()` for every `console` message of type `error`,
+except fonts and connection resets (`tests/matrix.cjs`, and the same line in the other suites that
+copy it). For a subresource that fails to load, that text is Chromium's own "Failed to load resource:
+the server responded with a status of 500 ()", which names the status and not the request. So a red
+"no page errors" check cannot say which URL answered 500, whether it was the mock, the deployment or
+a third party, and the failure has to be attributed from the logs around it or not at all.
+
+What it cost. Run 390 on `9424c5d`, attempt 1: `matrix (chromium)` passed 6963 of 6964 and failed
+`chromium-360x800-light no page errors` with that message. The arm is the first Feed arm of the run
+and loads no Discovery route. The one re-run of the failed job passed 6964 of 6964, with webkit, live
+and deploy from attempt 1 on the same head. The 500 was not attributed: the artifact could not be
+fetched from the session that read the run, and the message carries no URL. It is recorded here as
+unexplained, neither called a flake nor traced to this PR.
+
+Owed: the check's message carries the request's URL, from `m.location().url` on the console message
+or a `response` listener for statuses of 400 and above, so the next failure of this kind names what
+failed. Nothing about the arms' pass conditions changes.
+
+---
