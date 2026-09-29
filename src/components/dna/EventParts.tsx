@@ -9,6 +9,10 @@
 import type { CSSProperties, ReactNode } from "react";
 import { Avatar } from "@/components/strand/Avatar";
 import { Icon } from "@/components/strand/Icon";
+import { LINK_KINDS } from "@/components/strand/LinkRow";
+import { MediaBlock } from "@/components/strand/MediaBlock";
+import { PersonCard } from "@/components/strand/PersonCard";
+import type { EventBlock, PresenterLink } from "@/lib/event-page";
 import { placeLine } from "@/lib/place";
 import { dateLine, knownZone, localLine, timeInZone, whenLine } from "@/lib/when";
 
@@ -109,11 +113,14 @@ export function FactRow({
   main,
   sub,
   testId,
+  action,
 }: {
   icon: string;
   main: ReactNode;
   sub?: ReactNode;
   testId?: string | undefined;
+  /** A control at the row's end, e.g. the topic row's Subscribe. */
+  action?: ReactNode;
 }) {
   return (
     <div
@@ -121,10 +128,11 @@ export function FactRow({
       style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "10px 0" }}
     >
       <Icon name={icon} size={18} style={{ marginTop: 2, color: "var(--ink-2)" }} />
-      <div style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0, flex: 1 }}>
         <div style={{ fontSize: 15, lineHeight: 1.45, color: "var(--ink)" }}>{main}</div>
         {sub && <div style={QUIET}>{sub}</div>}
       </div>
+      {action}
     </div>
   );
 }
@@ -191,11 +199,17 @@ export function PresentedBy({
   host,
   avatarSrc,
   action,
+  headline,
+  links,
 }: {
   presenter: string | null;
   host: string | null;
   avatarSrc?: string | undefined;
   action?: ReactNode;
+  /** 1225: the presenter's one-line headline, as admitted for the viewer; a quiet line. */
+  headline?: string | null | undefined;
+  /** 1225: the presenter's links, as admitted for the viewer. */
+  links?: PresenterLink[] | undefined;
 }) {
   const name = presenter ?? host ?? "";
   return (
@@ -205,87 +219,241 @@ export function PresentedBy({
         <span style={{ fontSize: 15, fontWeight: 700, color: "var(--ink)" }}>
           Presented by {name}
         </span>
+        {headline && (
+          <span data-event-presenter-headline style={{ ...QUIET, fontSize: 15 }}>
+            {headline}
+          </span>
+        )}
         {host && host !== presenter && <span style={QUIET}>Hosted by {host}</span>}
+        {links && links.length > 0 && <PresenterLinks links={links} />}
       </div>
       {action}
     </div>
   );
 }
 
-export type SpeakerPill = {
+/** One accepted person on the page: the name, the role's own label, and where the card goes. */
+export type PersonEntry = {
   key: string;
-  name: string | null;
+  name: string;
   label: string;
   avatarSrc?: string | undefined;
-  /** 678: a pending party on the public page, drawn as a dashed empty avatar and the role alone. */
-  pending?: boolean | undefined;
+  /** The profile's address. Absent on the public page, where the card is not a control. */
+  handle?: string | undefined;
 };
 
-/** The speakers strip (SPEC 3.9): horizontal scroll of pills; absent below one. */
-export function SpeakersRow({
-  speakers,
-  label = true,
+/**
+ * People (Revision 4, 678, 1195): accepted parties as PersonCard rows under the heading People, and on
+ * the public page a pending party as its role label alone in plain type, with no card. Absent below
+ * one. With `onOpen` a card opens the profile; without it (the public page) the card is drawn but is
+ * not a control: Strand's PersonCard is always an anchor or a button, so it sits in an inert
+ * wrapper and the group carries the name and role for a reader (G162).
+ */
+export function People({
+  people,
+  pending = [],
+  onOpen,
 }: {
-  speakers: SpeakerPill[];
-  label?: boolean;
+  people: PersonEntry[];
+  pending?: { key: string; label: string }[];
+  onOpen?: ((handle: string) => void) | undefined;
 }) {
-  if (speakers.length === 0) return null;
+  if (people.length === 0 && pending.length === 0) return null;
   return (
     <div data-event-speakers style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-      {label && <CapsLabel>Speakers</CapsLabel>}
-      <div
-        style={{
-          display: "flex",
-          gap: 8,
-          overflowX: "auto",
-          scrollbarWidth: "none",
-          paddingBottom: 2,
-          // Contained, so the strip scrolls inside the column rather than widening it (344).
-          minWidth: 0,
-          contain: "inline-size",
-        }}
-      >
-        {speakers.map((s) => (
-          <span
-            key={s.key}
-            data-speaker={s.pending ? "pending" : "accepted"}
+      <CapsLabel>People</CapsLabel>
+      {people.map((p) =>
+        onOpen && p.handle ? (
+          <div key={p.key} data-speaker="accepted">
+            <PersonCard
+              name={p.name}
+              role={p.label}
+              src={p.avatarSrc}
+              href={"/m/" + p.handle}
+              onOpen={() => onOpen(p.handle as string)}
+            />
+          </div>
+        ) : (
+          <div
+            key={p.key}
+            data-speaker="accepted"
+            role="group"
+            aria-label={p.name + ", " + p.label}
+          >
+            <div inert aria-hidden="true">
+              <PersonCard name={p.name} role={p.label} src={p.avatarSrc} />
+            </div>
+          </div>
+        ),
+      )}
+      {pending.map((r) => (
+        <p
+          key={r.key}
+          data-speaker="pending"
+          style={{ margin: 0, fontSize: 15, color: "var(--ink-2)" }}
+        >
+          {r.label}
+        </p>
+      ))}
+    </div>
+  );
+}
+
+/** A presenter's links (1225): the profile's own kind labels and icons, as anchors to the stored URL. */
+export function PresenterLinks({ links }: { links: PresenterLink[] }) {
+  const items = links.filter((l) => /^https?:\/\//i.test(l.url));
+  if (items.length === 0) return null;
+  return (
+    <div
+      data-event-presenter-links
+      style={{ display: "flex", flexWrap: "wrap", gap: "var(--space-1) var(--space-4)" }}
+    >
+      {items.map((l) => {
+        const kind = LINK_KINDS.find((k) => k.k === l.kind);
+        return (
+          <a
+            key={l.kind + l.url}
+            href={l.url}
+            target="_blank"
+            rel="noreferrer"
             style={{
               display: "inline-flex",
               alignItems: "center",
-              gap: 8,
-              flex: "none",
-              padding: "4px 12px 4px 4px",
-              borderRadius: "var(--radius-pill)",
-              border: "1px solid var(--line)",
-              background: "var(--surface)",
+              gap: 6,
+              minHeight: "var(--target-min)",
+              fontSize: 13,
+              color: "var(--ink-2)",
+              textDecoration: "underline",
+              textDecorationColor: "var(--line-strong)",
+              textUnderlineOffset: 2,
             }}
           >
-            {s.pending ? (
-              <span
-                aria-hidden="true"
-                style={{
-                  width: 32,
-                  height: 32,
-                  borderRadius: 8,
-                  border: "1px dashed var(--line-strong)",
-                  flex: "none",
-                }}
-              />
-            ) : (
-              <Avatar name={s.name ?? ""} src={s.avatarSrc} size={32} />
-            )}
-            <span
-              style={{ display: "flex", flexDirection: "column", gap: 0, whiteSpace: "nowrap" }}
-            >
-              <span style={{ fontSize: 15, fontWeight: 500, color: "var(--ink)" }}>
-                {s.pending ? s.label : s.name}
-              </span>
-              <span style={QUIET}>{s.pending ? "to be confirmed" : s.label}</span>
-            </span>
-          </span>
-        ))}
-      </div>
+            <Icon name={kind?.icon ?? "link"} size={14} />
+            {kind?.label ?? l.url}
+          </a>
+        );
+      })}
     </div>
+  );
+}
+
+function hostOf(url: string): string {
+  try {
+    return new URL(url).host.replace(/^www\./, "");
+  } catch {
+    return url;
+  }
+}
+
+/**
+ * The host-written sections (1186, 1189): consecutive blocks grouped by kind, each group under its
+ * first block's own `label`, in the order the read serves them. A page with no blocks renders nothing,
+ * heading included. The kind picks the drawing (structure); no heading string lives here.
+ */
+export function BlockSections({
+  blocks,
+  columns = false,
+}: {
+  blocks: EventBlock[];
+  /** Links in a grid of `minmax(280px, 1fr)` tracks, where the column is wide enough for two. */
+  columns?: boolean;
+}) {
+  const groups: { kind: EventBlock["kind"]; items: EventBlock[] }[] = [];
+  for (const b of blocks) {
+    const last = groups[groups.length - 1];
+    if (last && last.kind === b.kind) last.items.push(b);
+    else groups.push({ kind: b.kind, items: [b] });
+  }
+  if (groups.length === 0) return null;
+  return (
+    <>
+      {groups.map((g, i) => (
+        <div
+          key={g.kind + i}
+          data-event-block-section={g.kind}
+          style={{ display: "flex", flexDirection: "column", gap: 8 }}
+        >
+          <CapsLabel>{g.items[0]?.label}</CapsLabel>
+          {g.kind === "link" && (
+            <div
+              style={{
+                display: "grid",
+                gap: 8,
+                gridTemplateColumns: columns ? "repeat(auto-fill, minmax(280px, 1fr))" : "1fr",
+              }}
+            >
+              {g.items.map((b, j) =>
+                b.kind === "link" ? (
+                  <MediaBlock
+                    key={j}
+                    kind="link"
+                    src={b.payload.url}
+                    title={b.payload.label || hostOf(b.payload.url)}
+                    domain={hostOf(b.payload.url)}
+                  />
+                ) : null,
+              )}
+            </div>
+          )}
+          {g.kind === "programme" && (
+            <div style={{ display: "flex", flexDirection: "column" }}>
+              {g.items.map((b, j) =>
+                b.kind === "programme" ? (
+                  <div
+                    key={j}
+                    data-programme-row
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "max-content minmax(0, 1fr)",
+                      alignItems: "center",
+                      columnGap: "var(--space-4)",
+                      minHeight: "var(--target-primary)",
+                      borderTop: j === 0 ? undefined : "1px solid var(--line)",
+                    }}
+                  >
+                    <span
+                      data-programme-at
+                      style={{
+                        fontSize: 15,
+                        fontVariantNumeric: "tabular-nums",
+                        color: "var(--ink-2)",
+                      }}
+                    >
+                      {b.payload.at}
+                    </span>
+                    <span style={{ fontSize: 15, lineHeight: 1.45, overflowWrap: "anywhere" }}>
+                      {b.payload.line}
+                    </span>
+                  </div>
+                ) : null,
+              )}
+            </div>
+          )}
+          {g.kind === "note" &&
+            g.items.map((b, j) =>
+              b.kind === "note" ? (
+                <div
+                  key={j}
+                  data-note-row
+                  style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "6px 0" }}
+                >
+                  <Icon name="info" size={18} style={{ marginTop: 2, color: "var(--ink-2)" }} />
+                  <span
+                    style={{
+                      fontSize: 15,
+                      lineHeight: 1.45,
+                      whiteSpace: "pre-wrap",
+                      overflowWrap: "anywhere",
+                    }}
+                  >
+                    {b.payload.text}
+                  </span>
+                </div>
+              ) : null,
+            )}
+        </div>
+      ))}
+    </>
   );
 }
 

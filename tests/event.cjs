@@ -59,6 +59,18 @@ const HOST = "00000000-0000-4000-8000-0000000000f2";
 const SLUG = "corridor-suppers-accra-3f2a1b";
 const TITLE = "Corridor Suppers: Accra";
 
+const BLOCKS = [
+  { kind: "link", label: "Links", payload: { url: "https://example.org/menu", label: "The menu" } },
+  { kind: "link", label: "Links", payload: { url: "https://example.org/map" } },
+  { kind: "programme", label: "Programme", payload: { at: "18:30", line: "Doors and a drink" } },
+  { kind: "programme", label: "Programme", payload: { at: "19:30", line: "Supper is served" } },
+  {
+    kind: "note",
+    label: "Good to know",
+    payload: { text: "Bring one thing you need and one thing you can offer." },
+  },
+];
+
 function person(id, name, handle) {
   return { id, name, handle, avatar_path: null };
 }
@@ -136,6 +148,7 @@ function attendPage(kind) {
       window_basis: null,
       mode: "in_person",
       ticket_kind: "free",
+      family: "small_social",
       delivery_intent:
         "In the room, at a long table. Doors at 18:30; the meal is served at 19:30 and the conversation runs until the last person leaves.",
       full: kind === "full",
@@ -147,7 +160,23 @@ function attendPage(kind) {
       audience: kind === "private" ? "connections" : "everyone",
       published_at: new Date(Date.now() - 7200e3).toISOString(),
     },
-    presented_by: { kind: "space", id: "s-suppers", name: "Corridor Suppers" },
+    // Handoff 37-C: a Space presents neither a line nor links; "blocks" is presented by a member whose
+    // profile admits both, so the presenter line and links render.
+    presented_by:
+      kind === "blocks"
+        ? {
+            kind: "member",
+            id: HOST,
+            name: "Kwame Mensah",
+            handle: "kwame-mensah",
+            avatar_path: null,
+            headline: "Grower and convener, Accra",
+            links: [
+              { kind: "website", url: "https://kwame.example.org" },
+              { kind: "linkedin", url: "https://www.linkedin.com/in/kwame-mensah" },
+            ],
+          }
+        : { kind: "space", id: "s-suppers", name: "Corridor Suppers", headline: null, links: [] },
     media: cancelled
       ? []
       : [{ position: 0, storage_path: "seed/" + kind + ".jpg", width: 1200, height: 800 }],
@@ -160,7 +189,7 @@ function attendPage(kind) {
       country: "Ghana",
       lng: -0.1747,
       lat: 5.5559,
-      map_link: null,
+      map_link: "https://maps.example.org/?q=Front+Room+Accra",
     },
     meeting_url: null,
     door_withheld: kind === "loaded",
@@ -169,6 +198,7 @@ function attendPage(kind) {
       registration: null,
       default_audience: "connections",
       has_default: false,
+      subscribed: false,
     },
     invitations:
       kind === "loaded"
@@ -205,8 +235,8 @@ function attendPage(kind) {
           },
         ],
     partners: [],
-    // Handoff 37-A (1186): the page's blocks; none are rendered in this handoff.
-    blocks: [],
+    // Handoff 37-A, 37-C (1186, 1189): the host's blocks, in the kinds' page order; only "blocks" has any.
+    blocks: kind === "blocks" ? BLOCKS : [],
     going: cancelled || kind === "full" ? null : going,
     calendar: {
       uid: id,
@@ -222,7 +252,7 @@ function attendPage(kind) {
 }
 
 function seedAttend(db) {
-  for (const kind of ["loaded", "past", "cancelled", "full", "private"])
+  for (const kind of ["loaded", "past", "cancelled", "full", "private", "blocks"])
     db.attend.pages[eventId(kind)] = attendPage(kind);
   db.attend.parties.push({
     id: "party-1",
@@ -351,7 +381,9 @@ async function digitsOutsideFacts(page) {
     const root = document.querySelector("[data-event-page]");
     if (!root) return "no page";
     const clone = root.cloneNode(true);
-    for (const el of clone.querySelectorAll("[data-fact], [data-event-cancelled-line]"))
+    for (const el of clone.querySelectorAll(
+      "[data-fact], [data-event-cancelled-line], [data-programme-at]",
+    ))
       el.remove();
     const text = clone.textContent || "";
     const m = text.match(/[^\d]{0,20}\d[^\d]{0,20}/);
@@ -374,7 +406,7 @@ async function runEvent(browserType, bname, [w, h], theme) {
     const order = await page.evaluate(() =>
       Array.from(
         document.querySelectorAll(
-          "[data-event-invitation],[data-event-kicker],[data-event-title],[data-event-presenter],[data-event-facts],[data-event-rsvp],[data-event-body],[data-event-speakers],[data-event-going],[data-event-going-list],[data-event-share-row]",
+          "[data-event-invitation],[data-event-kicker],[data-event-title],[data-event-presenter],[data-event-facts],[data-event-rsvp],[data-event-body],[data-event-block-section],[data-event-speakers],[data-event-going],[data-event-going-list],[data-event-share-row]",
         ),
       ).map((el) =>
         el.hasAttribute("data-event-invitation")
@@ -382,10 +414,14 @@ async function runEvent(browserType, bname, [w, h], theme) {
           : [...el.attributes].find((a) => a.name.startsWith("data-event-")).name.slice(11),
       ),
     );
+    // Revision 4 (1185): below expanded the RSVP is the bar at the foot, so it is last in the document.
     record(
-      tag + " loaded: SPEC 3's order, invitation to share row",
+      tag +
+        " loaded: Revision 4's order, invitation to share row, the RSVP last as a bar below expanded",
       order.join(",") ===
-        "invitation,kicker,title,presenter,facts,rsvp,body,speakers,going,going-list,share-row",
+        (w > 1024
+          ? "invitation,kicker,title,presenter,facts,rsvp,body,speakers,going,going-list,share-row"
+          : "invitation,kicker,title,presenter,facts,body,speakers,going,going-list,share-row,rsvp"),
       order.join(","),
     );
     record(
@@ -896,11 +932,23 @@ const GUEST_FIELD_LINE = "One email address, so the door can reach you. Nothing 
 /** The public projection's answer for a slug, in the shape src/lib/event-public.ts reads (1028). */
 function publicPage(kind, overrides = {}) {
   const pg = attendPage(kind);
-  const { id: _id, status: _status, full: _full, public: _public, ...event } = pg.event;
+  const {
+    id: _id,
+    status: _status,
+    full: _full,
+    public: _public,
+    family: _family,
+    ...event
+  } = pg.event;
   return {
     event: { ...event, ...overrides },
     body: pg.post.body,
-    presented_by: { kind: pg.presented_by.kind, name: pg.presented_by.name },
+    presented_by: {
+      kind: pg.presented_by.kind,
+      name: pg.presented_by.name,
+      headline: pg.presented_by.headline,
+      links: pg.presented_by.links,
+    },
     host: { name: pg.host.name },
     media: [],
     place: {
@@ -919,7 +967,7 @@ function publicPage(kind, overrides = {}) {
     })),
     pending_roles: [],
     partners: [],
-    blocks: [],
+    blocks: pg.blocks,
   };
 }
 
@@ -1217,8 +1265,235 @@ async function runEventLinks(browserType, bname, [w, h], theme) {
   }
 }
 
+const BLOCKS_SLUG = "corridor-suppers-blocks-5d4e3f";
+
+/**
+ * Handoff 37-C (1185, 1186, 1189, 1196): the new facts, the block sections, People, the RSVP bar and
+ * the public page's two columns, at every cell.
+ */
+async function runEventBlocks(browserType, bname, [w, h], theme) {
+  const tag = `${bname}-${w}x${h}-${theme}-event-blocks`;
+  M.armStart(tag);
+  const db = makeMockDb();
+  seedPosts(db, 1);
+  seedAttend(db);
+  seedGuest(db);
+  db.attend.publicPages[BLOCKS_SLUG] = publicPage("blocks", {
+    slug: BLOCKS_SLUG,
+  });
+  db.attend.publicPages[BLOCKS_SLUG].pending_roles = [{ role: "moderator", label: "Moderator" }];
+  const { browser, page, errors } = await context(browserType, [w, h], theme, db);
+  const sections = () =>
+    page.evaluate(() =>
+      Array.from(document.querySelectorAll("[data-event-block-section]")).map((el) => ({
+        kind: el.getAttribute("data-event-block-section"),
+        heading: el.firstElementChild ? el.firstElementChild.textContent : "",
+      })),
+    );
+  try {
+    await signIn(page);
+
+    // A page with no blocks: no block section and no empty heading (1189); the new facts on the loaded page.
+    await open(page, "loaded", "loaded");
+    const bodyText = await page.locator("[data-event-page]").textContent();
+    record(
+      tag + " no blocks: no block section, no Links, Programme or Good to know heading",
+      (await page.locator("[data-event-block-section]").count()) === 0 &&
+        !/Links|Programme|Good to know/.test(bodyText),
+      bodyText.slice(0, 120),
+    );
+    record(
+      tag + " loaded: a Space presents no line and no links",
+      (await page.locator("[data-event-presenter-headline]").count()) === 0 &&
+        (await page.locator("[data-event-presenter-links]").count()) === 0,
+    );
+    await page.locator('[data-fact="topic"]').waitFor({ timeout: 10000 });
+    record(
+      tag + " loaded: the topic row names the family from the vocabulary, with Subscribe",
+      /Small social gatherings/.test(await page.locator('[data-fact="topic"]').textContent()) &&
+        (await page.locator('[data-testid="event-subscribe"]').textContent()).trim() ===
+          "Subscribe",
+    );
+    record(
+      tag + " loaded: the map row is the place's name and Open in maps",
+      /Front Room/.test(await page.locator('[data-fact="map"]').textContent()) &&
+        (await page.locator("[data-event-map-link]").getAttribute("href")) ===
+          "https://maps.example.org/?q=Front+Room+Accra" &&
+        (await page.locator("[data-event-map-link]").textContent()).trim() === "Open in maps",
+    );
+    await page.locator('[data-testid="event-subscribe"]').click();
+    await page.waitForFunction(
+      () => document.querySelector('[data-testid="event-subscribe"]')?.textContent === "Subscribed",
+      null,
+      { timeout: 10000 },
+    );
+    const writes = db.discovery.subscriptionWrites;
+    record(
+      tag + " loaded: Subscribe writes set_subscription for the family and reads Subscribed",
+      writes.length === 1 && writes[0].p_family === "small_social" && writes[0].p_on === true,
+      JSON.stringify(writes),
+    );
+
+    // The RSVP: a bar at the foot below expanded, in flow in the pane (1185).
+    const barCount = await page.locator("[data-event-rsvp-bar]").count();
+    if (w > 1024) {
+      record(
+        tag + " loaded: in the pane the RSVP is in flow, no bar",
+        barCount === 0 && (await page.locator("[data-event-rsvp]").count()) === 1,
+      );
+    } else {
+      const geo = await page.evaluate(() => {
+        const bar = document.querySelector("[data-event-rsvp-bar]");
+        const dock = document.querySelector('[data-pulse="dock"]');
+        if (!bar || !dock) return null;
+        const b = bar.getBoundingClientRect();
+        const d = dock.getBoundingClientRect();
+        return {
+          bottom: b.bottom,
+          dockTop: d.top,
+          top: b.top,
+          vh: window.innerHeight,
+          z: getComputedStyle(bar).zIndex,
+        };
+      });
+      record(
+        tag + " loaded: the RSVP is a sticky bar inside the viewport, above the dock",
+        barCount === 1 &&
+          !!geo &&
+          geo.bottom <= geo.dockTop + 0.5 &&
+          geo.top >= 0 &&
+          geo.bottom <= geo.vh,
+        JSON.stringify(geo),
+      );
+    }
+    // A past event has nothing to answer: no bar, its line in flow, and no map row.
+    await open(page, "past", "past");
+    record(
+      tag + " past: no bar and no map row; This event has happened. stays in flow",
+      (await page.locator("[data-event-rsvp-bar]").count()) === 0 &&
+        (await page.locator('[data-fact="map"]').count()) === 0 &&
+        /This event has happened\./.test(await page.locator("[data-event-rsvp]").textContent()),
+    );
+
+    // A page with blocks: the three sections under each block's own label, in order (1186).
+    await open(page, "blocks", "loaded");
+    const got = await sections();
+    record(
+      tag + " blocks: Links, Programme, Good to know under their own labels, in that order",
+      got.map((g) => g.kind + ":" + g.heading).join("|") ===
+        "link:Links|programme:Programme|note:Good to know",
+      JSON.stringify(got),
+    );
+    record(
+      tag + " blocks: two link cards (the label, else the host), two programme rows, one note",
+      (await page.locator('[data-event-block-section="link"] a').count()) === 2 &&
+        /The menu/.test(await page.locator('[data-event-block-section="link"]').textContent()) &&
+        /example\.org/.test(
+          await page.locator('[data-event-block-section="link"]').textContent(),
+        ) &&
+        (await page.locator("[data-programme-row]").count()) === 2 &&
+        (await page.locator("[data-programme-at]").allTextContents()).join(",") === "18:30,19:30" &&
+        (await page.locator("[data-note-row]").count()) === 1,
+    );
+    record(
+      tag + " blocks: the member presenter's line and links",
+      (await page.locator("[data-event-presenter-headline]").textContent()).trim() ===
+        "Grower and convener, Accra" &&
+        (await page.locator("[data-event-presenter-links] a").allTextContents()).join(",") ===
+          "Website,LinkedIn",
+    );
+    const digits = await digitsOutsideFacts(page);
+    record(tag + " blocks: no number other than a time (guardrail 1)", digits === "", digits);
+    record(
+      tag + " blocks: People are PersonCard rows with the role label under the heading",
+      (await page.locator('[data-event-speakers] [data-person-card="row"]').count()) === 2 &&
+        /^People/.test(await page.locator("[data-event-speakers]").textContent()) &&
+        (await page.locator('[data-event-speakers] [data-field="role"]').first().textContent()) ===
+          "Speaker",
+    );
+    record(
+      tag + " blocks: Who is going is a grid of PersonCard tiles",
+      (await page.locator('[data-event-going-list] [data-person-card="tile"]').count()) === 6,
+    );
+    await noOverflow(page, tag + " blocks");
+    await shot(page, `${tag}-01-blocks`);
+
+    // The public page (signed out): the same sections, People as inert cards, the layout by width.
+    await page.evaluate(() => {
+      window.localStorage.clear();
+    });
+    await page.goto(BASE + "/sign-in", { waitUntil: "networkidle" });
+    await clientGo(page, "/e/" + SLUG);
+    await page.waitForSelector(`[data-public-event="${SLUG}"]`, { timeout: 15000 });
+    record(
+      tag + " public, no blocks: no block section and no empty heading",
+      (await page.locator("[data-event-block-section]").count()) === 0 &&
+        !/Links|Programme|Good to know/.test(
+          await page.locator("[data-public-event]").textContent(),
+        ),
+    );
+    await clientGo(page, "/e/" + BLOCKS_SLUG);
+    await page.waitForSelector(`[data-public-event="${BLOCKS_SLUG}"]`, { timeout: 15000 });
+    const pub = await page.evaluate(() => {
+      const q = (sel) => document.querySelector(sel);
+      const width = (sel) => (q(sel) ? q(sel).getBoundingClientRect().width : null);
+      return {
+        columns: document.querySelectorAll("[data-public-columns]").length,
+        aside: width("[data-public-aside]"),
+        story: width("[data-public-story]"),
+        main: width("main"),
+        cover: width("main img") || width("main [data-media]"),
+      };
+    });
+    const pubSections = await sections();
+    record(
+      tag + " public: the sections under their own labels, in order",
+      pubSections.map((g) => g.heading).join("|") === "Links|Programme|Good to know",
+      JSON.stringify(pubSections),
+    );
+    record(
+      tag +
+        (w > 1024
+          ? " public: two columns, the facts left and the story right"
+          : " public: one column"),
+      w > 1024
+        ? pub.columns === 1 &&
+            pub.aside > 0 &&
+            pub.story > pub.aside &&
+            (await page.locator("[data-public-aside] [data-event-facts]").count()) === 1 &&
+            (await page.locator("[data-public-story] [data-event-block-section]").count()) === 3
+        : pub.columns === 0,
+      JSON.stringify(pub),
+    );
+    const bar = await page.locator("[data-guest-rsvp-bar]").count();
+    record(
+      tag + (w < 640 ? " public: the guest RSVP is a sticky bar" : " public: no bar above compact"),
+      bar === (w < 640 ? 1 : 0),
+    );
+    record(
+      tag + " public: People are cards that are not controls; a pending party is its role alone",
+      (await page.locator('[data-event-speakers] [data-person-card="row"]').count()) === 2 &&
+        (await page.locator("[data-event-speakers] [inert] [data-person-card]").count()) === 2 &&
+        (
+          await page.locator('[data-event-speakers] [data-speaker="pending"]').allTextContents()
+        ).join(",") === "Moderator" &&
+        (await page
+          .locator('[data-event-speakers] [data-speaker="pending"] [data-person-card]')
+          .count()) === 0,
+    );
+    await noOverflow(page, tag + " public");
+    await shot(page, `${tag}-02-public`);
+    record(tag + " no page errors", errors.length === 0, errors.join(" | ").slice(0, 300));
+  } catch (e) {
+    record(tag + " flow", false, String(e).slice(0, 400));
+  } finally {
+    await browser.close();
+  }
+}
+
 module.exports = {
   runEvent,
+  runEventBlocks,
   runEventFlows,
   runGuest,
   runEventLinks,

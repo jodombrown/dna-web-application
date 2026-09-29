@@ -28,10 +28,12 @@ import { useContext, useEffect, useRef, useState, type CSSProperties } from "rea
 import { Avatar } from "@/components/strand/Avatar";
 import { BackRow } from "@/components/strand/BackRow";
 import { Button } from "@/components/strand/Button";
+import { CBadge } from "@/components/strand/CBadge";
 import { EmptyState } from "@/components/strand/EmptyState";
 import { Icon } from "@/components/strand/Icon";
 import { MediaBlock } from "@/components/strand/MediaBlock";
 import { NotificationListItem } from "@/components/strand/NotificationListItem";
+import { PersonCard } from "@/components/strand/PersonCard";
 import { Toast } from "@/components/strand/Toast";
 import type { Member } from "@/lib/auth";
 import {
@@ -44,12 +46,15 @@ import {
   type EventPage,
   type RegistrationStatus,
 } from "@/lib/event-page";
+import { setSubscription } from "@/lib/discovery";
 import { deliverImageUrl } from "@/lib/media";
 import { useBackToOrigin } from "@/lib/origin";
 import { PaneShareContext } from "@/lib/pane-share";
 import { useTier } from "@/lib/tier";
+import { loadVocabularies } from "@/lib/vocabularies";
 import { browserZone } from "@/lib/when";
 import {
+  BlockSections,
   CapsLabel,
   EventBody,
   EventTitle,
@@ -57,8 +62,8 @@ import {
   Facts,
   Kicker,
   PresentedBy,
+  People,
   QUIET,
-  SpeakersRow,
   placeWord,
   whenLines,
 } from "./EventParts";
@@ -159,6 +164,14 @@ export function EventSurface({
     queryKey: ["event-follow", member.id, hostId ?? ""],
     queryFn: () => isFollowing(member.id, hostId ?? ""),
     enabled: !!hostId && hostId !== member.id,
+  });
+  // 1196: the topic's label is a `convene_families` row, read where Discovery reads it.
+  const vocab = useQuery({ queryKey: ["vocabularies"], queryFn: loadVocabularies });
+  const subscribe = useMutation({
+    mutationFn: (on: boolean) => setSubscription(page?.event.family ?? "", on),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["discovery", member.id] }),
+    onSettled: () => qc.invalidateQueries({ queryKey: [EVENT_PAGE_KEY, member.id, id] }),
+    onError: () => say("That did not go through. Try again."),
   });
   const follow = useMutation({
     mutationFn: (on: boolean) => setFollow(hostId ?? "", on),
@@ -291,6 +304,10 @@ export function EventSurface({
   );
   const where = placeWord(ev.mode, page.place);
   const invited = page.invitations.filter((i) => i.status === "invited");
+  const topic = vocab.data?.convene_families?.find((f) => f.value === ev.family)?.label ?? null;
+  // Revision 4 (1185): below expanded the RSVP is a bar at the scroller's foot; in the pane it stays
+  // in flow after the facts. A past event has nothing to answer, so its line stays in flow.
+  const bar = tier !== "expanded" && !ev.past;
   const origin = typeof window !== "undefined" ? window.location.origin : "";
   const shareUrl = eventShareUrl(origin, ev);
 
@@ -301,6 +318,85 @@ export function EventSurface({
       : ev.full && !going
         ? "full"
         : "loaded";
+
+  const rsvpEl = (
+    <div
+      data-event-rsvp
+      data-rsvp-state={
+        ev.past ? "past" : going ? "going" : reg ? "not-going" : ev.full ? "full" : "open"
+      }
+    >
+      {ev.past ? (
+        <p style={{ margin: 0, fontSize: 15, color: "var(--ink-2)" }}>This event has happened.</p>
+      ) : going ? (
+        <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+          <span
+            data-rsvp-pill
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 8,
+              minHeight: 44,
+              padding: "0 16px",
+              borderRadius: "var(--radius-pill)",
+              background: "var(--c-convene-tint)",
+              color: "var(--c-convene-text)",
+              fontSize: 15,
+              fontWeight: 500,
+            }}
+          >
+            <Icon name="check" size={18} />
+            You are going
+          </span>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => setRsvp({ open: true, initial: "going" })}
+            data-testid="rsvp-change"
+          >
+            Change
+          </Button>
+        </div>
+      ) : reg ? (
+        <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+          <span style={{ fontSize: 15, color: "var(--ink-2)" }}>You said not going.</span>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => setRsvp({ open: true, initial: "not_going" })}
+            data-testid="rsvp-change"
+          >
+            Change
+          </Button>
+        </div>
+      ) : ev.full ? (
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <span style={{ fontSize: 17, fontWeight: 500 }}>This event is full</span>
+          <span style={{ fontSize: 15, color: "var(--ink-2)" }}>The host has no more room.</span>
+        </div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <Button
+              c="convene"
+              onClick={() => setRsvp({ open: true, initial: "going" })}
+              data-testid="rsvp-going"
+            >
+              I am going
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={() => setRsvp({ open: true, initial: "not_going" })}
+              data-testid="rsvp-not-going"
+            >
+              Not going
+            </Button>
+          </div>
+          {ev.ticket_kind === "free" && <span style={QUIET}>Free.</span>}
+        </div>
+      )}
+    </div>
+  );
 
   return frame(
     state,
@@ -330,6 +426,22 @@ export function EventSurface({
         ))}
 
       {/* 2. Cover: absent when cancelled. In the pane it spans the pane body edge to edge (1143). */}
+      {!ev.cancelled && !inPane && page.media.length === 0 && (
+        <div
+          data-event-cover-fallback
+          style={{
+            aspectRatio: "16 / 9",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            background: "var(--bg-sunken)",
+            border: "1px solid var(--line)",
+            borderRadius: 14,
+          }}
+        >
+          <CBadge c="convene" size={48} />
+        </div>
+      )}
       {!ev.cancelled && images.data?.cover && (
         <MediaBlock
           // Keyed on the place, so a page that settles into the pane after its first render mounts
@@ -353,6 +465,8 @@ export function EventSurface({
         presenter={presenterName}
         host={page.host?.name ?? null}
         avatarSrc={presenterAvatar}
+        headline={page.presented_by?.headline}
+        links={page.presented_by?.links}
         action={
           hostId && hostId !== member.id ? (
             <Button
@@ -392,6 +506,52 @@ export function EventSurface({
                 testId="where"
               />
             )}
+            {page.place?.map_link &&
+              /^https?:\/\//i.test(page.place.map_link) &&
+              ev.mode !== "virtual" &&
+              !ev.past &&
+              (page.place.place_name || page.place.place_text) && (
+                <FactRow
+                  icon="map-pin"
+                  main={page.place.place_name || page.place.place_text}
+                  sub={
+                    <a
+                      href={page.place.map_link}
+                      target="_blank"
+                      rel="noreferrer"
+                      data-event-map-link
+                      style={{
+                        color: "var(--c-convene-text)",
+                        textDecoration: "underline",
+                        textDecorationColor: "var(--line-strong)",
+                        textUnderlineOffset: 2,
+                      }}
+                    >
+                      Open in maps
+                    </a>
+                  }
+                  testId="map"
+                />
+              )}
+            {ev.family && topic && (
+              <FactRow
+                icon="hash"
+                main={topic}
+                testId="topic"
+                action={
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    disabled={subscribe.isPending}
+                    aria-pressed={page.viewer.subscribed}
+                    onClick={() => subscribe.mutate(!page.viewer.subscribed)}
+                    data-testid="event-subscribe"
+                  >
+                    {page.viewer.subscribed ? "Subscribed" : "Subscribe"}
+                  </Button>
+                }
+              />
+            )}
             {(ev.delivery_intent.trim() || page.meeting_url || page.door_withheld) && (
               <FactRow
                 icon="info"
@@ -424,99 +584,22 @@ export function EventSurface({
             )}
           </Facts>
 
-          {/* 7. RSVP. */}
-          <div
-            data-event-rsvp
-            data-rsvp-state={
-              ev.past ? "past" : going ? "going" : reg ? "not-going" : ev.full ? "full" : "open"
-            }
-          >
-            {ev.past ? (
-              <p style={{ margin: 0, fontSize: 15, color: "var(--ink-2)" }}>
-                This event has happened.
-              </p>
-            ) : going ? (
-              <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-                <span
-                  data-rsvp-pill
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: 8,
-                    minHeight: 44,
-                    padding: "0 16px",
-                    borderRadius: "var(--radius-pill)",
-                    background: "var(--c-convene-tint)",
-                    color: "var(--c-convene-text)",
-                    fontSize: 15,
-                    fontWeight: 500,
-                  }}
-                >
-                  <Icon name="check" size={18} />
-                  You are going
-                </span>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => setRsvp({ open: true, initial: "going" })}
-                  data-testid="rsvp-change"
-                >
-                  Change
-                </Button>
-              </div>
-            ) : reg ? (
-              <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-                <span style={{ fontSize: 15, color: "var(--ink-2)" }}>You said not going.</span>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => setRsvp({ open: true, initial: "not_going" })}
-                  data-testid="rsvp-change"
-                >
-                  Change
-                </Button>
-              </div>
-            ) : ev.full ? (
-              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                <span style={{ fontSize: 17, fontWeight: 500 }}>This event is full</span>
-                <span style={{ fontSize: 15, color: "var(--ink-2)" }}>
-                  The host has no more room.
-                </span>
-              </div>
-            ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  <Button
-                    c="convene"
-                    onClick={() => setRsvp({ open: true, initial: "going" })}
-                    data-testid="rsvp-going"
-                  >
-                    I am going
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    onClick={() => setRsvp({ open: true, initial: "not_going" })}
-                    data-testid="rsvp-not-going"
-                  >
-                    Not going
-                  </Button>
-                </div>
-                {ev.ticket_kind === "free" && <span style={QUIET}>Free.</span>}
-              </div>
-            )}
-          </div>
+          {!bar && rsvpEl}
 
           {/* 8. Body. */}
           {page.post && <EventBody>{page.post.body}</EventBody>}
 
-          {/* 9. Speakers, accepted only (678). 10. Partners: absent under 1019. */}
-          <SpeakersRow
-            speakers={page.speakers.map((s) => ({
-              key: s.party_id,
-              name: s.name,
-              label: s.label,
-              avatarSrc: images.data?.avatars[s.member_id],
+          {/* 9. The host's blocks (1186, 1189), then People: accepted parties only (678, 1195). 10. Partners: absent under 1019. */}
+          <BlockSections blocks={page.blocks} />
+          <People
+            people={page.speakers.map((sp) => ({
+              key: sp.party_id,
+              name: sp.name,
+              label: sp.label,
+              handle: sp.handle,
+              avatarSrc: images.data?.avatars[sp.member_id],
             }))}
+            onOpen={(handle) => void navigate({ to: "/m/$handle", params: { handle }, search: {} })}
           />
 
           {/* 11 and 12. Going and who is going, only when the projection returned rows (508, 645). */}
@@ -540,23 +623,42 @@ export function EventSurface({
                 <p style={{ margin: 0, ...QUIET }}>
                   Names appear only as each member chose to be seen.
                 </p>
-                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                <div
+                  style={{
+                    display: "grid",
+                    gap: "var(--space-2)",
+                    gridTemplateColumns: "repeat(auto-fill, minmax(104px, 1fr))",
+                  }}
+                >
                   {page.going.map((g) => (
                     <div
                       key={g.member_id}
                       data-going-row={
                         g.you ? "you" : g.connection ? "connection" : g.shared ? "shared" : "member"
                       }
-                      style={{ display: "flex", alignItems: "center", gap: 10 }}
+                      style={{ display: "flex", flexDirection: "column", gap: 4 }}
                     >
-                      <Avatar name={g.name} src={images.data?.avatars[g.member_id]} size={32} />
-                      <span style={{ fontSize: 15, minWidth: 0, flex: 1 }}>
-                        {g.name}
-                        {g.you && <span style={{ color: "var(--ink-3)" }}>, you</span>}
-                      </span>
+                      <PersonCard
+                        layout="tile"
+                        name={g.you ? g.name + ", you" : g.name}
+                        src={images.data?.avatars[g.member_id]}
+                        href={"/m/" + g.handle}
+                        onOpen={() =>
+                          void navigate({
+                            to: "/m/$handle",
+                            params: { handle: g.handle },
+                            search: {},
+                          })
+                        }
+                      />
                       {g.connection && (
                         <span
-                          style={{ fontSize: 13, fontWeight: 500, color: "var(--c-connect-text)" }}
+                          style={{
+                            fontSize: 13,
+                            fontWeight: 500,
+                            textAlign: "center",
+                            color: "var(--c-connect-text)",
+                          }}
                         >
                           Connection
                         </span>
@@ -566,6 +668,7 @@ export function EventSurface({
                           style={{
                             fontSize: 13,
                             fontWeight: 500,
+                            textAlign: "center",
                             color: "var(--c-collaborate-text)",
                           }}
                         >
@@ -615,6 +718,22 @@ export function EventSurface({
               <span style={QUIET}>Add to calendar appears once you are going.</span>
             ) : null}
           </div>
+          {bar && (
+            <div
+              data-event-rsvp-bar
+              style={{
+                position: "sticky",
+                bottom:
+                  "calc(var(--dock-height) + var(--border-thin) + env(safe-area-inset-bottom))",
+                zIndex: "var(--z-sticky)" as unknown as number,
+                background: "var(--surface-glass)",
+                borderTop: "1px solid var(--line)",
+                padding: "var(--space-3) var(--space-4)",
+              }}
+            >
+              {rsvpEl}
+            </div>
+          )}
         </>
       )}
 

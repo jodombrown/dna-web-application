@@ -223,6 +223,8 @@ describe — has the same wrong answer.
 
 A PR is merged only after Chat has read its final head and its green enforcing run (ruling 1114); Code marks a PR ready for review only when told to, and never describes a run as proof before that run has finished.
 
+Code marks a PR ready and merges it only when the founder asks, after Chat has read the head and the enforcing run, with the merge guarded on that head SHA; never on its own initiative, on a green run alone, or by auto-merge (1227).
+
 An unpushed commit in a stood-down session is lost (ruling 1086). A session's commits live only in its
 container until they reach the remote, and standing the session down releases the container, so work
 that was committed locally and never pushed goes with it, however finished it was.
@@ -379,6 +381,8 @@ Host-written event page content is `public.event_blocks`, its kinds `public.even
 `vocabularies()` as `event_block_kinds`; the only writer is `public.save_event_blocks`, acting for the
 host, and it is read only inside `event_page` and `event_public_page` through
 `private.event_blocks_json`. A heading is a block's own `label`, never a string in a surface (1186, 1189).
+
+The event page renders host-written blocks only from `event_page.blocks` and `event_public_page.blocks`, grouped by kind under each block's own label, and renders no section or heading without content (1186, 1189).
 
 ## Brand assets (ruling 184)
 

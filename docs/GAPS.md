@@ -6658,6 +6658,10 @@ the allowance: the first arm to use it holds it and a second arm's frame fails. 
 and its bracketing samples are printed in the arm's detail, pass or fail. Proved against the recorded
 series in a scratch that is not committed (results in PR #77's body).
 
+**History, 29 September 2026 (handoff 37-C).** Run 413 (PR #77, head `704e745`) excused one WebKit frame
+under the narrowed allowance, on `webkit-2560x1440-light-sheet-composer`'s exit, reading 2408 at 1240 ms
+between geometry samples 1839 and 2410.7. That is a third sighting of the late frame, at a new width.
+
 ---
 
 ## G155. Headless WebKit at 2560 by 1440 on the runner paints no frame of Sheet's 300 ms transition
@@ -6845,3 +6849,30 @@ It stays a finding until the founder rules on moving the header into Sheet for e
 none of them. Measured once by scratch scripts that are not committed.
 
 ---
+
+---
+
+## G162. Strand's PersonCard has no static layout, and the profile's LinkRow reads handles, not URLs
+
+**Severity: low. Opened 29 September 2026 during handoff 37-C, filed under ruling 597. The number is
+assigned by this entry (ruling 638).**
+
+Two parts the handoff named do not fit the public page as written. `PersonCard` always renders an anchor
+or a button, so the public page's People (non-interactive, no profile address in `event_public_page`)
+draws the card inside an `inert` wrapper under a `role="group"` that carries the name and role for a
+reader (`People` in `EventParts.tsx`). `LinkRow` assumes a website URL and social handles: it gives every
+non-website kind `href="#"` and prefixes an at-sign, while `private.event_presenter_profile` returns full
+http(s) URLs for all four kinds, so the presenter's links reuse `LINK_KINDS` for the labels and icons and
+draw their own anchors (`PresenterLinks`). Neither is changed here: Strand's parts are read from the
+compile (1222), and a static PersonCard or a URL-aware LinkRow is Strand's correction to make.
+
+---
+
+## G163. The event page reads following as a second query beside `event_page`, and the tree has two follow wrappers
+
+**Severity: low. Opened 29 September 2026 during handoff 37-C item 11, a finding only (1226).**
+
+`EventSurface` reads whether the member follows the host through `isFollowing` in `src/lib/event-page.ts`,
+a direct `member_follows` select beside the page's one read, and writes it through `setFollow` in the same
+file. `src/lib/connect.ts` carries a second wrapper of the same `set_follow` RPC, `setFollowing`. Neither
+is changed by 37-C.
