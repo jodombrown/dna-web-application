@@ -941,7 +941,17 @@ async function runLiveDbArms({ record, skip }) {
         !!page &&
           !!line &&
           !!line.presented_by &&
-          JSON.stringify(line.presented_by) === JSON.stringify(page.presented_by) &&
+          // 20260929120000 adds the presenter's headline and links to event_page's presented_by (1225);
+          // event_presenters is the card's name line and carries neither, so the two are compared
+          // on what both serve.
+          JSON.stringify(line.presented_by) ===
+            JSON.stringify(
+              Object.fromEntries(
+                Object.entries(page.presented_by).filter(
+                  ([k]) => k !== "headline" && k !== "links",
+                ),
+              ),
+            ) &&
           JSON.stringify(line.host) === JSON.stringify(page.host),
         presenters.ok
           ? JSON.stringify({
