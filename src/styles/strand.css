@@ -366,10 +366,13 @@
 
   /* Sheet geometry (584, 603). Ruling 492's two named exceptions are carried, not re-derived. */
   --sheet-compact-height: 80%;
-  --sheet-medium-width: 40%;
-  --sheet-expanded-width: 40%;
+  --sheet-side-max-width: calc(
+    var(--content-max) + 2 * var(--space-5) + var(--border-thin)
+  ); /* 1219: a feed card's width plus Sheet's padding and hairline */
+  --sheet-medium-width: min(60%, var(--sheet-side-max-width)); /* 1220 */
+  --sheet-expanded-width: min(60%, var(--sheet-side-max-width));
   --sheet-expanded-max-height: 80%;
-  --sheet-composer-ratio: 50%; /* 492 exception: the composer's stacked preview */
+  --sheet-composer-ratio: min(60%, var(--sheet-side-max-width)); /* 492 exception, 1200, 1219 */
   --sheet-notification-width: 380px; /* 492 exception: the pointer notification panel */
   --sheet-radius: var(--radius-l);
   --sheet-drag-dismiss: 120px;

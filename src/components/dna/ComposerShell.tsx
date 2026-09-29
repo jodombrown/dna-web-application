@@ -208,7 +208,7 @@ export function ComposerShell() {
       draft={draft}
       onDraft={onDraft}
       fieldOptions={{ instrument }}
-      // Ruling 492: at a 50 percent side sheet two columns do not fit, so the preview stacks under
+      // Ruling 492: in the side sheet (1219) two columns do not fit, so the preview stacks under
       // the fields at every tier. B1's two-column drawer is retired (B13 item 5).
       columns={1}
       maxImages={4}
