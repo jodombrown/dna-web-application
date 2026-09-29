@@ -6751,3 +6751,29 @@ lifetime against the step's wall-clock, before any arm is touched. Not a flake b
 arm is never called one); a failure whose cause was not read.
 
 ---
+
+## G160. One WebKit enter frame on the Share sheet at 390 read the hidden edge after rest, then rest again
+
+**Severity: low. Opened 29 September 2026 during handoff 37-A, filed under ruling 597. The number is
+assigned by this entry (ruling 638).**
+
+`pages.yml` run 406 (id `36597906337`, head `2aa3587`, PR #76), `webkit-390x844-light-sheet-share`:
+the enter check "the painted edge never moves away from rest between two frames (1201, 37-B)" read
+`rest 168; first 687, min 168, max 687, last 168; 16 painted frames of 18 from the click; moved away
+at frames 8`. The sheet's edge came from its hidden position to rest and then, on the eighth painted
+frame, read the hidden position again for one frame before rest for the remainder. That is G154's shape
+on the enter side: a screencast frame WebKit delivered out of arrival order and the arm wrote in the
+order it arrived. G154 taught `judgeExit` in `tests/sheet.cjs` to name such a frame by its match to the
+geometry record and leave it out; the enter judgment has no such match and stays strict, by G154's own
+reasoning (the real enter excursions at 430 before ruling 1201's fix were single frames too).
+
+Not this PR's: the head changes no rendered surface (types, test fixtures, a live arm and documents),
+and the same WebKit matrix was green on main `a3a085d` (run 404). Every other sheet arm on both
+engines passed on run 406, and the same arm passed on runs 403 and 404. The video is in run 406's
+artefact under `sheet-video/`.
+
+Owed: whether the enter judgment should learn G154's geometry match, decided with the video read, not
+from this entry. The same run's `webkit-390x844-light-block-flow` lost its web process (G5's class,
+reported UNPROVEN under 228) and is not a new gap.
+
+---
