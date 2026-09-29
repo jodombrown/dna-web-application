@@ -32,6 +32,7 @@ const {
   eventId,
   shot,
   noOverflow,
+  sheetSettled,
   BASE,
   UID,
   SB,
@@ -999,6 +1000,10 @@ async function runGuest(browserType, bname, [w, h], theme) {
         (await dlg.textContent()).includes(GUEST_FIELD_LINE) &&
         (await dlg.locator('[data-testid="guest-send"]').textContent()).trim() === "Send me a link",
     );
+    // Handoff 37-B (G151): the width is read once the sheet has settled. Read on attach, the panel
+    // is still translated its own width past the viewport; before the fix the dialog's scroll
+    // offset cancelled that in the geometry, so the check passed on a panel mid-slide by accident.
+    await sheetSettled(page, 'section[role="dialog"][aria-label="I am going"]');
     await noOverflow(page, tag + " email sheet");
     await shot(page, tag + "-email");
     await dlg.locator('input[type="email"]').fill("nope");

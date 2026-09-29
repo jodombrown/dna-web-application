@@ -14,7 +14,18 @@
 // Usage: BASE=https://<preview>.dna-web-application.pages.dev SPECIAL=block node tests/matrix.cjs
 const M = require("./matrix.cjs");
 
-const { launch, makeMockDb, seedPosts, mockSupabase, signIn, record, noOverflow, shot, BASE } = M;
+const {
+  launch,
+  makeMockDb,
+  seedPosts,
+  mockSupabase,
+  signIn,
+  record,
+  noOverflow,
+  sheetSettled,
+  shot,
+  BASE,
+} = M;
 const HANDLE = "thandiwe-dube";
 /** Strings only a connection or an Anchored viewer may see on the seeded persona. */
 const CONNECTIONS_ONLY = ["dubepower.co.za", "thandiwedube", "dube.power"];
@@ -291,6 +302,8 @@ async function runBlockFlow(browserType, bname, [w, h], theme) {
     // B4A sections 5 and 13: no numerals on either sheet, and no count of anything.
     record(tag + ": no numeral anywhere on the Block sheet", !/[0-9]/.test(sheet), sheet);
     await shot(page, tag + "-block-sheet");
+    // Handoff 37-B (G151): the width is read once the sheet has settled, as the guest arm reads it.
+    await sheetSettled(page, 'section[role="dialog"][aria-label="Block Thandiwe"]');
     await noOverflow(page, tag + " block sheet");
     // Cancel returns to the profile unchanged.
     await press(page, '[data-testid="block-cancel"]');

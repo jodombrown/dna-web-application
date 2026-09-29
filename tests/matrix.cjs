@@ -5989,6 +5989,7 @@ module.exports = {
   shot,
   noOverflow,
   measureWidth,
+  sheetSettled,
   fadeProbe,
   FADE_UNDER_DISTANCE,
   BASE,

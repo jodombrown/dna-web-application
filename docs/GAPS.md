@@ -6614,3 +6614,23 @@ Owed: FacetRail keeps the Sheet mounted and passes `open` through, so its exit i
 arm reads it.
 
 ---
+
+## G154. One WebKit exit frame read the drawer's edge at 1000 after 1277, then gone
+
+**Severity: low. Opened 29 September 2026 during handoff 37-B, filed under ruling 597. The number is
+assigned by this entry (ruling 638).**
+
+On pages.yml run 399 (`053f7d0`, the fix head), `webkit-1280x800-dark-sheet-composer` painted its
+exit at 640, 642, 1046, 1096, 1130, 1184, 1235, 1264, 1277 over nine 40 ms frames and then, on the
+tenth, 1000, and on the eleventh nothing, so the exit check read one frame turned back toward rest.
+Every other exit of the run's eighteen sheet arms, and every exit of run 398's, ran one way. A
+position of 1000 lies between the second and third frames of the same exit, and the panel unmounts
+at the end of its 300 ms transition, so the frame is consistent with a screencast frame delivered
+late and written in arrival order, and with nothing the component does. Not root-caused: the video
+is in run 399's artefact under `sheet-video/`, and the arm stays strict rather than learning to
+forgive a single frame, because the enter's real excursions at 430 were single frames too.
+
+Owed: the reading on the next run of the same head, per handoff 37-B guardrail 4; if it recurs,
+the frame's own pixels against the geometry record of the same instant.
+
+---
