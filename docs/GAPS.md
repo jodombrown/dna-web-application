@@ -6894,7 +6894,7 @@ is changed by 37-C.
 
 ---
 
-## G164. The approved public event frame's left column is a 320px literal, and Strand has no token for it
+## G164. The approved public event frame's left column is a 320px literal, and Strand has no token for it — closed (handoff 37-E)
 
 **Severity: low. Opened 29 September 2026 during handoff 37-C, filed under ruling 597. The number is
 assigned by this entry (ruling 638).**
@@ -6905,6 +6905,25 @@ which names a different thing, and borrowing it would tie the event page's colum
 axis, one meaning). The tree keeps `--pane-list-width` (360), so the left column reads 40px wider than the
 frame. Owed: Strand to token the public page's left column, after which the page takes it and the
 measured widths at 1536 (aside, gap `--space-8`, story) are re-read.
+
+**Closed 30 September 2026, in handoff 37-E item 1, by `44a2903`.** Strand's correction 35 (1230) tokened
+the column: `--event-page-side-column: 320px` in `tokens/spacing.css` at compile `v1790724894917128`,
+"the side column of the two-column public page above --tier-expanded: `var(--event-page-side-column)
+minmax(0,1fr)`, gap --space-8. Not --lane-card-width: one token, one meaning." `src/styles/strand.css`
+carries it at that value, and `PublicEventSurface.tsx`'s `data-public-columns` grid reads it in place of
+`--pane-list-width`. The event-blocks arm reads the aside's width against the resolved token through a
+`getPropertyValue` probe and prints the readings to the run's log. Re-read on the deployed preview,
+deployment `744875bf` (`https://744875bf.dna-web-application.pages.dev`), Pages run 36672353233 on
+`b295ab0`, at 1536 by 960, Chromium and WebKit, light and dark, all four identical:
+
+| Reading              | Value |
+| -------------------- | ----- |
+| the aside            | 320   |
+| the gap, `--space-8` | 32    |
+| the story            | 680   |
+
+The story is `--content-max`, the main column 1120, so the frame's 320 column now reads as drawn and
+the 40px the tree had added is gone.
 
 ---
 
