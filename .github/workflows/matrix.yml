@@ -65,6 +65,10 @@ on:
         description: Ruling 74; how many sequential calls the latency arm makes. Empty is 80.
         required: false
         default: ""
+      runner:
+        description: Ruling 1235; the runner label for the matrix job. Empty is ubuntu-latest; macos-latest drives the Mac port of WebKit as pages.yml's webkit-macos job does (no apt, no cores, no gdb there).
+        required: false
+        default: ""
 
 jobs:
   # Brief 5, Done Means 8: the two ruling 218 test accounts complete onboarding once, through the
@@ -166,7 +170,9 @@ jobs:
 
   matrix:
     if: ${{ inputs.onboard == '' && inputs.dia_latency != '1' && inputs.special != 'dia-latency' }}
-    runs-on: ubuntu-latest
+    # Ruling 1235: a dispatch may name macos-latest to drive the Mac port, as the push path's
+    # webkit-macos job does; the Linux-only steps below are skipped there by name.
+    runs-on: ${{ inputs.runner || 'ubuntu-latest' }}
     # 60, not 45 (handoff 31-B): Brief 9's Discovery arm adds twenty arms per engine, about six
     # minutes, and run 316 put Chromium's whole matrix past 45 at +2682s with no check failed.
     timeout-minutes: 60
@@ -209,11 +215,17 @@ jobs:
       # Ruling 217: cdn.playwright.dev and apt are third parties this gate does not test, and a
       # failure here ends the matrix before a test body runs.
       - name: Install browsers
+        if: ${{ !startsWith(inputs.runner, 'macos') }}
         run: scripts/retry.sh 3 bunx playwright install --with-deps ${{ steps.target.outputs.engines }}
+      # Ruling 1235: the Mac port needs no system packages, so there is no --with-deps on macOS.
+      - name: Install browsers (macOS)
+        if: ${{ startsWith(inputs.runner, 'macos') }}
+        run: scripts/retry.sh 3 bunx playwright install ${{ steps.target.outputs.engines }}
       # Ruling 200: a dispatched run reproduces the web-process crash but, without this, records
       # only that it happened. Core dumps cost nothing on a passing run and are the only route to
       # the signal and stack the investigation still lacks. Diagnostic only; no pass criterion.
       - name: Enable core dumps
+        if: ${{ !startsWith(inputs.runner, 'macos') }}
         run: |
           sudo mkdir -p /tmp/cores
           sudo chmod 1777 /tmp/cores
@@ -271,7 +283,7 @@ jobs:
           ulimit -c unlimited
           node tests/matrix.cjs 2>&1 | tee "$OUT/matrix.log"
       - name: Extract the signal and stack from any core (ruling 200)
-        if: always()
+        if: ${{ always() && !startsWith(inputs.runner, 'macos') }}
         # As on the PR path: diagnostic by charter, so it cannot fail the job by construction.
         continue-on-error: true
         run: |

@@ -2175,6 +2175,7 @@ async function launch(browserType) {
   const outerClose = browser.close.bind(browser);
   browser.close = async (...args) => {
     closing = true;
+    await failureState(browser);
     return outerClose(...args);
   };
   browser.on("disconnected", () => {
@@ -2182,6 +2183,52 @@ async function launch(browserType) {
     console.log("BROWSER DISCONNECTED |", openArm ? openArm.arm : "(no arm open)");
   });
   return browser;
+}
+
+/**
+ * Handoff 37-F: what the page held when an arm failed, as text in the log, because a flow's catch
+ * records only the error and the artefact's screenshots are not readable everywhere the log is.
+ * Runs once per arm from `launch()`'s close wrapper, before the browser goes: when the open arm has
+ * a failed check, every page it still has open prints one `FAILSTATE` line (its URL, the focused
+ * element, the open dialogs, the test ids present) and writes a screenshot under OUT. Diagnostic:
+ * it changes no check and its own failure is swallowed.
+ */
+async function failureState(browser) {
+  const arm = openArm;
+  if (!arm || arm.stated) return;
+  if (!results.slice(arm.from).some((r) => r.ok === false)) return;
+  arm.stated = true;
+  let n = 0;
+  for (const page of arm.pages) {
+    if (page.isClosed()) continue;
+    n += 1;
+    const file = path.join(OUT, `failstate-${arm.arm.replace(/[^\w.-]+/g, "_")}-${n}.png`);
+    try {
+      const state = await page.evaluate(() => {
+        const a = document.activeElement;
+        const id = (el) =>
+          el?.getAttribute?.("data-testid") || el?.getAttribute?.("aria-label") || "";
+        const ids = [...document.querySelectorAll("[data-testid]")].map((el) =>
+          el.getAttribute("data-testid"),
+        );
+        return {
+          active: a ? `${a.tagName.toLowerCase()}${id(a) ? `[${id(a)}]` : ""}` : "none",
+          dialogs: [...document.querySelectorAll("dialog[open]")].map(
+            (d) => d.querySelector('[role="dialog"]')?.getAttribute("aria-label") || "(unlabelled)",
+          ),
+          pane: !!document.querySelector("[data-pane], [data-pane-share]"),
+          ids: [...new Set(ids)].slice(0, 40),
+        };
+      });
+      console.log(
+        `FAILSTATE ${arm.arm} | ${page.url()} | active ${state.active} | dialogs ${JSON.stringify(state.dialogs)} | pane ${state.pane} | testids ${state.ids.join(",")}`,
+      );
+      await page.screenshot({ path: file, timeout: 5000 });
+      console.log(`FAILSTATE ${arm.arm} | screenshot ${path.relative(OUT, file)}`);
+    } catch (e) {
+      console.log(`FAILSTATE ${arm.arm} | not read: ${String(e).slice(0, 160)}`);
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------
