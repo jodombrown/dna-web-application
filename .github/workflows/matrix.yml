@@ -49,6 +49,10 @@ on:
         description: With crash_probe, "2" crashes the retry as well, and the job must be red (1237).
         required: false
         default: ""
+      install_attempt_seconds:
+        description: Handoff 38-C's harness probe, off by default; a per-attempt bound in seconds for the browser install instead of 240, so a dispatch shows a timed-out attempt retried and three failing the job by name at the install step. Proof only, never a pass criterion.
+        required: false
+        default: ""
       loop:
         description: Ruling 200; iterations of the owner-flow crash loop instead of the matrix. Empty runs the matrix.
         required: false
@@ -214,9 +218,19 @@ jobs:
         run: scripts/deployment-serves.sh
       # Ruling 217: cdn.playwright.dev and apt are third parties this gate does not test, and a
       # failure here ends the matrix before a test body runs.
+      #
+      # Handoff 38-C (G196): the same single budget as pages.yml's matrix job, bounded the same way
+      # and for the reasons written above that job's install step: each attempt at 240 s through
+      # scripts/retry.sh, three timed-out attempts failing the job here by name, the step's own
+      # 14-minute limit as the line that holds. install_attempt_seconds is the probe that forces a
+      # short bound on a dispatch to show the retry; empty on every other run.
       - name: Install browsers
         if: ${{ !startsWith(inputs.runner, 'macos') }}
-        run: scripts/retry.sh 3 bunx playwright install --with-deps ${{ steps.target.outputs.engines }}
+        timeout-minutes: 14
+        env:
+          RETRY_ATTEMPT_SECONDS: ${{ inputs.install_attempt_seconds || '240' }}
+          ENGINES: ${{ steps.target.outputs.engines }}
+        run: scripts/retry.sh 3 bash -c 'sudo dpkg --configure -a && exec bunx playwright install --with-deps $ENGINES'
       # Ruling 1235: the Mac port needs no system packages, so there is no --with-deps on macOS.
       - name: Install browsers (macOS)
         if: ${{ startsWith(inputs.runner, 'macos') }}

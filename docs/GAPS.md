@@ -7817,3 +7817,47 @@ Owed: when the element that holds focus inside the sheet loses it to `body` beca
 the Sheet puts focus back on the first focusable control, or the caller keeps Confirm focusable and
 `aria-disabled` while saving, as Pane's stepping pair does (1083). Not changed by 38-B, whose one
 change is the Escape guard (its guardrail 1).
+
+---
+
+## G196. The browser install shared the Linux matrix job's 60 minutes with the suite, so a slow apt mirror cancelled the suite with no check failed
+
+**Severity: moderate. Opened 30 September 2026 during handoff 38-C, filed under ruling 597. The number is
+assigned by this entry (ruling 638).**
+
+`pages.yml`'s `matrix` job had one `timeout-minutes: 60` for everything it does: dropping the Google
+Chrome apt source, `scripts/retry.sh 3 bunx playwright install --with-deps <engine>`, the core-dump
+setup and the suite. The install step had no time of its own, and `retry.sh` could not retry a stalled
+attempt because nothing ended one. The Linux WebKit suite needs about 53 of the 60 minutes (run 436,
+`109999825350`: 390 arms in 52m31s after a 73-second install), so any install past about seven minutes
+left the suite less than it needs and the job was cancelled partway, which reads unproven (228) with
+nothing named.
+
+**Sightings, both on PR #81's head `420ff52`, run 439 (`36756445804`).** Attempt 1's `matrix (webkit)`
+job (`110028516638`): the install step ran from 18:10:33 to 18:42:43 UTC, 32m10s, and the suite that
+started at 18:42:43 was cancelled at 19:10:42 by the job's 60 minutes. Attempt 2's job (`110054085937`):
+the install ran 8m22s, from 19:14:15 to 19:22:37, and the suite was cancelled at 20:14:20, 51m43s in, at
+`+3217s` on the 820x1180 mount arms, with a double crash on `webkit-390x844-dark-auth flows` already
+inside it that 1237 would have named at the tail the job never reached. The Chromium job passed both
+times (install 29 s, suite 50m19s), and so did the macOS gate.
+
+**Where the time went, read from the three WebKit install logs and the Chromium one.** The slow part is
+the apt archive fetch inside `--with-deps`, from `azure.archive.ubuntu.com`, and never Playwright's CDN:
+
+| Job               | apt index | apt archives                 | unpack and configure | WebKit and FFmpeg from cdn.playwright.dev | step   |
+| ----------------- | --------- | ---------------------------- | -------------------- | ----------------------------------------- | ------ |
+| run 436 WebKit    | 9 s       | 130 MB in 9 s (14.5 MB/s)    | 49 s                 | 3.4 s                                     | 73 s   |
+| run 439 a1 WebKit | 5 s       | 130 MB in 31m47s (67.9 kB/s) | 12 s                 | 3.1 s                                     | 32m10s |
+| run 439 a2 WebKit | 8 s       | 125 MB in 7m50s (266 kB/s)   | 17 s                 | 3.3 s                                     | 8m22s  |
+| run 436 Chromium  | 5 s       | 34.9 MB in 5 s (6.8 MB/s)    | 5 s                  | 8 s, three downloads                      | 26 s   |
+
+The runner image's apt is configured with `Acquire::Retries 1` and a 15-second `Acquire::http::Timeout`
+(`actions/runner-images`, `images/ubuntu/scripts/build/configure-apt.sh`), which is a stall timeout and
+never trips on a trickle. The image writes no `docker-clean` and leaves `APT::Keep-Downloaded-Packages`
+at its default, so the fetched `.deb` files stay in `/var/cache/apt/archives` after the install.
+
+**Owed (handoff 38-C).** The install's time separated from the suite's: each attempt bounded through
+`scripts/retry.sh`, a stalled attempt ended and retried, three timed-out attempts failing the job by
+name at the install step; the apt archives cached, keyed on the runner image, the engine and
+Playwright's resolved version, a miss behaving exactly as before; the job's budget restated per engine
+from the readings above, with the arithmetic in the comment over `timeout-minutes`.
