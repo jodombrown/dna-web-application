@@ -1562,6 +1562,11 @@ async function mockSupabase(page, db, opts = {}) {
       await new Promise((r) => setTimeout(r, 120));
       if (a.fail) return json({ code: "PGRST", message: "forced event_page failure" }, 500);
       const pg = a.pages[b.p_event];
+      if (pg && pg.event && pg.event.family && pg.viewer) {
+        // Handoff 37-C: viewer.subscribed reads member_subscriptions, which set_subscription writes.
+        const subscribed = db.discovery.subscriptions.some((x) => x.family === pg.event.family);
+        return json({ ...pg, viewer: { ...pg.viewer, subscribed } });
+      }
       return json(pg === undefined ? null : pg);
     }
     if (p === "/rest/v1/rpc/event_speakers") {
@@ -6246,10 +6251,18 @@ if (require.main === module)
         // Brief 10 (handoff 30-C item 13): the member's event page at every cell, its flows on the
         // two representative layouts.
         if (process.env.SPECIAL.includes("event")) {
-          const { runEvent, runEventFlows, runGuest, runEventLinks } = require("./event.cjs");
+          const {
+            runEvent,
+            runEventBlocks,
+            runEventFlows,
+            runGuest,
+            runEventLinks,
+          } = require("./event.cjs");
           for (const vp of process.env.ONLY ? [JSON.parse(process.env.ONLY)] : VIEWPORTS)
-            for (const theme of process.env.THEME ? [process.env.THEME] : THEMES)
+            for (const theme of process.env.THEME ? [process.env.THEME] : THEMES) {
               await runEvent(bt, bname, vp, theme);
+              await runEventBlocks(bt, bname, vp, theme);
+            }
           for (const vp of process.env.ONLY
             ? [JSON.parse(process.env.ONLY)]
             : [
@@ -6374,8 +6387,18 @@ if (require.main === module)
         for (const theme of THEMES) await runConnect(bt, bname, vp, theme);
       // Brief 10 (handoff 30-C item 13): the member's event page at every cell, its flows on the
       // two representative layouts.
-      const { runEvent, runEventFlows, runGuest, runEventLinks } = require("./event.cjs");
-      for (const vp of VIEWPORTS) for (const theme of THEMES) await runEvent(bt, bname, vp, theme);
+      const {
+        runEvent,
+        runEventBlocks,
+        runEventFlows,
+        runGuest,
+        runEventLinks,
+      } = require("./event.cjs");
+      for (const vp of VIEWPORTS)
+        for (const theme of THEMES) {
+          await runEvent(bt, bname, vp, theme);
+          await runEventBlocks(bt, bname, vp, theme);
+        }
       for (const vp of [
         [390, 844],
         [1280, 800],

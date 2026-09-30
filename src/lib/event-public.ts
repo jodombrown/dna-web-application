@@ -10,12 +10,13 @@
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "./database.types";
 import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL } from "./supabase";
-import type { EventBlock, EventPageEvent } from "./event-page";
+import type { EventBlock, EventPageEvent, PresenterProfile } from "./event-page";
 
 export type PublicEventPage = {
-  event: Omit<EventPageEvent, "id" | "status" | "full" | "public">;
+  event: Omit<EventPageEvent, "id" | "status" | "full" | "public" | "family">;
   body: string;
-  presented_by: { kind: "member" | "space" | null; name: string | null };
+  /** Handoff 37-C: the line and links read as a signed-out viewer, so only what the presenter shares publicly. */
+  presented_by: { kind: "member" | "space" | null; name: string | null } & PresenterProfile;
   host: { name: string } | null;
   /** Positions only: the bytes come through event-media (1029), never a storage path. */
   media: { position: number; width: number; height: number }[];

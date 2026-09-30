@@ -208,6 +208,12 @@ async function runLiveDbArms({ record, skip }) {
       "Handoff 37-A (1186, 1189): the host's save of one note block returns it, event_page shows it as the host, and event_public_page shows it for an event with a public page",
     blocksRefused:
       "Handoff 37-A (1186): a save with a programme payload missing its line is refused with 22023 and leaves the earlier blocks in place, and an empty list clears them",
+    presenterKeys:
+      "Handoff 37-C (1196, 1225): event_page carries event.family, viewer.subscribed and the presenter's headline and links, read as the event's host",
+    presenterPublic:
+      "Handoff 37-C (1196, 1225): event_public_page carries the presenter's headline and links and no family, read signed out",
+    presenterSubscribe:
+      "Handoff 37-C (1039, 1196): set_subscription flips viewer.subscribed on event_page for the event's family",
   };
   // G143: a block that opens with a presence probe carries every arm it holds in `names`, under one key
   // prefix, so a probe that fails reports each of them UNPROVEN and the job's total does not fall with
@@ -935,7 +941,17 @@ async function runLiveDbArms({ record, skip }) {
         !!page &&
           !!line &&
           !!line.presented_by &&
-          JSON.stringify(line.presented_by) === JSON.stringify(page.presented_by) &&
+          // 20260929120000 adds the presenter's headline and links to event_page's presented_by (1225);
+          // event_presenters is the card's name line and carries neither, so the two are compared
+          // on what both serve.
+          JSON.stringify(line.presented_by) ===
+            JSON.stringify(
+              Object.fromEntries(
+                Object.entries(page.presented_by).filter(
+                  ([k]) => k !== "headline" && k !== "links",
+                ),
+              ),
+            ) &&
           JSON.stringify(line.host) === JSON.stringify(page.host),
         presenters.ok
           ? JSON.stringify({
@@ -1170,6 +1186,99 @@ async function runLiveDbArms({ record, skip }) {
           (cleared.ok ? JSON.stringify(cleared.rows[0].b) : cleared.code + " " + cleared.message) +
           " left " +
           (none.ok ? JSON.stringify(left) : none.code + " " + none.message),
+      );
+    });
+    // ------------------------------------------------------------------------------------------
+    // Handoff 37-C (20260929120000; rulings 1196, 1225). The two reads carry the presenter's line and
+    // links, event_page carries the event's family and whether the viewer subscribes to it, and the
+    // public read carries no family. Read on the project's own stand-in events (every event carries a
+    // family) rather than a published one, so the arm writes only the owner's subscription, which
+    // rolls back with the transaction.
+    // ------------------------------------------------------------------------------------------
+    await inTransaction(client, async () => {
+      await actAsSelf(client);
+      const present = await client.query(
+        "select to_regprocedure('private.event_presenter_profile(jsonb, boolean)') is not null as ok",
+      );
+      if (!present.rows[0] || present.rows[0].ok !== true) {
+        for (const n of armsOf("presenter"))
+          skip(n, "20260929120000_p2_event_presenter_topic.sql is not on the project yet");
+        return;
+      }
+      await actAs(client, owner.id);
+      const cand = await client.query(
+        "select e.id, e.slug, e.family, e.host_member_id from public.events e where e.family is not null and e.status = 'published' order by e.created_at, e.id limit 25",
+      );
+      let target = null;
+      for (const row of cand.rows) {
+        await client.query("set local role anon");
+        await client.query("select set_config('request.jwt.claims', '', true)");
+        const probe = await attempt(client, "select public.event_public_page($1) as p", [row.slug]);
+        await actAs(client, owner.id);
+        if (probe.ok && probe.rows[0].p) {
+          target = { ...row, pub: probe.rows[0].p };
+          break;
+        }
+      }
+      if (!target) {
+        for (const n of armsOf("presenter"))
+          skip(
+            n,
+            "no published event with a family and a public page on the project, so this arm did not run",
+          );
+        return;
+      }
+      const has = (o, k) => !!o && Object.prototype.hasOwnProperty.call(o, k);
+      const shaped = (pb) => pb === null || (has(pb, "headline") && Array.isArray(pb.links));
+
+      await actAs(client, target.host_member_id);
+      const asHost = await attempt(client, "select public.event_page($1::uuid) as p", [target.id]);
+      const hp = asHost.ok ? asHost.rows[0].p : null;
+      record(
+        names.presenterKeys,
+        !!hp &&
+          hp.event.family === target.family &&
+          typeof hp.viewer.subscribed === "boolean" &&
+          shaped(hp.presented_by),
+        asHost.ok
+          ? "family " +
+              hp.event.family +
+              " subscribed " +
+              hp.viewer.subscribed +
+              " presented_by " +
+              JSON.stringify(hp.presented_by)
+          : asHost.code + " " + asHost.message,
+      );
+
+      const pp = target.pub;
+      record(
+        names.presenterPublic,
+        shaped(pp.presented_by) && !has(pp.event, "family") && !has(pp, "viewer"),
+        "presented_by " +
+          JSON.stringify(pp.presented_by) +
+          " event keys " +
+          Object.keys(pp.event).join(","),
+      );
+
+      await actAs(client, owner.id);
+      const off = await attempt(client, "select public.set_subscription($1, false)", [
+        target.family,
+      ]);
+      const before = await attempt(client, "select public.event_page($1::uuid) as p", [target.id]);
+      const on = await attempt(client, "select public.set_subscription($1, true)", [target.family]);
+      const after = await attempt(client, "select public.event_page($1::uuid) as p", [target.id]);
+      record(
+        names.presenterSubscribe,
+        off.ok &&
+          on.ok &&
+          before.ok &&
+          after.ok &&
+          before.rows[0].p.viewer.subscribed === false &&
+          after.rows[0].p.viewer.subscribed === true,
+        "before " +
+          (before.ok ? before.rows[0].p.viewer.subscribed : before.code) +
+          " after " +
+          (after.ok ? after.rows[0].p.viewer.subscribed : after.code),
       );
     });
     // ------------------------------------------------------------------------------------------

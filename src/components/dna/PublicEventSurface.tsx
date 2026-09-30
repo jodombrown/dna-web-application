@@ -29,8 +29,9 @@ import {
   Facts,
   Kicker,
   PresentedBy,
+  People,
   QUIET,
-  SpeakersRow,
+  BlockSections,
   eventOwnWhen,
   placeWord,
 } from "./EventParts";
@@ -105,20 +106,209 @@ export function PublicEventSurface({ page, slug }: { page: PublicEventPage; slug
   });
   const where = placeWord(ev.mode, page.place);
   const cover = !ev.cancelled && page.media[0] ? page.media[0] : null;
-  const speakers = [
-    ...page.speakers.map((s) => ({
-      key: s.party_id,
-      name: s.name,
-      label: s.label,
-      avatarSrc: s.has_photo ? eventMediaUrl(slug, { party: s.party_id }) : undefined,
-    })),
-    ...page.pending_roles.map((r, i) => ({
-      key: "pending-" + r.role + "-" + i,
-      name: null,
-      label: r.label,
-      pending: true,
-    })),
-  ];
+  const people = page.speakers.map((sp) => ({
+    key: sp.party_id,
+    name: sp.name,
+    label: sp.label,
+    avatarSrc: sp.has_photo ? eventMediaUrl(slug, { party: sp.party_id }) : undefined,
+  }));
+  const pending = page.pending_roles.map((r, i) => ({
+    key: "pending-" + r.role + "-" + i,
+    label: r.label,
+  }));
+  // Revision 4 (1185): above 1024 the facts and the RSVP sit in a sticky left column beside the story;
+  // a cancelled page keeps its one column. At compact the guest RSVP is a bar at the foot.
+  const twoCol = tier === "expanded" && !ev.cancelled;
+  const bar = compact && showRsvp;
+  const rsvpEl = showRsvp ? (
+    <div
+      data-guest-rsvp
+      data-rsvp-state={
+        guest?.status === "going" ? "going" : guest?.status === "not_going" ? "not-going" : "open"
+      }
+    >
+      {guest?.status === "going" ? (
+        <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+          <span
+            data-rsvp-pill
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 8,
+              minHeight: 44,
+              padding: "0 16px",
+              borderRadius: "var(--radius-pill)",
+              background: "var(--c-convene-tint)",
+              color: "var(--c-convene-text)",
+              fontSize: 15,
+              fontWeight: 500,
+            }}
+          >
+            <Icon name="check" size={18} />
+            You are going.
+          </span>
+          <Button variant="secondary" size="sm" onClick={openChange} data-testid="guest-change">
+            Change
+          </Button>
+        </div>
+      ) : guest?.status === "not_going" ? (
+        <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+          <span style={{ fontSize: 15, color: "var(--ink-2)" }}>You said not going.</span>
+          <Button variant="secondary" size="sm" onClick={openChange} data-testid="guest-change">
+            Change
+          </Button>
+        </div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <div>
+            <Button c="convene" onClick={openEmail} data-testid="guest-going">
+              I am going
+            </Button>
+          </div>
+          <span style={QUIET}>{GUEST_FREE_LINE}</span>
+        </div>
+      )}
+    </div>
+  ) : null;
+  const story = (
+    <>
+      <EventBody>{page.body}</EventBody>
+      <BlockSections blocks={page.blocks} columns={twoCol} />
+      <People people={people} pending={pending} />
+    </>
+  );
+
+  const coverEl = cover ? (
+    <MediaBlock
+      kind="image"
+      src={eventMediaUrl(slug, { position: cover.position })}
+      alt=""
+      ratio={twoCol ? "21/9" : undefined}
+    />
+  ) : null;
+  const headEl = (
+    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      <Kicker cancelled={ev.cancelled} />
+      <EventTitle title={ev.title} cancelled={ev.cancelled} compact={compact} />
+    </div>
+  );
+  const presenterEl = (
+    <PresentedBy
+      presenter={page.presented_by.name}
+      host={page.host?.name ?? null}
+      headline={page.presented_by.headline}
+      links={page.presented_by.links}
+    />
+  );
+  const factsEl = (
+    <Facts>
+      {when && <FactRow icon="calendar" main={when} testId="when" />}
+      {where && (
+        <FactRow
+          icon="map-pin"
+          main={where}
+          sub={ev.timezone ? "Times at the place are in " + ev.timezone : undefined}
+          testId="where"
+        />
+      )}
+      {ev.delivery_intent.trim() && (
+        <FactRow
+          icon="info"
+          main={ev.delivery_intent.trim()}
+          sub="The exact door goes to people who are going."
+          testId="intent"
+        />
+      )}
+    </Facts>
+  );
+  const layout = ev.cancelled ? (
+    <>
+      {headEl}
+      {presenterEl}
+      {ev.cancelled_reason && <EventBody>{ev.cancelled_reason}</EventBody>}
+      <p data-event-cancelled-line style={{ margin: 0, ...QUIET, fontSize: 15 }}>
+        {CANCELLED_SURVIVES}
+      </p>
+    </>
+  ) : twoCol ? (
+    <>
+      {coverEl}
+      <div
+        data-public-columns
+        style={{
+          display: "grid",
+          gridTemplateColumns: "var(--pane-list-width) minmax(0, 1fr)",
+          columnGap: "var(--space-8)",
+          alignItems: "start",
+        }}
+      >
+        <div
+          data-public-aside
+          style={{
+            position: "sticky",
+            top: "var(--space-6)",
+            display: "flex",
+            flexDirection: "column",
+            gap: 20,
+          }}
+        >
+          {presenterEl}
+          {factsEl}
+          {rsvpEl && (
+            <div
+              data-public-rsvp-card
+              style={{
+                padding: "var(--space-4)",
+                borderRadius: "var(--radius-l)",
+                border: "1px solid var(--line)",
+                background: "var(--surface)",
+              }}
+            >
+              {rsvpEl}
+            </div>
+          )}
+        </div>
+        <div
+          data-public-story
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: 20,
+            maxWidth: "var(--content-max)",
+          }}
+        >
+          {headEl}
+          {story}
+        </div>
+      </div>
+    </>
+  ) : (
+    <>
+      {coverEl}
+      {headEl}
+      {presenterEl}
+      {factsEl}
+      {!bar && rsvpEl}
+      {story}
+      {bar && (
+        <div
+          data-guest-rsvp-bar
+          style={{
+            position: "sticky",
+            bottom: 0,
+            zIndex: "var(--z-sticky)" as unknown as number,
+            marginInline: -16,
+            background: "var(--surface-glass)",
+            borderTop: "1px solid var(--line)",
+            padding:
+              "var(--space-3) var(--space-4) calc(var(--space-3) + env(safe-area-inset-bottom))",
+          }}
+        >
+          {rsvpEl}
+        </div>
+      )}
+    </>
+  );
 
   return (
     <div
@@ -174,7 +364,7 @@ export function PublicEventSurface({ page, slug }: { page: PublicEventPage; slug
         style={{
           flex: 1,
           width: "100%",
-          maxWidth: "var(--content-max)",
+          maxWidth: twoCol ? "var(--page-max)" : "var(--content-max)",
           margin: "0 auto",
           boxSizing: "border-box",
           padding: compact ? "16px 16px 48px" : "32px 32px 64px",
@@ -183,114 +373,7 @@ export function PublicEventSurface({ page, slug }: { page: PublicEventPage; slug
           gap: 20,
         }}
       >
-        {cover && (
-          <MediaBlock kind="image" src={eventMediaUrl(slug, { position: cover.position })} alt="" />
-        )}
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          <Kicker cancelled={ev.cancelled} />
-          <EventTitle title={ev.title} cancelled={ev.cancelled} compact={compact} />
-        </div>
-        <PresentedBy presenter={page.presented_by.name} host={page.host?.name ?? null} />
-        {ev.cancelled ? (
-          <>
-            {ev.cancelled_reason && <EventBody>{ev.cancelled_reason}</EventBody>}
-            <p data-event-cancelled-line style={{ margin: 0, ...QUIET, fontSize: 15 }}>
-              {CANCELLED_SURVIVES}
-            </p>
-          </>
-        ) : (
-          <>
-            <Facts>
-              {when && <FactRow icon="calendar" main={when} testId="when" />}
-              {where && (
-                <FactRow
-                  icon="map-pin"
-                  main={where}
-                  sub={ev.timezone ? "Times at the place are in " + ev.timezone : undefined}
-                  testId="where"
-                />
-              )}
-              {ev.delivery_intent.trim() && (
-                <FactRow
-                  icon="info"
-                  main={ev.delivery_intent.trim()}
-                  sub="The exact door goes to people who are going."
-                  testId="intent"
-                />
-              )}
-            </Facts>
-
-            {/* 7. RSVP, public (SPEC 3.7): the guest path's entry, for a free event that is neither
-                cancelled nor over. Paid events wait for the pay and admit pass. */}
-            {showRsvp && (
-              <div
-                data-guest-rsvp
-                data-rsvp-state={
-                  guest?.status === "going"
-                    ? "going"
-                    : guest?.status === "not_going"
-                      ? "not-going"
-                      : "open"
-                }
-              >
-                {guest?.status === "going" ? (
-                  <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-                    <span
-                      data-rsvp-pill
-                      style={{
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: 8,
-                        minHeight: 44,
-                        padding: "0 16px",
-                        borderRadius: "var(--radius-pill)",
-                        background: "var(--c-convene-tint)",
-                        color: "var(--c-convene-text)",
-                        fontSize: 15,
-                        fontWeight: 500,
-                      }}
-                    >
-                      <Icon name="check" size={18} />
-                      You are going.
-                    </span>
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={openChange}
-                      data-testid="guest-change"
-                    >
-                      Change
-                    </Button>
-                  </div>
-                ) : guest?.status === "not_going" ? (
-                  <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-                    <span style={{ fontSize: 15, color: "var(--ink-2)" }}>You said not going.</span>
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={openChange}
-                      data-testid="guest-change"
-                    >
-                      Change
-                    </Button>
-                  </div>
-                ) : (
-                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                    <div>
-                      <Button c="convene" onClick={openEmail} data-testid="guest-going">
-                        I am going
-                      </Button>
-                    </div>
-                    <span style={QUIET}>{GUEST_FREE_LINE}</span>
-                  </div>
-                )}
-              </div>
-            )}
-
-            <EventBody>{page.body}</EventBody>
-            <SpeakersRow speakers={speakers} />
-          </>
-        )}
+        {layout}
       </main>
       <GuestSheet
         open={sheet.open}

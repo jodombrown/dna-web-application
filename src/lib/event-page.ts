@@ -38,15 +38,29 @@ export type EventPageEvent = {
   mode: Database["public"]["Enums"]["event_mode"];
   ticket_kind: Database["public"]["Enums"]["ticket_kind"];
   delivery_intent: string;
+  /** Handoff 37-C (1196): the event's topic, a `convene_families` value; null when it has none. */
+  family: string | null;
   /** 623: the host's capacity is reached, as a fact and never as a number. */
   full: boolean;
   /** 1028: the event has a public page (published or cancelled, and its post is to everyone). */
   public: boolean;
 };
 
+/** Handoff 37-C: a presenter's link as `private.event_presenter_profile` serves it; the url is always http(s). */
+export type PresenterLink = { kind: "website" | "linkedin" | "x" | "instagram"; url: string };
+
+/** The presenter's line and links, admitted for the viewer as profile_view admits them (1187, 1225). */
+export type PresenterProfile = { headline: string | null; links: PresenterLink[] };
+
 export type EventPresenter =
-  | { kind: "member"; id: string; name: string; handle: string; avatar_path: string | null }
-  | { kind: "space"; id: string; name: string }
+  | ({
+      kind: "member";
+      id: string;
+      name: string;
+      handle: string;
+      avatar_path: string | null;
+    } & PresenterProfile)
+  | ({ kind: "space"; id: string; name: string } & PresenterProfile)
   | null;
 
 export type EventPerson = { id: string; name: string; handle: string; avatar_path: string | null };
@@ -136,6 +150,8 @@ export type EventPage = {
     registration: EventRegistration;
     default_audience: Audience;
     has_default: boolean;
+    /** Handoff 37-C: the viewer subscribes to the event's topic (`member_subscriptions`). */
+    subscribed: boolean;
   };
   invitations: EventInvitation[];
   speakers: EventSpeaker[];

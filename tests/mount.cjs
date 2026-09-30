@@ -1190,9 +1190,39 @@ async function runMountCovers(bt, bname, [w, h], theme) {
         window.dispatchEvent(new PopStateEvent("popstate", { state: {} }));
       }, "/e/" + SLUG);
       await page.waitForSelector(`[data-public-event="${SLUG}"]`, { timeout: 15000 });
-      const pub = keepsEa35(await readMedia(page, `[data-public-event="${SLUG}"] ` + COVER));
+      const pubMedia = await readMedia(page, `[data-public-event="${SLUG}"] ` + COVER);
+      // Handoff 37-C item 8 (1185): above 1024 the public page's cover spans both columns at 21:9, so
+      // the frame declares that ratio and the one image fills it; at 1024 and below it keeps ea35e8e's
+      // box.
+      const pub =
+        w > 1024
+          ? (() => {
+              const i = pubMedia.imgs[0];
+              const why = [];
+              if (pubMedia.imgs.length !== 1) why.push(pubMedia.imgs.length + " images");
+              else {
+                if (pubMedia.ratio.replace(/\s/g, "") !== "21/9")
+                  why.push("aspect-ratio " + pubMedia.ratio);
+                if (Math.abs(i.w - pubMedia.inner.w) > 0.5)
+                  why.push(`width ${i.w} of ${pubMedia.inner.w}`);
+                if (Math.abs(i.h - pubMedia.inner.h) > 1)
+                  why.push(`height ${i.h} of ${pubMedia.inner.h}`);
+                if (Math.abs(pubMedia.outer.h - pubMedia.outer.w / (21 / 9)) > 1)
+                  why.push(`frame ${pubMedia.outer.w}x${pubMedia.outer.h}`);
+              }
+              return {
+                ok: why.length === 0,
+                detail:
+                  why.join(" | ") ||
+                  `${Math.round(pubMedia.outer.w)}x${Math.round(pubMedia.outer.h)}`,
+              };
+            })()
+          : keepsEa35(pubMedia);
       record(
-        tag + " the public event page's cover keeps ea35e8e's box (no ratio)",
+        tag +
+          (w > 1024
+            ? " the public event page's cover is 21:9 across both columns (1185)"
+            : " the public event page's cover keeps ea35e8e's box (no ratio)"),
         pub.ok,
         pub.detail,
       );
