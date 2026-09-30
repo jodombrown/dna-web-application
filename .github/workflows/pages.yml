@@ -300,7 +300,10 @@ jobs:
       # apt verifies it file by file, fetching what the new week's index names differently and
       # keeping the rest; the complete set is then saved under the new exact key. The cache action
       # takes the newest entry under a prefix, so a complete set outranks run 441's stranded partial
-      # one wherever both match.
+      # one wherever both match. The key is ordered OS, engine, image version, Playwright, so that
+      # prefix is a prefix of it: run 444 read `Cache not found` for `apt-archives-ubuntu24-webkit-`
+      # against run 443's `apt-archives-ubuntu24-20260927.320.1-webkit-...` because the version sat
+      # between the two, and a fallback that can never match is the miss it was meant to prevent.
       # Restored into a runner-owned directory and copied in with sudo, because the cache action
       # cannot write apt's root-owned directory. A miss is exactly today: nothing is copied in, and
       # the step after the install keeps what apt fetched for the next run. The runner image writes
@@ -317,7 +320,7 @@ jobs:
           # "-complete": only a set harvested after a successful install is saved under this key.
           # Run 441's first shape saved a 10-file set under the key without the suffix, and an
           # exact hit is never saved again, so that entry is left to expire unused.
-          echo "key=apt-archives-${image}-${ENGINE}-playwright-${pw}-complete" >> "$GITHUB_OUTPUT"
+          echo "key=apt-archives-${ImageOS:-unknown}-${ENGINE}-${ImageVersion:-unknown}-playwright-${pw}-complete" >> "$GITHUB_OUTPUT"
           echo "prefix=apt-archives-${ImageOS:-unknown}-${ENGINE}-" >> "$GITHUB_OUTPUT"
           echo "Runner image ${image}, Playwright ${pw}, engine ${ENGINE}."
       - name: Restore the apt archives (handoff 38-C)

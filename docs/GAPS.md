@@ -7902,4 +7902,12 @@ more (`Need to get 10.7 MB/130 MB`), and attempt 3 fetched the rest and read `Su
 installed`, downloaded WebKit and succeeded at 45 s, and the gate read 283 of 283. Three timed-out
 attempts failing the job by name is run 83 (`36781480713`, a 5-second bound): `All 3 attempts timed out
 at the 5s bound (exit 124)`, the step red at 32 s, and the tail reading `The matrix step produced no
-output; it did not reach tests/matrix.cjs.` The enforcing run on the final head is cited on PR #83.
+output; it did not reach tests/matrix.cjs.` Run 444 (`36788537363`, head `233e54a`, the same workflow)
+read the same again on a runner that had rotated back to image `20260920.314.1`: `matrix (webkit)`
+(`110135942000`) installed in 34 s, lost a web process on `webkit-390x844-dark profile visitor stranger`
+and ran it again clean under 1237, read `7554 of 7554` and ended at 56m11s of 85 with the core
+extracted; `matrix (chromium)` (`110135941861`) installed in 22 s, read `7545 of 7545` and ended at
+52m28s of 75. Its restore lines also showed the fallback prefix could not match the key as first
+ordered, `apt-archives-ubuntu24-webkit-` against `apt-archives-ubuntu24-20260927.320.1-webkit-…`, so
+the key is reordered OS, engine, image version, Playwright in the commit after 444; the enforcing run
+on the final head is cited on PR #83.
