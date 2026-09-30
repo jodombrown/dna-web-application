@@ -2967,8 +2967,22 @@ async function shot(page, name) {
   await page.screenshot({ path: path.join(OUT, name + ".png"), fullPage: false });
 }
 
+/**
+ * G140 (handoff 37-F): the sign-in form is touched only once the client has taken over from the
+ * server-rendered markup. Every auth route calls useTheme, which stamps data-theme on the document
+ * element in an effect, so the attribute's arrival is hydration; networkidle is not, and a press
+ * that lands before React's onSubmit is attached submits the form natively, to `/sign-in?`, where
+ * the arm then waits fifteen seconds for a feed that never comes (runs 379 and 431).
+ */
+async function hydrated(page) {
+  await page.waitForFunction(() => document.documentElement.hasAttribute("data-theme"), null, {
+    timeout: 15000,
+  });
+}
+
 async function signIn(page) {
   await page.goto(BASE + "/sign-in", { waitUntil: "networkidle" });
+  await hydrated(page);
   await page.fill('input[type="email"]', "member@test.invalid");
   await page.fill('input[type="password"]', "x");
   await page.click('button[type="submit"]');
@@ -6164,6 +6178,7 @@ async function runWidth(browserType, bname, [w, h]) {
     await visit("/m/thandiwe-dube", null, "public profile");
     await visit("/reset", null, "reset request");
     await visit("/sign-in", null, "sign-in");
+    await hydrated(page);
     await page.fill('input[type="email"]', "member@test.invalid");
     await page.fill('input[type="password"]', "x");
     await page.click('button[type="submit"]');
@@ -6310,6 +6325,7 @@ module.exports = {
   seedPosts,
   mockSupabase,
   signIn,
+  hydrated,
   record,
   unproven,
   eventId,

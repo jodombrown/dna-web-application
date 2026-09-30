@@ -6244,7 +6244,7 @@ Owed: the header in longhand only, as `AppHeader` and `ProfileSurface`'s public 
 (ruling 344's inset in `paddingTop`, the sides in `paddingLeft` and `paddingRight`). Handoff 33-D
 does not reach this surface, so it is not changed here.
 
-## G140. After sign-in, Chromium's 1366x1024 light onboarding-layout arm stayed on `/sign-in?` for 15 s on run 379, and passed on runs 380 and 381
+## G140. After sign-in, Chromium's 1366x1024 light onboarding-layout arm stayed on `/sign-in?` for 15 s on run 379, and WebKit's 1440x900 light discovery arm on run 431 — closed (handoff 37-F)
 
 **Severity: low, unread. Opened 27 September 2026 during handoff 34-A (item 1), filed under
 ruling 597. The number is assigned by this entry (ruling 638).**
@@ -6289,6 +6289,24 @@ reach the host that serves Actions artifacts.
 
 Owed: that screenshot, read while the artifact is retained, and any further red reading of this arm
 added here before a cause is named.
+
+**Second sighting, 30 September 2026 (handoff 37-F).** `pages.yml` run 431 (id `36696029333`, head
+`950b72b`, the enforcing run of PR #81), `matrix (webkit)` job `109824752438`:
+`webkit-1440x900-light-discovery` timed out on `signIn`'s `waitForURL("**/feed")` after fifteen seconds,
+`emitted 1 of 36`, the job's one failure beside its retried G5 arm. WebKit this time, a different arm
+and a different width, 2299 s into the job. 37-F's `FAILSTATE` line read what the page held:
+`/sign-in?`, focus on `body`, no dialog, and the sign-in form's own test ids present (`password-eye`,
+`forgot-password`, the two providers), so the address is the native submission this entry named and
+the form had re-rendered under it.
+
+**Closed 30 September 2026, in handoff 37-F, by the commit that changes `tests/matrix.cjs`'s `signIn`.**
+The cause the address shows: the press reached the form before React's `onSubmit` was attached, so the
+browser submitted the form natively. `networkidle` is not hydration. `tests/auth.cjs` already guarded
+its own controls by waiting for `data-theme` on the document element, which every auth route's
+`useTheme` stamps in an effect, and `signIn` did not. `hydrated(page)` now lives in `tests/matrix.cjs`,
+`signIn` and the width arm's sign-in call it after the goto, and `tests/onboarding.cjs`'s and
+`tests/mount.cjs`'s `signInTo` call `M.hydrated`. The screenshot this entry owed is superseded by the
+`FAILSTATE` reading; a further `/sign-in?` after this commit is a new entry.
 
 ---
 

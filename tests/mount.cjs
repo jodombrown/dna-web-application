@@ -1351,6 +1351,8 @@ const freshState = () => ({
 
 async function signInTo(page, glob) {
   await page.goto(BASE + "/sign-in", { waitUntil: "networkidle" });
+  // G140: the form is touched only once hydrated, as tests/matrix.cjs's signIn does.
+  await M.hydrated(page);
   await page.fill('input[type="email"]', "member@test.invalid");
   await page.fill('input[type="password"]', "x");
   await page.click('button[type="submit"]');
