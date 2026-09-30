@@ -1351,6 +1351,8 @@ const freshState = () => ({
 
 async function signInTo(page, glob) {
   await page.goto(BASE + "/sign-in", { waitUntil: "networkidle" });
+  // G140: the form is touched only once hydrated, as tests/matrix.cjs's signIn does.
+  await M.hydrated(page);
   await page.fill('input[type="email"]', "member@test.invalid");
   await page.fill('input[type="password"]', "x");
   await page.click('button[type="submit"]');
@@ -1692,30 +1694,31 @@ async function runMountEmpty(bt, bname, [w, h], theme) {
   );
 }
 
+// Ruling 1237: each arm is driven through `M.drive`, so a lost web process retries that arm alone.
 async function runMount(bt, bname, vp, theme) {
-  await runMountFeed(bt, bname, vp, theme);
-  await runMountPost(bt, bname, vp, theme);
-  await runMountComposer(bt, bname, vp, theme, "feed");
-  await runMountComposer(bt, bname, vp, theme, "connect");
-  await runMountConvene(bt, bname, vp, theme, "/convene");
-  await runMountConvene(bt, bname, vp, theme, "/convene/curated");
+  await M.drive(runMountFeed, bt, bname, vp, theme);
+  await M.drive(runMountPost, bt, bname, vp, theme);
+  await M.drive(runMountComposer, bt, bname, vp, theme, "feed");
+  await M.drive(runMountComposer, bt, bname, vp, theme, "connect");
+  await M.drive(runMountConvene, bt, bname, vp, theme, "/convene");
+  await M.drive(runMountConvene, bt, bname, vp, theme, "/convene/curated");
   // At expanded /convene/events/$id is Discovery with the pane (1047); below it is Brief 10's own
   // route, which binds none of the changed parts.
-  if (vp[0] > 1024) await runMountEvent(bt, bname, vp, theme);
-  await runMountConnect(bt, bname, vp, theme);
-  await runMountProfile(bt, bname, vp, theme);
-  await runMountOnboarding(bt, bname, vp, theme, "welcome");
-  await runMountOnboarding(bt, bname, vp, theme, "where");
-  await runMountOnboarding(bt, bname, vp, theme, "relationship");
-  await runMountGuest(bt, bname, vp, theme);
-  await runMountAuth(bt, bname, vp, theme, "sign-in");
-  await runMountAuth(bt, bname, vp, theme, "reset");
-  await runMountShell(bt, bname, vp, theme);
+  if (vp[0] > 1024) await M.drive(runMountEvent, bt, bname, vp, theme);
+  await M.drive(runMountConnect, bt, bname, vp, theme);
+  await M.drive(runMountProfile, bt, bname, vp, theme);
+  await M.drive(runMountOnboarding, bt, bname, vp, theme, "welcome");
+  await M.drive(runMountOnboarding, bt, bname, vp, theme, "where");
+  await M.drive(runMountOnboarding, bt, bname, vp, theme, "relationship");
+  await M.drive(runMountGuest, bt, bname, vp, theme);
+  await M.drive(runMountAuth, bt, bname, vp, theme, "sign-in");
+  await M.drive(runMountAuth, bt, bname, vp, theme, "reset");
+  await M.drive(runMountShell, bt, bname, vp, theme);
   // Addendum 3 item E: MediaBlock's ratio on the Feed's Convene card, and every other box kept.
-  await runMountMedia(bt, bname, vp, theme);
-  await runMountCovers(bt, bname, vp, theme);
+  await M.drive(runMountMedia, bt, bname, vp, theme);
+  await M.drive(runMountCovers, bt, bname, vp, theme);
   // Handoff 33-D item 4 (1147): EmptyState fills its column on Discovery, the Feed and Connect.
-  await runMountEmpty(bt, bname, vp, theme);
+  await M.drive(runMountEmpty, bt, bname, vp, theme);
 }
 
 module.exports = { runMount, MOUNT_CELLS, runMountEmpty, readEmpty, emptyFills };

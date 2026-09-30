@@ -1,43 +1,63 @@
-// Handoff 37-B (ruling 1201): every Sheet's enter and exit, read frame by frame from the pixels the
-// engine painted. The founder's two Safari recordings show each sheet opening with its panel moving
-// away from its rest position and then snapping to it: the drawer's left edge runs from 640 to the
-// window's left edge and jumps back, the bottom sheet rises past the window's top and drops. Chat
-// reproduced it on the real `src/components/strand/Sheet.tsx` in Playwright's WebKit and Chromium,
-// and found that `getBoundingClientRect`, `offsetLeft` plus the computed transform, and the painted
-// pixels disagreed in both engines (the handoff's Update, item 5), so an arm that reads geometry can
-// pass while the screen is wrong. This arm reads the paint, on the deployed build, in both engines,
-// and it is committed and read red before Sheet.tsx is touched (guardrail 2).
+// Handoff 37-B (ruling 1201), amended by 37-F (rulings 1236, 1240): every Sheet's enter and exit,
+// read from the pixels the engine painted. The founder's two Safari recordings show each sheet
+// opening with its panel moving away from its rest position and then snapping to it: the drawer's
+// left edge runs from 640 to the window's left edge and jumps back, the bottom sheet rises past the
+// window's top and drops. Chat reproduced it on the real `src/components/strand/Sheet.tsx` in
+// Playwright's WebKit and Chromium, and found that `getBoundingClientRect`, `offsetLeft` plus the
+// computed transform, and the painted pixels disagreed in both engines (37-B's Update, item 5), so
+// an arm that reads geometry can pass while the screen is wrong. This arm reads the paint, on the
+// deployed build, in both engines, and it was committed and read red before Sheet.tsx was touched.
 //
 // One arm per surface and cell. The composer is the drawer at 820, 1280 and 2560 and the bottom
 // sheet at 390 and 430; Discovery's Filters and the event page's Share are the bottom sheet at 390
-// and 430. Each arm records the page as video (Playwright's own ffmpeg, 25 frames a second), paints
-// an 8 px lime outline inside the panel's box so the panel is unambiguous in every frame, drops a
-// magenta marker on the click and a cyan one on the Escape so both instants are frame-exact, then
-// decodes a 64 px band across the panel's path and reads the panel's leading edge per frame as
-// `real/measure.py` in Chat's harness reads it: the first column (drawer) or row (bottom sheet) on
-// which more than half the band is lime. Beside it, a requestAnimationFrame sampler reads the
-// panel's bounding box and computed transform per frame from the click, so a disagreement between
-// geometry and paint is visible in the record; nothing is asserted on the geometry.
+// and 430. Every arm paints an 8 px lime outline inside the panel's box so the panel is unambiguous
+// in every frame, reads a 64 px band across the panel's path, and reads the panel's leading edge
+// per frame as `real/measure.py` in Chat's harness reads it: the first column (drawer) or row
+// (bottom sheet) on which more than half the band is lime. The axis is the panel's left edge for
+// the drawer and its top edge for the bottom sheet. How the frames are obtained differs by engine,
+// and every `SHEET` line names it as `method=`.
 //
-// The axis is the panel's left edge for the drawer and its top edge for the bottom sheet, and rest
-// is where the last painted enter frame sits. Four assertions on the enter, per the handoff: the
-// painted edge is never on the wrong side of rest by more than 0.5 px; it never moves away from rest
-// between two frames; the last frame is at rest within 0.5 px; and the first painted frame is not at
-// rest, so the slide ran. Then Escape, read the same way until the lime is gone, with one assertion:
-// the exit never crosses rest and never turns back toward it. Every series is printed for every arm,
-// passing or failing (ruling 930: a record, not an assertion), as `SHEET <arm> <enter|exit> ...`,
-// because `record()` prints a detail only on failure and the arrays the handoff wants in the PR body
-// are the passing engine's as much as the failing one's. The video of a failing arm is kept in the
-// job's artefact under `sheet-video/`; a passing arm's is deleted.
+// WebKit: `method=stepped` (ruling 1236). The session installs Playwright's clock, clicks the
+// trigger, waits for the panel's transform transition to exist, pauses it, and steps its
+// `currentTime` from 0 to the transition's duration inclusive in 1000/60 ms steps, taking a
+// lossless screenshot of the band at each step; the exit is Escape, read the same way, with the
+// clock paused first so the `setTimeout(SHEET_DUR)` that unmounts the panel is held until the last
+// step has been read, then run so the panel's detach is asserted. The clock is installed but not
+// paused during the enter, because Sheet shows the panel after two animation frames and a paused
+// clock would never deliver them; the CSS transition itself is driven by the engine's own timeline
+// and by the paused animation's `currentTime`, which the fake clock does not touch. Screenshots
+// are lossless, so the tolerance is 0.5 CSS px at device scale 1, the handoff's original value.
+// The stepped series does not depend on the engine running an animation frame while the
+// transition plays, which is what G155 could not get at 2560 by 1440, and it cannot deliver a frame
+// out of order, which is what G154 and G160 read from WebKit's screencast: the reorder allowance
+// those two carried is retired with this method (1240).
 //
-// The tolerance on the painted edge is 2 video pixels, not the handoff's 0.5: the video is VP8 with
-// 4:2:0 chroma, so a colour edge is resolved to a 2 by 2 block and the lime edge of a panel at rest
-// on y 168.8 reads 168 on one frame and 170 on the next, never 169. Half a pixel is finer than the
-// recording can resolve; one chroma block is what it can, and a snap of the kind the founder
-// recorded is hundreds of pixels. A 2560-wide cell is recorded at half size and its readings are
-// scaled back, so its tolerance is four CSS pixels. The geometry record keeps the 0.5 px reading.
+// Chromium: `method=video`, unchanged in method from 37-B. The session records the page as video
+// (Playwright's own ffmpeg, 25 frames a second), drops a magenta marker on the click and a cyan one
+// on the Escape so both instants are frame-exact, then decodes the band from the video. The
+// tolerance is 2 video pixels, not 0.5: the video is VP8 with 4:2:0 chroma, so a colour edge is
+// resolved to a 2 by 2 block and the lime edge of a panel at rest on y 168.8 reads 168 on one frame
+// and 170 on the next, never 169. A 2560-wide cell is recorded at half size and its readings are
+// scaled back, so its tolerance is four CSS pixels. A requestAnimationFrame sampler reads the
+// panel's box and computed transform per frame beside the video, as a record only.
+//
+// The assertions are the same in meaning on both series. Rest is where the settled panel sits:
+// the last painted enter frame on the video, the settled paint after the transition finished on
+// the stepped series. Four on the enter: the painted edge is never on the wrong side of rest by
+// more than the tolerance; it never moves away from rest between two frames; the last frame is at
+// rest; and the first painted frame is not at rest, so the slide ran. The stepped series adds one:
+// step 0 reads the panel wholly off its edge, so the series starts where the transition starts.
+// Then Escape, with one assertion: the exit never crosses rest and never turns back toward it, and
+// the panel is gone (the video: no lime; the stepped series: the last step off the edge and the
+// panel detached once the held timers ran). Every series is printed for every arm, passing or
+// failing (ruling 930: a record, not an assertion), as `SHEET <arm> <enter|exit> method=... `,
+// because `record()` prints a detail only on failure. A failing Chromium arm's video is kept in
+// the job's artefact under `sheet-video/`; a passing arm's is deleted.
 //
 // Usage: BASE=https://<preview>.dna-web-application.pages.dev SPECIAL=sheet node tests/matrix.cjs
+// SHEET_METHOD=stepped|video overrides the engine's method. A harness probe, off by default, for
+// reading the stepped mechanism on a machine that has no WebKit; it is never set by a workflow, and
+// a Chromium arm run stepped emits one more check than it declares, which the accounting names.
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
@@ -60,12 +80,12 @@ const {
   SB,
 } = M;
 
-/** The engine's one allowance for a frame delivered out of order, per run: engine -> the arm that used it (37-D item 8). */
-const ALLOWANCE = new Map();
-/** 0.5 px, the handoff's tolerance, on the geometry record. */
+/** 0.5 px, the handoff's tolerance: the stepped series' painted reading, and the video's geometry record. */
 const TOL = 0.5;
-/** One 4:2:0 chroma block, the video's own resolution for a colour edge, on the painted reading. */
+/** One 4:2:0 chroma block, the video's own resolution for a colour edge, on the video's painted reading. */
 const PAINT_TOL = 2;
+/** The stepped series' step, one frame at 60 Hz. */
+const STEP_MS = 1000 / 60;
 /** How long the sampler keeps reading after the panel first appears, or after it leaves. */
 const SAMPLE_MS = 700;
 /** The sampler's hard stop, in case the panel never appears or never leaves. */
@@ -108,24 +128,48 @@ const IGNORED_CONSOLE = new RegExp(
   ].join("|"),
 );
 
+/**
+ * Ruling 1236: how an engine's frames are obtained. WebKit steps the transition's clock and
+ * screenshots each step; Chromium keeps its video. SHEET_METHOD is the probe override named in the
+ * header and is read nowhere else.
+ */
+function methodOf(engine) {
+  const forced = process.env.SHEET_METHOD;
+  if (forced === "stepped" || forced === "video") return forced;
+  return engine === "webkit" ? "stepped" : "video";
+}
+
 /** Every session `context()` opens, in order: `arm()` closes and reads the ones its arm opened even
  *  when the arm's own gate throws before it can hand its session back. */
 const opened = [];
 
 async function context(browserType, [w, h], theme, db, tag) {
   const browser = await launch(browserType);
-  // The video is the measurement (the handoff's revised Stage 1), so every session records one, at
-  // the viewport's own size up to VIDEO_MAX_W and at half size past it.
-  const scale = w > VIDEO_MAX_W ? 2 : 1;
+  const method = methodOf(tag.split("-")[0]);
+  // On the video method the video is the measurement (37-B's revised Stage 1), recorded at the
+  // viewport's own size up to VIDEO_MAX_W and at half size past it. The stepped method screenshots
+  // at device scale 1, so its readings are CSS pixels and its scale is 1.
+  const scale = method === "video" && w > VIDEO_MAX_W ? 2 : 1;
   const ctx = await browser.newContext({
     viewport: { width: w, height: h },
     hasTouch: w <= 1024,
     isMobile: w < 1024,
     deviceScaleFactor: 1,
     colorScheme: theme,
-    recordVideo: { dir: path.join(VIDEO_DIR, tag), size: { width: w / scale, height: h / scale } },
+    ...(method === "video"
+      ? {
+          recordVideo: {
+            dir: path.join(VIDEO_DIR, tag),
+            size: { width: w / scale, height: h / scale },
+          },
+        }
+      : {}),
   });
   const page = await ctx.newPage();
+  // Ruling 1236: the clock is installed before the first navigation, running, so the page loads
+  // and the enter's two animation frames run as they would; `readSheetStepped` pauses it only for
+  // the exit, to hold Sheet's unmount timer while the exit's steps are read.
+  if (method === "stepped") await page.clock.install();
   await page.addInitScript(
     ({ theme }) => {
       try {
@@ -154,7 +198,7 @@ async function context(browserType, [w, h], theme, db, tag) {
         `${m.location().url || (failedResponses.length ? "(last failed response, unconfirmed) " + failedResponses.at(-1) : "(no url)")} ${m.text()}`,
       );
   });
-  const session = { browser, ctx, page, errors, scale, w, h };
+  const session = { browser, ctx, page, errors, scale, w, h, method };
   opened.push(session);
   return session;
 }
@@ -290,7 +334,11 @@ const VIDEO_FPS = 25;
  * suite carries no image library and the runner need not either.
  */
 function decodePng(file) {
-  const d = fs.readFileSync(file);
+  return decodePngBuffer(fs.readFileSync(file), file);
+}
+
+/** The same decoder on a buffer, for the stepped method's screenshots (rgba, colour type 6). */
+function decodePngBuffer(d, file = "screenshot") {
   if (d.readUInt32BE(0) !== 0x89504e47) throw new Error(`${file}: not a PNG`);
   let off = 8;
   let w = 0;
@@ -478,18 +526,16 @@ function fmtSeries(list) {
 }
 
 /**
- * The four enter assertions of the handoff, on the painted frames that show the panel. Rest is the
- * last such frame's edge, so "the wrong side" is an edge below rest on either axis: left of a
- * drawer's rest, above a bottom sheet's. `allow` is whether one out-of-order frame may be excused
- * (see `reordered`).
+ * The four enter assertions of the handoff, on the painted frames that show the panel. Rest is
+ * `restAt` where the caller read the settled panel (the stepped method), else the last painted
+ * frame's edge (the video), so "the wrong side" is an edge below rest on either axis: left of a
+ * drawer's rest, above a bottom sheet's. Strict on both engines: the reorder allowance that G154
+ * and G160 carried is retired with the stepped method (1236, 1240).
  */
-function judgeEnter(enter, tol, geometry, allow) {
-  const frames = enter.filter((f) => f.pos !== null);
-  if (!frames.length) return { painted: 0 };
-  const geoRest = geometry[geometry.length - 1];
-  const found = reordered(frames, "enter", geometry, tol, geoRest, allow);
-  const pos = frames.filter((_, i) => i !== found.late?.index).map((f) => f.pos);
-  const rest = pos[pos.length - 1];
+function judgeEnter(enter, tol, restAt = null) {
+  const pos = enter.filter((f) => f.pos !== null).map((f) => f.pos);
+  if (!pos.length) return { painted: 0 };
+  const rest = restAt ?? pos[pos.length - 1];
   const wrongSide = pos.filter((p) => p < rest - tol);
   const away = [];
   for (let i = 1; i < pos.length; i++) if (pos[i] > pos[i - 1] + tol) away.push(i);
@@ -498,8 +544,6 @@ function judgeEnter(enter, tol, geometry, allow) {
     rest,
     wrongSide,
     away,
-    late: found.late,
-    refused: found.refused,
     atRest: Math.abs(pos[pos.length - 1] - rest) <= tol,
     slid: pos[0] > rest + tol,
     first: pos[0],
@@ -510,69 +554,17 @@ function judgeEnter(enter, tol, geometry, allow) {
 }
 
 /**
- * G154, G160 (handoff 37-D item 8, narrowed by Chat): WebKit's screencast can deliver one frame
- * out of the video's order, reading a position the motion had already passed. Seen only in WebKit,
- * so Chromium never has the allowance. A frame is excused only when all of these hold:
- * - the geometry record over the same motion is itself one-way (a reversal there is real motion);
- * - the frame is the first that moves the wrong way (away from rest on an enter, back toward it
- *   on an exit) and removing it leaves the painted series one-way;
- * - it lies between two consecutive samples of that record and is not past rest;
- * - on an enter, the series that remains ends at the record's rest.
- * `allow` is decided by the caller: one frame per arm and one arm per engine per run. The frame
- * stays in the printed series, and a refusal names its reason so a failing arm says why.
- * Returns { late: {index, t, pos, between: [a, b]} | null, refused: string | null }.
- */
-function reordered(frames, dir, geometry, tol, geoRest, allow) {
-  const pos = frames.map((f) => f.pos);
-  const wrong = (a, i) => (dir === "enter" ? a[i] > a[i - 1] + tol : a[i] < a[i - 1] - tol);
-  const first = pos.findIndex((_, i) => i > 0 && wrong(pos, i));
-  if (first < 0) return { late: null, refused: null };
-  const no = (why) => ({ late: null, refused: why });
-  if (!allow) return no("the reorder allowance is not available to this arm");
-  for (let i = 1; i < geometry.length; i++)
-    if (dir === "enter" ? geometry[i] > geometry[i - 1] + TOL : geometry[i] < geometry[i - 1] - TOL)
-      return no(
-        `the geometry reverses at sample ${i} (${geometry[i - 1]} to ${geometry[i]}): real motion`,
-      );
-  const rest = pos.filter((_, i) => i !== first);
-  for (let i = 1; i < rest.length; i++)
-    if (wrong(rest, i)) return no("a second frame moves the wrong way");
-  const p = pos[first];
-  if (p < geoRest - tol) return no(`the frame at ${fmt(p)} is past rest ${fmt(geoRest)}`);
-  const at = geometry.findIndex(
-    (g, i) => i > 0 && p >= Math.min(g, geometry[i - 1]) && p <= Math.max(g, geometry[i - 1]),
-  );
-  if (at < 0) return no(`the frame at ${fmt(p)} is between no two samples of the geometry`);
-  if (dir === "enter" && Math.abs(rest[rest.length - 1] - geoRest) > 2 * tol)
-    return no(
-      `the series without it ends at ${fmt(rest[rest.length - 1])}, not the geometry's rest ${fmt(geoRest)}`,
-    );
-  return {
-    late: { index: first, t: frames[first].t, pos: p, between: [geometry[at - 1], geometry[at]] },
-    refused: null,
-  };
-}
-
-/** "excused: the frame at 578, 400 ms, between samples 712.1 and 569.5" for an arm's detail. */
-const excused = (late) =>
-  late
-    ? `; excused one frame delivered out of order: ${fmt(late.pos)} at ${late.t} ms, between geometry samples ${fmt(late.between[0])} and ${fmt(late.between[1])}`
-    : "";
-
-/**
  * The exit: from the rest the enter reached, the painted edge may only ever move away from it,
- * never below it and never back toward it between two frames, until no lime is painted. A frame
- * WebKit delivered out of order (runs 399, 400 and 407) is excused only by `reordered`'s rule.
+ * never below it and never back toward it between two frames, until no lime is painted. Strict on
+ * both engines (1236, 1240).
  */
-function judgeExit(exit, rest, tol, geometry, allow) {
-  const painted = exit.filter((f) => f.pos !== null);
+function judgeExit(exit, rest, tol) {
+  const pos = exit.filter((f) => f.pos !== null).map((f) => f.pos);
   const gone = exit.length > 0 && exit[exit.length - 1].pos === null;
-  const found = reordered(painted, "exit", geometry, tol, rest, allow);
-  const pos = painted.filter((_, i) => i !== found.late?.index).map((f) => f.pos);
   const wrongSide = pos.filter((p) => p < rest - tol);
   const back = [];
   for (let i = 1; i < pos.length; i++) if (pos[i] < pos[i - 1] - tol) back.push(i);
-  return { wrongSide, back, gone, late: found.late, refused: found.refused, count: pos.length };
+  return { wrongSide, back, gone, count: pos.length };
 }
 
 const fmt = (n) => (n == null ? "null" : Math.round(n * 10) / 10);
@@ -584,6 +576,8 @@ const fmt = (n) => (n == null ? "null" : Math.round(n * 10) / 10);
  * painted. Headless WebKit at 2560 by 1440 on the runner does this (run 402: 2560 at 254 ms, then
  * 1280 at 558 ms, nothing between). A check on the slide is then unprovable there (ruling 228).
  */
+// Reached on the video method only: the stepped series (1236) does not depend on the engine running
+// a frame while the transition plays, so on WebKit this branch no longer exists.
 function unpaintedTransition(frames, shape, tol) {
   const present = frames.filter((f) => !f.none).map((f) => ({ t: f.t, pos: axisOf(f, shape).pos }));
   if (present.length < 2) return null;
@@ -597,20 +591,35 @@ function unpaintedTransition(frames, shape, tol) {
   return gap >= SHEET_DUR - 40 ? { from: lastOff.t, to: firstAt.t, gap: Math.round(gap) } : null;
 }
 
-/**
- * One sheet, opened by the trigger's own click, read on its enter and its exit: four checks and
- * one on the painted edge, and the geometry beside it as a record. `label` is the panel's
- * accessible name, `shape` "drawer" or "sheet", `trigger` the selector whose click opens it.
- */
-async function readSheet(session, tag, { label, shape, trigger }) {
-  const { page, ctx, scale, w, h } = session;
+/** The panel's selector and its lime outline, common to both methods. */
+async function outline(page, label) {
   const sel = `section[role="dialog"][aria-label="${label}"]`;
-  const tol = PAINT_TOL * scale;
   // The lime outline: painted inside the panel's box, above its content, and carried by whatever
   // moves the panel, so the panel's painted edge is the first lime column or row.
   await page.addStyleTag({
     content: `${sel}{outline:${OUTLINE}px solid #00ff00 !important;outline-offset:-${OUTLINE}px !important;}`,
   });
+  return sel;
+}
+
+/**
+ * One sheet, opened by the trigger's own click, read on its enter and its exit by the session's
+ * method. `label` is the panel's accessible name, `shape` "drawer" or "sheet", `trigger` the
+ * selector whose click opens it.
+ */
+async function readSheet(session, tag, spec) {
+  if (session.method === "stepped") return readSheetStepped(session, tag, spec);
+  return readSheetVideo(session, tag, spec);
+}
+
+/**
+ * Chromium, `method=video`: unchanged in method from 37-B. Four checks on the enter and one on the
+ * exit, on the painted edge decoded from the video, and the geometry beside it as a record.
+ */
+async function readSheetVideo(session, tag, { label, shape, trigger }) {
+  const { page, ctx, scale, w, h } = session;
+  const sel = await outline(page, label);
+  const tol = PAINT_TOL * scale;
   const video = await page.video().path();
   await armSampler(page, sel, "enter");
   // The click and its marker in one task, so the marker's first frame is the click's frame. The
@@ -633,7 +642,7 @@ async function readSheet(session, tag, { label, shape, trigger }) {
   const present = geo.frames.filter((f) => !f.none);
   const tfs = [...new Set(present.map((f) => f.tf))];
   console.log(
-    `SHEET ${tag} geometry shape=${shape} firstAt=${fmt(geo.firstAt)} frames=${present.length} ` +
+    `SHEET ${tag} geometry method=video shape=${shape} firstAt=${fmt(geo.firstAt)} frames=${present.length} ` +
       `series=[${geometrySeries(geo.frames, shape).join(",")}] transforms=${JSON.stringify(tfs)}`,
   );
   // The exit: Escape, which every Sheet answers through its `cancel` listener or its own key
@@ -650,7 +659,7 @@ async function readSheet(session, tag, { label, shape, trigger }) {
   await page.keyboard.press("Escape");
   const geoExit = await readFrames(page);
   console.log(
-    `SHEET ${tag} geometry-exit shape=${shape} series=[${geometrySeries(geoExit.frames, shape).join(",")}]`,
+    `SHEET ${tag} geometry-exit method=video shape=${shape} series=[${geometrySeries(geoExit.frames, shape).join(",")}]`,
   );
   await page
     .locator(sel)
@@ -667,32 +676,16 @@ async function readSheet(session, tag, { label, shape, trigger }) {
   // Closing the context is what finishes the video file.
   await ctx.close();
   const painted = paintedSeries(video, shape, scale, w / scale, h / scale);
-  const geometryEnter = present.map((f) => axisOf(f, shape).pos);
-  // The allowance for one out-of-order frame: WebKit only, one frame per arm, one arm per engine
-  // per run (37-D item 8). The first arm to use it holds it; a later arm's frame fails.
-  const engine = tag.split("-")[0];
-  const held = ALLOWANCE.get(engine);
-  const allow = engine === "webkit" && held === undefined;
-  const e = judgeEnter(painted.enter, tol, geometryEnter, allow);
+  const e = judgeEnter(painted.enter, tol);
   console.log(
-    `SHEET ${tag} enter shape=${shape} scale=${scale} decoded=${painted.decoded} click=${painted.click} escape=${painted.esc} ` +
-      (e.late
-        ? `late=${e.late.t}:${e.late.pos} (between geometry samples ${fmt(e.late.between[0])} and ${fmt(e.late.between[1])}; G160) `
-        : "") +
-      (e.refused ? `refused=${JSON.stringify(e.refused)} ` : "") +
+    `SHEET ${tag} enter method=video shape=${shape} scale=${scale} decoded=${painted.decoded} click=${painted.click} escape=${painted.esc} ` +
       `rest=${fmt(e.rest)} painted=${e.painted} first=${fmt(e.first)} min=${fmt(e.min)} max=${fmt(e.max)} last=${fmt(e.last)} ` +
       `series=[${fmtSeries(painted.enter)}]`,
   );
-  const detail = `rest ${fmt(e.rest)}; first ${fmt(e.first)}, min ${fmt(e.min)}, max ${fmt(e.max)}, last ${fmt(e.last)}; ${e.painted} painted frames of ${painted.enter.length} from the click${excused(e.late)}${e.refused ? `; not excused: ${e.refused}${held ? ` (held by ${held})` : ""}` : ""}`;
-  const geometryExit = geoExit.frames.filter((f) => !f.none).map((f) => axisOf(f, shape).pos);
-  const x = judgeExit(painted.exit, e.rest ?? 0, tol, geometryExit, allow && !e.late);
-  if (e.late || x.late) ALLOWANCE.set(engine, tag);
+  const detail = `rest ${fmt(e.rest)}; first ${fmt(e.first)}, min ${fmt(e.min)}, max ${fmt(e.max)}, last ${fmt(e.last)}; ${e.painted} painted frames of ${painted.enter.length} from the click`;
+  const x = judgeExit(painted.exit, e.rest ?? 0, tol);
   console.log(
-    `SHEET ${tag} exit shape=${shape} from=${fmt(e.rest)} painted=${x.count} gone=${x.gone} ` +
-      (x.late
-        ? `late=${x.late.t}:${x.late.pos} (between geometry samples ${fmt(x.late.between[0])} and ${fmt(x.late.between[1])}; G154) `
-        : "") +
-      (x.refused ? `refused=${JSON.stringify(x.refused)} ` : "") +
+    `SHEET ${tag} exit method=video shape=${shape} from=${fmt(e.rest)} painted=${x.count} gone=${x.gone} ` +
       `series=[${fmtSeries(painted.exit)}]`,
   );
   const checks = [
@@ -724,7 +717,7 @@ async function readSheet(session, tag, { label, shape, trigger }) {
     [
       " exit: the painted edge leaves one way, never past its rest and never back toward it, and is gone (37-B)",
       e.painted > 0 && x.wrongSide.length === 0 && x.back.length === 0 && x.gone,
-      `from ${fmt(e.rest)}; ${x.count} painted frames${excused(x.late)}${x.refused ? `; not excused: ${x.refused}${held ? ` (held by ${held})` : ""}` : ""}; ${x.wrongSide.length} past rest; turned back at ${x.back.join(",") || "none"}; gone ${x.gone}`,
+      `from ${fmt(e.rest)}; ${x.count} painted frames; ${x.wrongSide.length} past rest; turned back at ${x.back.join(",") || "none"}; gone ${x.gone}`,
     ],
   ];
   for (const [name, ok, why, gap] of checks) {
@@ -739,6 +732,240 @@ async function readSheet(session, tag, { label, shape, trigger }) {
   if (checks.every(([, ok, , gap]) => ok || gap))
     fs.rmSync(path.dirname(video), { recursive: true, force: true });
   else console.log(`SHEET ${tag} video kept at ${path.relative(OUT, video)}`);
+}
+
+/** Real time on the Node side, never the page's clock, which the stepped method installs and pauses. */
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * Waits for the panel's transform transition to exist and pauses it, polling from Node with real
+ * time because the page's own timers may be paused. Returns the transition's duration in ms, or
+ * null with the reason when none appeared within `timeoutMs`.
+ */
+async function pauseTransition(page, sel, timeoutMs) {
+  const t0 = Date.now();
+  let seen = "no panel";
+  while (Date.now() - t0 < timeoutMs) {
+    const r = await page.evaluate(async (sel) => {
+      const p = document.querySelector(sel);
+      if (!p) return { state: "no panel" };
+      const a = p
+        .getAnimations()
+        .find(
+          (x) => x.transitionProperty === "transform" || x.constructor.name === "CSSTransition",
+        );
+      if (!a)
+        return {
+          state: `panel present, no transform transition, transform ${getComputedStyle(p).transform}`,
+        };
+      a.pause();
+      await a.ready;
+      const timing = a.effect.getComputedTiming();
+      return { state: "paused", duration: timing.duration, at: a.currentTime };
+    }, sel);
+    if (r.state === "paused") return r;
+    seen = r.state;
+    await sleep(5);
+  }
+  return { state: null, reason: `${seen} within ${timeoutMs} ms` };
+}
+
+/**
+ * One step of a paused transition: sets its currentTime, forces style, reads the panel's box and
+ * transform, and screenshots the band. The screenshot is the paint; the box is a record.
+ */
+async function readStep(page, sel, shape, t, w, h) {
+  const geo = await page.evaluate(
+    ({ sel, t }) => {
+      const p = document.querySelector(sel);
+      if (!p) return null;
+      const a =
+        p.getAnimations().find((x) => x.transitionProperty === "transform") ?? p.getAnimations()[0];
+      if (a) a.currentTime = t;
+      const r = p.getBoundingClientRect();
+      const d = p.closest("dialog");
+      const dr = d ? d.getBoundingClientRect() : null;
+      return {
+        left: r.left,
+        top: r.top,
+        w: r.width,
+        h: r.height,
+        dlg: dr ? { l: dr.left, t: dr.top, r: dr.right, b: dr.bottom } : null,
+        tf: getComputedStyle(p).transform,
+        animating: !!a,
+      };
+    },
+    { sel, t },
+  );
+  const edge = await paintedEdge(page, shape, w, h);
+  return { t: Math.round(t * 10) / 10, pos: edge, geo };
+}
+
+/** The band's painted reading at this instant, in CSS pixels (device scale 1). */
+async function paintedEdge(page, shape, w, h) {
+  const cw = shape === "drawer" ? w : BAND;
+  const ch = shape === "drawer" ? BAND : h;
+  const cx = shape === "drawer" ? 0 : Math.floor(w / 2 - BAND / 2);
+  const cy = shape === "drawer" ? Math.floor(h / 2 - BAND / 2) : 0;
+  const png = await page.screenshot({
+    type: "png",
+    clip: { x: cx, y: cy, width: cw, height: ch },
+    animations: "allow",
+    caret: "hide",
+  });
+  const frame = decodePngBuffer(png);
+  if (frame.w !== cw || frame.h !== ch)
+    throw new Error(`the screenshot is ${frame.w}x${frame.h}, not the band's ${cw}x${ch}`);
+  return readFrame(frame, shape, cw, ch, 1).edge;
+}
+
+/** The stepped series as `t:pos`, `-` where no lime is painted. */
+const fmtSteps = (list) => list.map((f) => `${f.t}:${f.pos === null ? "-" : f.pos}`).join(",");
+/** The geometry beside it, per step, `t:pos` from the box, as a record. */
+const fmtStepGeometry = (list, shape) =>
+  list
+    .map((f) => `${f.t}:${f.geo ? Math.round(axisOf(f.geo, shape).pos * 10) / 10 : "-"}`)
+    .join(",");
+
+/**
+ * WebKit, `method=stepped` (ruling 1236). The enter's transition is paused and stepped from 0 to its
+ * duration; the clock is then paused, Escape pressed, and the exit's transition stepped the same
+ * way while the unmount timer is held; then the timers run and the panel's detach is read.
+ */
+async function readSheetStepped(session, tag, { label, shape, trigger }) {
+  const { page, w, h } = session;
+  const sel = await outline(page, label);
+  const tol = TOL;
+  const steps = [];
+  for (let t = 0; t < SHEET_DUR; t += STEP_MS) steps.push(t);
+  steps.push(SHEET_DUR);
+  const failEnter = (why) => {
+    console.log(`SHEET ${tag} enter method=stepped shape=${shape} not read: ${why}`);
+    record(tag + " enter: the stepped series could be read (1236)", false, why);
+  };
+
+  // Enter: the trigger's own click, then the transform transition paused as soon as it exists.
+  await page.evaluate((trigger) => document.querySelector(trigger).click(), trigger);
+  const enterT = await pauseTransition(page, sel, 4000);
+  if (!enterT.state)
+    return failEnter(`the panel's transform transition never appeared: ${enterT.reason}`);
+  if (Math.abs(enterT.duration - SHEET_DUR) > 1)
+    console.log(
+      `SHEET ${tag} enter method=stepped the transition's duration is ${enterT.duration}, not SHEET_DUR ${SHEET_DUR}`,
+    );
+  const enter = [];
+  for (const t of steps)
+    enter.push(await readStep(page, sel, shape, Math.min(t, enterT.duration), w, h));
+  // Settle: finish the transition so the panel is at its layout position with no transform, and
+  // read where the settled paint sits. That reading is rest.
+  await page.evaluate((sel) => {
+    for (const a of document.querySelector(sel)?.getAnimations() ?? []) a.finish();
+  }, sel);
+  await sleep(50);
+  const settled = await readStep(page, sel, shape, 0, w, h);
+  console.log(
+    `SHEET ${tag} geometry method=stepped shape=${shape} duration=${enterT.duration} pausedAt=${fmt(enterT.at)} ` +
+      `series=[${fmtStepGeometry(enter, shape)}] settled=${settled.geo ? fmt(axisOf(settled.geo, shape).pos) : "-"} ` +
+      `transforms=${JSON.stringify([...new Set(enter.map((f) => f.geo?.tf))])}`,
+  );
+  const e = judgeEnter(enter, tol, settled.pos);
+  console.log(
+    `SHEET ${tag} enter method=stepped shape=${shape} scale=1 steps=${enter.length} rest=${fmt(settled.pos)} painted=${e.painted} ` +
+      `step0=${enter[0].pos === null ? "off" : enter[0].pos} first=${fmt(e.first)} min=${fmt(e.min)} max=${fmt(e.max)} last=${fmt(e.last)} ` +
+      `series=[${fmtSteps(enter)}]`,
+  );
+  const detail = `rest ${fmt(settled.pos)} (the settled paint); step 0 ${enter[0].pos === null ? "off the edge" : `at ${enter[0].pos}`}; first ${fmt(e.first)}, min ${fmt(e.min)}, max ${fmt(e.max)}, last ${fmt(e.last)}; ${e.painted} painted of ${enter.length} steps`;
+
+  // Exit: the clock paused first, so the setTimeout(SHEET_DUR) that unmounts the panel is held
+  // while the steps are read. pauseAt must not be in the fake clock's past, so it is read from the
+  // page and moved a little ahead; the small jump fires nothing of Sheet's, which has no timer yet.
+  const now = await page.evaluate(() => Date.now());
+  await page.clock.pauseAt(now + 250);
+  await page.keyboard.press("Escape");
+  const exitT = await pauseTransition(page, sel, 4000);
+  const exit = [];
+  let held = true;
+  let detached = false;
+  // A caller that unmounts the Sheet on close rather than dropping `open` (FacetRail's contained
+  // Filters sheet, G191) has no exit transition: the panel detaches at once. The video method read
+  // that as no painted exit frame and gone, and this reads it the same way, by name.
+  let atOnce = false;
+  if (!exitT.state) {
+    atOnce = await page.evaluate((sel) => !document.querySelector(sel), sel);
+    detached = atOnce;
+  }
+  if (exitT.state) {
+    for (const t of steps) {
+      const step = await readStep(page, sel, shape, Math.min(t, exitT.duration), w, h);
+      if (!step.geo) held = false;
+      exit.push(step);
+    }
+    await page.evaluate((sel) => {
+      for (const a of document.querySelector(sel)?.getAnimations() ?? []) a.finish();
+    }, sel);
+    // Now the timers: SHEET_DUR and a margin, so the unmount fires and the panel detaches.
+    await page.clock.runFor(SHEET_DUR + 100);
+    detached = await page
+      .locator(sel)
+      .waitFor({ state: "detached", timeout: 4000 })
+      .then(() => true)
+      .catch(() => false);
+  }
+  const x = judgeExit(exit, settled.pos ?? 0, tol);
+  const lastOff = exit.length > 0 && exit[exit.length - 1].pos === null;
+  console.log(
+    `SHEET ${tag} geometry-exit method=stepped shape=${shape} ` +
+      (exitT.state
+        ? `duration=${exitT.duration} pausedAt=${fmt(exitT.at)} series=[${fmtStepGeometry(exit, shape)}]`
+        : `not read: ${exitT.reason}`),
+  );
+  console.log(
+    `SHEET ${tag} exit method=stepped shape=${shape} from=${fmt(settled.pos)} steps=${exit.length} painted=${x.count} ` +
+      `held=${held} lastOff=${lastOff} detached=${detached} atOnce=${atOnce} series=[${fmtSteps(exit)}]`,
+  );
+  const checks = [
+    [
+      " enter: step 0 reads the panel wholly off its edge (1236)",
+      enter.length > 0 && enter[0].pos === null,
+      detail,
+    ],
+    [
+      " enter: the painted edge is never on the wrong side of rest by more than 0.5 px (1201, 1236)",
+      e.painted > 0 && e.wrongSide.length === 0,
+      detail +
+        (e.painted && e.wrongSide.length
+          ? `; ${e.wrongSide.length} steps past rest, furthest ${fmt(Math.min(...e.wrongSide))}`
+          : ""),
+    ],
+    [
+      " enter: the painted edge never moves away from rest between two steps (1201, 1236)",
+      e.painted > 0 && e.away.length === 0,
+      detail + (e.painted && e.away.length ? `; moved away at steps ${e.away.join(",")}` : ""),
+    ],
+    [
+      " enter: the last step reads rest within 0.5 px (1201, 1236)",
+      e.painted > 0 && settled.pos !== null && e.atRest,
+      detail,
+    ],
+    [
+      " enter: the first painted step is not at rest, so the slide ran (1201, 1236)",
+      e.painted > 0 && e.slid,
+      detail,
+    ],
+    [
+      " exit: the painted edge leaves one way, never past its rest and never back toward it, and the panel is gone (37-B, 1236)",
+      exitT.state
+        ? held && x.wrongSide.length === 0 && x.back.length === 0 && lastOff && detached
+        : atOnce,
+      (exitT.state
+        ? ""
+        : atOnce
+          ? "no exit transition: the panel detached at once on Escape (a caller that unmounts on close, G191); "
+          : `the exit's transform transition never appeared and the panel is still mounted: ${exitT.reason}; `) +
+        `from ${fmt(settled.pos)}; ${x.count} painted of ${exit.length} steps; timers held ${held}; ${x.wrongSide.length} past rest; turned back at ${x.back.join(",") || "none"}; last step off the edge ${lastOff}; detached ${detached}`,
+    ],
+  ];
+  for (const [name, ok, why] of checks) record(tag + name, ok, why);
 }
 
 /** The composer, from the header's pill on the Feed. */
@@ -826,13 +1053,16 @@ async function runSheetShare(bt, bname, [w, h], theme) {
   );
 }
 
-/** Every sheet arm on its cells, in one call per engine. `only` narrows to one viewport. */
+/** Every sheet arm on its cells, in one call per engine, each driven through `M.drive` so a lost web
+ *  process retries that arm alone (1237). `only` narrows to one viewport. */
 async function runSheets(bt, bname, only = null) {
   const on = (vp) => !only || (vp[0] === only[0] && vp[1] === only[1]);
   for (const [vp, theme] of [...BOTTOM_CELLS, ...DRAWER_CELLS])
-    if (on(vp)) await runSheetComposer(bt, bname, vp, theme);
-  for (const [vp, theme] of BOTTOM_CELLS) if (on(vp)) await runSheetFilters(bt, bname, vp, theme);
-  for (const [vp, theme] of BOTTOM_CELLS) if (on(vp)) await runSheetShare(bt, bname, vp, theme);
+    if (on(vp)) await M.drive(runSheetComposer, bt, bname, vp, theme);
+  for (const [vp, theme] of BOTTOM_CELLS)
+    if (on(vp)) await M.drive(runSheetFilters, bt, bname, vp, theme);
+  for (const [vp, theme] of BOTTOM_CELLS)
+    if (on(vp)) await M.drive(runSheetShare, bt, bname, vp, theme);
 }
 
 module.exports = {

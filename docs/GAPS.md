@@ -1274,6 +1274,30 @@ touches nothing in the auth flow or its arm. The job was red on its own account 
 that were the branch's (G115, G116), so the push that fixes those starts the next run and no re-run was
 spent.
 
+### Update, 30 September 2026: run 419, recorded and not hunted (rulings 1234, 1235, 1237)
+
+`pages.yml` run 419 (id `36648678693`, attempt 2, job `109692136301`, head `af5a3f1`, handoff 37-C's
+branch) lost a web process in `webkit-390x844-light-event-flows`, waiting for the role-invitation sheet
+(`Moderate Corridor Suppers: Accra?`) to detach after invitation-accept had closed it over the member
+event page: 16 of 19 emitted, the browser still connected, and ruling 832 stood the job down on the one
+arm. One core (`257M`), extracted and not retained, no ruling 850 degradation. The stack, read from the
+job's own log (the extraction step printed it in full, so the artefact `matrix-webkit-run-419` was not
+opened): fault `+0x588b98a`, `#1 +0x27b6be4`, the cycle `+0x27b76f4`, `+0x27b23f1`, `+0x27b555f` at 10x,
+9x and 8x, with the interlude `+0x27bd55a`, `+0x27b8ccd`, `+0x27b7762`, `+0x27b23d5` at `#9` to `#12`,
+entered at `#33 +0x27b1885`, then `+0x7607e1`, `+0x75f51a`, `+0x7659a9`, `+0x1d3726b`, `+0x1d356e6`,
+`g_main_context_dispatch`, `+0x1d35d51`, `+0x1d36067`, `+0x1cd2ac3`, `+0x1d3bd46`, `start_thread`,
+`clone3`: 47 frames, identical frame for frame to runs 329 and 333 above. **They are not new frames**
+(D1336, corrected in Session 38): the interlude is the one this entry already lists from those runs, one
+turn shallower than run 58's. Attempt 1 of the same run (job `109677764743`) lost no web process; it was
+red for G154's reason.
+
+**Ruling 1234 closes this entry's sighting list.** G5 is a Linux WPE compositor defect that Safari does
+not run; it is recorded, not hunted, and it is handled rather than fixed: ruling 1235 puts the WebKit
+result that gates a merge on a macOS runner (`pages.yml`'s `webkit-macos` job, handoff 37-F), where this
+compositor does not exist, and ruling 1237 runs an arm that loses its web process again once, alone, in a
+fresh browser, and fails the run on a second crash, in place of 832's stand-down. A further sighting on
+the Linux job is a tally mark, and a crash there alone no longer blocks a merge.
+
 ## G6. Withdraw separated the two states ruling 214 joined — closed (ruling 229)
 
 **Opened and closed 9 September 2026, both inside Fix PR 01. Ruling 227 stated the requirement,
@@ -6220,7 +6244,7 @@ Owed: the header in longhand only, as `AppHeader` and `ProfileSurface`'s public 
 (ruling 344's inset in `paddingTop`, the sides in `paddingLeft` and `paddingRight`). Handoff 33-D
 does not reach this surface, so it is not changed here.
 
-## G140. After sign-in, Chromium's 1366x1024 light onboarding-layout arm stayed on `/sign-in?` for 15 s on run 379, and passed on runs 380 and 381
+## G140. After sign-in, Chromium's 1366x1024 light onboarding-layout arm stayed on `/sign-in?` for 15 s on run 379, and WebKit's 1440x900 light discovery arm on run 431 — closed (handoff 37-F)
 
 **Severity: low, unread. Opened 27 September 2026 during handoff 34-A (item 1), filed under
 ruling 597. The number is assigned by this entry (ruling 638).**
@@ -6265,6 +6289,24 @@ reach the host that serves Actions artifacts.
 
 Owed: that screenshot, read while the artifact is retained, and any further red reading of this arm
 added here before a cause is named.
+
+**Second sighting, 30 September 2026 (handoff 37-F).** `pages.yml` run 431 (id `36696029333`, head
+`950b72b`, the enforcing run of PR #81), `matrix (webkit)` job `109824752438`:
+`webkit-1440x900-light-discovery` timed out on `signIn`'s `waitForURL("**/feed")` after fifteen seconds,
+`emitted 1 of 36`, the job's one failure beside its retried G5 arm. WebKit this time, a different arm
+and a different width, 2299 s into the job. 37-F's `FAILSTATE` line read what the page held:
+`/sign-in?`, focus on `body`, no dialog, and the sign-in form's own test ids present (`password-eye`,
+`forgot-password`, the two providers), so the address is the native submission this entry named and
+the form had re-rendered under it.
+
+**Closed 30 September 2026, in handoff 37-F, by the commit that changes `tests/matrix.cjs`'s `signIn`.**
+The cause the address shows: the press reached the form before React's `onSubmit` was attached, so the
+browser submitted the form natively. `networkidle` is not hydration. `tests/auth.cjs` already guarded
+its own controls by waiting for `data-theme` on the document element, which every auth route's
+`useTheme` stamps in an effect, and `signIn` did not. `hydrated(page)` now lives in `tests/matrix.cjs`,
+`signIn` and the width arm's sign-in call it after the goto, and `tests/onboarding.cjs`'s and
+`tests/mount.cjs`'s `signInTo` call `M.hydrated`. The screenshot this entry owed is superseded by the
+`FAILSTATE` reading; a further `/sign-in?` after this commit is a new entry.
 
 ---
 
@@ -6677,6 +6719,43 @@ series in a scratch that is not committed (results in PR #77's body).
 under the narrowed allowance, on `webkit-2560x1440-light-sheet-composer`'s exit, reading 2408 at 1240 ms
 between geometry samples 1839 and 2410.7. That is a third sighting of the late frame, at a new width.
 
+**Reopened 30 September 2026 (handoff 37-F item 4, ruling 1240), on five sightings the allowance was
+never sized for.** Two on `pages.yml` run 419 attempt 1 (job `109677764743`, head `af5a3f1`):
+`webkit-390x844-light-sheet-composer` exit `840:168,880:168,920:391,960:509,1000:530,1040:680,1080:754,
+1120:802,1160:830,1200:839,1240:381,1280:-` read `late=1240:381` between geometry samples 168.8 and
+389.2 and held the engine's allowance; `webkit-820x1180-light-sheet-composer` exit `800:328,840:328,
+880:328,920:660,960:697,1000:718,1040:758,1080:793,1120:808,1160:-,1200:644,1240:-` was refused by name
+("the reorder allowance is not available to this arm, held by webkit-390x844-light-sheet-composer") and
+the job went red; attempt 2 (job `109692136301`) read the 390 cell's `late=1240:381` again and the 820
+cell clean. Three on run 423 attempt 1 (PR #79, head `d969a2e`, job `109763342596`):
+`webkit-390x844-light-sheet-composer` exit `... 1160:834,1200:390,1240:-` read `late=1200:390` between
+168.8 and 397.4 and held the allowance; `webkit-1280x800-dark-sheet-composer` exit `880:559,920:559,
+960:560,1000:1064,1040:1107,1080:1172,1120:1232,1160:1262,1200:1274,1240:1034,1280:-` and
+`webkit-430x932-dark-sheet-share` exit `800:187,840:346,880:499,920:550,960:746,1000:826,1040:884,
+1080:914,1120:930,1160:322,1200:-` were refused by name, three in one run, and the job went red. Every
+one is the same shape: the last painted frame, followed by nothing, reading a position the exit had
+already passed, matching an early geometry sample. The frames come from WebKit's screencast, not from
+the page (1236): the geometry record of every one of these exits is one-way.
+
+**Closed 30 September 2026, in handoff 37-F item 1, by the commit that changes `tests/sheet.cjs` (rulings
+1236, 1240).** On WebKit the sheet arms no longer decode video. The session installs Playwright's clock,
+clicks the trigger, pauses the panel's transform transition as soon as it exists and steps its
+`currentTime` from 0 to 300 ms inclusive in 1000/60 ms steps, screenshotting the band at each step; the
+exit is Escape with the clock paused first, so Sheet's `setTimeout(SHEET_DUR)` is held until the last
+step is read, then run, and the panel's detach is asserted. A stepped series is read at instants the arm
+chooses, so it cannot deliver a frame out of order, and the screenshots are lossless, so the tolerance
+is 0.5 CSS px. `ALLOWANCE`, `reordered`, `excused` and the `allow` plumbing are deleted; Chromium keeps
+its video, its chroma-block tolerance and its assertions, and never had the allowance, so nothing there
+changes. Read first on Chromium with the probe override `SHEET_METHOD=stepped` against a local
+`wrangler pages dev` of the build, every sheet cell: nineteen steps per motion, step 0 off the edge, the
+exit's timers held through all nineteen steps and the panel detached once they ran (the readings are in
+PR #81's body). Then on WebKit itself, the Mac port, in `pages.yml` run 427's `webkit-macos` job
+(`109814308566`, head `a6cebea`): all nine sheet arms passed, every exit one-way to the edge with the
+timers held, for instance `webkit-1280x800-dark-sheet-composer` exit `[0:559,16.7:585,33.3:702,50:851,
+66.7:956,83.3:1031,100:1086,116.7:1129,133.3:1164,150:1191,166.7:1214,183.3:1232,200:1246,216.7:1257,
+233.3:1266,250:1272,266.7:1276,283.3:1279,300:-]`, the cell whose video exit run 423 had refused. The
+Linux WebKit readings are the enforcing run's, cited in the PR.
+
 ---
 
 ## G155. Headless WebKit at 2560 by 1440 on the runner paints no frame of Sheet's 300 ms transition
@@ -6701,6 +6780,18 @@ and never as a failure; the other checks on the cell judge the frames that exist
 
 Owed: the 2560 slide on WebKit read on hardware that renders it, which is the founder's Safari check
 of Done Means 3, or a runner that can.
+
+**Closed 30 September 2026, in handoff 37-F item 1 (rulings 1236, 1240).** The stepped method does not
+depend on the engine running an animation frame while the transition plays: the transition is paused and
+its `currentTime` set per step, and each step is screenshotted, so the frame exists because the arm asked
+for it. Read on WebKit on macOS by `pages.yml` run 427's `webkit-macos` job (`109814308566`, head
+`a6cebea`): `webkit-2560x1440-light-sheet-composer` enter `[0:-,16.7:2533,33.3:2416,50:2267,66.7:2162,
+83.3:2087,100:2032,116.7:1989,133.3:1954,150:1927,166.7:1904,183.3:1886,200:1872,216.7:1861,233.3:1852,
+250:1846,266.7:1842,283.3:1839,300:1839]`, rest 1839, the slide read in eighteen painted steps; exit
+`[0:1839,16.7:1865,...,283.3:2559,300:-]`, timers held and the panel detached. The unprovable branch is no
+longer reached on WebKit: `unpaintedTransition` in `tests/sheet.cjs` stays on Chromium's video path alone,
+where the geometry sampler that feeds it still runs. The founder's Safari check (61) stays the exit
+criterion for the surface itself.
 
 ---
 
@@ -7568,10 +7659,149 @@ complete; every line is kept by the ruling named. Closes on Chat's confirmation.
 
 ---
 
+## G191. The secret scan of the repository's full history found no secret; one publishable key, public by design — closed (handoff 37-F item 5, ruling 1238)
+
+**Severity: low. Opened and closed 30 September 2026 during handoff 37-F item 5, filed under rulings 597
+and 1238. The number is assigned by this entry (ruling 638). An invite-boundary gate under ruling 140, not
+a breach: the repository was public before 1238 made it private, and this is the record of what that
+exposure contained.**
+
+Scanned with gitleaks 8.30.0 (`gitleaks git --log-opts="--all"`, the default ruleset, values redacted at
+the tool), on a clone that had fetched every branch (`refs/heads/*`, 76 remote branches including
+`main`), every tag (`refs/tags/*`: none exist) and every pull request head (`refs/pull/*`: 79 heads,
+`refs/pull/1` to `refs/pull/79`; GitHub keeps no `refs/pull/N/merge` for merged or closed pull requests,
+so none were fetched). 492 commits reachable from those refs, of which gitleaks scanned the 394 with a
+diff (it skips merge commits and empty diffs by design). Beside it, a sweep of every tree at every one of
+the 492 commits for the provider shapes ruling 1238 names, printing rule, path, line and commit and never
+the match: a Supabase JWT or `sb_secret_`/`sb_publishable_` key, a Stripe `sk_`/`rk_` key or `whsec_`
+secret, a Resend key, a Mapbox `sk.`/`pk.` token, an Anthropic `sk-ant-` key, a database URL carrying a
+password, a Cloudflare token, a GitHub token, a private-key block, an AWS access key, a Tinify key, a
+service-role literal, and any quoted `password` assignment.
+
+Findings, no value printed:
+
+| Rule                         | Where                                                                                                                             | Commit                                                | Date              | On `main`                                                                                                                            | Class                                                                                                                                       |
+| ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| gitleaks `generic-api-key`   | `.github/workflows/security-pass-02-http.yml:33`, `PUBLISHABLE_KEY:`                                                              | `57d84a4` (and `f86e254`, line 34)                    | 11 September 2026 | no: PR #28 and #30 heads, branches `claude/charming-euler-9m8a8s` and `claude/practical-bell-ikqr6e` only; the file is not on `main` | public by design: the Supabase publishable key (`sb_publishable_`), the same value the client ships                                         |
+| sweep `supabase-publishable` | `src/lib/supabase.ts:13` (line 12 before `384865c`), the client's fallback                                                        | first at `a8706a4`, 6 September 2026, on `main` since | 6 September 2026  | yes                                                                                                                                  | public by design: the Supabase publishable key, served to every browser with the app                                                        |
+| sweep `seeded-password`      | `src/routes/sign-in.tsx`, `src/routes/reset_.new.tsx`, `src/components/strand/PasswordField.tsx` (13 line sites over the history) | various, from `a8706a4`                               | September 2026    | yes                                                                                                                                  | false positive: every match is an `autoComplete="current-password"`/`"new-password"` attribute, an `aria-label` or a button label; no value |
+
+No secret: no service-role key, no `sb_secret_`, no Stripe, Resend, Cloudflare, Mapbox `sk.`, Anthropic or
+Tinify key, no database URL with a password, no seeded account's password, no private key, anywhere in
+the history scanned. **Rotation list: none.** The Supabase publishable key is public by design and is not
+rotated for this finding; the Supabase project URL beside it is likewise public.
+
+Limits, stated so the gate is read for what it is: a clone sees only objects reachable from fetched refs,
+so a commit force-pushed away on a branch, a deleted branch's objects GitHub still holds, or a pull
+request's merge ref is outside this scan; the reflog is the container's, not GitHub's. GitHub's own
+secret scanning, where enabled on the private repository, is the second net over what a clone cannot
+reach. Nothing was committed from the scan but this entry (37-F item 5), and no history was rewritten.
+
+---
+
+## G192. FacetRail's contained Filters sheet unmounts on close, so it has no exit transition
+
+**Severity: low. Opened 30 September 2026 during handoff 37-F item 1, filed under ruling 597. The number is
+assigned by this entry (ruling 638).**
+
+`src/components/strand/FacetRail.tsx` renders `<Sheet open ... contained>` inside `{open && (...)}`, so on
+close the parent unmounts the Sheet rather than dropping `open`: Sheet's 300 ms exit (`setShown(false)`,
+then `setMounted(false)` on a `setTimeout(SHEET_DUR)`) never runs, and the panel detaches at once. The
+composer and the event page's Share drop `open` and animate out. Found by the stepped sheet arm (1236):
+on WebKit its exit waits for the panel's transform transition and, for `sheet-filters`, none appears and
+the panel is already gone; the video arm had read the same thing on both engines as "0 painted frames,
+gone", which its exit check passes. `tests/sheet.cjs` now names the case, `atOnce=true` in the arm's
+`SHEET ... exit` line and "no exit transition: the panel detached at once on Escape" in the check's
+detail, and passes it as gone, because the assertion's meaning is that the exit never crosses rest and
+the panel is gone, and both hold. Not changed by 37-F: nothing under `src/` is edited there (guardrail
+1). Owed: either the Filters sheet drops `open` and animates out like every other Sheet caller, or the
+ruling that says a contained sheet may close at once; then the arm's `atOnce` reading becomes a failure
+or a rule.
+
+---
+
+## G193. Escape on a Sheet inside the Pane closes the Pane as well, on every engine — closed (PR #82, handoff 38-B)
+
+**Severity: moderate. Opened 30 September 2026 during handoff 37-F item 3, filed under ruling 597. The
+number is assigned by this entry (ruling 638).**
+
+Found by the macOS WebKit gate (1235) on its first run, `pages.yml` run 427's `webkit-macos` job
+(`109814308566`) and again by `matrix.yml` run 77 (`36694192903`, `runner=macos-latest`, `SPECIAL=event
+ONLY=[1280,800] THEME=dark`): `webkit-1280x800-dark-event-flows` pressed Escape on the RSVP sheet's error
+state at expanded and its next step, the share control, was not found for thirty seconds. Run 77's
+`FAILSTATE` line says what the page held: `/posts/post-e-loaded`, no pane, no dialog. Escape had closed the
+sheet and the Pane behind it, and the Pane's close returned to the Feed card the flow came from.
+
+Reproduced on Chromium, locally against `wrangler pages dev` of the build, in a scratch that is not
+committed: open the member event page at 1280 by 800, click I am going, let the sheet focus its heading,
+press Escape. The URL falls to `/convene`, no pane, no `event-share`. So it is not the Mac port; it is the
+product on every engine. The mechanism, read in the tree: `Sheet.tsx` closes on the dialog's `cancel`
+event and prevents that event, but on the `showModal` path it neither prevents nor stops the Escape
+`keydown` itself (its window listener does so only for `contained`); `Pane.tsx`'s section `onKeyDown`
+closes the pane on any Escape whose `defaultPrevented` is false (1084), and React's synthetic keydown
+follows the React tree, in which the event page's `RsvpSheet` is the pane's descendant. One Escape, two
+closes.
+
+Why the arm passes on Chromium and Linux WebKit: by the arm's Escape, focus has fallen to `body`, because
+the confirm button it clicked went disabled while the mocked save failed, and a keydown whose target is
+`body` never crosses the pane's subtree. The same scratch, replicating the arm's exact state, reads
+`active=body` before the Escape on Chromium, the pane survives, and `cancel` still reaches the sheet. The
+Mac port keeps focus inside the sheet there, so the gate read the defect the flow's coincidence had hidden.
+Whether Safari keeps focus as the Mac port does is the founder's device check (61); a member who opens the
+RSVP sheet and presses Escape at once, with the heading focused, meets it in every browser.
+
+Not changed by 37-F: nothing under `src/` is edited there (guardrail 1), and `Sheet.tsx` is canonical
+(1229). Owed: the Sheet marks the Escape it handles as handled on the modal path too, so the Pane's
+`defaultPrevented` guard (1084) sees it, or the ruling that says a Sheet's Escape may also close the pane
+it sits in. Until then the gate's `webkit-1280x800-dark-event-flows` arm is red on this defect, which is
+the gate doing what 1235 built it for.
+
+**Closed 30 September 2026. The same defect as G86, opened in 32-A, and closed by PR #82 (handoff 38-B,
+ruling 1251), merged as `e9cadaf`.** The Sheet handles Escape in the dialog's own React `onKeyDown`, marked
+with `preventDefault` so the Pane's guard (1084) yields, on both paths; the record of the mechanism is
+G86's close. The proof is the macOS gate's reading on this branch rebased onto that merge: `pages.yml` run
+438's `webkit-macos` job (`110025804746`, head `4d5c136`, whose `src/` is the final head's) read `283 of
+283 checks passed` across the gate's twenty arms with no web process lost, `webkit-1280x800-dark-event-flows`
+among them with the four `G193` checks handoff 38-B added to the arm: the sheet closes, focus returns to
+the opener, the Pane stays open, and Escape inside the Pane with no sheet still closes it. The gate that
+found the defect is the gate that reads it closed.
+
+---
+
+## G194. The auth reveal-timing check read 1833 ms against 1066 ms on the macOS runner, then 1320 against 2106 — closed (handoff 37-F)
+
+**Severity: low. Opened 30 September 2026 during handoff 37-F item 3, filed under ruling 597. The number is
+assigned by this entry (ruling 638).**
+
+`tests/auth.cjs`'s `webkit-390x844-light-auth flows` compares the time to reveal the reset "sent" state
+for a known address against an unknown one whose mocked answer is delayed 1500 ms, within 600 ms, each in
+a fresh browser; the reveal is a fixed `REVEAL_MS` of 900 in `src/routes/reset.tsx`, so the two land
+together and the surface times nothing. On `pages.yml` run 427's `webkit-macos` job (`109814308566`) the
+known run took 1833 ms and the unknown 1066 ms: about 900 ms above the reveal on the first of the two
+browsers, none on the second. `matrix.yml` run 78 (`36694197392`, `runner=macos-latest`, `SPECIAL=auth
+ONLY=[390,844] THEME=light`) ran the same arm on the same runner image and passed. Not attributed: the
+extra 900 ms is on the first fresh WebKit session of that arm on a shared macOS runner, and nothing in the
+arm reads where it went. The check measures wall clock from Node across the driver, the page's hydration
+and the reveal, so a slow first session reads as a timed answer.
+
+It recurred on the next reading: `pages.yml` run 430's `webkit-macos` job (`109821207415`, head
+`d8cb7e4`) read `1320ms vs 2106ms`, the slow session on the other side this time. Two of four macOS
+samples, alternating sides, is host noise in a wall-clock reading and not the surface.
+
+**Closed 30 September 2026, in handoff 37-F, by the commit that changes `tests/auth.cjs`'s `sentState`.**
+The interval is now read in the page: a capture listener on the form's `submit` event and a
+`MutationObserver` on the sent state's insertion, both on `performance.now()`, so the driver's round trip
+and a fresh session's cold start drop out of both readings; the wall clock is printed beside it as a
+record, as `REVEAL <arm> known=... unknown=...`. The assertion is unchanged: the two reveals within 600 ms
+of each other. On Chromium locally the page reads 908 against 909 ms where the wall clock read 1370
+against 1367, which is the driver's share made visible. The macOS reading is the enforcing run's.
+
+---
+
 ## G195. Focus inside an open Sheet falls to `body` when the focused control becomes disabled
 
 **Severity: low. Opened 30 September 2026 during handoff 38-B item 1, filed under ruling 597. The number
-is assigned by this entry (ruling 638); G191 to G194 are on PR #81's branch.**
+is assigned by this entry (ruling 638); G191 to G194 were on PR #81's branch when it was written.**
 
 The event-flows arm's Escape on the RSVP sheet's error state reached the page with focus on `body` on
 Chromium and Linux WebKit, which is why the arm passed there while the macOS gate failed on G193
