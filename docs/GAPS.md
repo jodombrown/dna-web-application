@@ -7720,7 +7720,7 @@ or a rule.
 
 ---
 
-## G193. Escape on a Sheet inside the Pane closes the Pane as well, on every engine
+## G193. Escape on a Sheet inside the Pane closes the Pane as well, on every engine — closed (PR #82, handoff 38-B)
 
 **Severity: moderate. Opened 30 September 2026 during handoff 37-F item 3, filed under ruling 597. The
 number is assigned by this entry (ruling 638).**
@@ -7755,6 +7755,16 @@ Not changed by 37-F: nothing under `src/` is edited there (guardrail 1), and `Sh
 `defaultPrevented` guard (1084) sees it, or the ruling that says a Sheet's Escape may also close the pane
 it sits in. Until then the gate's `webkit-1280x800-dark-event-flows` arm is red on this defect, which is
 the gate doing what 1235 built it for.
+
+**Closed 30 September 2026. The same defect as G86, opened in 32-A, and closed by PR #82 (handoff 38-B,
+ruling 1251), merged as `e9cadaf`.** The Sheet handles Escape in the dialog's own React `onKeyDown`, marked
+with `preventDefault` so the Pane's guard (1084) yields, on both paths; the record of the mechanism is
+G86's close. The proof is the macOS gate's reading on this branch rebased onto that merge: `pages.yml` run
+438's `webkit-macos` job (`110025804746`, head `4d5c136`, whose `src/` is the final head's) read `283 of
+283 checks passed` across the gate's twenty arms with no web process lost, `webkit-1280x800-dark-event-flows`
+among them with the four `G193` checks handoff 38-B added to the arm: the sheet closes, focus returns to
+the opener, the Pane stays open, and Escape inside the Pane with no sheet still closes it. The gate that
+found the defect is the gate that reads it closed.
 
 ---
 
@@ -7791,7 +7801,7 @@ against 1367, which is the driver's share made visible. The macOS reading is the
 ## G195. Focus inside an open Sheet falls to `body` when the focused control becomes disabled
 
 **Severity: low. Opened 30 September 2026 during handoff 38-B item 1, filed under ruling 597. The number
-is assigned by this entry (ruling 638); G191 to G194 are on PR #81's branch.**
+is assigned by this entry (ruling 638); G191 to G194 were on PR #81's branch when it was written.**
 
 The event-flows arm's Escape on the RSVP sheet's error state reached the page with focus on `body` on
 Chromium and Linux WebKit, which is why the arm passed there while the macOS gate failed on G193
