@@ -1476,6 +1476,9 @@ async function runEventBlocks(browserType, bname, [w, h], theme) {
         ),
       };
     });
+    // G164 (37-E item 1): the readings the register cites are printed so the run's own log carries
+    // them, the way ruling 267 re-emits the arms; a passing record prints no detail.
+    console.log("G164 readings", tag, JSON.stringify(pub));
     const pubSections = await sections();
     record(
       tag + " public: the sections under their own labels, in order",
