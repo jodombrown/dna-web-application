@@ -192,8 +192,22 @@ export function Sheet({
     restore();
   }, [mounted, restore]);
 
-  // Esc, and the Tab trap. showModal() already traps, but `contained` does not, and the explicit
-  // trap keeps one behaviour on both paths.
+  // The Tab trap, and the dialog's `cancel`. showModal() already traps Tab, but `contained` does
+  // not, and the explicit trap keeps one behaviour on both paths.
+  //
+  // Escape is not handled here (G193, G86; handoff 38-B). It was, for `contained` only, and a window
+  // listener in the capture phase runs before every handler inside the sheet, so it took the Escape
+  // that Input's combobox and Menu handle for themselves and ignored the `defaultPrevented` they
+  // set; while the showModal path handled no keydown at all and waited for the dialog's `cancel`,
+  // which the browser raises after the keydown has bubbled, and by then a Pane above the sheet had
+  // already read an unmarked Escape and closed itself (1084). Both paths now handle Escape in the
+  // dialog's own `onKeyDown` below, at keydown, after the sheet's descendants and before its
+  // ancestors, which is the order React's synthetic bubbling gives for free.
+  //
+  // `cancel` stays as the path for a close request that does not arrive as a keydown inside the
+  // dialog: an Escape whose target is outside it, which showModal() allows when focus has fallen to
+  // `body`, and a close request the platform raises with no key. Preventing the keydown's default
+  // ends the browser's close request, so `cancel` never follows an Escape the handler below took.
   //
   // `mounted` is in the deps because the dialog element does not exist on the commit where `open`
   // first turns true: that render still returns null and only the effect below it sets `mounted`.
@@ -204,7 +218,7 @@ export function Sheet({
   // for a close the component did not initiate, and it is not: the effect above closes the dialog
   // in its own cleanup, so under React's development double-invoke that close reaches a listener
   // still attached from the first pass and shuts the sheet a fifth of a second after it opened.
-  // `cancel` is the event that carries Escape, and Escape is the case that needed covering.
+  // `cancel` is the event that carries a close request, and that is the case that needed covering.
   useEffect(() => {
     if (!open || !mounted) return;
     const d = dlg.current;
@@ -213,11 +227,6 @@ export function Sheet({
       onClose?.();
     };
     const key = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && contained) {
-        e.preventDefault();
-        onClose?.();
-        return;
-      }
       if (e.key !== "Tab") return;
       const p = panel.current;
       if (!p) return;
@@ -246,7 +255,7 @@ export function Sheet({
       d?.removeEventListener("cancel", cancel);
       window.removeEventListener("keydown", key, true);
     };
-  }, [open, mounted, contained, onClose]);
+  }, [open, mounted, onClose]);
 
   // Scroll lock, narrowed (ruling 493). The host does not scroll while the sheet is mounted and a
   // wheel that lands on the scrim is cancelled; inside the dialog a vertical scroller is consumed
@@ -339,6 +348,19 @@ export function Sheet({
       data-shown={shown ? "1" : "0"}
       onClick={(e) => {
         if (e.target === dlg.current) onClose?.();
+      }}
+      // G193, G86 (handoff 38-B): an Escape this sheet handles stops here. React's synthetic keydown
+      // follows the React tree, in which a sheet a Pane renders is the pane's descendant even though
+      // the dialog sits in the top layer, and Pane closes on any Escape whose `defaultPrevented` is
+      // false (1084). So the sheet marks the keydown it takes, on both paths, and closes itself on
+      // it. It yields to an Escape a descendant already took, Input's open list or a Menu, and where
+      // two sheets nest the inner one runs first and the outer yields the same way, so only the
+      // topmost handles it. An Escape from outside the dialog never reaches this handler and is left
+      // to the browser's close request, which `cancel` above turns into the same close.
+      onKeyDown={(e) => {
+        if (e.key !== "Escape" || e.defaultPrevented) return;
+        e.preventDefault();
+        onClose?.();
       }}
       style={{
         position: contained ? "absolute" : "fixed",
