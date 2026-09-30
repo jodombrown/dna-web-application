@@ -4721,7 +4721,7 @@ column to its end, steps Next twice, and requires the list column scrolled with 
 its box. So it reads Pane's own follow alone. Both reads fail at `d23c55f`, where the list column is
 not a scroller. The change is `174a55e`'s `height`, which Discovery passes.
 
-## G86. A Sheet inside the Pane closes the Pane with it on Escape, because the app's modal Sheet never prevents the keydown
+## G86. A Sheet inside the Pane closes the Pane with it on Escape, because the app's modal Sheet never prevents the keydown — closed (handoff 38-B)
 
 **Severity: low. Opened 24 September 2026 during handoff 32-A, filed under ruling 597. The number is
 assigned by this entry (ruling 638).**
@@ -4738,6 +4738,20 @@ neither a Menu (G88) nor correction 25's combobox, whose Escape "closes the list
 guard does not also close", can keep the key inside FacetRail's compact Sheet once a page binds them.
 Owed: the Sheet prevents the Escape keydown it consumes on the modal path and yields to a prevented one
 on the contained path, which is the Sheet's change and not the Pane's.
+
+**Closed 30 September 2026, in handoff 38-B (1251), by the commit that changes `Sheet.tsx`.** The macOS
+WebKit gate (1235) found the modal half again on its first run and it is G193 on PR #81's branch, which
+records this close on its rebase. Both halves are one change: Escape is handled in the dialog's own React
+`onKeyDown`, on both paths, which runs after every handler inside the sheet and before every ancestor.
+The keydown is marked with `preventDefault`, so the Pane's guard (1084) yields; a keydown a descendant
+already marked, Input's open list or a Menu, is yielded to, which is what the contained path's capture
+listener could not do; and where two sheets nest the inner one runs first, so only the topmost handles
+it. The capture-phase Escape branch is gone with the window listener keeping the Tab trap only, and the
+dialog's `cancel` listener stays for a close request that is not a keydown inside the dialog. Proven
+by four checks added to the event-flows arm (`tests/event.cjs`), red on `d4742b8` and green with the
+guard, on the runs handoff 38-B's PR names. The lines in `Input.tsx` and `Menu.tsx` that describe the contained
+Sheet closing "in a capture listener before this runs (G86)" describe the mechanism this closes and are
+left as written; they are a comment follow-up, not a behaviour.
 
 ## G87. Correction 25's compile, read against its own extractions and against this app: what Strand's next correction brief should carry
 
