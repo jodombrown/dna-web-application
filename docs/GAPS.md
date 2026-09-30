@@ -7564,3 +7564,25 @@ Connect card reads `CARD_SCHEMA.connect`, "Connection request" with no act, 157)
 `VERB_SCHEMA.convey.kicker`, "Story" (546, W54), the instrument's options come from the vocabulary
 through `fieldOptions` (193), and `convene` is `fields: []` under `forms.convene`. Filed so the audit is
 complete; every line is kept by the ruling named. Closes on Chat's confirmation.
+
+---
+
+## G195. Focus inside an open Sheet falls to `body` when the focused control becomes disabled
+
+**Severity: low. Opened 30 September 2026 during handoff 38-B item 1, filed under ruling 597. The number
+is assigned by this entry (ruling 638); G191 to G194 are on PR #81's branch.**
+
+The event-flows arm's Escape on the RSVP sheet's error state reached the page with focus on `body` on
+Chromium and Linux WebKit, which is why the arm passed there while the macOS gate failed on G193
+(G86): a keydown targeted at `body` never enters the Pane's subtree. The drop is in the product, not
+the arm. `RsvpSheet` renders Confirm as `disabled={saving || withdrawing}` while the save is in flight,
+and both engines drop focus from a focused control that becomes disabled; `Sheet.tsx` places focus
+only on open (its heading, else the first non-destructive control, 222) and traps Tab, so nothing
+brings focus back into the dialog when the error lands and Confirm is enabled again. The next Tab
+starts from the document rather than from the sheet, against 423's trap. The Mac port keeps focus
+where it was, so the founder's device check (61) may not see it.
+
+Owed: when the element that holds focus inside the sheet loses it to `body` because it was disabled,
+the Sheet puts focus back on the first focusable control, or the caller keeps Confirm focusable and
+`aria-disabled` while saving, as Pane's stepping pair does (1083). Not changed by 38-B, whose one
+change is the Escape guard (its guardrail 1).
