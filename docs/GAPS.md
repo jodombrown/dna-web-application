@@ -7878,5 +7878,8 @@ attempt 1 had fetched were saved under the exact key, which an exact hit never s
 **Owed (handoff 38-C).** The install's time separated from the suite's: each attempt bounded through
 `scripts/retry.sh`, a stalled attempt ended and retried, three timed-out attempts failing the job by
 name at the install step; the apt archives cached, keyed on the runner image, the engine and
-Playwright's resolved version, a miss behaving exactly as before; the job's budget restated per engine
-from the readings above, with the arithmetic in the comment over `timeout-minutes`.
+Playwright's resolved version, a miss behaving exactly as before, and restored under a prefix of the
+image OS and the engine alone, so a new runner image week or a Playwright bump starts from the most
+recent set saved for that engine, which apt verifies file by file, rather than from nothing; the job's
+budget restated per engine from the readings above, with the arithmetic in the comment over
+`timeout-minutes`.

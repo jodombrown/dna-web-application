@@ -294,8 +294,13 @@ jobs:
       # wrong package. What is not sound, and not done, is caching the installed files themselves
       # past dpkg. The key is the runner image (ImageOS and ImageVersion, which the runner exports
       # and the env context does not carry), the engine, and Playwright's resolved version from
-      # node_modules, so the set moves with the image week and with the package list; the prefix
-      # restore key lets a Playwright bump start from the last set, which apt verifies file by file.
+      # node_modules, so the set moves with the image week and with the package list. The restore
+      # prefix is the image OS and the engine only: a new image week, or a Playwright bump, restores
+      # the most recent set saved for that engine and starts from it rather than from nothing, and
+      # apt verifies it file by file, fetching what the new week's index names differently and
+      # keeping the rest; the complete set is then saved under the new exact key. The cache action
+      # takes the newest entry under a prefix, so a complete set outranks run 441's stranded partial
+      # one wherever both match.
       # Restored into a runner-owned directory and copied in with sudo, because the cache action
       # cannot write apt's root-owned directory. A miss is exactly today: nothing is copied in, and
       # the step after the install keeps what apt fetched for the next run. The runner image writes
@@ -313,7 +318,7 @@ jobs:
           # Run 441's first shape saved a 10-file set under the key without the suffix, and an
           # exact hit is never saved again, so that entry is left to expire unused.
           echo "key=apt-archives-${image}-${ENGINE}-playwright-${pw}-complete" >> "$GITHUB_OUTPUT"
-          echo "prefix=apt-archives-${image}-${ENGINE}-playwright-${pw}-" >> "$GITHUB_OUTPUT"
+          echo "prefix=apt-archives-${ImageOS:-unknown}-${ENGINE}-" >> "$GITHUB_OUTPUT"
           echo "Runner image ${image}, Playwright ${pw}, engine ${ENGINE}."
       - name: Restore the apt archives (handoff 38-C)
         id: apt-cache
