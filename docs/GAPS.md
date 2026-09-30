@@ -4746,7 +4746,8 @@ records this close on its rebase. Both halves are one change: Escape is handled 
 The keydown is marked with `preventDefault`, so the Pane's guard (1084) yields; a keydown a descendant
 already marked, Input's open list or a Menu, is yielded to, which is what the contained path's capture
 listener could not do; and where two sheets nest the inner one runs first, so only the topmost handles
-it. The capture-phase Escape branch is gone with the window listener keeping the Tab trap only, and the
+it. The capture-phase listener keeps the Tab trap and, for `contained` only, closes on an Escape whose
+target is outside the dialog, since a contained dialog is not modal and raises no `cancel`; the
 dialog's `cancel` listener stays for a close request that is not a keydown inside the dialog. Proven
 by four checks added to the event-flows arm (`tests/event.cjs`), red on `d4742b8` and green with the
 guard, on the runs handoff 38-B's PR names. The lines in `Input.tsx` and `Menu.tsx` that describe the contained

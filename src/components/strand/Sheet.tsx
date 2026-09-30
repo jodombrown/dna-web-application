@@ -195,19 +195,27 @@ export function Sheet({
   // The Tab trap, and the dialog's `cancel`. showModal() already traps Tab, but `contained` does
   // not, and the explicit trap keeps one behaviour on both paths.
   //
-  // Escape is not handled here (G193, G86; handoff 38-B). It was, for `contained` only, and a window
-  // listener in the capture phase runs before every handler inside the sheet, so it took the Escape
-  // that Input's combobox and Menu handle for themselves and ignored the `defaultPrevented` they
-  // set; while the showModal path handled no keydown at all and waited for the dialog's `cancel`,
-  // which the browser raises after the keydown has bubbled, and by then a Pane above the sheet had
-  // already read an unmarked Escape and closed itself (1084). Both paths now handle Escape in the
-  // dialog's own `onKeyDown` below, at keydown, after the sheet's descendants and before its
-  // ancestors, which is the order React's synthetic bubbling gives for free.
+  // An Escape inside the dialog is not handled here (G193, G86; handoff 38-B). It was, for
+  // `contained` only, and a window listener in the capture phase runs before every handler inside
+  // the sheet, so it took the Escape that Input's combobox and Menu handle for themselves and
+  // ignored the `defaultPrevented` they set; while the showModal path handled no keydown at all and
+  // waited for the dialog's `cancel`, which the browser raises after the keydown has bubbled, and by
+  // then a Pane above the sheet had already read an unmarked Escape and closed itself (1084). Both
+  // paths now handle an Escape inside the dialog in its own `onKeyDown` below, at keydown, after the
+  // sheet's descendants and before its ancestors, which is the order React's synthetic bubbling
+  // gives for free.
+  //
+  // An Escape whose target is outside the dialog, which focus fallen to `body` produces (G195), is
+  // the browser's on the showModal path: the top layer holds the dialog and the close request
+  // arrives as `cancel`. A contained dialog is not modal and raises no `cancel`, so that Escape is
+  // closed from here, for `contained` only and only when the target is outside the dialog. It never
+  // crosses a Pane's subtree, so marking it costs the Pane nothing, and it is what the branch this
+  // replaces did for every Escape.
   //
   // `cancel` stays as the path for a close request that does not arrive as a keydown inside the
-  // dialog: an Escape whose target is outside it, which showModal() allows when focus has fallen to
-  // `body`, and a close request the platform raises with no key. Preventing the keydown's default
-  // ends the browser's close request, so `cancel` never follows an Escape the handler below took.
+  // dialog: the outside-target Escape above, and a close request the platform raises with no key.
+  // Preventing the keydown's default ends the browser's close request, so `cancel` never follows an
+  // Escape the handler below took.
   //
   // `mounted` is in the deps because the dialog element does not exist on the commit where `open`
   // first turns true: that render still returns null and only the effect below it sets `mounted`.
@@ -227,6 +235,13 @@ export function Sheet({
       onClose?.();
     };
     const key = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        if (contained && d && !(e.target instanceof Node && d.contains(e.target))) {
+          e.preventDefault();
+          onClose?.();
+        }
+        return;
+      }
       if (e.key !== "Tab") return;
       const p = panel.current;
       if (!p) return;
@@ -255,7 +270,7 @@ export function Sheet({
       d?.removeEventListener("cancel", cancel);
       window.removeEventListener("keydown", key, true);
     };
-  }, [open, mounted, onClose]);
+  }, [open, mounted, contained, onClose]);
 
   // Scroll lock, narrowed (ruling 493). The host does not scroll while the sheet is mounted and a
   // wheel that lands on the scrim is cancelled; inside the dialog a vertical scroller is consumed
@@ -355,8 +370,9 @@ export function Sheet({
       // false (1084). So the sheet marks the keydown it takes, on both paths, and closes itself on
       // it. It yields to an Escape a descendant already took, Input's open list or a Menu, and where
       // two sheets nest the inner one runs first and the outer yields the same way, so only the
-      // topmost handles it. An Escape from outside the dialog never reaches this handler and is left
-      // to the browser's close request, which `cancel` above turns into the same close.
+      // topmost handles it. An Escape from outside the dialog never reaches this handler: on the
+      // showModal path the browser's close request, which `cancel` above turns into the same close,
+      // and on the contained path the window listener above, close the sheet on it.
       onKeyDown={(e) => {
         if (e.key !== "Escape" || e.defaultPrevented) return;
         e.preventDefault();
