@@ -7740,7 +7740,7 @@ the gate doing what 1235 built it for.
 
 ---
 
-## G194. The auth reveal-timing check read 1833 ms against 1066 ms once on the macOS runner
+## G194. The auth reveal-timing check read 1833 ms against 1066 ms on the macOS runner, then 1320 against 2106 — closed (handoff 37-F)
 
 **Severity: low. Opened 30 September 2026 during handoff 37-F item 3, filed under ruling 597. The number is
 assigned by this entry (ruling 638).**
@@ -7756,10 +7756,17 @@ extra 900 ms is on the first fresh WebKit session of that arm on a shared macOS 
 arm reads where it went. The check measures wall clock from Node across the driver, the page's hydration
 and the reveal, so a slow first session reads as a timed answer.
 
-Owed: if it recurs, the measurement taken in the page (a `performance.now()` at the submit and at the
-reveal's insertion) so the driver and the session's cold start drop out of both readings while the
-assertion, the two reveals within 600 ms of each other, stays as it is. A third and later reading is the
-enforcing run's `webkit-macos` job.
+It recurred on the next reading: `pages.yml` run 430's `webkit-macos` job (`109821207415`, head
+`d8cb7e4`) read `1320ms vs 2106ms`, the slow session on the other side this time. Two of four macOS
+samples, alternating sides, is host noise in a wall-clock reading and not the surface.
+
+**Closed 30 September 2026, in handoff 37-F, by the commit that changes `tests/auth.cjs`'s `sentState`.**
+The interval is now read in the page: a capture listener on the form's `submit` event and a
+`MutationObserver` on the sent state's insertion, both on `performance.now()`, so the driver's round trip
+and a fresh session's cold start drop out of both readings; the wall clock is printed beside it as a
+record, as `REVEAL <arm> known=... unknown=...`. The assertion is unchanged: the two reveals within 600 ms
+of each other. On Chromium locally the page reads 908 against 909 ms where the wall clock read 1370
+against 1367, which is the driver's share made visible. The macOS reading is the enforcing run's.
 
 ---
 

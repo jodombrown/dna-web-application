@@ -247,13 +247,36 @@ async function sentState(browserType, vp, theme, tune) {
   await page.waitForSelector('[data-testid="reset-request"]');
   await hydrated(page);
   await page.fill('input[type="email"]', "same@test.invalid");
+  // Handoff 37-F (G194): the interval is read in the page, from the form's submit event to the
+  // sent state's insertion, on the page's own clock. Read from Node it carried the driver's round
+  // trip and a fresh session's cold start, and on the macOS runner (1235) that added up to a
+  // second to whichever of the two runs happened to be cold (1833 against 1066 ms, then 1320
+  // against 2106), which the check read as a timed answer. What the check judges is what the
+  // surface does between submit and reveal, and that is what this measures; the wall clock beside
+  // it stays a record.
+  await page.evaluate(() => {
+    const t = { submitted: null, shown: null };
+    window.__reveal = t;
+    document.addEventListener("submit", () => (t.submitted ??= performance.now()), true);
+    new MutationObserver((_, o) => {
+      if (document.querySelector('[data-testid="check-email"]')) {
+        t.shown = performance.now();
+        o.disconnect();
+      }
+    }).observe(document.documentElement, { childList: true, subtree: true });
+  });
   const started = Date.now();
   await page.click('button[type="submit"]');
   await page.waitForSelector('[data-testid="check-email"]', { timeout: 15000 });
-  const elapsed = Date.now() - started;
+  const wall = Date.now() - started;
+  const inPage = await page.evaluate(() => window.__reveal);
+  const elapsed =
+    inPage.submitted != null && inPage.shown != null
+      ? Math.round(inPage.shown - inPage.submitted)
+      : wall;
   const html = await page.locator('[data-testid="check-email"]').evaluate((el) => el.outerHTML);
   await browser.close();
-  return { html, elapsed, calls: auth.recoverCalls.length };
+  return { html, elapsed, wall, inPage: inPage.submitted != null, calls: auth.recoverCalls.length };
 }
 
 /**
@@ -480,11 +503,15 @@ async function runAuthFlows(browserType, bname, [w, h], theme) {
         known.calls === 1 && unknown.calls === 1,
         `${known.calls} / ${unknown.calls}`,
       );
-      // The reveal is a fixed delay, so a 1500ms answer and an instant one land together.
+      // The reveal is a fixed delay, so a 1500ms answer and an instant one land together. The
+      // interval is the page's own (G194); the wall clock is printed beside it as a record.
+      console.log(
+        `REVEAL ${tag} known=${known.elapsed}ms (wall ${known.wall}ms, in-page ${known.inPage}) unknown=${unknown.elapsed}ms (wall ${unknown.wall}ms, in-page ${unknown.inPage})`,
+      );
       record(
         tag + ": the reveal does not time the answer",
         Math.abs(known.elapsed - unknown.elapsed) < 600,
-        `${known.elapsed}ms vs ${unknown.elapsed}ms`,
+        `${known.elapsed}ms vs ${unknown.elapsed}ms in the page (wall ${known.wall}ms vs ${unknown.wall}ms)`,
       );
     } catch (e) {
       record(tag + ": reset sent parity flow completed", false, String(e).slice(0, 200));
