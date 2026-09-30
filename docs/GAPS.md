@@ -6731,7 +6731,12 @@ its video, its chroma-block tolerance and its assertions, and never had the allo
 changes. Read first on Chromium with the probe override `SHEET_METHOD=stepped` against a local
 `wrangler pages dev` of the build, every sheet cell: nineteen steps per motion, step 0 off the edge, the
 exit's timers held through all nineteen steps and the panel detached once they ran (the readings are in
-PR #81's body); the WebKit readings are the enforcing run's, cited there.
+PR #81's body). Then on WebKit itself, the Mac port, in `pages.yml` run 427's `webkit-macos` job
+(`109814308566`, head `a6cebea`): all nine sheet arms passed, every exit one-way to the edge with the
+timers held, for instance `webkit-1280x800-dark-sheet-composer` exit `[0:559,16.7:585,33.3:702,50:851,
+66.7:956,83.3:1031,100:1086,116.7:1129,133.3:1164,150:1191,166.7:1214,183.3:1232,200:1246,216.7:1257,
+233.3:1266,250:1272,266.7:1276,283.3:1279,300:-]`, the cell whose video exit run 423 had refused. The
+Linux WebKit readings are the enforcing run's, cited in the PR.
 
 ---
 
@@ -6757,6 +6762,18 @@ and never as a failure; the other checks on the cell judge the frames that exist
 
 Owed: the 2560 slide on WebKit read on hardware that renders it, which is the founder's Safari check
 of Done Means 3, or a runner that can.
+
+**Closed 30 September 2026, in handoff 37-F item 1 (rulings 1236, 1240).** The stepped method does not
+depend on the engine running an animation frame while the transition plays: the transition is paused and
+its `currentTime` set per step, and each step is screenshotted, so the frame exists because the arm asked
+for it. Read on WebKit on macOS by `pages.yml` run 427's `webkit-macos` job (`109814308566`, head
+`a6cebea`): `webkit-2560x1440-light-sheet-composer` enter `[0:-,16.7:2533,33.3:2416,50:2267,66.7:2162,
+83.3:2087,100:2032,116.7:1989,133.3:1954,150:1927,166.7:1904,183.3:1886,200:1872,216.7:1861,233.3:1852,
+250:1846,266.7:1842,283.3:1839,300:1839]`, rest 1839, the slide read in eighteen painted steps; exit
+`[0:1839,16.7:1865,...,283.3:2559,300:-]`, timers held and the panel detached. The unprovable branch is no
+longer reached on WebKit: `unpaintedTransition` in `tests/sheet.cjs` stays on Chromium's video path alone,
+where the geometry sampler that feeds it still runs. The founder's Safari check (61) stays the exit
+criterion for the surface itself.
 
 ---
 
@@ -7682,6 +7699,67 @@ the panel is gone, and both hold. Not changed by 37-F: nothing under `src/` is e
 1). Owed: either the Filters sheet drops `open` and animates out like every other Sheet caller, or the
 ruling that says a contained sheet may close at once; then the arm's `atOnce` reading becomes a failure
 or a rule.
+
+---
+
+## G193. Escape on a Sheet inside the Pane closes the Pane as well, on every engine
+
+**Severity: moderate. Opened 30 September 2026 during handoff 37-F item 3, filed under ruling 597. The
+number is assigned by this entry (ruling 638).**
+
+Found by the macOS WebKit gate (1235) on its first run, `pages.yml` run 427's `webkit-macos` job
+(`109814308566`) and again by `matrix.yml` run 77 (`36694192903`, `runner=macos-latest`, `SPECIAL=event
+ONLY=[1280,800] THEME=dark`): `webkit-1280x800-dark-event-flows` pressed Escape on the RSVP sheet's error
+state at expanded and its next step, the share control, was not found for thirty seconds. Run 77's
+`FAILSTATE` line says what the page held: `/posts/post-e-loaded`, no pane, no dialog. Escape had closed the
+sheet and the Pane behind it, and the Pane's close returned to the Feed card the flow came from.
+
+Reproduced on Chromium, locally against `wrangler pages dev` of the build, in a scratch that is not
+committed: open the member event page at 1280 by 800, click I am going, let the sheet focus its heading,
+press Escape. The URL falls to `/convene`, no pane, no `event-share`. So it is not the Mac port; it is the
+product on every engine. The mechanism, read in the tree: `Sheet.tsx` closes on the dialog's `cancel`
+event and prevents that event, but on the `showModal` path it neither prevents nor stops the Escape
+`keydown` itself (its window listener does so only for `contained`); `Pane.tsx`'s section `onKeyDown`
+closes the pane on any Escape whose `defaultPrevented` is false (1084), and React's synthetic keydown
+follows the React tree, in which the event page's `RsvpSheet` is the pane's descendant. One Escape, two
+closes.
+
+Why the arm passes on Chromium and Linux WebKit: by the arm's Escape, focus has fallen to `body`, because
+the confirm button it clicked went disabled while the mocked save failed, and a keydown whose target is
+`body` never crosses the pane's subtree. The same scratch, replicating the arm's exact state, reads
+`active=body` before the Escape on Chromium, the pane survives, and `cancel` still reaches the sheet. The
+Mac port keeps focus inside the sheet there, so the gate read the defect the flow's coincidence had hidden.
+Whether Safari keeps focus as the Mac port does is the founder's device check (61); a member who opens the
+RSVP sheet and presses Escape at once, with the heading focused, meets it in every browser.
+
+Not changed by 37-F: nothing under `src/` is edited there (guardrail 1), and `Sheet.tsx` is canonical
+(1229). Owed: the Sheet marks the Escape it handles as handled on the modal path too, so the Pane's
+`defaultPrevented` guard (1084) sees it, or the ruling that says a Sheet's Escape may also close the pane
+it sits in. Until then the gate's `webkit-1280x800-dark-event-flows` arm is red on this defect, which is
+the gate doing what 1235 built it for.
+
+---
+
+## G194. The auth reveal-timing check read 1833 ms against 1066 ms once on the macOS runner
+
+**Severity: low. Opened 30 September 2026 during handoff 37-F item 3, filed under ruling 597. The number is
+assigned by this entry (ruling 638).**
+
+`tests/auth.cjs`'s `webkit-390x844-light-auth flows` compares the time to reveal the reset "sent" state
+for a known address against an unknown one whose mocked answer is delayed 1500 ms, within 600 ms, each in
+a fresh browser; the reveal is a fixed `REVEAL_MS` of 900 in `src/routes/reset.tsx`, so the two land
+together and the surface times nothing. On `pages.yml` run 427's `webkit-macos` job (`109814308566`) the
+known run took 1833 ms and the unknown 1066 ms: about 900 ms above the reveal on the first of the two
+browsers, none on the second. `matrix.yml` run 78 (`36694197392`, `runner=macos-latest`, `SPECIAL=auth
+ONLY=[390,844] THEME=light`) ran the same arm on the same runner image and passed. Not attributed: the
+extra 900 ms is on the first fresh WebKit session of that arm on a shared macOS runner, and nothing in the
+arm reads where it went. The check measures wall clock from Node across the driver, the page's hydration
+and the reveal, so a slow first session reads as a timed answer.
+
+Owed: if it recurs, the measurement taken in the page (a `performance.now()` at the submit and at the
+reveal's insertion) so the driver and the session's cold start drop out of both readings while the
+assertion, the two reveals within 600 ms of each other, stays as it is. A third and later reading is the
+enforcing run's `webkit-macos` job.
 
 ---
 
