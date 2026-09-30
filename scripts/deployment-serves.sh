@@ -55,8 +55,9 @@ serves /posts/seed-1
 serves /m/thandiwe-dube
 serves /convene/curated
 # Ruling 184's asset contract: every path in the table serves, so the redesign stays a file
-# overwrite. Handoff 38-A adds favicon.ico: browsers fetch it unasked, and a 404 there left tabs on
-# the icon cached for the host before 1139 (Lovable's).
+# overwrite. Ruling 1246 (handoff 38-A) returns favicon.ico to the contract, generated from
+# icon-512.png: browsers fetch it unasked, and a 404 there left tabs on the icon cached for the host
+# before 1139 (Lovable's).
 serves /strand/logo.png
 serves /favicon.ico /tmp/favicon.ico
 serves /favicon.png
