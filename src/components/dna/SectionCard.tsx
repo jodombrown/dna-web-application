@@ -7,12 +7,12 @@
 // Everything else, including the caps title, the glyph badge, the edit affordance and the owner's
 // empty act, is Brief 3 as built.
 import type { CSSProperties, ReactNode } from "react";
-import type { Audience } from "./AudienceSelect";
-import { Button } from "./Button";
-import { CBadge } from "./CBadge";
-import { IconButton } from "./IconButton";
+import type { Audience } from "@/components/strand/AudienceSelect";
+import { Button } from "@/components/strand/Button";
+import { CBadge } from "@/components/strand/CBadge";
+import { IconButton } from "@/components/strand/IconButton";
 import { VisibilitySelect } from "./VisibilitySelect";
-import type { C } from "./cmeta";
+import type { C } from "@/components/strand/cmeta";
 
 export const CAPS: CSSProperties = {
   margin: 0,

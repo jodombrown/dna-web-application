@@ -1,7 +1,7 @@
 // Ported from profile/strand-patch/Profile.jsx (B3-Profile-v3). Behavior unchanged.
 import type { CSSProperties } from "react";
-import type { Audience } from "./AudienceSelect";
-import { Icon } from "./Icon";
+import type { Audience } from "@/components/strand/AudienceSelect";
+import { Icon } from "@/components/strand/Icon";
 
 /** Audience per section (ruling 124). Anchored (ruling 136) admits a visitor who holds a role in a
  *  Space the owner holds a role in, or who shares an attested event with the owner. */

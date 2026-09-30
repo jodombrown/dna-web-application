@@ -1,6 +1,6 @@
 // Ported from profile/strand-patch/Profile.jsx (B3-Profile-v3, ruling 122). Behavior unchanged.
 import type { CSSProperties } from "react";
-import { Icon } from "./Icon";
+import { Icon } from "@/components/strand/Icon";
 
 export type VocabularyPickerProps = {
   label: string;

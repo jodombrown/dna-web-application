@@ -9,7 +9,7 @@
 import type { CSSProperties, ReactNode } from "react";
 import { Avatar } from "@/components/strand/Avatar";
 import { Icon } from "@/components/strand/Icon";
-import { LINK_KINDS } from "@/components/strand/LinkRow";
+import { LINK_KINDS, linkHref } from "@/components/dna/LinkRow";
 import { MediaBlock } from "@/components/strand/MediaBlock";
 import { PersonCard } from "@/components/strand/PersonCard";
 import type { EventBlock, PresenterLink } from "@/lib/event-page";
@@ -245,9 +245,11 @@ export type PersonEntry = {
 /**
  * People (Revision 4, 678, 1195): accepted parties as PersonCard rows under the heading People, and on
  * the public page a pending party as its role label alone in plain type, with no card. Absent below
- * one. With `onOpen` a card opens the profile; without it (the public page) the card is drawn but is
- * not a control: Strand's PersonCard is always an anchor or a button, so it sits in an inert
- * wrapper and the group carries the name and role for a reader (G162).
+ * one. With `onOpen` a card opens the profile; without it (the public page) the card is PersonCard's
+ * read-only layout at compile v1790724894917128 (correction 35, 1230): a plain div with nothing
+ * wrapped around it, so the card's own text is what a reader reads. That closes G162's PersonCard
+ * half, which until 37-E drew the interactive card inside an inert wrapper under a composed group
+ * label.
  */
 export function People({
   people,
@@ -274,15 +276,8 @@ export function People({
             />
           </div>
         ) : (
-          <div
-            key={p.key}
-            data-speaker="accepted"
-            role="group"
-            aria-label={p.name + ", " + p.label}
-          >
-            <div inert aria-hidden="true">
-              <PersonCard name={p.name} role={p.label} src={p.avatarSrc} />
-            </div>
+          <div key={p.key} data-speaker="accepted">
+            <PersonCard name={p.name} role={p.label} src={p.avatarSrc} readOnly />
           </div>
         ),
       )}
@@ -299,9 +294,16 @@ export function People({
   );
 }
 
-/** A presenter's links (1225): the profile's own kind labels and icons, as anchors to the stored URL. */
+/**
+ * A presenter's links (1225): the profile's own kind labels and icons, as anchors to the address
+ * `linkHref` gives the stored value (37-E item 4, 1232: the one address rule, shared with LinkRow).
+ * A value with no address is not drawn here.
+ */
 export function PresenterLinks({ links }: { links: PresenterLink[] }) {
-  const items = links.filter((l) => /^https?:\/\//i.test(l.url));
+  const items = links.flatMap((l) => {
+    const href = linkHref(l.kind, l.url);
+    return href ? [{ ...l, href }] : [];
+  });
   if (items.length === 0) return null;
   return (
     <div
@@ -313,9 +315,9 @@ export function PresenterLinks({ links }: { links: PresenterLink[] }) {
         return (
           <a
             key={l.kind + l.url}
-            href={l.url}
+            href={l.href}
             target="_blank"
-            rel="noreferrer"
+            rel="noopener noreferrer"
             style={{
               display: "inline-flex",
               alignItems: "center",

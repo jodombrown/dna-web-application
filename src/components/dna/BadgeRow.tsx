@@ -1,7 +1,7 @@
 // Ported from profile/strand-patch/Profile.jsx (B3-Profile-v3, ruling 123). Behavior unchanged.
 import { useState, type CSSProperties } from "react";
-import { CBadge } from "./CBadge";
-import type { C } from "./cmeta";
+import { CBadge } from "@/components/strand/CBadge";
+import type { C } from "@/components/strand/cmeta";
 
 export type BadgeC = Extract<C, "convene" | "collaborate" | "contribute">;
 export type BadgeItem = {

@@ -7,7 +7,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState, type FormEvent } from "react";
 import { Button } from "@/components/strand/Button";
-import { PasswordField } from "@/components/strand/PasswordField";
+import { PasswordField } from "@/components/dna/PasswordField";
 import {
   AuthAlert,
   AuthPage,

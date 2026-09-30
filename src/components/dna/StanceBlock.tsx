@@ -5,9 +5,9 @@
 // declared `SegmentBlock`, `SegmentField`, `SegmentData`, `SegmentBlockProps` and `SEG`; each now
 // carries Stance. Strand's `Segment` (Segment.tsx) is a different part and keeps its name.
 import type { CSSProperties } from "react";
-import { Chip } from "./Chip";
-import { Input } from "./Input";
-import { Select } from "./Select";
+import { Chip } from "@/components/strand/Chip";
+import { Input } from "@/components/strand/Input";
+import { Select } from "@/components/strand/Select";
 import { VocabularyPicker } from "./VocabularyPicker";
 
 // Brief 5 (ruling 300): the axis is stance, five values in the register's order. kin carries no

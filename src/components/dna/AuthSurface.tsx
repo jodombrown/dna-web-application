@@ -5,7 +5,7 @@
 // 487, 491). Button still has no loading prop, and the separator, the provider buttons and the
 // focusable alert are still compositions rather than components.
 import { useEffect, useRef, type CSSProperties, type ReactNode } from "react";
-import { AuthColumn, AuthHead } from "@/components/strand/AuthHead";
+import { AuthColumn, AuthHead } from "@/components/dna/AuthHead";
 import { Button } from "@/components/strand/Button";
 import { Icon } from "@/components/strand/Icon";
 import {

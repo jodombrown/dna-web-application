@@ -7,12 +7,8 @@
 // here filters, counts, scores or computes eligibility: the client renders what arrives.
 // Writes: send_introduction, respond_to_request, withdraw_request, set_follow, dismiss_suggestion.
 import type { Lens } from "@/components/strand/LensBar";
-import type { Badge } from "@/components/strand/BadgeRow";
-import type {
-  MemberCardContext,
-  MemberCardMember,
-  MemberRel,
-} from "@/components/strand/MemberCard";
+import type { Badge } from "@/components/dna/BadgeRow";
+import type { MemberCardContext, MemberCardMember, MemberRel } from "@/components/dna/MemberCard";
 import { functionsUrl, getSupabase, SUPABASE_PUBLISHABLE_KEY } from "./supabase";
 
 // ---------------------------------------------------------------------------

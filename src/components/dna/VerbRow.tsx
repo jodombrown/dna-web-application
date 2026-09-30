@@ -12,8 +12,8 @@
 //   null when the tap landed elsewhere, so the Composer can write the reason into the DiaLine slot
 //   and clear it on the next tap. The chip is read at the row, as Strand's Composer reads it.
 import { useCallback, useEffect, useRef, useState, type MouseEvent } from "react";
-import { VerbChip } from "./VerbChip";
-import { COMPOSER_VERBS, type ComposerVerb } from "./cmeta";
+import { VerbChip } from "@/components/strand/VerbChip";
+import { COMPOSER_VERBS, type ComposerVerb } from "@/components/strand/cmeta";
 
 // The verb list is cmeta's, not a second copy here: ruling 417 removed Connect from the composer
 // and cmeta carries that as the ComposerVerb type, so the row cannot drift from the schema.

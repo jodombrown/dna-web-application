@@ -15,7 +15,7 @@
 // centres in the viewport with auto margins (ruling 487). Neither is ever centred by a flex
 // container that clips its top once the content is taller than the frame.
 import type { CSSProperties, ReactNode, RefObject } from "react";
-import { assetBase } from "./cmeta";
+import { assetBase } from "@/components/strand/cmeta";
 
 export function AuthHead({
   heading,

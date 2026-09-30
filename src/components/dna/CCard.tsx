@@ -2,10 +2,10 @@
 // The five Cs for the public close: --shadow-2 at rest (the deck exception); hover takes the C
 // colour (ruling 129), no lift, no fill; tap opens the C sheet.
 import { useState, type CSSProperties } from "react";
-import { CBadge } from "./CBadge";
-import { Icon } from "./Icon";
+import { CBadge } from "@/components/strand/CBadge";
+import { Icon } from "@/components/strand/Icon";
 import { C_INFO } from "./cinfo";
-import type { C } from "./cmeta";
+import type { C } from "@/components/strand/cmeta";
 
 export type CCardProps = { c: C; onOpen: (c: C) => void; style?: CSSProperties | undefined };
 

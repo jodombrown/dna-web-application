@@ -21,11 +21,11 @@
 // resting shadow. --line-strong on hover is the same hairline, not a second treatment.
 // Rulings 117 to 120, 157, 161, 168.
 import { useState, type CSSProperties, type ReactNode } from "react";
-import { Avatar } from "./Avatar";
+import { Avatar } from "@/components/strand/Avatar";
 import { BadgeRow, type Badge } from "./BadgeRow";
-import { Button } from "./Button";
-import { Chip } from "./Chip";
-import { Icon } from "./Icon";
+import { Button } from "@/components/strand/Button";
+import { Chip } from "@/components/strand/Chip";
+import { Icon } from "@/components/strand/Icon";
 import { IdentityMark } from "./IdentityMark";
 
 // Ruling 214: there is no window state on a surface. private.relationship_display maps it to
