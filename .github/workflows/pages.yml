@@ -309,8 +309,11 @@ jobs:
           set -uo pipefail
           pw=$(node -p "require('playwright/package.json').version")
           image="${ImageOS:-unknown}-${ImageVersion:-unknown}"
-          echo "key=apt-archives-${image}-${ENGINE}-playwright-${pw}" >> "$GITHUB_OUTPUT"
-          echo "prefix=apt-archives-${image}-${ENGINE}-" >> "$GITHUB_OUTPUT"
+          # "-complete": only a set harvested after a successful install is saved under this key.
+          # Run 441's first shape saved a 10-file set under the key without the suffix, and an
+          # exact hit is never saved again, so that entry is left to expire unused.
+          echo "key=apt-archives-${image}-${ENGINE}-playwright-${pw}-complete" >> "$GITHUB_OUTPUT"
+          echo "prefix=apt-archives-${image}-${ENGINE}-playwright-${pw}-" >> "$GITHUB_OUTPUT"
           echo "Runner image ${image}, Playwright ${pw}, engine ${ENGINE}."
       - name: Restore the apt archives (handoff 38-C)
         id: apt-cache
@@ -344,18 +347,40 @@ jobs:
       # what the attempt fetched, because apt fetches only what its archive directory does not
       # already hold. Three timed-out attempts fail the job here, by name, at 3 × (240 + 20 s kill
       # grace) + 15 s of delays, 13m15s; the step's own 14-minute limit is the line that holds
-      # whatever the shell does (485, 539). dpkg --configure -a first in every attempt, because a cut
-      # that lands in the unpack window after the fetch leaves dpkg interrupted, and apt refuses to
-      # run until that is finished. The bound is proven by matrix.yml's install_attempt_seconds
-      # probe, which forces a short one on a dispatch; nothing here changes it.
+      # whatever the shell does (485, 539).
+      #
+      # Each attempt first ends what the previous one left running as root. Playwright runs apt
+      # through sudo, and sudo runs its command in a pty session of its own, outside the process
+      # group timeout signals; on run 441 the bound cut attempt 1 at 240 s with the mirror at about
+      # 60 kB/s, and its apt-get, pid 2687, outlived the attempt and held the dpkg frontend lock
+      # through attempts 2 and 3, which failed in a second each. So the attempt kills apt-get, dpkg
+      # and apt's fetch methods, TERM then KILL, then runs dpkg --configure -a, because a cut that
+      # lands in the unpack window leaves dpkg interrupted and apt refuses to run until that is
+      # finished, and only then installs. What the cut attempt fetched stays in apt's archive
+      # directory and its partial files resume. The bound is proven by matrix.yml's
+      # install_attempt_seconds probe, which forces a short one on a dispatch; nothing here changes it.
       - name: Install the browser this job drives
+        id: install
         timeout-minutes: 14
         env:
           RETRY_ATTEMPT_SECONDS: "240"
           ENGINE: ${{ matrix.engine }}
-        run: scripts/retry.sh 3 bash -c 'sudo dpkg --configure -a && exec bunx playwright install --with-deps "$ENGINE"'
+        run: |
+          scripts/retry.sh 3 bash -c '
+            for sig in TERM KILL; do
+              sudo pkill -"$sig" -x apt-get && sleep 3 || true
+              sudo pkill -"$sig" -x dpkg || true
+              sudo pkill -"$sig" -f "^/usr/lib/apt/methods/" || true
+            done
+            sudo dpkg --configure -a && exec bunx playwright install --with-deps "$ENGINE"
+          '
+      # Only a complete set is kept: a set harvested after a cut attempt (run 441 kept 10 of 195
+      # files) would be saved under the exact key, and an exact hit is never saved again, so the
+      # partial set would stand until the image or Playwright moved. With the install failed the
+      # directory is never created, the cache action finds no path and saves nothing, and the next
+      # run starts clean.
       - name: Keep the apt archives for the cache (handoff 38-C)
-        if: ${{ always() && steps.apt-cache.outputs.cache-hit != 'true' }}
+        if: ${{ always() && steps.install.outcome == 'success' && steps.apt-cache.outputs.cache-hit != 'true' }}
         run: |
           set -uo pipefail
           shopt -s nullglob

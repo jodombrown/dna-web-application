@@ -7856,6 +7856,25 @@ The runner image's apt is configured with `Acquire::Retries 1` and a 15-second `
 never trips on a trickle. The image writes no `docker-clean` and leaves `APT::Keep-Downloaded-Packages`
 at its default, so the fetched `.deb` files stay in `/var/cache/apt/archives` after the install.
 
+**Third sighting, and the first reading of the bound: run 441 (`36780457917`), this branch's first
+push.** The mirror served about 60 kB/s again, 10 packages and 15 MB in the 240 seconds the `matrix
+(webkit)` job (`110109456142`) gave attempt 1 before `scripts/retry.sh` ended it, named it (`Attempt 1
+of 3 timed out at the 240s bound`) and retried. The retry failed in a second, and so did the third:
+`dpkg: error: dpkg frontend lock was locked by another process with pid 2687`. Playwright runs apt
+through sudo, and sudo runs its command in a pty session of its own, outside the process group
+`timeout` signals, so the cut attempt's `apt-get` outlived it and kept the lock. The step failed by
+name at 4m20s, which is the outcome the bound exists for, but without the retry it promises.
+`matrix.yml` run 80 (`36780595009`, `install_attempt_seconds=30`, healthy mirror) had shown the retry
+working when the cut lands outside apt: attempt 1 was ended at 30 s during the WebKit download, attempt
+2 found apt with nothing left to do (`0 upgraded, 0 newly installed`) and finished in 6 s, and the gate
+then read 283 of 283 on Linux WebKit. Run 81 (`36781074172`, a 5-second bound) showed the leak from the
+other side: attempt 1's `apt-get update` printed its `Fetched` line after the attempt had been ended,
+attempt 3 met the lock attempt 2's apt still held, and the job failed by name at the install step in
+30 s, having reached no test body. So each attempt now first ends the `apt-get`, `dpkg` and apt fetch
+methods a previous attempt left running as root, TERM then KILL, before `dpkg --configure -a` and the
+install. The same job also showed why only a complete set may be harvested into the cache: the 10 files
+attempt 1 had fetched were saved under the exact key, which an exact hit never saves again.
+
 **Owed (handoff 38-C).** The install's time separated from the suite's: each attempt bounded through
 `scripts/retry.sh`, a stalled attempt ended and retried, three timed-out attempts failing the job by
 name at the install step; the apt archives cached, keyed on the runner image, the engine and

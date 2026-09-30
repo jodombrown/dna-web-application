@@ -34,8 +34,12 @@ if [ -n "$bound" ]; then
 fi
 
 # Under the bound, `timeout` puts the command in its own process group and signals the whole group,
-# so an apt or a browser download spawned two levels down ends with the attempt. Exit 124 is the
-# TERM at the bound; 137 is the KILL twenty seconds later, when TERM was not enough.
+# so a browser download spawned two levels down ends with the attempt. What the command ran through
+# sudo does not: sudo runs it in a pty session of its own, outside that group, and on pages.yml run
+# 441 the apt-get a cut attempt started outlived it and held the dpkg lock against the retry. The
+# caller that runs root work ends it at the start of its next attempt, as pages.yml's install step
+# does; this script has no sudo and takes none. Exit 124 is the TERM at the bound; 137 is the KILL
+# twenty seconds later, when TERM was not enough.
 attempt() {
   if [ -n "$bound" ]; then
     timeout --kill-after=20 "$bound" "$@"
