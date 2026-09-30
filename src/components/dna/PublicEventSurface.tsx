@@ -237,7 +237,7 @@ export function PublicEventSurface({ page, slug }: { page: PublicEventPage; slug
         data-public-columns
         style={{
           display: "grid",
-          gridTemplateColumns: "var(--pane-list-width) minmax(0, 1fr)",
+          gridTemplateColumns: "var(--event-page-side-column) minmax(0, 1fr)",
           columnGap: "var(--space-8)",
           alignItems: "start",
         }}

@@ -3,12 +3,12 @@
 // attestation rail, and a footer with previous, Join DNA (Connect green), next.
 import type { ReactNode } from "react";
 import { AttestationRail, type AttestationItem } from "./AttestationRail";
-import { Button } from "./Button";
-import { CBadge } from "./CBadge";
-import { IconButton } from "./IconButton";
+import { Button } from "@/components/strand/Button";
+import { CBadge } from "@/components/strand/CBadge";
+import { IconButton } from "@/components/strand/IconButton";
 import { CAPS } from "./SectionCard";
 import { C_INFO } from "./cinfo";
-import type { C } from "./cmeta";
+import type { C } from "@/components/strand/cmeta";
 
 export type CSheetBodyProps = {
   c: C;

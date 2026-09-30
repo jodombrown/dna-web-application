@@ -391,6 +391,32 @@ async function runOwner(browserType, bname, vp, theme) {
         (await page.locator('[data-testid^="section-"] select').count()) >= 8,
     );
     const ids = await sectionIds(page);
+    // 37-E item 4 (1232): LinkRow's one address rule on the three rows the mock mirrors from the
+    // canonical project. The bare website links, https:// prefixed, in a new tab; the two handles
+    // are plain text with their at-sign, never an anchor and never href="#".
+    const links = await page.evaluate(() =>
+      Array.from(document.querySelectorAll('[data-testid="links"] [data-link]')).map(
+        (el) =>
+          el.tagName.toLowerCase() +
+          ":" +
+          el.getAttribute("data-link") +
+          ":" +
+          (el.getAttribute("href") ?? "") +
+          ":" +
+          (el.getAttribute("target") ?? "") +
+          ":" +
+          (el.getAttribute("rel") ?? "") +
+          ":" +
+          el.querySelector("[data-link-text]").textContent.trim(),
+      ),
+    );
+    record(
+      tag + ": Links: the website is an anchor in a new tab, the handles are plain text",
+      links.join("|") ===
+        "a:website:https://dubepower.co.za:_blank:noopener noreferrer:dubepower.co.za|" +
+          "span:linkedin::::@thandiwedube|span:instagram::::@dube.power",
+      links.join("|"),
+    );
     record(
       tag + ": all sections present for the owner (empty ones show their act)",
       [

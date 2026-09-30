@@ -22,8 +22,8 @@ import { Icon } from "@/components/strand/Icon";
 import { Input } from "@/components/strand/Input";
 import { Select } from "@/components/strand/Select";
 import { Sheet } from "@/components/strand/Sheet";
-import { AuthColumn, AuthHead } from "@/components/strand/AuthHead";
-import type { Stance } from "@/components/strand/StanceBlock";
+import { AuthColumn, AuthHead } from "@/components/dna/AuthHead";
+import type { Stance } from "@/components/dna/StanceBlock";
 import { AuthAlert, useHeadingFocus } from "@/components/dna/AuthSurface";
 import {
   deriveUsername,

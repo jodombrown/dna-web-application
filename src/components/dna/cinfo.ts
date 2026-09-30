@@ -3,7 +3,7 @@
 // Ruling 422: the copy below is the approved text of the Fix PR 02 handoff appendix, verbatim.
 // It describes only what the register keeps: no money, no Offers, no audio, no Edition, no
 // brokered intro, no milestones, no wallet (rulings 4, 49, 50, 55, 119).
-import type { C } from "./cmeta";
+import type { C } from "@/components/strand/cmeta";
 
 export type CInfo = {
   label: string;

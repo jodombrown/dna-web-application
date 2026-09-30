@@ -1,9 +1,10 @@
-// Strand `components/dna/PersonCard.jsx` at compile v1790410319010950 (correction 30 Part A ask 3,
-// every size a token since correction 31 item 1; ratified together under 1153; handoff 33-D). New to
-// the tree; no page binds it in this handoff (the first Discovery handoff and Brief 10 Revision 4
-// do). Divergence carried from the other ports: the device's input mode comes from `useMode` in
-// src/lib/tier.ts, where the compile reads `(pointer: coarse)` in render. Dispositions are in
-// docs/strand-ports/v1790410319010950.md.
+// Strand `components/dna/PersonCard.jsx` at compile v1790724894917128 (correction 35, ratified
+// under 1229 and 1230; handoff 37-E item 3), which adds `readOnly` to the part first ported at
+// v1790410319010950 (correction 30 Part A ask 3, every size a token since correction 31 item 1;
+// ratified together under 1153; handoff 33-D). The public event page's People binds the read-only
+// layout; the interactive layouts are unchanged. Divergence carried from the other ports: the
+// device's input mode comes from `useMode` in src/lib/tier.ts, where the compile reads
+// `(pointer: coarse)` in render. Dispositions are in docs/strand-ports/v1790724894917128.md.
 import { useState, type CSSProperties, type MouseEvent, type ReactNode } from "react";
 import { Avatar } from "./Avatar";
 import type { C } from "./cmeta";
@@ -28,6 +29,8 @@ export type PersonCardProps = {
   onOpen?: (() => void) | undefined;
   /** Accessible name. Default "Open {name}". */
   openLabel?: string | undefined;
+  /** Correction 35 (1230, G162): the same card as a plain div for display-only contexts (the public event page's People): no button, no link, no focus stop, no hover edge. */
+  readOnly?: boolean | undefined;
   /** Overrides the detected input mode (hover edge on pointer only). */
   input?: Mode | undefined;
   style?: CSSProperties | undefined;
@@ -37,7 +40,8 @@ export type PersonCardProps = {
  *  row (People, Partners): a 56 Avatar left; name in the display face (v5 20/1.2, carried to --display-s); role in caps at --tracking-caps, medium, in the C's text rung (v5 12, carried to --text-xs);
  *  an optional line (v5 14/1.4 --ink-2, carried to --text-xs). Card: --surface, 1px --line edge, --radius-l, min height 84; v5 padding and gap 14 carried to --space-3; edge --line-strong on hover.
  *  tile (Going): a 48 Avatar over the name at --text-xs medium, centred, balanced; padding v5 14 8 12 carried to --space-4 --space-2 --space-3; min height 112.
- *  The whole card is one control that opens the profile: an anchor with href, else a button with onOpen. A name renders only as the caller passes it; the part never looks one up. */
+ *  The whole card is one control that opens the profile: an anchor with href, else a button with onOpen. A name renders only as the caller passes it; the part never looks one up.
+ *  Correction 35 (1230, G162): readOnly renders the same card as a plain div for display-only contexts (the public event page's People): no button, no link, no focus stop, no hover edge. */
 export function PersonCard({
   name = "",
   role,
@@ -48,6 +52,7 @@ export function PersonCard({
   href,
   onOpen,
   openLabel,
+  readOnly = false,
   input,
   style,
 }: PersonCardProps) {
@@ -163,6 +168,23 @@ export function PersonCard({
     onFocus: () => setHot(true),
     onBlur: () => setHot(false),
   };
+  if (readOnly)
+    return (
+      <div
+        data-person-card={layout}
+        data-readonly=""
+        style={{
+          ...base,
+          ...geom,
+          cursor: "default",
+          border: "var(--border-thin) solid var(--line)",
+          transition: "none",
+          ...style,
+        }}
+      >
+        {body}
+      </div>
+    );
   if (href)
     return (
       <a

@@ -26,7 +26,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useContext, useEffect, useRef, useState, type CSSProperties } from "react";
 import { Avatar } from "@/components/strand/Avatar";
-import { BackRow } from "@/components/strand/BackRow";
+import { BackRow } from "@/components/dna/BackRow";
 import { Button } from "@/components/strand/Button";
 import { CBadge } from "@/components/strand/CBadge";
 import { EmptyState } from "@/components/strand/EmptyState";

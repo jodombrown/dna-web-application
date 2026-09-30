@@ -12,7 +12,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from "r
 import { Ghosts } from "@/components/dna/Ghosts";
 import { PostCardRouter } from "@/components/dna/PostCardRouter";
 import { Button } from "@/components/strand/Button";
-import { CardFade } from "@/components/strand/CardFade";
+import { CardFade } from "@/components/dna/CardFade";
 import { EmptyState } from "@/components/strand/EmptyState";
 import { Icon } from "@/components/strand/Icon";
 import { IconButton } from "@/components/strand/IconButton";

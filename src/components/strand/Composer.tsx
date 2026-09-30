@@ -63,7 +63,7 @@ import { COMPOSER_SHEET_WIDTH, Sheet } from "./Sheet";
 import { Switch } from "./Switch";
 import { type ComposerVerb } from "./cmeta";
 import { VERB_ACT } from "./VerbChip";
-import { VerbRow } from "./VerbRow";
+import { VerbRow } from "@/components/dna/VerbRow";
 import {
   UNTYPED,
   VERB_SCHEMA,

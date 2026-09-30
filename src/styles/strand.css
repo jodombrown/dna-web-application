@@ -409,6 +409,12 @@
   /* Lane geometry (731). A card laid in a lane; read by the caller that lays the lane. */
   --lane-card-width: 320px;
 
+  /* ---- Strand compile v1790724894917128 (correction 35, ratified 1229 and 1230; handoff 37-E
+     item 1): the one token its tokens/spacing.css adds over v1790707582513113, at the compile's
+     own value and position (604). ---- */
+  /* Public event page (G164, 1230, correction 35). The side column of the two-column public page above --tier-expanded: `var(--event-page-side-column) minmax(0,1fr)`, gap --space-8. Not --lane-card-width: one token, one meaning. */
+  --event-page-side-column: 320px;
+
   /* Z-index scale (603). Ruled order. No component hardcodes a z-index. */
   --z-pane: 1; /* @kind other */ /* navigated into, page content, never over chrome */
   --z-rail: 2; /* @kind other */ /* FacetRail as a rail, sticky in its column */

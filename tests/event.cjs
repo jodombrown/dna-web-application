@@ -1402,6 +1402,21 @@ async function runEventBlocks(browserType, bname, [w, h], theme) {
         (await page.locator("[data-event-presenter-links] a").allTextContents()).join(",") ===
           "Website,LinkedIn",
     );
+    // 37-E item 4 (1232): the presenter's links are drawn by LinkRow's one address rule, so a full
+    // URL of any kind opens in a new tab with rel noopener noreferrer, at the stored address.
+    const presenterLinks = await page.evaluate(() =>
+      Array.from(document.querySelectorAll("[data-event-presenter-links] a")).map(
+        (a) =>
+          a.getAttribute("href") + "|" + a.getAttribute("target") + "|" + a.getAttribute("rel"),
+      ),
+    );
+    record(
+      tag + " blocks: each presenter link is the stored URL in a new tab, rel noopener noreferrer",
+      presenterLinks.join(",") ===
+        "https://kwame.example.org|_blank|noopener noreferrer," +
+          "https://www.linkedin.com/in/kwame-mensah|_blank|noopener noreferrer",
+      presenterLinks.join(","),
+    );
     const digits = await digitsOutsideFacts(page);
     record(tag + " blocks: no number other than a time (guardrail 1)", digits === "", digits);
     record(
@@ -1418,7 +1433,7 @@ async function runEventBlocks(browserType, bname, [w, h], theme) {
     await noOverflow(page, tag + " blocks");
     await shot(page, `${tag}-01-blocks`);
 
-    // The public page (signed out): the same sections, People as inert cards, the layout by width.
+    // The public page (signed out): the same sections, People as read-only cards, the layout by width.
     await page.evaluate(() => {
       window.localStorage.clear();
     });
@@ -1451,11 +1466,19 @@ async function runEventBlocks(browserType, bname, [w, h], theme) {
         space8: parseFloat(
           getComputedStyle(document.documentElement).getPropertyValue("--space-8"),
         ),
+        // 37-E item 1 (G164): the aside is the resolved side-column token, read through the probe
+        // and never written here as a number.
+        sideColumn: parseFloat(
+          getComputedStyle(document.documentElement).getPropertyValue("--event-page-side-column"),
+        ),
         contentMax: parseFloat(
           getComputedStyle(document.documentElement).getPropertyValue("--content-max"),
         ),
       };
     });
+    // G164 (37-E item 1): the readings the register cites are printed so the run's own log carries
+    // them, the way ruling 267 re-emits the arms; a passing record prints no detail.
+    console.log("G164 readings", tag, JSON.stringify(pub));
     const pubSections = await sections();
     record(
       tag + " public: the sections under their own labels, in order",
@@ -1469,7 +1492,8 @@ async function runEventBlocks(browserType, bname, [w, h], theme) {
           : " public: one column"),
       w > 1024
         ? pub.columns === 1 &&
-            pub.aside > 0 &&
+            pub.sideColumn > 0 &&
+            Math.abs(pub.aside - pub.sideColumn) < 0.5 &&
             pub.story > pub.aside &&
             pub.story <= pub.contentMax + 0.5 &&
             Math.abs(pub.gap - pub.space8) < 0.5 &&
@@ -1487,10 +1511,19 @@ async function runEventBlocks(browserType, bname, [w, h], theme) {
       tag + (w < 640 ? " public: the guest RSVP is a sticky bar" : " public: no bar above compact"),
       bar === (w < 640 ? 1 : 0),
     );
+    // 37-E item 3 (1230, G162): PersonCard's read-only layout, a plain div with nothing wrapped
+    // around it: no inert wrapper, no aria-hidden, no composed group label, no anchor, no button.
     record(
-      tag + " public: People are cards that are not controls; a pending party is its role alone",
+      tag + " public: People are read-only cards, not controls; a pending party is its role alone",
       (await page.locator('[data-event-speakers] [data-person-card="row"]').count()) === 2 &&
-        (await page.locator("[data-event-speakers] [inert] [data-person-card]").count()) === 2 &&
+        (await page
+          .locator("[data-event-speakers] div[data-person-card][data-readonly]")
+          .count()) === 2 &&
+        (await page
+          .locator(
+            '[data-speaker="accepted"][role="group"], [data-speaker="accepted"] > [inert], [data-speaker="accepted"] > [aria-hidden], [data-speaker="accepted"] a, [data-speaker="accepted"] button',
+          )
+          .count()) === 0 &&
         (
           await page.locator('[data-event-speakers] [data-speaker="pending"]').allTextContents()
         ).join(",") === "Moderator" &&

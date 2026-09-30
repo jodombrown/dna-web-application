@@ -25,32 +25,15 @@ export * from "./LensBar";
 export * from "./NotificationBell";
 export * from "./NotificationListItem";
 export * from "./RailWidget";
-// Brief 3 (B3-Profile-v3): core additions and the Profile set, ported from the strand-patch source.
+// Brief 3 (B3-Profile-v3): the two core additions the compile carries.
 export * from "./Select";
 export * from "./Chip";
-export * from "./IdentityMark";
-export * from "./VisibilitySelect";
-export * from "./ProfileHeader";
-export * from "./SectionCard";
-export * from "./VocabularyPicker";
-export * from "./StanceBlock";
-export * from "./BadgeRow";
-export * from "./LinkRow";
-export * from "./PatternPicker";
-export * from "./cinfo";
-export * from "./CCard";
-export * from "./AttestationRail";
-export * from "./CSheetBody";
-// Brief 4 (B4-Connect-v4): the Connect card, its skeleton and the Where tile, ported from
-// connect/strand-patch/Connect.jsx.
-export * from "./MemberCard";
-export * from "./PlaceTile";
-// Design pass 01 (rulings 486 to 499): the new parts and the two amended ones.
-export * from "./PasswordField";
-export * from "./AuthHead";
-export * from "./BackRow";
-export * from "./CardFade";
-export * from "./VerbRow";
+// Handoff 37-E (1232): the app's own parts, ported from the app project's strand-patch sources and
+// Design pass 01 rather than from a Strand compile, live in src/components/dna/ and are not
+// re-exported here: AttestationRail, AuthHead, BackRow, BadgeRow, CCard, CSheetBody, CardFade,
+// IdentityMark, LinkRow, MemberCard, PasswordField, PatternPicker, PlaceTile, ProfileHeader,
+// SectionCard, StanceBlock, VerbRow, VisibilitySelect, VocabularyPicker and cinfo. The folder's
+// record is docs/strand-ports/v1790724894917128.md.
 // Convene Pass 1 (ruling 673): the Segment part, the Composer its first caller.
 export * from "./Segment";
 // Strand re-sync to compile v1789885868097915 (handoff 29-A item 3, ruling 851): the two parts the

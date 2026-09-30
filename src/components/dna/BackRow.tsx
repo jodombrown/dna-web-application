@@ -8,7 +8,7 @@
 // - a negative left margin of 6 so the glyph optically aligns with the column edge while the tap
 //   area stays full size.
 import { useState, type CSSProperties } from "react";
-import { Icon } from "./Icon";
+import { Icon } from "@/components/strand/Icon";
 
 export type BackRowProps = {
   /** The parent's name, as the member reads it: "Feed", "Connect". Never "Back". */

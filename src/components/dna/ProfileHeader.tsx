@@ -11,12 +11,12 @@
 // than left unpassed, because a component that still accepts a prop the doctrine forbids is a prop
 // somebody eventually passes.
 import type { CSSProperties, ReactNode } from "react";
-import { Avatar } from "./Avatar";
-import { Button } from "./Button";
-import { Icon } from "./Icon";
-import { IconButton } from "./IconButton";
+import { Avatar } from "@/components/strand/Avatar";
+import { Button } from "@/components/strand/Button";
+import { Icon } from "@/components/strand/Icon";
+import { IconButton } from "@/components/strand/IconButton";
 import { IdentityMark } from "./IdentityMark";
-import { assetBase } from "./cmeta";
+import { assetBase } from "@/components/strand/cmeta";
 
 export type MastheadPattern = "kente" | "adinkra" | "mudcloth";
 

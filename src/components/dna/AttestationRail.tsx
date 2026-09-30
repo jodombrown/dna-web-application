@@ -3,11 +3,11 @@
 // their profile. Snap row, rotates one card every 4s, pauses on hover or touch, still under reduced
 // motion. Renders nothing when empty.
 import { useEffect, useRef, useState } from "react";
-import { Avatar } from "./Avatar";
-import { CBadge } from "./CBadge";
+import { Avatar } from "@/components/strand/Avatar";
+import { CBadge } from "@/components/strand/CBadge";
 import { CAPS } from "./SectionCard";
 import { C_INFO } from "./cinfo";
-import type { C } from "./cmeta";
+import type { C } from "@/components/strand/cmeta";
 
 export type AttestationItem = {
   member: string;

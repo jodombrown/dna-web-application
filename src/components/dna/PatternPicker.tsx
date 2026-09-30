@@ -1,8 +1,8 @@
 // Ported from profile/strand-patch/Profile.jsx (B3-Profile-v3, ruling 132). Behavior unchanged.
 import type { CSSProperties } from "react";
-import { Icon } from "./Icon";
+import { Icon } from "@/components/strand/Icon";
 import type { MastheadPattern } from "./ProfileHeader";
-import { assetBase } from "./cmeta";
+import { assetBase } from "@/components/strand/cmeta";
 
 /** Curated masthead patterns: three textile tiles, chosen, never uploaded (guide amendment 4.4). */
 export const PATTERNS: { id: MastheadPattern; label: string }[] = [

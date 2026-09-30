@@ -6852,7 +6852,7 @@ none of them. Measured once by scratch scripts that are not committed.
 
 ---
 
-## G162. Strand's PersonCard has no static layout, and the profile's LinkRow reads handles, not URLs
+## G162. Strand's PersonCard has no static layout, and the profile's LinkRow reads handles, not URLs — closed (handoff 37-E)
 
 **Severity: low. Opened 29 September 2026 during handoff 37-C, filed under ruling 597. The number is
 assigned by this entry (ruling 638).**
@@ -6865,6 +6865,21 @@ non-website kind `href="#"` and prefixes an at-sign, while `private.event_presen
 http(s) URLs for all four kinds, so the presenter's links reuse `LINK_KINDS` for the labels and icons and
 draw their own anchors (`PresenterLinks`). Neither is changed here: Strand's parts are read from the
 compile (1222), and a static PersonCard or a URL-aware LinkRow is Strand's correction to make.
+
+**Closed 30 September 2026, in handoff 37-E items 3 and 4.** PersonCard's half: Strand's correction 35
+(1230) added `readOnly` at compile `v1790724894917128`, "the same card as a plain div for display-only
+contexts (the public event page's People): no button, no link, no focus stop, no hover edge", and
+`src/components/strand/PersonCard.tsx` carries it as compiled (`data-readonly`, `cursor: default`, the
+resting `--line` edge, `transition: none`). `People` in `EventParts.tsx` renders `<PersonCard readOnly />`
+with nothing wrapped around it: the `inert` wrapper, the `aria-hidden` and the `role="group"` with its
+composed label are gone, and the card's own text is what a reader reads. LinkRow's half: ruling 1232 put
+the address rule in the app, not in Strand. `linkHref(kind, value)` in `src/components/dna/LinkRow.tsx`
+is the one rule (a full `^https?://` URL of any kind links, a bare website is prefixed `https://`, any
+other value has no address and renders as text), LinkRow and `PresenterLinks` both read it, and no
+`href="#"` is rendered for a link kind anywhere. Proved by the event-blocks arm (the public page's People
+carry no `inert`, `aria-hidden`, group, anchor or button; each presenter link is its stored URL in a new
+tab with `rel="noopener noreferrer"`) and by the profile owner arm (the bare website is an anchor, the
+two handles are `span`s), both on the deployed preview.
 
 ---
 
@@ -6879,7 +6894,7 @@ is changed by 37-C.
 
 ---
 
-## G164. The approved public event frame's left column is a 320px literal, and Strand has no token for it
+## G164. The approved public event frame's left column is a 320px literal, and Strand has no token for it — closed (handoff 37-E)
 
 **Severity: low. Opened 29 September 2026 during handoff 37-C, filed under ruling 597. The number is
 assigned by this entry (ruling 638).**
@@ -6890,3 +6905,648 @@ which names a different thing, and borrowing it would tie the event page's colum
 axis, one meaning). The tree keeps `--pane-list-width` (360), so the left column reads 40px wider than the
 frame. Owed: Strand to token the public page's left column, after which the page takes it and the
 measured widths at 1536 (aside, gap `--space-8`, story) are re-read.
+
+**Closed 30 September 2026, in handoff 37-E item 1, by `44a2903`.** Strand's correction 35 (1230) tokened
+the column: `--event-page-side-column: 320px` in `tokens/spacing.css` at compile `v1790724894917128`,
+"the side column of the two-column public page above --tier-expanded: `var(--event-page-side-column)
+minmax(0,1fr)`, gap --space-8. Not --lane-card-width: one token, one meaning." `src/styles/strand.css`
+carries it at that value, and `PublicEventSurface.tsx`'s `data-public-columns` grid reads it in place of
+`--pane-list-width`. The event-blocks arm reads the aside's width against the resolved token through a
+`getPropertyValue` probe and prints the readings to the run's log. Re-read on the deployed preview,
+deployment `744875bf` (`https://744875bf.dna-web-application.pages.dev`), Pages run 36672353233 on
+`b295ab0`, at 1536 by 960, Chromium and WebKit, light and dark, all four identical:
+
+| Reading              | Value |
+| -------------------- | ----- |
+| the aside            | 320   |
+| the gap, `--space-8` | 32    |
+| the story            | 680   |
+
+The story is `--content-max`, the main column 1120, so the frame's 320 column now reads as drawn and
+the 40px the tree had added is gone.
+
+---
+
+## G165. `LINK_KINDS` is a hardcoded label map for `member_links.kind`
+
+**Severity: low. Opened 30 September 2026 during handoff 37-E item 7, filed under ruling 597. The number is
+assigned by this entry (ruling 638).**
+
+`LINK_KINDS` in `src/components/dna/LinkRow.tsx` (in `src/components/strand/` until 37-E) is a TypeScript
+array of four `{ k, label, icon }` rows: Website, LinkedIn, X, Instagram. It covers a content vocabulary,
+`member_links.kind`, the enum `public.link_kind`, which `public.vocabularies()` does not serve (its keys
+were read on the canonical project during Session 38 and carry no link kinds). That is the named
+anti-pattern in CLAUDE.md's fixed-vocabularies absolute: a value a member's record can hold, and a label a
+surface must display for it, kept in a component file rather than read from a table at runtime. `LinkRow`
+and `PresenterLinks` in `EventParts.tsx` both read it. Not changed by 37-E, which only moved the file and
+gave it the address rule (1232). Owed: a `public.link_kinds` table served by `vocabularies()`, its own
+migration and ruling, after which the array goes.
+
+---
+
+## G166. `private.event_presenter_profile` admits only `^https?://` links, a second rule beside the profile's
+
+**Severity: low. Opened 30 September 2026 during handoff 37-E item 7, filed under ruling 597. The number is
+assigned by this entry (ruling 638).**
+
+Ruling 1225 has the presenter's line and links admitted on the event page exactly as the profile admits
+them. `private.event_presenter_profile` on the canonical project (read by Chat in Session 38) returns only
+links whose value matches `^https?://`, while the profile renders a bare website and handles as
+`save_profile_section`'s `links` branch stores them. `public.member_links` holds three rows today, none a
+full URL, so every presenter's links are empty on the event page while the same member's profile shows
+three. With 37-E the app's own rule, `linkHref` in `src/components/dna/LinkRow.tsx`, decides what links
+(a bare website does; a bare handle does not), so the projection's filter is a second rule in the
+database that the surface no longer needs. Not changed by 37-E: the projection change is its own
+migration and its own ruling.
+
+---
+
+## G167. Sheet: the compile shows and lays out the dialog once in a layout effect before the enter starts; the tree waits two animation frames
+
+**Severity: low. Opened 30 September 2026 during handoff 37-E item 2, filed under ruling 597. The number is
+assigned by this entry (ruling 638). A read against compile `v1790724894917128`; `Sheet.tsx` is not
+changed (1229).**
+
+Compile, `components/core/Sheet.jsx`:
+
+```js
+React.useLayoutEffect(() => {
+  // 1229: enter. The dialog is shown and laid out once at its off-edge position before paint, then the transform transitions to rest.
+  if (!open) { ... return; }
+  if (entered) return;
+  const d = dlg.current;
+  if (d) {
+    if (!d.open) { if (contained) d.show(); else { try { d.showModal(); } catch (e) { d.show(); } } }
+    d.getBoundingClientRect();
+  }
+  setEntered(true);
+}, [open]);
+```
+
+Tree, `src/components/strand/Sheet.tsx`:
+
+```ts
+useEffect(() => {
+  if (open) {
+    opener.current = (document.activeElement as HTMLElement | null) ?? null;
+    setMounted(true);
+    let inner = 0;
+    const id = requestAnimationFrame(() => {
+      inner = requestAnimationFrame(() => setShown(true));
+    });
+    ...
+```
+
+The tree has the behaviour's outcome: the panel's first paint is at its off-edge transform and the
+transition runs to rest, proved frame by frame by `tests/sheet.cjs` on both engines (G151). The
+mechanism differs: the compile forces one layout inside `useLayoutEffect` and flips `entered` before the
+browser paints, so no frame is ever painted at rest; the tree paints the mounted panel at its off-edge
+transform, then flips `shown` two frames later. Ruling 1231 records this as one of the two behaviours
+Strand added beyond correction 35's brief. Chat rules on whether the tree takes it.
+
+---
+
+## G168. Sheet: a reopened Sheet re-enters from its edge
+
+**Severity: low. Opened 30 September 2026 during handoff 37-E item 2, filed under ruling 597. The number is
+assigned by this entry (ruling 638). `Sheet.tsx` is not changed (1229).**
+
+Compile:
+
+```js
+if (!open) {
+  if (entered && !reduced) setEntered(false);
+  if (gone) setGone(false);
+  return;
+} // closed by the caller: the next open enters from the edge again
+```
+
+Tree:
+
+```ts
+setShown(false);
+const t = setTimeout(() => setMounted(false), SHEET_DUR);
+return () => clearTimeout(t);
+```
+
+The tree has the behaviour: `shown` returns to false the moment `open` does, so the next open starts at
+the off-edge transform again whether or not the exit finished, and a reopen inside the exit window
+transitions back from wherever the panel was. The compile keeps the same promise by resetting `entered`.
+The second of ruling 1231's two added behaviours; filed so the report is complete.
+
+---
+
+## G169. Sheet: the compile's exit is driven by a `phase` prop and times itself off `--dur-slow`; the tree's is driven by `open` and a constant 300
+
+**Severity: low. Opened 30 September 2026 during handoff 37-E item 2, filed under ruling 597. The number is
+assigned by this entry (ruling 638). `Sheet.tsx` is not changed (1229).**
+
+Compile:
+
+```js
+const slowMs = el => { const v = parseFloat(getComputedStyle(el).getPropertyValue('--dur-slow')); return isNaN(v) ? 300 : v; };
+...
+React.useEffect(() => {
+  // 1229: exit. The transform returns to the edge and the panel unmounts after --dur-slow (at once under reduced motion).
+  if (phase !== 'dismissing') { setGone(false); return; }
+  const d = dlg.current;
+  const ms = reduced || !d ? 0 : slowMs(d);
+  const t = setTimeout(() => setGone(true), ms);
+  return () => clearTimeout(t);
+}, [phase]);
+...
+transform: !entered || phase === 'dismissing' ? g.off : dy ? 'translateY(' + dy + 'px)' : 'none',
+transition: dy || reduced ? 'none' : 'transform var(--dur-slow) var(--ease)',
+```
+
+Tree:
+
+```ts
+export const SHEET_DUR = 300;
+...
+  setShown(false);
+  const t = setTimeout(() => setMounted(false), SHEET_DUR);
+...
+  const ease = rm ? "0ms" : SHEET_DUR + "ms var(--ease)";
+...
+  transform: dy ? "translateY(" + dy + "px)" : shown ? "none" : hidden,
+  transition: dy ? "none" : "transform " + ease,
+```
+
+The tree has the outcome (exit is the enter reversed, the panel unmounts after 300 ms, at once under
+reduced motion) by a different contract: the caller flips `open`, where the compile's caller passes
+`phase="dismissing"` and keeps `open` true until the panel is gone. The duration is a literal in the
+tree, `SHEET_DUR = 300`, which `tests/sheet.cjs` also reads, where the compile reads `--dur-slow` off the
+element at exit and cites `var(--dur-slow)` in the transition. Under reduced motion the compile starts
+`entered` true and sets `transition: 'none'`; the tree sets the transition to `0ms`.
+
+---
+
+## G170. Sheet: the compile's `<dialog>` is the panel; the tree's `<dialog>` is a presentational scrim around a `<section role="dialog">`
+
+**Severity: low. Opened 30 September 2026 during handoff 37-E item 2, filed under ruling 597. The number is
+assigned by this entry (ruling 638). `Sheet.tsx` is not changed (1229).**
+
+Compile: one element carries everything.
+
+```js
+const dialog = React.createElement("dialog", {
+  ref: dlg, className: "strand-sheet", "aria-label": label, "aria-busy": loading || undefined,
+  onClick: e => { if (e.target === dlg.current && !contained) close('backdrop'); },
+  style: { position: contained ? 'absolute' : 'fixed', inset: g.inset, margin: g.margin, width, height, ...,
+    zIndex: z, ..., overflow: 'clip', ..., transform: ..., transition: ... }
+}, React.createElement("style", null, '.strand-sheet::backdrop{background:var(--scrim)}'), ...)
+```
+
+Tree: two elements.
+
+```tsx
+<dialog ref={dlg} className="strand-sheet" role="presentation" data-sheet-scrim data-shown={shown ? "1" : "0"}
+  onClick={(e) => { if (e.target === dlg.current) onClose?.(); }}
+  style={{ position: contained ? "absolute" : "fixed", bottom: ..., height: ..., display: "flex", alignItems: ..., justifyContent: ..., background: contained ? "var(--scrim)" : "transparent", ... }}>
+  <section ref={panel} role="dialog" aria-modal="true" aria-label={label} style={{ ..., transform: ..., transition: ... }}>
+```
+
+The tree's comment gives the reason: the top-layer element carries the scrim and the inert background,
+the panel inside carries the dialog, so a screen reader announces one dialog and every surface keeps
+selecting the panel it always selected. The backdrop click closes on both sides (the compile's target is
+the dialog because the dialog is the panel and `::backdrop` clicks target it; the tree's because the
+dialog is the scrim). The compile sets `zIndex: var(--z-sheet)` inline and paints `::backdrop` through an
+inline `<style>`; the tree's `dialog.strand-sheet` and its `::backdrop` fade live in `src/styles/strand.css`.
+Not visible to a member; visible to every test and every consumer that selects the panel.
+
+---
+
+## G171. Sheet: the compile lays the panel out by `tier` and `size`; the tree by `variant`, `width`, `height` and `side`
+
+**Severity: low. Opened 30 September 2026 during handoff 37-E item 2, filed under ruling 597. The number is
+assigned by this entry (ruling 638). `Sheet.tsx` is not changed (1229).**
+
+Compile:
+
+```js
+const GEO = {
+  compact:  { width: '100%', height: 'var(--sheet-compact-height)', inset: 'auto 0 0 0', margin: 0, radius: 'var(--sheet-radius) var(--sheet-radius) 0 0', off: 'translateY(100%)' },
+  medium:   { width: 'var(--sheet-medium-width)', height: '100%', inset: '0 0 0 auto', margin: 0, radius: 0, off: 'translateX(100%)' },
+  expanded: { width: 'var(--sheet-expanded-width)', height: '100%', inset: '0 0 0 auto', margin: 0, radius: 0, off: 'translateX(100%)' }
+};
+...
+function Sheet({ open, onClose, tier = 'compact', size = 'default', label, title, footer, error, loading, phase = 'rest', contained, autoFocus = true, children, style })
+...
+const drawer = composer && tier !== 'compact';
+const g = drawer ? GEO.medium : GEO[tier] || GEO.compact;
+const width = composer && tier !== 'compact' ? 'var(--sheet-composer-ratio)' : notification && tier !== 'compact' ? 'var(--sheet-notification-width)' : g.width;
+const z = notification ? 'var(--z-notification)' : 'var(--z-sheet)';
+```
+
+Tree:
+
+```ts
+export function Sheet({ open, onClose, variant = "sheet", label, width, height, contained, side = "right", keyboardHeight = 0, actions, error, initialFocus, returnFocus, children, style }: SheetProps)
+...
+const hidden = sheet ? "translateY(100%)" : "translateX(" + (left ? "-" : "") + "100%)";
+const w = sheet ? "100%" : len(width ?? SHEET_WIDTH);
+const h = sheet ? (keyboardHeight > 0 ? "calc(100% - 8px)" : len(height ?? SHEET_HEIGHT)) : "100%";
+```
+
+The compile reads the tier and the named size (`default`, `composer`, `notification`) and picks every
+token itself; the tree's caller picks `variant` (bottom sheet or drawer), may pass `width` (the composer
+passes `COMPOSER_SHEET_WIDTH`), `height` and `side`. Ruling 605 already asks for this migration and G30
+records it as unstarted; this entry is the read of the two contracts at this compile, and closes with G30. The tree has a left drawer (`side="left"`) and a
+`keyboardHeight` inset the compile has no line for; the compile has `size="notification"` at
+`--sheet-notification-width` and `--z-notification`, which the tree's `NotificationPanel` draws for
+itself. Same geometry at rest on every tier the tree mounts; a different contract.
+
+---
+
+## G172. Sheet: literals in the tree where the compile reads tokens
+
+**Severity: low. Opened 30 September 2026 during handoff 37-E item 2, filed under ruling 597. The number is
+assigned by this entry (ruling 638). `Sheet.tsx` is not changed (1229).**
+
+| Line                | Compile                                                                                                                             | Tree                                                                |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| bottom-sheet height | `height: 'var(--sheet-compact-height)'`                                                                                             | `SHEET_HEIGHT = "80%"`                                              |
+| bottom-sheet radius | `radius: 'var(--sheet-radius) var(--sheet-radius) 0 0'`                                                                             | `borderRadius: sheet ? "14px 14px 0 0" : 0`                         |
+| drawer hairline     | `borderLeft: tier !== 'compact' ? 'var(--border-thin) solid var(--line)' : 0`                                                       | `borderLeft: sheet \|\| left ? "none" : "1px solid var(--line)"`    |
+| drag threshold      | `parseFloat(getComputedStyle(dlg.current).getPropertyValue('--sheet-drag-dismiss')) \|\| 120`                                       | `if (dy > 120) onClose?.();`                                        |
+| handle row          | `height: 'var(--space-6)'`, grip `borderRadius: 'var(--radius-pill)'`                                                               | `height: 24`, grip `borderRadius: 2`                                |
+| footer              | `gap: 'var(--space-2)', padding: 'var(--space-3) var(--space-5) var(--space-5)', borderTop: 'var(--border-thin) solid var(--line)'` | `gap: 12, padding: "12px 20px", borderTop: "1px solid var(--line)"` |
+| transition          | `'transform var(--dur-slow) var(--ease)'`                                                                                           | `"transform " + SHEET_DUR + "ms var(--ease)"`                       |
+
+Every value resolves the same today (80%, 14, 1, 120, 24, 300), so nothing is visible to a member; each
+is a number written in a component for a value a token names, which is what ruling 604 and the
+handoff's guardrail 3 forbid in new lines. The tree's header says the widths are "read from the
+--sheet-* tokens in strand.css and never written as a number here", which is true of the widths and not
+of the height. The footer's `padding-bottom` differs as well (compile `--space-5`, 20; tree 12): the
+tree's action row is 8px shorter than the compile's, which is visible on every sheet with actions.
+
+---
+
+## G173. Sheet: focus on open lands on `[data-autofocus]` in the compile and on the heading or the first non-destructive control in the tree
+
+**Severity: low. Opened 30 September 2026 during handoff 37-E item 2, filed under ruling 597. The number is
+assigned by this entry (ruling 638). `Sheet.tsx` is not changed (1229).**
+
+Compile, in the effect keyed on `[contained]`:
+
+```js
+if (autoFocus) {
+  const f = d.querySelector("[data-autofocus]") || d.querySelector(FOCUSABLE);
+  f && f.focus({ preventScroll: true });
+}
+```
+
+Tree:
+
+```ts
+const id = requestAnimationFrame(() => {
+  const explicit = initialFocus?.current;
+  const heading = p.querySelector<HTMLElement>("[data-sheet-heading]");
+  const safe = focusables(p).find((el) => !el.hasAttribute("data-destructive"));
+  const target = explicit ?? heading ?? safe ?? p;
+  if (target === heading && heading && !heading.hasAttribute("tabindex"))
+    heading.setAttribute("tabindex", "-1");
+  target.focus?.({ preventScroll: true });
+});
+```
+
+Both focus with `preventScroll: true` (1214). The target differs: the compile takes a `[data-autofocus]`
+mark, else the first focusable; the tree takes an `initialFocus` ref, else `[data-sheet-heading]` (made
+focusable), else the first control without `data-destructive`, so a destructive action is never the
+default target (ruling 222). The tree's `FOCUSABLE` is `a[href]` where the compile's is `[href]`. The
+tree has no `autoFocus` prop. Divergent under an app ruling; a member with a keyboard lands on a
+different element.
+
+---
+
+## G174. Sheet: the compile restores focus when `open` flips; the tree after the exit finishes, and takes `returnFocus`
+
+**Severity: low. Opened 30 September 2026 during handoff 37-E item 2, filed under ruling 597. The number is
+assigned by this entry (ruling 638). `Sheet.tsx` is not changed (1229).**
+
+Compile:
+
+```js
+React.useEffect(() => {
+  if (!open) return;
+  const prev = document.activeElement;
+  return () => {
+    prev && prev.focus && prev.focus();
+  };
+}, [open]);
+```
+
+Tree:
+
+```ts
+useEffect(() => {
+  if (mounted || !wasOpen.current) return;
+  wasOpen.current = false;
+  restore();
+}, [mounted, restore]);
+```
+
+The tree's comment records why: while the dialog is still in the top layer the browser holds focus
+inside it, so a `focus()` on the opener at the moment `open` flips is a no-op and the member is left on
+the sheet's last control. The tree waits for the unmount, which its showModal effect's cleanup closes on
+the same commit, and takes a `returnFocus` ref or element the compile has no line for. The compile's
+form runs its cleanup when `open` flips false, which is while its own `gone` is still false and the
+dialog still open.
+
+---
+
+## G175. Sheet: the compile's `onClose` carries a reason; the tree's carries none
+
+**Severity: low. Opened 30 September 2026 during handoff 37-E item 2, filed under ruling 597. The number is
+assigned by this entry (ruling 638). `Sheet.tsx` is not changed (1229).**
+
+Compile: `const close = r => onClose && onClose(r);` called as `close('escape')`, `close('backdrop')`,
+`close('button')`, `close('gesture')`. Tree: `onClose?: (() => void)`, called as `onClose?.()` from the
+`cancel` event, the Escape key on the contained path, the scrim click and the drag release. No caller in
+the tree reads a reason. Not visible to a member.
+
+---
+
+## G176. Sheet: the compile consumes every wheel inside the dialog and scrolls by hand; the tree consumes at the edges only (ruling 493)
+
+**Severity: low. Opened 30 September 2026 during handoff 37-E item 2, filed under ruling 597. The number is
+assigned by this entry (ruling 638). `Sheet.tsx` is not changed (1229).**
+
+Compile:
+
+```js
+const onWheel = e => {
+  const target = scrollableUp(e.target, e.deltaY);
+  if (target) { target.scrollTop += e.deltaY; }
+  e.preventDefault();
+};
+const onTouch = e => { if (!scrollableUp(e.target, 0) && !d.contains(e.target)) e.preventDefault(); };
+...
+if (!scrim) {
+  document.addEventListener('touchmove', onTouch, { passive: false });
+  document.addEventListener('wheel', onDocWheel, { passive: false });
+}
+```
+
+Tree:
+
+```ts
+const sc = scroller(e.target);
+if (!sc) {
+  e.preventDefault();
+  return;
+}
+if (sc.axis === "x") return; // the chip row keeps its wheel
+const up = e.deltaY < 0;
+const atTop = sc.el.scrollTop <= 0;
+const atEnd = sc.el.scrollTop + sc.el.clientHeight >= sc.el.scrollHeight - 1;
+if ((up && atTop) || (!up && atEnd)) e.preventDefault();
+e.stopPropagation();
+```
+
+The compile cancels every wheel over the dialog and moves the nearest vertical scroller's `scrollTop` by
+`deltaY` itself, and cancels `touchmove` outside a scroller. The tree lets the browser scroll a vertical
+scroller natively and cancels only at its edges, leaves a horizontal scroller its wheel (the composer's
+chip row) and leaves touch to the browser, which is ruling 493's narrowing. Both lock the host's
+`overflow`; the contained lock's parent is G152. A member on a pointer device feels the difference:
+native smooth scrolling in the tree, per-event jumps in the compile.
+
+---
+
+## G177. Sheet: the compile traps Tab only when `contained`; the tree traps on both paths, from a capturing window listener
+
+**Severity: low. Opened 30 September 2026 during handoff 37-E item 2, filed under ruling 597. The number is
+assigned by this entry (ruling 638). `Sheet.tsx` is not changed (1229).**
+
+Compile, `onKeyDown` on the dialog: `if (e.key !== 'Tab' || !contained) return;` then wraps between the
+first and last visible focusable. Tree, `window.addEventListener("keydown", key, true)`: wraps on both
+paths, and shift-Tab from the heading (tabindex -1, so never in the list) wraps to the last control.
+Under `showModal()` the browser confines Tab on its own, so the outcome is the same on the production
+path; the tree's explicit trap keeps one behaviour on both. Not visible to a member.
+
+---
+
+## G178. Sheet: the compile's body scroller, `loading` state and `aria-busy` have no line in the tree
+
+**Severity: low. Opened 30 September 2026 during handoff 37-E item 2, filed under ruling 597. The number is
+assigned by this entry (ruling 638). `Sheet.tsx` is not changed (1229).**
+
+Compile, after the title row G161 already records:
+
+```js
+React.createElement(
+  "div",
+  {
+    ref: body,
+    "data-sheet-body": true,
+    onScroll: (e) => setScrolled(e.currentTarget.scrollTop > 0),
+    style: {
+      flex: tier === "expanded" ? "0 1 auto" : 1,
+      minHeight: 0,
+      overflowY: "auto",
+      padding: "var(--space-5)",
+      fontSize: "var(--text-m)",
+      lineHeight: "var(--text-m-lh)",
+    },
+  },
+  loading
+    ? React.createElement("p", { style: { margin: 0, color: "var(--ink-3)" } }, "Loading")
+    : children,
+);
+```
+
+and `"aria-busy": loading || undefined` on the dialog. Tree: `{children}` renders bare between the handle
+and the status region; each mount draws its own scroller and padding, and there is no `loading` prop and
+no `aria-busy`. The title row and Close control are G161; this entry is the body, the scrolled hairline
+under the title (`scrolled` drives the title row's `borderBottom`), the `loading` line and `aria-busy`.
+Visible to a member wherever a mount's own body padding is not `--space-5`.
+
+---
+
+## G179. No `docs/strand/<id>/` directory holds the bytes of `v1790664060715049`, `v1790707582513113` or `v1790724894917128`
+
+**Severity: low. Opened 30 September 2026 during handoff 37-E item 0, filed under ruling 597. The number is
+assigned by this entry (ruling 638).**
+
+`docs/strand/README.md` (rulings 888, 907) keeps one directory per compile, named by the id read from the
+compile's own bundle, so the app Design project can be bound to a named artifact by a pinned link. The
+last directory is `v1790410319010950`; the three compiles since (corrections 34 part two, its pass 2, and 35) have no directory, and the tree's parts were reconciled against two of them with no port log either
+(the log for `v1790724894917128` is the first since `v1790410319010950`). Handoff 37-E did not ask for the
+bytes to be committed and 37-E does not commit them; the export was unpacked in the session's scratch
+space, its stamp verified, and its sections quoted into the PR body. Owed: a decision on whether the
+three exports are committed under `docs/strand/` in their own change, so 907's pinned link can name the
+live compile.
+
+---
+
+## G180. `AttestationRail` renders `href="#"` for an attestation with no address
+
+**Severity: low. Opened 30 September 2026 during handoff 37-E item 4, filed under ruling 597. The number is
+assigned by this entry (ruling 638).**
+
+Handoff 37-E's grep for `href="#"` found one remaining site after LinkRow's rule landed:
+`src/components/dna/AttestationRail.tsx` draws each attestation card as `<a href={it.href || "#"}>`, so a
+card whose row carries no address is an anchor to the page top. It is not a link kind, so it is outside
+1232 and 37-E's Done Means; it is the same shape LinkRow just lost. Owed: a card with no address renders
+as a non-anchor, the way a bare handle now does.
+
+---
+
+## G181. `Checkbox` is not the compiled part: a 20px box on `--bg-sunken` with its own tick, a 15px `--ink-2` label, and no `c`
+
+**Severity: low. Opened 30 September 2026 during handoff 37-E item 5, filed under ruling 597. The number is
+assigned by this entry (ruling 638).**
+
+`src/components/strand/Checkbox.tsx` cites no compile id, and against `components/core/Checkbox.jsx` at
+`v1790724894917128` it differs on every drawn line. Compile: a hidden native input beside a drawn 22 by 22
+span, `borderRadius: 6`, `1.5px solid` `--line-strong` or the C colour, `--surface` when unchecked, the C
+colour or `--ink` when checked, Strand's `check.svg` at 14 in white, a 17px label in the inherited colour,
+and a `c` prop that tints the box. Tree: the native input is the box (`appearance: none`), 20 by 20,
+`borderRadius: 5`, `1px solid`, `--bg-sunken` when unchecked, `--ink` when checked, an inline data-URI tick,
+a 15px `--ink-2` label, and no `c`. FacetRail's checklist draws its own 22px box and does not mount this
+part, so the divergence reaches the profile's switches-and-checkboxes and any other `Checkbox` caller.
+Not changed by 37-E (item 5 ports nothing but PersonCard). Owed: a port of the compiled part, or a ruling
+that keeps the tree's drawing.
+
+---
+
+## G182. `LensBar` keeps LENS_BAR_SPEC's drawing over the compile's, and two behaviours differ
+
+**Severity: low. Opened 30 September 2026 during handoff 37-E item 5, filed under ruling 597. The number is
+assigned by this entry (ruling 638).**
+
+Read against `components/dna/LensBar.jsx` at `v1790724894917128`. Drawing, kept by LENS_BAR_SPEC and 488:
+the track is `--radius-m` with no inset hairline where the compile is a pill with `inset 0 0 0 1px
+var(--line)`; the seat is `--radius-badge` at `fontWeight: on ? 700 : 500` in `--ink` with the C hue on the
+glyph and `--shadow-1`, where the compile is a 999 pill at 500 in `var(--c-<c>-text)` with `0 1px 2px
+rgba(26,26,24,0.08)`; the descriptor sits 12 below the track with an animated `max-height` collapse where
+the compile mounts it 6 below and unmounts it. Behaviour: a tap on the active lens toggles the descriptor
+and does not call `onChange` (`tap` returns early) where the compile re-opens it and always fires
+`onChange`; and `collapsed` latches once (ruling 405) where the compile hides on every `true` and shows
+again on `false`. Also tree-only: per-lens `disabled`, `labels` as any truthy value, `c: "brand"`, a
+two-weight fit probe, `navigator.vibrate(8)`. Not changed by 37-E. Owed: Chat's confirmation that the
+spec and 405 keep each line, or a port.
+
+---
+
+## G183. `FacetRail`'s compact sheet draws its own heading and scroller because the tree's Sheet has none
+
+**Severity: low. Opened 30 September 2026 during handoff 37-E item 5, filed under ruling 597. The number is
+assigned by this entry (ruling 638).**
+
+The compile mounts `<Sheet open onClose tier="compact" title={label} contained>{body}</Sheet>` and
+Strand's Sheet draws the title, its Close control and the body scroller. The tree mounts `<Sheet open
+onClose variant="sheet" label={label} contained>` around a part-drawn `h2[data-sheet-heading]` row and a
+part-drawn `[data-sheet-body]` scroller (ruling 618), so at compact the Filters sheet has no Sheet-owned
+Close control and the heading is the part's. The cause is G161 and G30 (the tree's Sheet contract); this
+entry is the visible consequence on Discovery's and Connect's Filters. Closes with G161.
+
+---
+
+## G184. `MediaBlock` renders a link whose `src` is not `http(s)://` as text, where the compile renders an anchor
+
+**Severity: low. Opened 30 September 2026 during handoff 37-E item 5, filed under ruling 597. The number is
+assigned by this entry (ruling 638).**
+
+Ruling 439, named in the part's header as its one kept divergence: a `kind: "link"` whose `src` does not
+match `^https?://` renders as a `span` of `title || src` in `--ink-2`, with no domain line and no
+thumbnail, where the compile renders `<a href={src} target="_blank" rel="noreferrer">` for any `src`. A
+`javascript:`, `data:` or relative address therefore never becomes a link. Filed because the audit lists
+every member-visible divergence; kept by 439, and closes on Chat's confirmation.
+
+---
+
+## G185. `Composer` treats medium as touch and focuses its textarea synchronously, where the compile treats medium as pointer and defers a frame
+
+**Severity: low. Opened 30 September 2026 during handoff 37-E item 5, filed under ruling 597. The number is
+assigned by this entry (ruling 638).**
+
+Two lines of `src/components/strand/Composer.tsx` no ruling in its header names. Touch: the compile reads
+`(mode || (tier === 'compact' ? 'touch' : 'pointer')) === 'touch'`, the tree
+`(mode || (tier === "expanded" ? "pointer" : "touch")) === "touch"`, so at medium the tree shows the photo
+and library picker rather than the file dialog, draws no drop hint, does not autofocus and does not bind
+Cmd/Ctrl+Enter. Focus: the compile focuses the textarea in `requestAnimationFrame`, one frame after
+Sheet's own focus move (ruling 641), and the tree calls `taRef.current.focus()` synchronously in the
+effect, so the tree's Sheet focus (a frame later, G173) can land after it and take the textarea's focus.
+Every other visible divergence in Composer is kept by a ruling its header names (458, 417, 497, 287, 74,
+193, 1217). Not changed by 37-E.
+
+---
+
+## G186. `AppHeader`'s expanded row is the app's redesign under 99, 1175 and 1190, not the compiled part
+
+**Severity: low. Opened 30 September 2026 during handoff 37-E item 5, filed under ruling 597. The number is
+assigned by this entry (ruling 638).**
+
+Against `components/dna/AppHeader.jsx` at `v1790724894917128`: the compile's expanded row is logo, a
+labelled "Home" text button with a 2px underline, a spacer, a 320-wide composer pill, children, avatar,
+with no bottom hairline; the tree's is logo, the five Cs inline (`PulseDock inline`), then a 44 by 44
+house icon, children and avatar, on a three-track grid (`132px minmax(0,1fr) 132px`) under a 1440 cap,
+with a hairline at every variant, no composer entry at expanded, a `--radius-m` entry (not a 999 pill) at
+compact and medium, an 8 or 6 item gap (compile 16 or 10), a LensBar centre slot and a bell hidden while
+it holds the centre at compact. Each is a ruled redesign (99 amending 78; 1175, 1190; 1000; 84). Filed so
+the audit is complete; closes on Chat's confirmation that the compiled AppHeader is superseded by the
+app's, or on Strand carrying the redesign.
+
+---
+
+## G187. `NotificationListItem` reads ruling 547's registry, ruling 461's words and ruling 490's destination line, not the compiled rows
+
+**Severity: low. Opened 30 September 2026 during handoff 37-E item 5, filed under ruling 597. The number is
+assigned by this entry (ruling 638).**
+
+Compile: five kinds (`connection_accepted`, `attestation_received`, `space_role_approved`,
+`event_reminder`, `role_invitation`), `' accepted your intro.'`, a second line of `time` alone, an 8 by 8
+unread dot at `marginTop: 8`, Respond on every `role_invitation`. Tree: three kinds from
+`NOTIFICATION_REGISTRY` (`connection_accepted`, `connection_request`, `role_invitation`; 547, G19),
+`" accepted your connection request."` (461), a `data-destination-line` under every sentence (490), the
+dot in a 24px `--target-min` box (480), Respond only with `onRespond`, and a composed fallback for a
+`role_invitation` without `text`. Filed so the audit is complete; every line is kept by the ruling named.
+Closes on Chat's confirmation.
+
+---
+
+## G188. `PostCard`'s feed face opens on a body tap only while the body is clamped
+
+**Severity: low. Opened 30 September 2026 during handoff 37-E item 5, filed under ruling 597. The number is
+assigned by this entry (ruling 638).**
+
+Compile: the body column carries `onClick: onClick` and `cursor: onClick ? 'pointer' : 'default'`
+whenever a handler is passed. Tree: `onClick={clamp ? onClick : undefined}` with the cursor likewise,
+`clamp = !!onReadMore && !expanded`, so on a card with no `onReadMore` (a short post) or an expanded card
+a body tap does nothing and the cursor is the default, while the compile opens it. Ruling 105's
+expand-in-place ("Read more" as a link, "Show less") and 416's handle line are the feed face's other
+visible divergences and are kept by those rulings; the system rung is G42. Not changed by 37-E.
+
+---
+
+## G189. `PulseDock`'s slots are Design pass 01's, not the compiled part
+
+**Severity: low. Opened 30 September 2026 during handoff 37-E item 5, filed under ruling 597. The number is
+assigned by this entry (ruling 638).**
+
+Compile: a `CBadge` tint chip (24 in the bar, 32 in the dock) dimmed and greyscaled when off, the label
+`--ink` or `--ink-3`, a 2px `--ink` underline in the bar only, `borderRadius: 10` slots, a 10px dot,
+`--surface-glass` with `blur(12px)` under the dock. Tree: a bare mask glyph (20 or 26) C-coloured only
+when on, the label in `--c-X-text`, a 2px C underline on every variant including the dock (W33), no
+radius and a 1px hover lift, an 8px dot, `--bg` with no blur (107), safe-area left and right (344), and an
+`inline` variant for the AppHeader's five Cs (99, 100). Filed so the audit is complete; every line is kept
+by the ruling named. Closes on Chat's confirmation.
+
+---
+
+## G190. `VERB_SCHEMA` and `VERB_ACT` drop Connect and `UNTYPED` carries the Story kicker, by rulings 400, 417 and 546
+
+**Severity: low. Opened 30 September 2026 during handoff 37-E item 5, filed under ruling 597. The number is
+assigned by this entry (ruling 638).**
+
+Compile, in `components/dna/Composer.jsx` and `components/dna/VerbChip.jsx`: `VERB_SCHEMA.connect` is
+`{kicker: 'Intro', action: 'Accept the intro', fields: [who, why]}`, `VERB_ACT.connect` is `'Make an
+Intro'`, `UNTYPED` is `{kicker: null, action: null, fields: []}`, `contribute.instrument.options` is
+`['Time', 'Skills', 'In-kind']`, and `convene` carries six fields and `Get a ticket`. Tree,
+`src/components/strand/verb-schema.ts` and `VerbChip.tsx`: no `connect` in either (400, 417; a legacy
+Connect card reads `CARD_SCHEMA.connect`, "Connection request" with no act, 157), `UNTYPED`'s kicker is
+`VERB_SCHEMA.convey.kicker`, "Story" (546, W54), the instrument's options come from the vocabulary
+through `fieldOptions` (193), and `convene` is `fields: []` under `forms.convene`. Filed so the audit is
+complete; every line is kept by the ruling named. Closes on Chat's confirmation.

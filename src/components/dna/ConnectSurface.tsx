@@ -23,7 +23,7 @@ import {
 import { Avatar } from "@/components/strand/Avatar";
 import { Button } from "@/components/strand/Button";
 import { Chip } from "@/components/strand/Chip";
-import { CardFade } from "@/components/strand/CardFade";
+import { CardFade } from "@/components/dna/CardFade";
 import { EmptyState } from "@/components/strand/EmptyState";
 import { Icon } from "@/components/strand/Icon";
 import { IconButton } from "@/components/strand/IconButton";
@@ -34,8 +34,8 @@ import {
   MemberCardSkeleton,
   type MemberCardContext,
   type MemberRel,
-} from "@/components/strand/MemberCard";
-import { PlaceTile } from "@/components/strand/PlaceTile";
+} from "@/components/dna/MemberCard";
+import { PlaceTile } from "@/components/dna/PlaceTile";
 import { RailWidget } from "@/components/strand/RailWidget";
 import { Select } from "@/components/strand/Select";
 import { Sheet } from "@/components/strand/Sheet";

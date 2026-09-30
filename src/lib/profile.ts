@@ -12,11 +12,11 @@
 // the helper that composed it left with the ProfileHeader props that carried it.
 import { format } from "date-fns";
 import type { Audience } from "@/components/strand/AudienceSelect";
-import type { AttestationItem } from "@/components/strand/AttestationRail";
-import type { Badge } from "@/components/strand/BadgeRow";
+import type { AttestationItem } from "@/components/dna/AttestationRail";
+import type { Badge } from "@/components/dna/BadgeRow";
 import type { C } from "@/components/strand/cmeta";
-import type { MastheadPattern } from "@/components/strand/ProfileHeader";
-import type { Stance } from "@/components/strand/StanceBlock";
+import type { MastheadPattern } from "@/components/dna/ProfileHeader";
+import type { Stance } from "@/components/dna/StanceBlock";
 import type { Json } from "./database.types";
 import { uploadImage, type ImageSlot, type ImageUpload } from "./media";
 import { getSupabase } from "./supabase";

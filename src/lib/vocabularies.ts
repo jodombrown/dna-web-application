@@ -5,7 +5,7 @@
 //
 // Named for the projection, not for a surface: Profile (Brief 3), the Composer (Brief 1) and the
 // Feed (Brief 2) all read this one path.
-import type { Stance } from "@/components/strand/StanceBlock";
+import type { Stance } from "@/components/dna/StanceBlock";
 import type { ConveneLensId, DiscoveryLaneId } from "./discovery";
 import { getSupabase, type Supabase } from "./supabase";
 

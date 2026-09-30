@@ -11,7 +11,7 @@ import {
   type InputHTMLAttributes,
   type ReactNode,
 } from "react";
-import { Icon } from "./Icon";
+import { Icon } from "@/components/strand/Icon";
 
 export type PasswordFieldProps = Omit<
   InputHTMLAttributes<HTMLInputElement>,
