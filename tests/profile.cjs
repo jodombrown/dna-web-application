@@ -1036,13 +1036,14 @@ async function runProfile(browserType, bname, vp, theme) {
   // accounting on every dispatched profile run (found by PR #25 at 744; ruling 357). What runs is
   // now what is declared, in the subset and the full run alike.
   const full = M.FULL_PREVIEW_AT.has(vp[0]);
-  await runPublic(browserType, bname, vp, theme);
-  await runGate(browserType, bname, vp, theme);
-  await runOwner(browserType, bname, vp, theme);
+  // Ruling 1237: each arm is driven through `M.drive`, so a lost web process retries that arm alone.
+  await M.drive(runPublic, browserType, bname, vp, theme);
+  await M.drive(runGate, browserType, bname, vp, theme);
+  await M.drive(runOwner, browserType, bname, vp, theme);
   if (full) {
-    await runVisitor(browserType, bname, vp, theme, "connected");
-    await runVisitor(browserType, bname, vp, theme, "anchor");
-    await runVisitor(browserType, bname, vp, theme, "stranger");
+    await M.drive(runVisitor, browserType, bname, vp, theme, "connected");
+    await M.drive(runVisitor, browserType, bname, vp, theme, "anchor");
+    await M.drive(runVisitor, browserType, bname, vp, theme, "stranger");
   }
 }
 

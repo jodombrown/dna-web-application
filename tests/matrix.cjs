@@ -4,7 +4,9 @@
 // layer, so the real client code paths run against a deterministic backend. Backend behaviour
 // (RLS, the feed view) is verified separately in SQL against the live project.
 // Usage: BASE=https://b2-shell-feed.dna-web-application.pages.dev WEBKIT=1 node tests/matrix.cjs
-// Env: ONLY='[390,844]' runs one viewport; SPECIAL=publish,guards,keyboard,silence,shell,width,targeted,profile,connect,event,discovery,vocab,block,auth,onboarding,mount,sheet runs flows only.
+// Env: ONLY='[390,844]' runs one viewport; SPECIAL=publish,guards,keyboard,silence,shell,width,targeted,profile,connect,event,discovery,vocab,block,auth,onboarding,mount,sheet,gate runs flows only.
+// Ruling 1237: an arm that loses its web process is run again once, alone, in a fresh browser, by
+// `drive()` below; CRASH_PROBE=<arm tag> is the harness probe that proves it (off by default).
 // Brief 3 profile flows live in tests/profile.cjs and Brief 4 Connect flows in tests/connect.cjs; both share this mock.
 const { chromium, webkit } = require("playwright");
 const fs = require("fs");
@@ -2220,13 +2222,18 @@ function tierOf(name) {
 
 function armStart(tag) {
   armClose();
-  openArm = { arm: tag, from: results.length, crashed: false, pages: new Set() };
+  // Ruling 1237: `attempt` is 2 while `drive()` is running this arm again after a lost web process.
+  const attempt = retryOf === tag ? 2 : 1;
+  openArm = { arm: tag, from: results.length, crashed: false, pages: new Set(), attempt };
   // Ruling 830: `record()` prints nothing for a passing check, so a job's log held no timeline at
   // all and ruling 828's census had to place each crash by step timestamps and infer how far the
   // run had got. One line per arm makes that readable: the checks emitted so far, the seconds since
   // the run began, and the arm about to run. Two hundred lines a job, against a log of thousands.
   const at = Math.round((Date.now() - runStart) / 1000);
-  console.log(`ARM ${String(results.length).padStart(5)} +${at}s ${tag}`);
+  console.log(
+    `ARM ${String(results.length).padStart(5)} +${at}s ${tag}` +
+      (attempt === 2 ? " (retry after a lost web process, ruling 1237)" : ""),
+  );
   return tag;
 }
 
@@ -2251,6 +2258,29 @@ function watchCrash(page, browser) {
   // and a crash reported during teardown must not be charged to whichever arm opened next.
   const owner = openArm;
   if (owner) owner.pages.add(page);
+  // Ruling 1237's harness probe, off unless CRASH_PROBE names an arm tag. It navigates that arm's
+  // page to chrome://crash once the page has loaded, on Chromium, where ruling 830 measured `crash`
+  // firing; on WebKit no such URL exists and the probe says so and does nothing. Attempt 1 alone by
+  // default, so a green job shows one crashed attempt and one clean retry; CRASH_PROBE_ATTEMPTS=2
+  // crashes the retry as well, which must fail the job. A probe, never a pass criterion, and a
+  // one-off proof that stays out of the permanent suite (37-F guardrail 5).
+  if (owner && process.env.CRASH_PROBE === owner.arm) {
+    const attempts = Number(process.env.CRASH_PROBE_ATTEMPTS || 1);
+    if (owner.attempt <= attempts) {
+      page.once("load", () => {
+        if (page.context().browser()?.browserType().name() !== "chromium") {
+          console.log(
+            `CRASH_PROBE | ${owner.arm} | the probe crashes a page at chrome://crash, which only Chromium serves; nothing injected`,
+          );
+          return;
+        }
+        console.log(
+          `CRASH_PROBE | ${owner.arm} | attempt ${owner.attempt}: navigating the page to chrome://crash`,
+        );
+        page.goto("chrome://crash").catch(() => {});
+      });
+    }
+  }
   page.on("crash", () => {
     const on = owner || openArm;
     const arm = on ? on.arm : "(no arm open)";
@@ -2261,6 +2291,7 @@ function watchCrash(page, browser) {
     crashSightings.push({
       arm,
       tier: tierOf(arm),
+      attempt: on ? on.attempt : null,
       at: new Date().toISOString(),
       secondsIn: Math.round((Date.now() - runStart) / 1000),
       browserConnected: alive,
@@ -2295,7 +2326,7 @@ function unproven(name, why, arm = openArm ? openArm.arm : null) {
 
 function record(name, ok, detail = "", crashed = armCrashed(), arm = openArm ? openArm.arm : null) {
   // `arm` is explicit only for ruling 292's own per-arm accounting, which runs after the last arm
-  // has closed and so has no open arm to read. Ruling 832 needs those records attributed, because a
+  // has closed and so has no open arm to read. Ruling 1237 needs those records attributed, because a
   // crashed arm's accounting failure is the crashed arm's and not a failure elsewhere in the job.
   results.push({ name, ok, detail, arm, crashed });
   // Ruling 316: every failure carries the flag or its absence, in the line a reader sees first.
@@ -2305,6 +2336,119 @@ function record(name, ok, detail = "", crashed = armCrashed(), arm = openArm ? o
   // label by label and the delta named rather than guessed at.
   if (process.env.DUMP_LABELS) console.log("LABEL", openArm ? openArm.arm : "-", "::", name);
 }
+// ---------------------------------------------------------------------------
+// Ruling 1237 (amending 832): an arm that loses its web process is run again once, alone, in a
+// fresh browser, and a second crash fails the run.
+//
+// G5 is a Linux WPE compositor defect that Safari does not run (1234), at a rate no branch owns
+// (828). Ruling 832 stood a job down on one crashed arm, which left that arm unproven on a green
+// job; 1237 replaces the stand-down with one retry, so the arm is either proven on its second
+// attempt or the job is red. It lives here, in one place, and every arm the suite runs goes through
+// it: the main loop below calls each arm through `drive(fn, ...args)`, and the three group runners
+// (tests/profile.cjs `runProfile`, tests/mount.cjs `runMount`, tests/sheet.cjs `runSheets`) call
+// their own arms through it, so no arm's body knows the retry exists.
+//
+// An arm is one `armStart`. `drive` reads the arms `fn` opened from the arm log after `fn` returns:
+// when exactly one arm opened and it lost a web process, the first attempt's checks leave the
+// counted results and are kept in `retriedArms` for the tail and the job summary, its arm-log entry
+// is dropped, and `fn` runs again with the same arguments. Every arm launches its own browser from
+// `launch()`, so the retry's browser is fresh by construction. The retry's checks are the arm's
+// result and are enforced against its declared count like any other arm's (292); a crash on the
+// retry stays in the arm log and fails the run, and so does any failed check on the retry, because
+// nothing here removes a failure. When `fn` opened more than one arm the crashed arm cannot be run
+// alone, and `drive` records a failure that says so rather than retrying the group.
+//
+// Guardrail 3 of handoff 37-F, in code: the first attempt is printed by name with its crash and its
+// checks; a retry that fails for any reason fails the run; and nothing crashed is ever counted as
+// passed (228), because a crashed attempt is either replaced by a clean retry or left in the log
+// as a crash.
+// ---------------------------------------------------------------------------
+/** Ruling 1237: every arm that was retried, each with its first attempt's checks and its retry's outcome. */
+const retriedArms = [];
+/** The arm tag `drive` is currently running again, so `armStart` can mark the attempt. */
+let retryOf = null;
+/** Depth guard: an arm driven from inside another `drive` (a group runner) runs plainly. */
+let driving = 0;
+
+async function drive(fn, ...args) {
+  if (driving) return fn(...args);
+  driving += 1;
+  try {
+    const from = results.length;
+    const armsFrom = armLog.length;
+    const sightingsFrom = crashSightings.length;
+    let threw = null;
+    try {
+      await fn(...args);
+    } catch (e) {
+      threw = e;
+    }
+    armClose();
+    const arms = armLog.slice(armsFrom);
+    const crashed = arms.filter((a) => a.crashed);
+    if (!crashed.length) {
+      if (threw) throw threw;
+      return;
+    }
+    if (arms.length !== 1) {
+      record(
+        `ruling 1237 | ${crashed.map((a) => a.arm).join(", ")}: retried alone after a lost web process`,
+        false,
+        `${fn.name || "the runner"} opened ${arms.length} arms in one call (${arms.map((a) => a.arm).join(", ")}), so the crashed arm could not be run again alone; the crash stands`,
+        true,
+        crashed[0].arm,
+      );
+      if (threw) throw threw;
+      return;
+    }
+    const arm = arms[0].arm;
+    const first = {
+      arm,
+      crash: crashSightings.slice(sightingsFrom),
+      emitted: arms[0].emitted,
+      threw: threw ? String(threw).slice(0, 300) : null,
+      checks: results.splice(from).map((r) => ({
+        name: r.name,
+        state: r.unproven ? "UNPROVEN" : r.ok ? "PASS" : "FAIL",
+        // One line per check in the tail, so a Playwright call log cannot break the block apart.
+        detail: String(r.detail || "")
+          .replace(/\s*\n\s*/g, " | ")
+          .slice(0, 300),
+      })),
+      retry: null,
+    };
+    armLog.splice(armsFrom);
+    retriedArms.push(first);
+    console.log(
+      `RETRY ${arm} | lost a web process on attempt 1 after ${first.emitted} checks; ` +
+        "running it again once, alone, in a fresh browser (ruling 1237)",
+    );
+    retryOf = arm;
+    let threwAgain = null;
+    try {
+      await fn(...args);
+    } catch (e) {
+      threwAgain = e;
+    } finally {
+      retryOf = null;
+    }
+    armClose();
+    const again = armLog.slice(armsFrom);
+    first.retry = {
+      crashed: again.some((a) => a.crashed),
+      failed: results.slice(from).filter((r) => r.ok === false).length,
+      emitted: again.reduce((n, a) => n + a.emitted, 0),
+      threw: threwAgain ? String(threwAgain).slice(0, 300) : null,
+    };
+    console.log(
+      `RETRY ${arm} | attempt 2 ${first.retry.crashed ? "LOST A WEB PROCESS AS WELL; the run fails" : first.retry.failed ? `failed ${first.retry.failed} check(s); the run fails` : "ran clean"} (ruling 1237)`,
+    );
+    if (threwAgain) throw threwAgain;
+  } finally {
+    driving -= 1;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Ruling 317: the suite declares what each arm emits, or the count is not evidence.
 //
@@ -2427,7 +2571,7 @@ function accountForArms({ full, engines }) {
         arm,
       );
     } else if (crashed) {
-      // Rulings 228 and 832. An arm can lose its web process after its last check has passed: the
+      // Rulings 228 and 1237. An arm can lose its web process after its last check has passed: the
       // listener charges the crash to the arm that opened the page, and a crash during teardown
       // arrives when the arm is over. Left as a pass, that arm emitted its declared number, failed
       // nothing, and the job went green with a dead web process in it and no failing check anywhere
@@ -2551,23 +2695,18 @@ function finish({ full = false, engines = [] } = {}) {
       ` | ${unclassified} unclassified`,
   );
   if (crashSightings.length)
-    console.log("arms that lost a web process: " + crashSightings.map((c) => c.arm).join(", "));
+    console.log(
+      "arms that lost a web process: " +
+        crashSightings.map((c) => `${c.arm} (attempt ${c.attempt ?? "?"})`).join(", "),
+    );
 
-  // Ruling 832, adopted narrowly. G5 is an engine defect, reported and not fixed under ruling 200,
-  // and ruling 828 measured it at about one crashed arm per four to five WebKit passes across
-  // seventeen sightings: a rate no branch owns and no push can move. One crashed arm therefore no
-  // longer fails the job, on three conditions, all of them ruling 228's. It is reported unproven
-  // rather than passing. Its checks are excluded from the passing count rather than folded into it,
-  // so the count never claims the arm as green. And a second crashed arm in one job still fails,
-  // because two is not the priced rate; so does any failure outside the crashed arm, which is the
-  // whole point of the exemption being one arm wide rather than a class-based pass.
-  // Every arm that lost a web process is unproven and comes out of the count, however many there
-  // are: that part is ruling 228 and is not the exemption. What ruling 832 grants is narrower than
-  // that and sits in `standDown` alone, one arm wide.
+  // Ruling 1237 (amending 832). Every arm that lost a web process and was not proven by a retry is
+  // unproven and comes out of the count: that part is ruling 228. An arm whose retry ran clean is in
+  // the count on its retry's checks alone, and its first attempt is printed below by name. The
+  // exit rule is one line: any counted failure or any crash that survived its retry fails the run.
   const unproven = [...new Set(armLog.filter((a) => a.crashed).map((a) => a.arm))];
   const counted = results.filter((r) => !unproven.includes(r.arm) && !r.unproven);
   const countedFails = counted.filter((r) => r.ok === false);
-  const standDown = unproven.length === 1 && countedFails.length === 0;
   const declared = loadExpected() || {};
 
   console.log(
@@ -2586,21 +2725,39 @@ function finish({ full = false, engines = [] } = {}) {
     console.log(`${unprovenChecks.length} check(s) UNPROVEN, not passing:`);
     for (const u of unprovenChecks) console.log(`  - ${u.name}: ${u.detail}`);
   }
-  if (standDown) {
+  // Ruling 1237: the retried arms, first attempt by name with its crash and its checks, then the
+  // retry's outcome. Inside the tail, so both workflows lift it into the job summary.
+  if (retriedArms.length) {
     console.log(
-      "\n=== ruling 832: STOOD DOWN ON ONE CRASHED ARM. THIS IS NOT A CLEAN RUN. ===\n" +
-        `${unproven[0]} lost a web process (G5, ruling 200; the rate is ruling 828's) and is UNPROVEN, never passed.\n` +
-        "Every other arm in this job is green, so the job exits 0 rather than charging an engine defect to this branch.\n" +
-        "A second crashed arm in one job still fails, and so does any failure outside the crashed arm.\n" +
-        "Do not read this green as the arm above having run.",
+      `\n=== ruling 1237: ${retriedArms.length} arm${retriedArms.length > 1 ? "s" : ""} retried once, alone, after a lost web process ===`,
     );
+    for (const r of retriedArms) {
+      const crash = r.crash[0];
+      console.log(
+        `${r.arm}: attempt 1 lost its web process` +
+          (crash
+            ? ` at +${crash.secondsIn}s (browser ${crash.browserConnected ? "still connected" : "gone with it"})`
+            : "") +
+          ` after ${r.emitted} check(s)` +
+          (r.threw ? `; the flow threw: ${r.threw}` : "") +
+          `; attempt 1's checks are not counted`,
+      );
+      for (const c of r.checks)
+        console.log(
+          `  attempt 1  ${c.state.padEnd(8)} ${c.name}${c.state === "PASS" ? "" : ` ${c.detail}`}`,
+        );
+      const x = r.retry;
+      console.log(
+        `  attempt 2  ${x.crashed ? "LOST A WEB PROCESS AS WELL: the run fails" : x.failed ? `${x.failed} check(s) FAILED: the run fails` : `clean, ${x.emitted} check(s), counted as the arm's result`}` +
+          (x.threw ? `; the flow threw: ${x.threw}` : ""),
+      );
+    }
   }
-  if (unproven.length > 1)
+  if (unproven.length)
     console.log(
-      `\n=== ruling 832 does NOT cover this run: ${unproven.length} arms lost a web process ===\n` +
-        "The exemption is one arm wide, because one is the rate ruling 828 measured and two is not.",
+      `\n=== ruling 1237: ${unproven.length} arm${unproven.length > 1 ? "s" : ""} lost a web process and ${unproven.length > 1 ? "were" : "was"} not proven by a retry; the run fails ===`,
     );
-  process.exit(standDown ? 0 : fails.length || unproven.length ? 1 : 0);
+  process.exit(fails.length || unproven.length ? 1 : 0);
 }
 
 /**
@@ -6112,6 +6269,7 @@ module.exports = {
   results,
   armStart,
   armCrashed,
+  drive,
   watchCrash,
   shot,
   noOverflow,
@@ -6169,29 +6327,29 @@ if (require.main === module)
       const specialEngines = selectEngines();
       for (const [bname, bt] of specialEngines) {
         if (process.env.SPECIAL.includes("publish"))
-          await runPublish(bt, bname, [390, 844], "light");
+          await drive(runPublish, bt, bname, [390, 844], "light");
         if (process.env.SPECIAL.includes("guards")) {
-          await runPublishGuards(bt, bname, [390, 844], "light");
-          await runPublishGuards(bt, bname, [1280, 800], "dark");
+          await drive(runPublishGuards, bt, bname, [390, 844], "light");
+          await drive(runPublishGuards, bt, bname, [1280, 800], "dark");
         }
-        if (process.env.SPECIAL.includes("keyboard")) await runKeyboard(bt, bname);
+        if (process.env.SPECIAL.includes("keyboard")) await drive(runKeyboard, bt, bname);
         if (process.env.SPECIAL.includes("convene")) {
-          await runConvene(bt, bname, [390, 844], "light");
-          await runConvene(bt, bname, [1280, 800], "dark");
-          await runConveneZone(bt, bname, [390, 844], "light");
-          await runConveneZone(bt, bname, [1280, 800], "dark");
+          await drive(runConvene, bt, bname, [390, 844], "light");
+          await drive(runConvene, bt, bname, [1280, 800], "dark");
+          await drive(runConveneZone, bt, bname, [390, 844], "light");
+          await drive(runConveneZone, bt, bname, [1280, 800], "dark");
         }
-        if (process.env.SPECIAL.includes("silence")) await runSilence(bt, bname);
+        if (process.env.SPECIAL.includes("silence")) await drive(runSilence, bt, bname);
         if (process.env.SPECIAL.includes("shell"))
           for (const vp of process.env.ONLY ? [JSON.parse(process.env.ONLY)] : VIEWPORTS)
-            await runShell(bt, bname, vp);
+            await drive(runShell, bt, bname, vp);
         // Ruling 344: the width arm, every viewport.
         if (process.env.SPECIAL.includes("width"))
           for (const vp of process.env.ONLY ? [JSON.parse(process.env.ONLY)] : VIEWPORTS)
-            await runWidth(bt, bname, vp);
+            await drive(runWidth, bt, bname, vp);
         if (process.env.SPECIAL.includes("targeted"))
           for (const vp of process.env.ONLY ? [JSON.parse(process.env.ONLY)] : TARGETED_VIEWPORTS)
-            await runTargeted(bt, bname, vp);
+            await drive(runTargeted, bt, bname, vp);
         if (process.env.SPECIAL.includes("profile")) {
           const { runProfile } = require("./profile.cjs");
           for (const vp of process.env.ONLY ? [JSON.parse(process.env.ONLY)] : VIEWPORTS)
@@ -6208,7 +6366,8 @@ if (require.main === module)
                 [1280, 800],
               ])
             for (const theme of process.env.THEME ? [process.env.THEME] : THEMES)
-              for (const fail of [false, true]) await runVocabulary(bt, bname, vp, theme, fail);
+              for (const fail of [false, true])
+                await drive(runVocabulary, bt, bname, vp, theme, fail);
         }
         // Ruling 198 and Brief 4A: both parties' views, the control end to end, and its focus.
         if (process.env.SPECIAL.includes("block")) {
@@ -6220,10 +6379,10 @@ if (require.main === module)
                 [1280, 800],
               ])
             for (const theme of process.env.THEME ? [process.env.THEME] : THEMES) {
-              await runBlock(bt, bname, vp, theme);
-              await runBlocker(bt, bname, vp, theme);
-              await runBlockFlow(bt, bname, vp, theme);
-              await runBlockFocus(bt, bname, vp, theme);
+              await drive(runBlock, bt, bname, vp, theme);
+              await drive(runBlocker, bt, bname, vp, theme);
+              await drive(runBlockFlow, bt, bname, vp, theme);
+              await drive(runBlockFocus, bt, bname, vp, theme);
             }
         }
         // Brief 5 (ruling 279): the three screens at every viewport and both themes, then the
@@ -6236,7 +6395,7 @@ if (require.main === module)
           } = require("./onboarding.cjs");
           for (const vp of process.env.ONLY ? [JSON.parse(process.env.ONLY)] : VIEWPORTS)
             for (const theme of process.env.THEME ? [process.env.THEME] : THEMES)
-              await runOnboardingLayout(bt, bname, vp, theme);
+              await drive(runOnboardingLayout, bt, bname, vp, theme);
           for (const vp of process.env.ONLY
             ? [JSON.parse(process.env.ONLY)]
             : [
@@ -6244,9 +6403,15 @@ if (require.main === module)
                 [1280, 800],
               ])
             for (const theme of process.env.THEME ? [process.env.THEME] : THEMES)
-              await runOnboardingFlows(bt, bname, vp, theme);
+              await drive(runOnboardingFlows, bt, bname, vp, theme);
           // Ruling 345: the HEIC and oversized-JPEG arm runs once per engine, at the compact tier.
-          await runOnboardingPhotoFormats(bt, bname, [390, 844], process.env.THEME || "light");
+          await drive(
+            runOnboardingPhotoFormats,
+            bt,
+            bname,
+            [390, 844],
+            process.env.THEME || "light",
+          );
         }
         // Brief 10 (handoff 30-C item 13): the member's event page at every cell, its flows on the
         // two representative layouts.
@@ -6260,8 +6425,8 @@ if (require.main === module)
           } = require("./event.cjs");
           for (const vp of process.env.ONLY ? [JSON.parse(process.env.ONLY)] : VIEWPORTS)
             for (const theme of process.env.THEME ? [process.env.THEME] : THEMES) {
-              await runEvent(bt, bname, vp, theme);
-              await runEventBlocks(bt, bname, vp, theme);
+              await drive(runEvent, bt, bname, vp, theme);
+              await drive(runEventBlocks, bt, bname, vp, theme);
             }
           for (const vp of process.env.ONLY
             ? [JSON.parse(process.env.ONLY)]
@@ -6270,7 +6435,7 @@ if (require.main === module)
                 [1280, 800],
               ])
             for (const theme of process.env.THEME ? [process.env.THEME] : THEMES)
-              await runEventFlows(bt, bname, vp, theme);
+              await drive(runEventFlows, bt, bname, vp, theme);
           // Handoff 30-D item 14.3: the public page's guest path on the two representative layouts.
           for (const vp of process.env.ONLY
             ? [JSON.parse(process.env.ONLY)]
@@ -6279,14 +6444,14 @@ if (require.main === module)
                 [1280, 800],
               ])
             for (const theme of process.env.THEME ? [process.env.THEME] : THEMES)
-              await runGuest(bt, bname, vp, theme);
+              await drive(runGuest, bt, bname, vp, theme);
           // Handoff 32-B item 9: the alias and short-code paths, on the client, at compact and expanded.
           for (const [vp, theme] of [
             [[390, 844], "light"],
             [[1280, 800], "dark"],
           ])
             if (!only || (vp[0] === only[0] && vp[1] === only[1]))
-              await runEventLinks(bt, bname, vp, theme);
+              await drive(runEventLinks, bt, bname, vp, theme);
         }
         if (process.env.SPECIAL.includes("discovery")) {
           const {
@@ -6300,27 +6465,27 @@ if (require.main === module)
           } = require("./discovery.cjs");
           for (const vp of only ? [only] : DISCOVERY_VIEWPORTS)
             for (const theme of process.env.THEME ? [process.env.THEME] : THEMES)
-              await runDiscovery(bt, bname, vp, theme);
+              await drive(runDiscovery, bt, bname, vp, theme);
           // Handoff 32-B items 1, 2, 6 and 12 with Addendum 1: redirects, facets, ladders, writes
           // and the rail's memory, one cell per tier plus the wide band.
           for (const [vp, theme] of FACET_VIEWPORTS)
             if (!only || (vp[0] === only[0] && vp[1] === only[1]))
-              await runDiscoveryFacets(bt, bname, vp, theme);
+              await drive(runDiscoveryFacets, bt, bname, vp, theme);
           // Handoff 31-D item 7: the lens, the place and the intent, on their own viewports.
           for (const [vp, theme] of PLACE_VIEWPORTS)
             if (!only || (vp[0] === only[0] && vp[1] === only[1]))
-              await runDiscoveryPlace(bt, bname, vp, theme);
+              await drive(runDiscoveryPlace, bt, bname, vp, theme);
           // Handoff 32-B Addenda 4 and 5: one arm per item (1 to 5, and 8), each on its own cells.
           for (const [run, cells] of FOLLOWUP_ARMS)
             for (const [vp, theme] of cells)
               if (!only || (vp[0] === only[0] && vp[1] === only[1]))
-                await run(bt, bname, vp, theme);
+                await drive(run, bt, bname, vp, theme);
         }
         if (process.env.SPECIAL.includes("connect")) {
           const { runConnect } = require("./connect.cjs");
           for (const vp of process.env.ONLY ? [JSON.parse(process.env.ONLY)] : VIEWPORTS)
             for (const theme of process.env.THEME ? [process.env.THEME] : THEMES)
-              await runConnect(bt, bname, vp, theme);
+              await drive(runConnect, bt, bname, vp, theme);
         }
         // Handoff 32-A item 5: the mount arms, one cell per tier (tests/mount.cjs).
         if (process.env.SPECIAL.includes("mount")) {
@@ -6334,6 +6499,35 @@ if (require.main === module)
           const { runSheets } = require("./sheet.cjs");
           await runSheets(bt, bname, only);
         }
+        // Ruling 1235 (handoff 37-F item 3): the macOS WebKit gate, pages.yml's `webkit-macos` job.
+        // Small by design, because macOS minutes bill at a multiple of Linux: the nine sheet arms
+        // (1236's stepped method is the point of the gate), the member event page and its blocks at
+        // the two representative cells with its flows (the arm G5 hit on run 419 among them), the
+        // composer as the publish flow at compact and its guards at expanded (the bottom sheet and
+        // the drawer), and sign-in's layout at both cells with its flows at compact. Twenty arms.
+        if (process.env.SPECIAL.includes("gate")) {
+          const { runSheets } = require("./sheet.cjs");
+          const { runEvent, runEventBlocks, runEventFlows } = require("./event.cjs");
+          const { runAuthLayout, runAuthFlows } = require("./auth.cjs");
+          const cells = [
+            [[390, 844], "light"],
+            [[1280, 800], "dark"],
+          ];
+          await runSheets(bt, bname, only);
+          for (const [vp, theme] of cells)
+            if (!only || (vp[0] === only[0] && vp[1] === only[1])) {
+              await drive(runEvent, bt, bname, vp, theme);
+              await drive(runEventBlocks, bt, bname, vp, theme);
+              await drive(runEventFlows, bt, bname, vp, theme);
+              await drive(runAuthLayout, bt, bname, vp, theme);
+            }
+          if (!only || (only[0] === 390 && only[1] === 844)) {
+            await drive(runPublish, bt, bname, [390, 844], "light");
+            await drive(runAuthFlows, bt, bname, [390, 844], "light");
+          }
+          if (!only || (only[0] === 1280 && only[1] === 800))
+            await drive(runPublishGuards, bt, bname, [1280, 800], "dark");
+        }
         // Brief 4B (rulings 230 to 236, 240): sign-in's additions, the two reset routes and the
         // signed-in change-password path. The layout pass runs everywhere; the state flows run on
         // the two representative layouts, as vocab and block do.
@@ -6341,7 +6535,7 @@ if (require.main === module)
           const { runAuthLayout, runAuthFlows } = require("./auth.cjs");
           for (const vp of process.env.ONLY ? [JSON.parse(process.env.ONLY)] : VIEWPORTS)
             for (const theme of process.env.THEME ? [process.env.THEME] : THEMES)
-              await runAuthLayout(bt, bname, vp, theme);
+              await drive(runAuthLayout, bt, bname, vp, theme);
           for (const vp of process.env.ONLY
             ? [JSON.parse(process.env.ONLY)]
             : [
@@ -6349,7 +6543,7 @@ if (require.main === module)
                 [1280, 800],
               ])
             for (const theme of process.env.THEME ? [process.env.THEME] : THEMES)
-              await runAuthFlows(bt, bname, vp, theme);
+              await drive(runAuthFlows, bt, bname, vp, theme);
         }
       }
       finish({ full: false, engines: specialEngines.map(([n]) => n) });
@@ -6358,25 +6552,25 @@ if (require.main === module)
     for (const [bname, bt] of engines) {
       for (const vp of only ? [only] : VIEWPORTS) {
         for (const theme of only ? [process.env.THEME || "light"] : THEMES)
-          await runViewport(bt, bname, vp, theme);
-        await runShell(bt, bname, vp);
-        await runWidth(bt, bname, vp);
+          await drive(runViewport, bt, bname, vp, theme);
+        await drive(runShell, bt, bname, vp);
+        await drive(runWidth, bt, bname, vp);
       }
       if (only) {
         finish({ full: false, engines: engines.map(([n]) => n) });
       }
-      await runPublish(bt, bname, [390, 844], "light");
-      await runPublish(bt, bname, [1280, 800], "dark");
-      await runPublishGuards(bt, bname, [390, 844], "light");
-      await runPublishGuards(bt, bname, [1280, 800], "dark");
-      await runSilence(bt, bname);
-      await runKeyboard(bt, bname);
+      await drive(runPublish, bt, bname, [390, 844], "light");
+      await drive(runPublish, bt, bname, [1280, 800], "dark");
+      await drive(runPublishGuards, bt, bname, [390, 844], "light");
+      await drive(runPublishGuards, bt, bname, [1280, 800], "dark");
+      await drive(runSilence, bt, bname);
+      await drive(runKeyboard, bt, bname);
       // Convene Pass 1 (P1-SPEC section 6): the composer's Convene mode and the card.
-      await runConvene(bt, bname, [390, 844], "light");
-      await runConvene(bt, bname, [1280, 800], "dark");
-      await runConveneZone(bt, bname, [390, 844], "light");
-      await runConveneZone(bt, bname, [1280, 800], "dark");
-      for (const vp of TARGETED_VIEWPORTS) await runTargeted(bt, bname, vp);
+      await drive(runConvene, bt, bname, [390, 844], "light");
+      await drive(runConvene, bt, bname, [1280, 800], "dark");
+      await drive(runConveneZone, bt, bname, [390, 844], "light");
+      await drive(runConveneZone, bt, bname, [1280, 800], "dark");
+      for (const vp of TARGETED_VIEWPORTS) await drive(runTargeted, bt, bname, vp);
       // Brief 3: the profile in its three views plus editing mode, every viewport, both themes.
       const { runProfile } = require("./profile.cjs");
       for (const vp of VIEWPORTS)
@@ -6384,7 +6578,7 @@ if (require.main === module)
       // Brief 4: Connect's four lenses, sheets and rails, every viewport, both themes.
       const { runConnect } = require("./connect.cjs");
       for (const vp of VIEWPORTS)
-        for (const theme of THEMES) await runConnect(bt, bname, vp, theme);
+        for (const theme of THEMES) await drive(runConnect, bt, bname, vp, theme);
       // Brief 10 (handoff 30-C item 13): the member's event page at every cell, its flows on the
       // two representative layouts.
       const {
@@ -6396,14 +6590,14 @@ if (require.main === module)
       } = require("./event.cjs");
       for (const vp of VIEWPORTS)
         for (const theme of THEMES) {
-          await runEvent(bt, bname, vp, theme);
-          await runEventBlocks(bt, bname, vp, theme);
+          await drive(runEvent, bt, bname, vp, theme);
+          await drive(runEventBlocks, bt, bname, vp, theme);
         }
       for (const vp of [
         [390, 844],
         [1280, 800],
       ])
-        for (const theme of THEMES) await runEventFlows(bt, bname, vp, theme);
+        for (const theme of THEMES) await drive(runEventFlows, bt, bname, vp, theme);
       // Brief 9 (handoff 31-B item 15): Discovery at every width plus 1440, both themes.
       const {
         runDiscovery,
@@ -6415,23 +6609,25 @@ if (require.main === module)
         PLACE_VIEWPORTS,
       } = require("./discovery.cjs");
       for (const vp of DISCOVERY_VIEWPORTS)
-        for (const theme of THEMES) await runDiscovery(bt, bname, vp, theme);
+        for (const theme of THEMES) await drive(runDiscovery, bt, bname, vp, theme);
       // Handoff 32-B items 1, 2, 6 and 12 with Addendum 1: redirects, facets, ladders, writes, memory.
-      for (const [vp, theme] of FACET_VIEWPORTS) await runDiscoveryFacets(bt, bname, vp, theme);
+      for (const [vp, theme] of FACET_VIEWPORTS)
+        await drive(runDiscoveryFacets, bt, bname, vp, theme);
       // Handoff 31-D item 7 (1063, 1065, 1067): the lens, the place and the intent.
-      for (const [vp, theme] of PLACE_VIEWPORTS) await runDiscoveryPlace(bt, bname, vp, theme);
+      for (const [vp, theme] of PLACE_VIEWPORTS)
+        await drive(runDiscoveryPlace, bt, bname, vp, theme);
       // Handoff 32-B Addenda 4 and 5: one arm per item (1 to 5, and 8), each on its own cells.
       for (const [run, cells] of FOLLOWUP_ARMS)
-        for (const [vp, theme] of cells) await run(bt, bname, vp, theme);
+        for (const [vp, theme] of cells) await drive(run, bt, bname, vp, theme);
       // Handoff 30-D item 14.3: the public page's guest path on the two representative layouts.
       for (const vp of [
         [390, 844],
         [1280, 800],
       ])
-        for (const theme of THEMES) await runGuest(bt, bname, vp, theme);
+        for (const theme of THEMES) await drive(runGuest, bt, bname, vp, theme);
       // Handoff 32-B item 9: the alias and short-code paths, on the client.
-      await runEventLinks(bt, bname, [390, 844], "light");
-      await runEventLinks(bt, bname, [1280, 800], "dark");
+      await drive(runEventLinks, bt, bname, [390, 844], "light");
+      await drive(runEventLinks, bt, bname, [1280, 800], "dark");
       // Rulings 193, 194: the vocabulary read served and then failing, on both layouts.
       const { runVocabulary } = require("./vocabulary.cjs");
       for (const vp of [
@@ -6439,17 +6635,17 @@ if (require.main === module)
         [1280, 800],
       ])
         for (const theme of THEMES)
-          for (const fail of [false, true]) await runVocabulary(bt, bname, vp, theme, fail);
+          for (const fail of [false, true]) await drive(runVocabulary, bt, bname, vp, theme, fail);
       // Brief 4B: every auth surface rendered at every viewport and both themes, then the state
       // flows on the two representative layouts.
       const { runAuthLayout, runAuthFlows } = require("./auth.cjs");
       for (const vp of VIEWPORTS)
-        for (const theme of THEMES) await runAuthLayout(bt, bname, vp, theme);
+        for (const theme of THEMES) await drive(runAuthLayout, bt, bname, vp, theme);
       for (const vp of [
         [390, 844],
         [1280, 800],
       ])
-        for (const theme of THEMES) await runAuthFlows(bt, bname, vp, theme);
+        for (const theme of THEMES) await drive(runAuthFlows, bt, bname, vp, theme);
       // Ruling 198 and Brief 4A: the blocked party's view, the blocker's own view, the control end
       // to end and its focus management, on both layouts and both themes.
       const { runBlock, runBlocker, runBlockFlow, runBlockFocus } = require("./block.cjs");
@@ -6458,10 +6654,10 @@ if (require.main === module)
         [1280, 800],
       ])
         for (const theme of THEMES) {
-          await runBlock(bt, bname, vp, theme);
-          await runBlocker(bt, bname, vp, theme);
-          await runBlockFlow(bt, bname, vp, theme);
-          await runBlockFocus(bt, bname, vp, theme);
+          await drive(runBlock, bt, bname, vp, theme);
+          await drive(runBlocker, bt, bname, vp, theme);
+          await drive(runBlockFlow, bt, bname, vp, theme);
+          await drive(runBlockFocus, bt, bname, vp, theme);
         }
       // Brief 5 (ruling 279): the three onboarding screens everywhere, the state flows on the
       // two representative layouts.
@@ -6471,14 +6667,14 @@ if (require.main === module)
         runOnboardingPhotoFormats,
       } = require("./onboarding.cjs");
       for (const vp of VIEWPORTS)
-        for (const theme of THEMES) await runOnboardingLayout(bt, bname, vp, theme);
+        for (const theme of THEMES) await drive(runOnboardingLayout, bt, bname, vp, theme);
       for (const vp of [
         [390, 844],
         [1280, 800],
       ])
-        for (const theme of THEMES) await runOnboardingFlows(bt, bname, vp, theme);
+        for (const theme of THEMES) await drive(runOnboardingFlows, bt, bname, vp, theme);
       // Ruling 345: the HEIC and oversized-JPEG arm runs once per engine, at the compact tier.
-      await runOnboardingPhotoFormats(bt, bname, [390, 844], "light");
+      await drive(runOnboardingPhotoFormats, bt, bname, [390, 844], "light");
       // Handoff 32-A item 5 (rulings 755, 556, 627): every route that binds a part Strand compile
       // v1790212533284400 changed, read after its open gate, one cell per tier (tests/mount.cjs).
       const { runMount, MOUNT_CELLS } = require("./mount.cjs");

@@ -182,6 +182,22 @@ force, without a lease, is refused everywhere.
 A test arm that cannot run is reported as unproven, never as passing, and never folded into a
 passing count (ruling 228). An arm that silently vanishes reads as coverage the suite does not have.
 
+An arm that loses its web process is run again once, alone, in a fresh browser, and a second crash
+fails the run (ruling 1237, amending 832). `drive()` in `tests/matrix.cjs` is the one place: every
+arm the suite runs goes through it, the first attempt is printed by name with its crash and its checks
+and leaves the count, the retry's checks are the arm's result against its declared count, and nothing
+crashed is ever counted as passed (228). Ruling 832's one-arm stand-down is gone with it; a run with a
+crash no retry proved exits 1. `CRASH_PROBE=<arm tag>` is the harness probe that proves the retry, off
+by default and never set by a workflow.
+
+The WebKit result that gates a merge is `pages.yml`'s `webkit-macos` job (ruling 1235): Playwright's
+WebKit on a macOS runner, the Mac port, which lacks G5's compositor, running `SPECIAL=gate`'s twenty
+arms (the sheets, the event page, the composer, sign-in) at the deployment's own URL. The Linux
+`matrix (webkit)` job keeps running in full, and a crash there alone does not block a merge, because
+G5 is a Linux WPE compositor defect that Safari does not run (1234). This repository has no branch
+protection to encode that; Chat reads it here under 1114, and the founder's device check (61) stays
+the exit criterion.
+
 A diagnostic step that cannot fail the job announces its own degradation in the job summary (ruling
 850). `continue-on-error` is right for a step whose charter is to observe rather than to judge, and it
 buys silence along with the safety: `pages.yml` and `matrix.yml` both carry a `degraded()` that writes
@@ -255,7 +271,7 @@ Every IconButton names itself through Strand's Tooltip, and never through a nati
 `--z-menu` is 62 in the stacking order, between `--z-sheet` (60) and `--z-dialog` (65) in `src/styles/strand.css` (1103): a Menu opens above the pane, the sticky chrome and a sheet it is summoned from, and below a dialog and the notification panel.
 Above compact every side sheet is right-anchored, flush, full height and square, `min(60%, the feed card's width plus Sheet's padding and hairline)`, read from `--sheet-*` tokens and never written as a number in a component or a test (1197, 1216, 1219, 1220).
 
-Sheet's enter and exit are proven by a per-frame arm on WebKit and Chromium (`tests/sheet.cjs`, painted pixels, never geometry); the dialog is never a scroll container (`overflow: clip`, not `hidden`) and the focus on open never scrolls, because a focus that scrolls the translated panel into view drags the dialog's scroll offset with it and the panel is painted at the transform alone until the transition ends, which is the wrong-way slide and snap the founder recorded (1201, 37-B, G151).
+Sheet's enter and exit are proven by a per-frame arm on WebKit and Chromium (`tests/sheet.cjs`, painted pixels, never geometry): on WebKit a stepped clock and a lossless screenshot per step, the transition paused and its `currentTime` stepped from 0 to 300 ms while Playwright's clock holds the unmount timer, at 0.5 px (1236); on Chromium video at one chroma block; the dialog is never a scroll container (`overflow: clip`, not `hidden`) and the focus on open never scrolls, because a focus that scrolls the translated panel into view drags the dialog's scroll offset with it and the panel is painted at the transform alone until the transition ends, which is the wrong-way slide and snap the founder recorded (1201, 37-B, G151).
 Exit check for every surface is the responsive test matrix on the deployed URL: 360, 390, 430, 744, 820, 1024 both orientations, 1280, 1536, both themes, Safari and Chrome (ruling 61).
 
 The shell owns one scroller per tier and the document never scrolls inside it (ruling 104), so the

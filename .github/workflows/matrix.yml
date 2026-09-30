@@ -18,7 +18,7 @@ on:
         required: false
         default: ""
       special:
-        description: Run flows only (publish, keyboard, silence, shell, width, targeted, profile, connect, event, discovery, vocab, block, auth, onboarding, mount, sheet)
+        description: Run flows only (publish, keyboard, silence, shell, width, targeted, profile, connect, event, discovery, vocab, block, auth, onboarding, mount, sheet, gate)
         required: false
         default: ""
       only:
@@ -39,6 +39,14 @@ on:
         default: ""
       probe:
         description: Ruling 200 diagnostic; compositing, appearance or color-scheme. Empty runs the control.
+        required: false
+        default: ""
+      crash_probe:
+        description: Ruling 1237's harness probe, off by default; an arm tag (e.g. chromium-390x844-shell) whose first attempt is navigated to chrome://crash on Chromium, so the run shows one crashed attempt and one clean retry. Proof only, never a pass criterion.
+        required: false
+        default: ""
+      crash_probe_attempts:
+        description: With crash_probe, "2" crashes the retry as well, and the job must be red (1237).
         required: false
         default: ""
       loop:
@@ -254,6 +262,9 @@ jobs:
           # is what makes a changed count explainable by arm group rather than merely different.
           DUMP_LABELS: ${{ inputs.dump_labels }}
           RULING200_PROBE: ${{ inputs.probe }}
+          # Ruling 1237: the crash-retry probe, empty on every run but the two that prove the retry.
+          CRASH_PROBE: ${{ inputs.crash_probe }}
+          CRASH_PROBE_ATTEMPTS: ${{ inputs.crash_probe_attempts }}
         run: |
           set -o pipefail
           mkdir -p "$OUT"
