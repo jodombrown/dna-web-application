@@ -113,6 +113,10 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       // Ruling 184's asset contract: every icon resolves by path from public/, so the redesign is
       // a file overwrite in one directory. The favicon.png line is the founder's own 9 September
       // edit and is left exactly as they set it.
+      // Handoff 38-A: browsers request /favicon.ico on their own whatever the head declares, and it
+      // answered 404, so a tab kept the icon it had cached for the host (Lovable's). The ICO is
+      // generated from icon-512.png and linked first; the favicon.png line below is untouched.
+      { rel: "icon", href: "/favicon.ico", sizes: "any" },
       { rel: "icon", href: "/favicon.png", type: "image/png" },
       { rel: "apple-touch-icon", href: "/apple-touch-icon.png", sizes: "180x180" },
     ],

@@ -55,8 +55,11 @@ serves /posts/seed-1
 serves /m/thandiwe-dube
 serves /convene/curated
 # Ruling 184's asset contract: every path in the table serves, so the redesign stays a file
-# overwrite. favicon.ico is absent by the founder's 9 September edit and is deliberately not here.
+# overwrite. Ruling 1246 (handoff 38-A) returns favicon.ico to the contract, generated from
+# icon-512.png: browsers fetch it unasked, and a 404 there left tabs on the icon cached for the host
+# before 1139 (Lovable's).
 serves /strand/logo.png
+serves /favicon.ico /tmp/favicon.ico
 serves /favicon.png
 serves /apple-touch-icon.png
 serves /icon-192.png
@@ -76,6 +79,16 @@ grep -q 'manifest.webmanifest' /tmp/sign-in.html || { echo "::error::/sign-in li
 grep -q '/icon-192.png' /tmp/manifest.json || { echo "::error::manifest names no 192 icon"; exit 1; }
 grep -q '/icon-512.png' /tmp/manifest.json || { echo "::error::manifest names no 512 icon"; exit 1; }
 ! grep -q 'mate-masie' /tmp/manifest.json || { echo "::error::manifest still names the Adinkra mark"; exit 1; }
+# Handoff 38-A: /favicon.ico is an ICO served as an image, and the head links it before favicon.png.
+case "$(curl -sS -o /dev/null -w '%{content_type}' --max-time 30 "$BASE/favicon.ico")" in
+  image/*) ;;
+  *) echo "::error::/favicon.ico is not served with an image content type"; exit 1 ;;
+esac
+[ "$(head -c 4 /tmp/favicon.ico | od -An -tx1 | tr -d ' \n')" = "00000100" ] || { echo "::error::/favicon.ico is not an ICO"; exit 1; }
+grep -q 'href="/favicon.ico"' /tmp/sign-in.html || { echo "::error::/sign-in links no favicon.ico"; exit 1; }
+ico_at=$(grep -abo 'href="/favicon.ico"' /tmp/sign-in.html | head -1 | cut -d: -f1)
+png_at=$(grep -abo 'href="/favicon.png"' /tmp/sign-in.html | head -1 | cut -d: -f1)
+[ -n "$png_at" ] && [ "$ico_at" -lt "$png_at" ] || { echo "::error::/sign-in does not link favicon.ico before favicon.png"; exit 1; }
 grep -q '^Contact: mailto:' /tmp/security.txt || { echo "::error::/.well-known/security.txt carries no Contact"; exit 1; }
 
 echo "The deployment serves every path the suites open."
