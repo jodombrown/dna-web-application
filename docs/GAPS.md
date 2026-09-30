@@ -7820,7 +7820,7 @@ change is the Escape guard (its guardrail 1).
 
 ---
 
-## G196. The browser install shared the Linux matrix job's 60 minutes with the suite, so a slow apt mirror cancelled the suite with no check failed
+## G196. The browser install shared the Linux matrix job's 60 minutes with the suite, so a slow apt mirror cancelled the suite with no check failed — closed (PR #83, handoff 38-C)
 
 **Severity: moderate. Opened 30 September 2026 during handoff 38-C, filed under ruling 597. The number is
 assigned by this entry (ruling 638).**
@@ -7883,3 +7883,23 @@ image OS and the engine alone, so a new runner image week or a Playwright bump s
 recent set saved for that engine, which apt verifies file by file, rather than from nothing; the job's
 budget restated per engine from the readings above, with the arithmetic in the comment over
 `timeout-minutes`.
+
+**Closed 30 September 2026 on `pages.yml` run 443 (`36782774745`, head `624e056`, whose `.github/` and
+`scripts/` are the final head's; the close is the only later change).** Both Linux matrix jobs finished
+inside their own budgets with every arm green and no web process lost: `matrix (webkit)`
+(`110117660541`) installed in 30 s on a healthy mirror (125 MB in 9 s), ran the suite in 54m59s, 390 arms
+and `7554 of 7554 checks passed`, and ended at 56m00s of its 85; `matrix (chromium)` (`110117660511`)
+installed in 23 s, ran the suite in 50m29s, `7545 of 7545`, and ended at 51m18s of its 75. Each saved its
+complete archive set: `Cache saved with key: apt-archives-ubuntu24-20260927.320.1-webkit-playwright-1.63.0-complete`
+(187 files, 120M) and the chromium key of the same shape (14 files, 31M); both restores read
+`Cache not found`, because run 442's cancelled jobs saved nothing. The bound is proven on the defect
+itself by run 442's `matrix (webkit)` job (`110112903224`, head `5b25e7e`): the mirror was slow a
+fourth time, attempt 1 was ended at 240 s with 24 MB of 130 fetched, attempt 2 at 240 s with 95 MB
+more (`Need to get 10.7 MB/130 MB`), and attempt 3 fetched the rest and read `Succeeded on attempt 3 of
+3` at 10m15s, with 195 files kept, and no lock error. The retry after a cut in the unpack window is
+`matrix.yml` run 82 (`36781477756`, `install_attempt_seconds=30`): attempt 1 ended at 30 s during
+`Setting up`, attempt 2 ended the leftover apt, ran `dpkg --configure -a`, found `0 upgraded, 0 newly
+installed`, downloaded WebKit and succeeded at 45 s, and the gate read 283 of 283. Three timed-out
+attempts failing the job by name is run 83 (`36781480713`, a 5-second bound): `All 3 attempts timed out
+at the 5s bound (exit 124)`, the step red at 32 s, and the tail reading `The matrix step produced no
+output; it did not reach tests/matrix.cjs.` The enforcing run on the final head is cited on PR #83.
