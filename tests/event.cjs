@@ -794,6 +794,105 @@ async function runEventFlows(browserType, bname, [w, h], theme) {
     await page.keyboard.press("Escape");
     await dlg.waitFor({ state: "detached", timeout: 8000 });
 
+    // G193 (handoff 38-B): an Escape the sheet handles stops at the sheet. The Escape above reaches
+    // the page with focus on `body` on Chromium and Linux WebKit: Confirm went disabled while the
+    // mocked save failed and a focused control that becomes disabled drops focus, so the keydown's
+    // target is outside the pane's React subtree and the pane never sees it. The macOS port kept
+    // focus inside the sheet, and the pane closed with it (run 427). So this reading puts focus in
+    // the sheet first, on the heading Sheet focuses on open, and opens the sheet from the keyboard so
+    // the opener is the focused control on every engine (WebKit does not focus a button on click).
+    const opener = page.locator('[data-testid="rsvp-change"]');
+    await opener.focus();
+    await page.keyboard.press("Enter");
+    dlg = dialog("Change your answer");
+    await dlg.waitFor({ timeout: 8000 });
+    // Sheet focuses the heading a frame after the dialog opens; wait for that rather than race it,
+    // and if it has not landed, put focus on the heading the way Sheet does.
+    await page
+      .waitForFunction(() => !!document.activeElement?.closest('section[role="dialog"]'), null, {
+        timeout: 3000,
+      })
+      .catch(() => {});
+    const focusInSheet = await page.evaluate(() => {
+      const probe = () => !!document.activeElement?.closest('section[role="dialog"]');
+      if (!probe()) {
+        const h = document.querySelector('section[role="dialog"] [data-sheet-heading]');
+        if (h) {
+          if (!h.hasAttribute("tabindex")) h.setAttribute("tabindex", "-1");
+          h.focus({ preventScroll: true });
+        }
+      }
+      return probe();
+    });
+    await page.keyboard.press("Escape");
+    const sheetClosed = await dlg
+      .waitFor({ state: "detached", timeout: 8000 })
+      .then(() => true)
+      .catch(() => false);
+    record(
+      tag + " G193: Escape with focus inside the RSVP sheet closes the sheet",
+      focusInSheet && sheetClosed,
+      `focusInSheet=${focusInSheet} closed=${sheetClosed}`,
+    );
+    // Focus returns to the opener once the exit has finished (423): after the unmount, not on the
+    // keydown, so it is waited for rather than read at once.
+    await page
+      .waitForFunction(
+        () => document.activeElement?.getAttribute("data-testid") === "rsvp-change",
+        null,
+        { timeout: 5000 },
+      )
+      .catch(() => {});
+    const activeAfter = await page.evaluate(
+      () =>
+        document.activeElement?.getAttribute("data-testid") ||
+        document.activeElement?.tagName.toLowerCase(),
+    );
+    record(
+      tag + " G193: focus returns to the control that opened the sheet (423)",
+      activeAfter === "rsvp-change",
+      "active=" + activeAfter,
+    );
+    if (w > 1024) {
+      // At expanded the page is the content of Discovery's pane (1047), and the sheet's Escape must
+      // not close the pane as well: the pane yields only to a marked Escape (1084), so this is the
+      // check that reads red on a build whose Sheet leaves the keydown unmarked.
+      const paneOpen =
+        page.url().includes("/convene/events/" + EV.loaded) &&
+        (await page
+          .locator(
+            '[data-discovery][data-pane-open="1"] [data-event-page][data-event-state="loaded"]',
+          )
+          .count()) === 1;
+      record(tag + " G193: the sheet's Escape leaves the Pane open (1084)", paneOpen, page.url());
+      // The other side (719): with no sheet open and focus inside the pane, Escape closes the pane
+      // and returns to the origin the flow came from, the Feed card or Discovery. It needs the pane
+      // open, so on a build that failed the check above it is UNPROVEN (228), never a second red
+      // for the same defect, and the page is reopened either way for the checks behind it.
+      if (paneOpen) {
+        await opener.focus();
+        await page.keyboard.press("Escape");
+        const paneClosed = await page
+          .waitForFunction(
+            () => document.querySelectorAll('[data-discovery][data-pane-open="1"]').length === 0,
+            null,
+            { timeout: 8000 },
+          )
+          .then(() => true)
+          .catch(() => false);
+        record(
+          tag + " G193: Escape inside the Pane with no sheet open still closes the Pane (719)",
+          paneClosed && !page.url().includes("/convene/events/" + EV.loaded),
+          `paneClosed=${paneClosed} ` + page.url(),
+        );
+      } else
+        unproven(
+          tag + " G193: Escape inside the Pane with no sheet open still closes the Pane (719)",
+          "the pane was already closed by the sheet's Escape, so there was no pane to close",
+        );
+      await open(page, "loaded", "loaded");
+    }
+
     // Share: the public URL and the code for a public event (1028); no code for a private one. At
     // expanded the page is the content of Discovery's pane, and its Share opens the pane's share view
     // in place of the page, closed by the view's own Close (1156, G130); below expanded it opens the

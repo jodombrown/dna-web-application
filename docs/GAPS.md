@@ -4721,7 +4721,7 @@ column to its end, steps Next twice, and requires the list column scrolled with 
 its box. So it reads Pane's own follow alone. Both reads fail at `d23c55f`, where the list column is
 not a scroller. The change is `174a55e`'s `height`, which Discovery passes.
 
-## G86. A Sheet inside the Pane closes the Pane with it on Escape, because the app's modal Sheet never prevents the keydown
+## G86. A Sheet inside the Pane closes the Pane with it on Escape, because the app's modal Sheet never prevents the keydown — closed (handoff 38-B)
 
 **Severity: low. Opened 24 September 2026 during handoff 32-A, filed under ruling 597. The number is
 assigned by this entry (ruling 638).**
@@ -4738,6 +4738,21 @@ neither a Menu (G88) nor correction 25's combobox, whose Escape "closes the list
 guard does not also close", can keep the key inside FacetRail's compact Sheet once a page binds them.
 Owed: the Sheet prevents the Escape keydown it consumes on the modal path and yields to a prevented one
 on the contained path, which is the Sheet's change and not the Pane's.
+
+**Closed 30 September 2026, in handoff 38-B (1251), by the commit that changes `Sheet.tsx`.** The macOS
+WebKit gate (1235) found the modal half again on its first run and it is G193 on PR #81's branch, which
+records this close on its rebase. Both halves are one change: Escape is handled in the dialog's own React
+`onKeyDown`, on both paths, which runs after every handler inside the sheet and before every ancestor.
+The keydown is marked with `preventDefault`, so the Pane's guard (1084) yields; a keydown a descendant
+already marked, Input's open list or a Menu, is yielded to, which is what the contained path's capture
+listener could not do; and where two sheets nest the inner one runs first, so only the topmost handles
+it. The capture-phase listener keeps the Tab trap and, for `contained` only, closes on an Escape whose
+target is outside the dialog, since a contained dialog is not modal and raises no `cancel`; the
+dialog's `cancel` listener stays for a close request that is not a keydown inside the dialog. Proven
+by four checks added to the event-flows arm (`tests/event.cjs`), red on `d4742b8` and green with the
+guard, on the runs handoff 38-B's PR names. The lines in `Input.tsx` and `Menu.tsx` that describe the contained
+Sheet closing "in a capture listener before this runs (G86)" describe the mechanism this closes and are
+left as written; they are a comment follow-up, not a behaviour.
 
 ## G87. Correction 25's compile, read against its own extractions and against this app: what Strand's next correction brief should carry
 
@@ -7550,3 +7565,25 @@ Connect card reads `CARD_SCHEMA.connect`, "Connection request" with no act, 157)
 `VERB_SCHEMA.convey.kicker`, "Story" (546, W54), the instrument's options come from the vocabulary
 through `fieldOptions` (193), and `convene` is `fields: []` under `forms.convene`. Filed so the audit is
 complete; every line is kept by the ruling named. Closes on Chat's confirmation.
+
+---
+
+## G195. Focus inside an open Sheet falls to `body` when the focused control becomes disabled
+
+**Severity: low. Opened 30 September 2026 during handoff 38-B item 1, filed under ruling 597. The number
+is assigned by this entry (ruling 638); G191 to G194 are on PR #81's branch.**
+
+The event-flows arm's Escape on the RSVP sheet's error state reached the page with focus on `body` on
+Chromium and Linux WebKit, which is why the arm passed there while the macOS gate failed on G193
+(G86): a keydown targeted at `body` never enters the Pane's subtree. The drop is in the product, not
+the arm. `RsvpSheet` renders Confirm as `disabled={saving || withdrawing}` while the save is in flight,
+and both engines drop focus from a focused control that becomes disabled; `Sheet.tsx` places focus
+only on open (its heading, else the first non-destructive control, 222) and traps Tab, so nothing
+brings focus back into the dialog when the error lands and Confirm is enabled again. The next Tab
+starts from the document rather than from the sheet, against 423's trap. The Mac port keeps focus
+where it was, so the founder's device check (61) may not see it.
+
+Owed: when the element that holds focus inside the sheet loses it to `body` because it was disabled,
+the Sheet puts focus back on the first focusable control, or the caller keeps Confirm focusable and
+`aria-disabled` while saving, as Pane's stepping pair does (1083). Not changed by 38-B, whose one
+change is the Escape guard (its guardrail 1).
