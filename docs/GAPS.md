@@ -7817,3 +7817,97 @@ Owed: when the element that holds focus inside the sheet loses it to `body` beca
 the Sheet puts focus back on the first focusable control, or the caller keeps Confirm focusable and
 `aria-disabled` while saving, as Pane's stepping pair does (1083). Not changed by 38-B, whose one
 change is the Escape guard (its guardrail 1).
+
+---
+
+## G196. The browser install shared the Linux matrix job's 60 minutes with the suite, so a slow apt mirror cancelled the suite with no check failed — closed (PR #83, handoff 38-C)
+
+**Severity: moderate. Opened 30 September 2026 during handoff 38-C, filed under ruling 597. The number is
+assigned by this entry (ruling 638).**
+
+`pages.yml`'s `matrix` job had one `timeout-minutes: 60` for everything it does: dropping the Google
+Chrome apt source, `scripts/retry.sh 3 bunx playwright install --with-deps <engine>`, the core-dump
+setup and the suite. The install step had no time of its own, and `retry.sh` could not retry a stalled
+attempt because nothing ended one. The Linux WebKit suite needs about 53 of the 60 minutes (run 436,
+`109999825350`: 390 arms in 52m31s after a 73-second install), so any install past about seven minutes
+left the suite less than it needs and the job was cancelled partway, which reads unproven (228) with
+nothing named.
+
+**Sightings, both on PR #81's head `420ff52`, run 439 (`36756445804`).** Attempt 1's `matrix (webkit)`
+job (`110028516638`): the install step ran from 18:10:33 to 18:42:43 UTC, 32m10s, and the suite that
+started at 18:42:43 was cancelled at 19:10:42 by the job's 60 minutes. Attempt 2's job (`110054085937`):
+the install ran 8m22s, from 19:14:15 to 19:22:37, and the suite was cancelled at 20:14:20, 51m43s in, at
+`+3217s` on the 820x1180 mount arms, with a double crash on `webkit-390x844-dark-auth flows` already
+inside it that 1237 would have named at the tail the job never reached. The Chromium job passed both
+times (install 29 s, suite 50m19s), and so did the macOS gate.
+
+**Where the time went, read from the three WebKit install logs and the Chromium one.** The slow part is
+the apt archive fetch inside `--with-deps`, from `azure.archive.ubuntu.com`, and never Playwright's CDN:
+
+| Job               | apt index | apt archives                 | unpack and configure | WebKit and FFmpeg from cdn.playwright.dev | step   |
+| ----------------- | --------- | ---------------------------- | -------------------- | ----------------------------------------- | ------ |
+| run 436 WebKit    | 9 s       | 130 MB in 9 s (14.5 MB/s)    | 49 s                 | 3.4 s                                     | 73 s   |
+| run 439 a1 WebKit | 5 s       | 130 MB in 31m47s (67.9 kB/s) | 12 s                 | 3.1 s                                     | 32m10s |
+| run 439 a2 WebKit | 8 s       | 125 MB in 7m50s (266 kB/s)   | 17 s                 | 3.3 s                                     | 8m22s  |
+| run 436 Chromium  | 5 s       | 34.9 MB in 5 s (6.8 MB/s)    | 5 s                  | 8 s, three downloads                      | 26 s   |
+
+The runner image's apt is configured with `Acquire::Retries 1` and a 15-second `Acquire::http::Timeout`
+(`actions/runner-images`, `images/ubuntu/scripts/build/configure-apt.sh`), which is a stall timeout and
+never trips on a trickle. The image writes no `docker-clean` and leaves `APT::Keep-Downloaded-Packages`
+at its default, so the fetched `.deb` files stay in `/var/cache/apt/archives` after the install.
+
+**Third sighting, and the first reading of the bound: run 441 (`36780457917`), this branch's first
+push.** The mirror served about 60 kB/s again, 10 packages and 15 MB in the 240 seconds the `matrix
+(webkit)` job (`110109456142`) gave attempt 1 before `scripts/retry.sh` ended it, named it (`Attempt 1
+of 3 timed out at the 240s bound`) and retried. The retry failed in a second, and so did the third:
+`dpkg: error: dpkg frontend lock was locked by another process with pid 2687`. Playwright runs apt
+through sudo, and sudo runs its command in a pty session of its own, outside the process group
+`timeout` signals, so the cut attempt's `apt-get` outlived it and kept the lock. The step failed by
+name at 4m20s, which is the outcome the bound exists for, but without the retry it promises.
+`matrix.yml` run 80 (`36780595009`, `install_attempt_seconds=30`, healthy mirror) had shown the retry
+working when the cut lands outside apt: attempt 1 was ended at 30 s during the WebKit download, attempt
+2 found apt with nothing left to do (`0 upgraded, 0 newly installed`) and finished in 6 s, and the gate
+then read 283 of 283 on Linux WebKit. Run 81 (`36781074172`, a 5-second bound) showed the leak from the
+other side: attempt 1's `apt-get update` printed its `Fetched` line after the attempt had been ended,
+attempt 3 met the lock attempt 2's apt still held, and the job failed by name at the install step in
+30 s, having reached no test body. So each attempt now first ends the `apt-get`, `dpkg` and apt fetch
+methods a previous attempt left running as root, TERM then KILL, before `dpkg --configure -a` and the
+install. The same job also showed why only a complete set may be harvested into the cache: the 10 files
+attempt 1 had fetched were saved under the exact key, which an exact hit never saves again.
+
+**Owed (handoff 38-C).** The install's time separated from the suite's: each attempt bounded through
+`scripts/retry.sh`, a stalled attempt ended and retried, three timed-out attempts failing the job by
+name at the install step; the apt archives cached, keyed on the runner image, the engine and
+Playwright's resolved version, a miss behaving exactly as before, and restored under a prefix of the
+image OS and the engine alone, so a new runner image week or a Playwright bump starts from the most
+recent set saved for that engine, which apt verifies file by file, rather than from nothing; the job's
+budget restated per engine from the readings above, with the arithmetic in the comment over
+`timeout-minutes`.
+
+**Closed 30 September 2026 on `pages.yml` run 443 (`36782774745`, head `624e056`, whose `.github/` and
+`scripts/` are the final head's; the close is the only later change).** Both Linux matrix jobs finished
+inside their own budgets with every arm green and no web process lost: `matrix (webkit)`
+(`110117660541`) installed in 30 s on a healthy mirror (125 MB in 9 s), ran the suite in 54m59s, 390 arms
+and `7554 of 7554 checks passed`, and ended at 56m00s of its 85; `matrix (chromium)` (`110117660511`)
+installed in 23 s, ran the suite in 50m29s, `7545 of 7545`, and ended at 51m18s of its 75. Each saved its
+complete archive set: `Cache saved with key: apt-archives-ubuntu24-20260927.320.1-webkit-playwright-1.63.0-complete`
+(187 files, 120M) and the chromium key of the same shape (14 files, 31M); both restores read
+`Cache not found`, because run 442's cancelled jobs saved nothing. The bound is proven on the defect
+itself by run 442's `matrix (webkit)` job (`110112903224`, head `5b25e7e`): the mirror was slow a
+fourth time, attempt 1 was ended at 240 s with 24 MB of 130 fetched, attempt 2 at 240 s with 95 MB
+more (`Need to get 10.7 MB/130 MB`), and attempt 3 fetched the rest and read `Succeeded on attempt 3 of
+3` at 10m15s, with 195 files kept, and no lock error. The retry after a cut in the unpack window is
+`matrix.yml` run 82 (`36781477756`, `install_attempt_seconds=30`): attempt 1 ended at 30 s during
+`Setting up`, attempt 2 ended the leftover apt, ran `dpkg --configure -a`, found `0 upgraded, 0 newly
+installed`, downloaded WebKit and succeeded at 45 s, and the gate read 283 of 283. Three timed-out
+attempts failing the job by name is run 83 (`36781480713`, a 5-second bound): `All 3 attempts timed out
+at the 5s bound (exit 124)`, the step red at 32 s, and the tail reading `The matrix step produced no
+output; it did not reach tests/matrix.cjs.` Run 444 (`36788537363`, head `233e54a`, the same workflow)
+read the same again on a runner that had rotated back to image `20260920.314.1`: `matrix (webkit)`
+(`110135942000`) installed in 34 s, lost a web process on `webkit-390x844-dark profile visitor stranger`
+and ran it again clean under 1237, read `7554 of 7554` and ended at 56m11s of 85 with the core
+extracted; `matrix (chromium)` (`110135941861`) installed in 22 s, read `7545 of 7545` and ended at
+52m28s of 75. Its restore lines also showed the fallback prefix could not match the key as first
+ordered, `apt-archives-ubuntu24-webkit-` against `apt-archives-ubuntu24-20260927.320.1-webkit-…`, so
+the key is reordered OS, engine, image version, Playwright in the commit after 444; the enforcing run
+on the final head is cited on PR #83.

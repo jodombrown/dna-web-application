@@ -236,9 +236,25 @@ jobs:
     needs: deploy
     if: ${{ needs.deploy.outputs.deployed == 'true' }}
     runs-on: ubuntu-latest
-    # 60, not 45 (handoff 31-B): Brief 9's Discovery arm adds twenty arms per engine, about six
-    # minutes, and run 316 put Chromium's whole matrix past 45 at +2682s with no check failed.
-    timeout-minutes: 60
+    # Handoff 38-C (G196), superseding the 60 handoff 31-B set when run 316 put Chromium's whole
+    # matrix past 45 at +2682s. The budget is the sum of what the job does, read on runs 436 and
+    # 439 and stated per engine, because the two share no state (283).
+    #
+    # WebKit: setup through the deployment check, 15 s on run 436; the apt-archive cache restore
+    # and seed, under 30 s; the install at its own 14-minute bound (the step below); the suite,
+    # 52m31s on run 436 (390 arms, +3151s) and, at run 439 attempt 2's pace, 6 per cent slower
+    # with a crash and its retry inside it (+3217s where run 436 read +3034s), about 56 minutes;
+    # 1237's retries at the census's maximum of two crashed arms in one job (828, run 139), each a
+    # fresh browser and the longest arm again, the connect arm at 23 s, under 2 minutes; the core
+    # extraction, 2m01s on run 439 attempt 2, 3 minutes; the archive harvest, the classification and
+    # the upload, under 1 minute. 0.5 + 0.5 + 14 + 56 + 2 + 3 + 1 = 77, so 85: an 8-minute margin.
+    #
+    # Chromium: the same setup, cache and install bound, 15; the suite, 51m16s on run 436 and
+    # 50m19s on run 439, 52; no core step and no retry, because Chromium has not crashed once in the
+    # census; the upload, under 1. 15 + 52 + 1 = 68, so 75: a 7-minute margin. Chromium's 60 is
+    # raised on its own reading and not on WebKit's: its suite was 44m42s when 31-B set 60 and is
+    # 51 now, which left 8 minutes for an install that run 439 showed cannot be assumed to take 26 s.
+    timeout-minutes: ${{ matrix.engine == 'webkit' && 85 || 75 }}
     strategy:
       fail-fast: false
       matrix:
@@ -267,11 +283,122 @@ jobs:
           set -e
           sudo rm -f /etc/apt/sources.list.d/google-chrome.list \
                      /etc/apt/sources.list.d/google-chrome.sources
+      # Handoff 38-C (G196), item 2: the apt archives, cached. Read on runs 436 and 439, the slow
+      # part of the install is the apt archive fetch inside --with-deps and never the browser
+      # download: cdn.playwright.dev served WebKit in 3 s on all three WebKit jobs, while the Ubuntu
+      # mirror served the same 130 MB of packages in 9 s on run 436, in 31m47s on run 439 attempt 1
+      # and in 7m50s on attempt 2. So the browser directory is not cached, 3 s is not worth a step,
+      # and the .deb files are. Caching them is sound because apt, not the cache, decides what is
+      # installed: every file already in /var/cache/apt/archives is checked against the signed index
+      # and fetched again if it does not match, so a stale or partial set costs a fetch and never a
+      # wrong package. What is not sound, and not done, is caching the installed files themselves
+      # past dpkg. The key is the runner image (ImageOS and ImageVersion, which the runner exports
+      # and the env context does not carry), the engine, and Playwright's resolved version from
+      # node_modules, so the set moves with the image week and with the package list. The restore
+      # prefix is the image OS and the engine only: a new image week, or a Playwright bump, restores
+      # the most recent set saved for that engine and starts from it rather than from nothing, and
+      # apt verifies it file by file, fetching what the new week's index names differently and
+      # keeping the rest; the complete set is then saved under the new exact key. The cache action
+      # takes the newest entry under a prefix, so a complete set outranks run 441's stranded partial
+      # one wherever both match. The key is ordered OS, engine, image version, Playwright, so that
+      # prefix is a prefix of it: run 444 read `Cache not found` for `apt-archives-ubuntu24-webkit-`
+      # against run 443's `apt-archives-ubuntu24-20260927.320.1-webkit-...` because the version sat
+      # between the two, and a fallback that can never match is the miss it was meant to prevent.
+      # Restored into a runner-owned directory and copied in with sudo, because the cache action
+      # cannot write apt's root-owned directory. A miss is exactly today: nothing is copied in, and
+      # the step after the install keeps what apt fetched for the next run. The runner image writes
+      # no docker-clean and leaves APT::Keep-Downloaded-Packages at its default, so the files are
+      # there to keep; the step prints how many.
+      - name: The cache key for the apt archives (handoff 38-C)
+        id: apt-key
+        env:
+          ENGINE: ${{ matrix.engine }}
+        run: |
+          set -uo pipefail
+          pw=$(node -p "require('playwright/package.json').version")
+          image="${ImageOS:-unknown}-${ImageVersion:-unknown}"
+          # "-complete": only a set harvested after a successful install is saved under this key.
+          # Run 441's first shape saved a 10-file set under the key without the suffix, and an
+          # exact hit is never saved again, so that entry is left to expire unused.
+          echo "key=apt-archives-${ImageOS:-unknown}-${ENGINE}-${ImageVersion:-unknown}-playwright-${pw}-complete" >> "$GITHUB_OUTPUT"
+          echo "prefix=apt-archives-${ImageOS:-unknown}-${ENGINE}-" >> "$GITHUB_OUTPUT"
+          echo "Runner image ${image}, Playwright ${pw}, engine ${ENGINE}."
+      - name: Restore the apt archives (handoff 38-C)
+        id: apt-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/apt-archives
+          key: ${{ steps.apt-key.outputs.key }}
+          restore-keys: ${{ steps.apt-key.outputs.prefix }}
+      - name: Seed apt's archive directory from the cache (handoff 38-C)
+        env:
+          HIT: ${{ steps.apt-cache.outputs.cache-hit }}
+        run: |
+          set -uo pipefail
+          shopt -s nullglob
+          debs=("$HOME"/.cache/apt-archives/*.deb)
+          echo "apt archives restored from the cache: ${#debs[@]} files (exact key hit: ${HIT:-false})."
+          if [ "${#debs[@]}" -gt 0 ]; then
+            sudo cp -n "${debs[@]}" /var/cache/apt/archives/
+          fi
       # Ruling 217: cdn.playwright.dev and apt are third parties this gate does not test, and a
       # failure here used to end the matrix before a test body ran. Retried, and only the engine
       # this job drives is downloaded, which halves both the transfer and the apt surface.
+      #
+      # Handoff 38-C (G196), item 1: the install has its own time, separate from the suite's. Run
+      # 439's two attempts lost the Linux WebKit job to this step twice, at 32m10s and at 8m22s of
+      # an install that takes 73 s (WebKit) and 26 s (Chromium) on run 436, and the job was cut at
+      # its 60 minutes with no check failed, which is a gate the runner voids (217, 228). The runner
+      # image's apt carries a 15-second stall timeout and one retry, which a mirror serving 67.9 kB/s
+      # never trips. So each attempt is bounded at 240 s through scripts/retry.sh, 3.3 times the
+      # healthy WebKit step: an attempt the mirror stalls ends and is retried, and the retry keeps
+      # what the attempt fetched, because apt fetches only what its archive directory does not
+      # already hold. Three timed-out attempts fail the job here, by name, at 3 × (240 + 20 s kill
+      # grace) + 15 s of delays, 13m15s; the step's own 14-minute limit is the line that holds
+      # whatever the shell does (485, 539).
+      #
+      # Each attempt first ends what the previous one left running as root. Playwright runs apt
+      # through sudo, and sudo runs its command in a pty session of its own, outside the process
+      # group timeout signals; on run 441 the bound cut attempt 1 at 240 s with the mirror at about
+      # 60 kB/s, and its apt-get, pid 2687, outlived the attempt and held the dpkg frontend lock
+      # through attempts 2 and 3, which failed in a second each. So the attempt kills apt-get, dpkg
+      # and apt's fetch methods, TERM then KILL, then runs dpkg --configure -a, because a cut that
+      # lands in the unpack window leaves dpkg interrupted and apt refuses to run until that is
+      # finished, and only then installs. What the cut attempt fetched stays in apt's archive
+      # directory and its partial files resume. The bound is proven by matrix.yml's
+      # install_attempt_seconds probe, which forces a short one on a dispatch; nothing here changes it.
       - name: Install the browser this job drives
-        run: scripts/retry.sh 3 bunx playwright install --with-deps ${{ matrix.engine }}
+        id: install
+        timeout-minutes: 14
+        env:
+          RETRY_ATTEMPT_SECONDS: "240"
+          ENGINE: ${{ matrix.engine }}
+        run: |
+          scripts/retry.sh 3 bash -c '
+            for sig in TERM KILL; do
+              sudo pkill -"$sig" -x apt-get && sleep 3 || true
+              sudo pkill -"$sig" -x dpkg || true
+              sudo pkill -"$sig" -f "^/usr/lib/apt/methods/" || true
+            done
+            sudo dpkg --configure -a && exec bunx playwright install --with-deps "$ENGINE"
+          '
+      # Only a complete set is kept: a set harvested after a cut attempt (run 441 kept 10 of 195
+      # files) would be saved under the exact key, and an exact hit is never saved again, so the
+      # partial set would stand until the image or Playwright moved. With the install failed the
+      # directory is never created, the cache action finds no path and saves nothing, and the next
+      # run starts clean.
+      - name: Keep the apt archives for the cache (handoff 38-C)
+        if: ${{ always() && steps.install.outcome == 'success' && steps.apt-cache.outputs.cache-hit != 'true' }}
+        run: |
+          set -uo pipefail
+          shopt -s nullglob
+          mkdir -p "$HOME/.cache/apt-archives"
+          debs=(/var/cache/apt/archives/*.deb)
+          if [ "${#debs[@]}" -gt 0 ]; then
+            sudo cp "${debs[@]}" "$HOME/.cache/apt-archives/"
+          fi
+          sudo chown -R "$(id -u):$(id -g)" "$HOME/.cache/apt-archives"
+          echo "apt archives kept for the cache: ${#debs[@]} files, $(du -sh "$HOME/.cache/apt-archives" | cut -f1); the cache action saves them when this job ends."
       # Ruling 830. The loop harness in matrix.yml has captured cores, gdb frames and resolved
       # library offsets since ruling 200, and it is what named G5's fault site; the PR path captured
       # one log line. Ruling 828's census is the argument for moving it here: seventeen sightings in
