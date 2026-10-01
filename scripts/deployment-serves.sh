@@ -9,6 +9,7 @@
 # them. One place, one policy.
 #
 # Usage: BASE=https://<deployment> scripts/deployment-serves.sh
+#        BASE=https://<deployment> APP=admin scripts/deployment-serves.sh   (handoff 40-B: the admin host)
 set -uo pipefail
 
 BASE="${BASE:?BASE is required}"
@@ -31,6 +32,25 @@ serves() {
 }
 
 echo "Confirming $BASE serves every path the suites open"
+
+# Handoff 40-B section 6: the admin host serves four paths and nothing of the member app's.
+if [ "${APP:-member}" = "admin" ]; then
+  serves /sign-in /tmp/admin-sign-in.html
+  serves /
+  serves /strand/logo.png
+  serves /favicon.ico /tmp/admin-favicon.ico
+  serves /robots.txt /tmp/admin-robots.txt
+  if [ "$failed" -ne 0 ]; then
+    echo "::error::The admin deployment did not serve every path the arms open. Nothing was tested."
+    exit 1
+  fi
+  grep -q '<title>DNA Admin</title>' /tmp/admin-sign-in.html || { echo "::error::/sign-in is not the admin app"; exit 1; }
+  ! grep -q 'manifest.webmanifest' /tmp/admin-sign-in.html || { echo "::error::the admin sign-in links the member app's manifest"; exit 1; }
+  grep -q '^Disallow: /$' /tmp/admin-robots.txt || { echo "::error::/robots.txt does not refuse every crawler"; exit 1; }
+  [ "$(head -c 4 /tmp/admin-favicon.ico | od -An -tx1 | tr -d ' \n')" = "00000100" ] || { echo "::error::/favicon.ico is not an ICO"; exit 1; }
+  echo "The admin deployment serves every path the arms open."
+  exit 0
+fi
 
 serves /sign-in /tmp/sign-in.html
 serves /connect /dev/null

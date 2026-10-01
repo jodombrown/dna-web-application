@@ -4,7 +4,7 @@
 // layer, so the real client code paths run against a deterministic backend. Backend behaviour
 // (RLS, the feed view) is verified separately in SQL against the live project.
 // Usage: BASE=https://b2-shell-feed.dna-web-application.pages.dev WEBKIT=1 node tests/matrix.cjs
-// Env: ONLY='[390,844]' runs one viewport; SPECIAL=publish,guards,keyboard,silence,shell,width,targeted,profile,connect,event,discovery,vocab,block,auth,onboarding,mount,sheet,gate runs flows only.
+// Env: ONLY='[390,844]' runs one viewport; SPECIAL=publish,guards,keyboard,silence,shell,width,targeted,profile,connect,event,discovery,vocab,block,auth,onboarding,mount,sheet,gate,admin runs flows only.
 // Ruling 1237: an arm that loses its web process is run again once, alone, in a fresh browser, by
 // `drive()` below; CRASH_PROBE=<arm tag> is the harness probe that proves it (off by default).
 // Brief 3 profile flows live in tests/profile.cjs and Brief 4 Connect flows in tests/connect.cjs; both share this mock.
@@ -2506,6 +2506,8 @@ async function drive(fn, ...args) {
 // a total (rulings 228 and 317).
 // ---------------------------------------------------------------------------
 const EXPECTED_PATH = path.join(__dirname, "expected-counts.json");
+/** Handoff 40-B: the arms tests/auth.cjs runs against the admin host, swept by the admin run alone. */
+const ADMIN_ARM = /-admin (signed-out|accounts)$/;
 
 function loadExpected() {
   try {
@@ -2636,7 +2638,13 @@ function accountForArms({ full, engines }) {
     }
   }
 
-  if (!full) {
+  // Handoff 40-B: the admin arms are declared beside every other arm, so a stale or short count
+  // is caught the same way, but they run only in the admin-arms job, under SPECIAL=admin against
+  // ADMIN_BASE, the dna-admin deployment, and never in a full run, which has no admin host to read.
+  // So the full run's sweep leaves them out, and the SPECIAL=admin run sweeps exactly them: an
+  // admin arm that stopped running is still found in what was declared, in the job that owes it.
+  const adminRun = !full && (process.env.SPECIAL || "").includes("admin");
+  if (!full && !adminRun) {
     console.log(
       "ruling 292: SPECIAL, ONLY or THEME is set, so this is a subset run and arms that did not " +
         "run are not swept for. The missing-arm sweep is a full-run check.",
@@ -2645,7 +2653,9 @@ function accountForArms({ full, engines }) {
   }
   // Ruling 228's case, and the one a total conceals: an arm that stopped running entirely emits
   // nothing, so it appears nowhere in what was observed and can only be found in what was declared.
-  const inScope = (arm) => engines.some((e) => arm.startsWith(e + "-") || arm.startsWith(e + " "));
+  const inScope = (arm) =>
+    engines.some((e) => arm.startsWith(e + "-") || arm.startsWith(e + " ")) &&
+    ADMIN_ARM.test(arm) === adminRun;
   for (const arm of Object.keys(expected)) {
     if (seen.has(arm) || !inScope(arm)) continue;
     record(
@@ -6594,6 +6604,13 @@ if (require.main === module)
         // Brief 4B (rulings 230 to 236, 240): sign-in's additions, the two reset routes and the
         // signed-in change-password path. The layout pass runs everywhere; the state flows run on
         // the two representative layouts, as vocab and block do.
+        // Handoff 40-B section 6: the admin app's arms at ADMIN_BASE, the dna-admin deployment.
+        if (process.env.SPECIAL.includes("admin")) {
+          const { runAdminSignedOut, runAdminAccounts } = require("./auth.cjs");
+          await drive(runAdminSignedOut, bt, bname, [390, 844], "light");
+          await drive(runAdminSignedOut, bt, bname, [1280, 800], "dark");
+          await drive(runAdminAccounts, bt, bname, [1280, 800], "light");
+        }
         if (process.env.SPECIAL.includes("auth")) {
           const { runAuthLayout, runAuthFlows } = require("./auth.cjs");
           for (const vp of process.env.ONLY ? [JSON.parse(process.env.ONLY)] : VIEWPORTS)
