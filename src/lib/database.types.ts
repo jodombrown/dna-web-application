@@ -1,7 +1,7 @@
 // Generated from the canonical Supabase project (dgspjevjoblujcoljvkn) with the Supabase MCP
-// generate_typescript_types tool on the second Discovery handoff's branch (#76, handoff 37-A), after
-// 20260928120000 was applied and recorded (pages.yml run 407 read its drift arm green and the four
-// save_event_blocks arms passing).
+// generate_typescript_types tool on handoff 40-A's branch (#84, Brief 12 12A), after 20261001120000
+// was applied and recorded in the same transaction as its change, and its recorded text read back at
+// the file's drift md5 (121aa5e22703b508bf95a5b83b8f0ea5, the file at 40e5f32).
 //
 // Nothing here is hand-written except this header and the `Views` helper at the end, which the
 // generator drops and every regeneration restores (`src/lib/feed.ts` reads it). The regeneration
@@ -11,15 +11,17 @@
 // file byte for byte, and `tests/migration-drift.cjs` reads it, so the generator returns it. Every
 // object the generator returns is explained by a migration in this tree, so nothing is left out.
 //
-// What 20260928120000 adds here (1186, 1189): the tables `event_block_kinds`, the kinds of
-// host-written block and the heading each shows, and `event_blocks`, one row per block of an event
-// page; and the function `save_event_blocks`, the one writer, acting for the host. `event_page`,
-// `event_public_page` and `vocabularies()` gain a key each inside their jsonb answers, which the
-// generator does not see; `src/lib/event-page.ts`, `event-public.ts` and `vocabularies.ts` carry them.
-// Earlier regenerations' additions (34-A's `member_lane_activity`, `note_lane_act`, `event_going_names`
-// and `convene_discovery`'s `p_q`; 35-A's `p_without`) stand as their headers described them.
+// What 20261001120000 changes here (1177, 1178, 1265, 1266): the tables `platform_role_kinds`, the
+// role vocabulary, `platform_roles`, who holds which role, and the two append-only logs
+// `admin_actions` and `admin_reads`; the functions `admin_session_state`, `admin_grant_role` and
+// `admin_revoke_role`, and `live_arms_admin_member`, which the generator lists because it is in
+// `public` although only `live_arms` may execute it; `editors` is gone, folded into `platform_roles`,
+// so `convene_picks.picked_by` now relates to `members` rather than `editors`. `vocabularies()` gains
+// `platform_role_kinds` inside its jsonb answer, which the generator does not see; its first reader is
+// the admin app (handoff 40-B), and `src/lib/vocabularies.ts` is unchanged by 12A. Earlier
+// regenerations' additions stand as their headers described them.
 //
-// The private functions they read are absent by design: the private schema is not exposed by
+// The private functions the surfaces read are absent by design: the private schema is not exposed by
 // PostgREST, so the generator does not see it and no surface may reach it.
 
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
@@ -32,6 +34,66 @@ export type Database = {
   };
   public: {
     Tables: {
+      admin_actions: {
+        Row: {
+          action: string;
+          actor: string | null;
+          after: Json | null;
+          before: Json | null;
+          id: number;
+          occurred_at: string;
+          reason: string | null;
+          role_at_time: string | null;
+          target_id: string | null;
+          target_kind: string;
+        };
+        Insert: {
+          action: string;
+          actor?: string | null;
+          after?: Json | null;
+          before?: Json | null;
+          id?: never;
+          occurred_at?: string;
+          reason?: string | null;
+          role_at_time?: string | null;
+          target_id?: string | null;
+          target_kind: string;
+        };
+        Update: {
+          action?: string;
+          actor?: string | null;
+          after?: Json | null;
+          before?: Json | null;
+          id?: never;
+          occurred_at?: string;
+          reason?: string | null;
+          role_at_time?: string | null;
+          target_id?: string | null;
+          target_kind?: string;
+        };
+        Relationships: [];
+      };
+      admin_reads: {
+        Row: {
+          actor: string;
+          id: number;
+          occurred_at: string;
+          projection: string;
+        };
+        Insert: {
+          actor: string;
+          id?: never;
+          occurred_at?: string;
+          projection: string;
+        };
+        Update: {
+          actor?: string;
+          id?: never;
+          occurred_at?: string;
+          projection?: string;
+        };
+        Relationships: [];
+      };
       attestations: {
         Row: {
           accepted_at: string | null;
@@ -231,8 +293,8 @@ export type Database = {
             foreignKeyName: "convene_picks_picked_by_fkey";
             columns: ["picked_by"];
             isOneToOne: false;
-            referencedRelation: "editors";
-            referencedColumns: ["member_id"];
+            referencedRelation: "members";
+            referencedColumns: ["id"];
           },
         ];
       };
@@ -384,29 +446,6 @@ export type Database = {
             foreignKeyName: "edges_from_id_fkey";
             columns: ["from_id"];
             isOneToOne: false;
-            referencedRelation: "members";
-            referencedColumns: ["id"];
-          },
-        ];
-      };
-      editors: {
-        Row: {
-          granted_at: string;
-          member_id: string;
-        };
-        Insert: {
-          granted_at?: string;
-          member_id: string;
-        };
-        Update: {
-          granted_at?: string;
-          member_id?: string;
-        };
-        Relationships: [
-          {
-            foreignKeyName: "editors_member_id_fkey";
-            columns: ["member_id"];
-            isOneToOne: true;
             referencedRelation: "members";
             referencedColumns: ["id"];
           },
@@ -1910,6 +1949,83 @@ export type Database = {
           },
         ];
       };
+      platform_role_kinds: {
+        Row: {
+          label: string;
+          position: number;
+          role: string;
+        };
+        Insert: {
+          label: string;
+          position: number;
+          role: string;
+        };
+        Update: {
+          label?: string;
+          position?: number;
+          role?: string;
+        };
+        Relationships: [];
+      };
+      platform_roles: {
+        Row: {
+          granted_at: string;
+          granted_by: string | null;
+          id: string;
+          member_id: string;
+          revoked_at: string | null;
+          revoked_by: string | null;
+          role: string;
+        };
+        Insert: {
+          granted_at?: string;
+          granted_by?: string | null;
+          id?: string;
+          member_id: string;
+          revoked_at?: string | null;
+          revoked_by?: string | null;
+          role: string;
+        };
+        Update: {
+          granted_at?: string;
+          granted_by?: string | null;
+          id?: string;
+          member_id?: string;
+          revoked_at?: string | null;
+          revoked_by?: string | null;
+          role?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "platform_roles_granted_by_fkey";
+            columns: ["granted_by"];
+            isOneToOne: false;
+            referencedRelation: "members";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "platform_roles_member_id_fkey";
+            columns: ["member_id"];
+            isOneToOne: false;
+            referencedRelation: "members";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "platform_roles_revoked_by_fkey";
+            columns: ["revoked_by"];
+            isOneToOne: false;
+            referencedRelation: "members";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "platform_roles_role_fkey";
+            columns: ["role"];
+            isOneToOne: false;
+            referencedRelation: "platform_role_kinds";
+            referencedColumns: ["role"];
+          },
+        ];
+      };
       post_dia: {
         Row: {
           accepted: boolean;
@@ -2421,6 +2537,15 @@ export type Database = {
       };
     };
     Functions: {
+      admin_grant_role: {
+        Args: { p_member: string; p_reason: string; p_role: string };
+        Returns: number;
+      };
+      admin_revoke_role: {
+        Args: { p_member: string; p_reason: string; p_role: string };
+        Returns: number;
+      };
+      admin_session_state: { Args: never; Returns: Json };
       claim_guest_registrations: { Args: never; Returns: Json };
       connect_cards: {
         Args: {
@@ -2506,6 +2631,7 @@ export type Database = {
         Args: { p_event: string; p_member: string; p_role: string };
         Returns: Json;
       };
+      live_arms_admin_member: { Args: never; Returns: string };
       note_lane_act: {
         Args: { p_act: string; p_lane: string };
         Returns: undefined;
