@@ -8,20 +8,20 @@
 // so the eye toggle sits inside the field (392) and a refusal renders in the field's own line,
 // carrying Fix PR 02's fault mapping (414). The column holds the top and never centres vertically;
 // the footer takes the bottom with an auto margin (487).
+//
+// Handoff 40-B section 4 (ruling 1291): the email-and-password form itself is SignInForm, shared
+// with the admin app's sign-in, so there is one sign-in implementation. This route keeps what is
+// the member app's own: the sign-up state, the providers, the reset link and the copy.
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState, type FormEvent } from "react";
-import { Button } from "@/components/strand/Button";
-import { Input } from "@/components/strand/Input";
-import { PasswordField } from "@/components/dna/PasswordField";
 import {
-  AuthAlert,
   AuthPage,
-  AuthStatus,
   CheckEmail,
   FooterLink,
   OrSeparator,
   ProviderButtons,
 } from "@/components/dna/AuthSurface";
+import { SignInForm, useSignInForm } from "@/components/dna/SignInForm";
 import { useAuth } from "@/lib/auth";
 import {
   COPY,
@@ -55,25 +55,19 @@ export const Route = createFileRoute("/sign-in")({
   component: SignIn,
 });
 
-type Flag = "email" | "password" | "both" | null;
-
 function SignIn() {
   const { ready, member } = useAuth();
   const navigate = useNavigate();
   const { join, email: prefill } = Route.useSearch();
   useTheme();
   const [mode, setMode] = useState<"in" | "up">(join ? "up" : "in");
-  const [email, setEmail] = useState(prefill ?? "");
-  const [password, setPassword] = useState("");
-  const [alert, setAlert] = useState<string | null>(null);
-  const [status, setStatus] = useState<string | null>(null);
-  const [flag, setFlag] = useState<Flag>(null);
-  const [busy, setBusy] = useState(false);
+  // The form's state, in the shared hook: email, password, the alert and status lines, the field
+  // flags, the password refusal (ruling 392, B8 item 3: in the field's own line) and busy.
+  const form = useSignInForm(prefill ?? "");
+  const { email, password, setPassword, setAlert, setStatus, setFlag, setRefusal, setBusy, clear } =
+    form;
   const [waitingFor, setWaitingFor] = useState<Provider | null>(null);
   const [sent, setSent] = useState<string | null>(null);
-  // Ruling 392, B8 item 3: a password refusal renders in the field's own line, where the member is
-  // looking, rather than only in the alert block above the form.
-  const [refusal, setRefusal] = useState<string | null>(null);
 
   // A provider round trip that failed comes back here rather than to the Feed, so the two states
   // the copy names have somewhere to render (handoff section 2).
@@ -84,6 +78,8 @@ function SignIn() {
     stripAuthFragment();
     if (back.kind === "cancelled") setStatus(COPY.providerCancelled(back.provider));
     else setAlert(COPY.providerError(back.provider));
+    // The hook's setters are stable for the life of the route; this runs once, on mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Ruling 240: a recovery session is held at /reset/new by the gate in the root route, so this
@@ -91,13 +87,6 @@ function SignIn() {
   useEffect(() => {
     if (ready && member && !recoveryPending()) void navigate({ to: "/feed", search: {} });
   }, [ready, member, navigate]);
-
-  const clear = () => {
-    setAlert(null);
-    setStatus(null);
-    setFlag(null);
-    setRefusal(null);
-  };
 
   const onProvider = async (p: Provider) => {
     clear();
@@ -115,54 +104,51 @@ function SignIn() {
     e.preventDefault();
     const sb = getSupabase();
     if (!sb) return;
+    if (mode === "in") {
+      // The shared sign-in: the shape check, then the request. The mismatch line never says which
+      // of the two was wrong (handoff section 2).
+      await form.signIn(sb, COPY.mismatch);
+      return;
+    }
     clear();
     if (!isEmailShaped(email)) {
       setFlag("email");
       setAlert(COPY.malformed);
       return;
     }
-    if (mode === "up" && password.length < MIN_PASSWORD) {
+    if (password.length < MIN_PASSWORD) {
       setFlag("password");
       setRefusal(COPY.tooShort);
       return;
     }
     setBusy(true);
     try {
-      if (mode === "in") {
-        const { error } = await sb.auth.signInWithPassword({ email, password });
-        if (error) {
-          // Never says which of the two was wrong (handoff section 2).
-          setFlag("both");
-          setAlert(COPY.mismatch);
-        }
-      } else {
-        // Ruling 384: no name is collected here, so none is written. Onboarding screen one is the
-        // one place a member's name is set (307, 469).
-        const signUp = sb.auth.signUp({
-          email,
-          password,
-          // Ruling 432 (U-A1): no display name here; onboarding screen one asks for it (ruling 307).
-          options: { emailRedirectTo: window.location.origin + "/feed" },
-        });
-        // Ruling 234: the state is identical whether or not the address already has an account, so
-        // it reveals on a fixed delay and never on the shape of the answer. Only a password the
-        // server refuses outright pulls the member back to the form.
-        const [{ error }] = await Promise.all([signUp, delay(REVEAL_MS)]);
-        if (error) {
-          // Ruling 414: every password refusal is named by its real reason. Anything that is not a
-          // password fault keeps the anti-enumeration state below (ruling 234).
-          const fault = passwordFault(error);
-          if (fault !== "other" || /password/i.test(error.message || "")) {
-            setFlag("password");
-            setRefusal(passwordFaultCopy(fault));
-            return;
-          }
-          // Ruling 496: the page could not create the account, and nothing typed is lost.
-          setAlert(COPY.signUpFailed);
+      // Ruling 384: no name is collected here, so none is written. Onboarding screen one is the
+      // one place a member's name is set (307, 469).
+      const signUp = sb.auth.signUp({
+        email,
+        password,
+        // Ruling 432 (U-A1): no display name here; onboarding screen one asks for it (ruling 307).
+        options: { emailRedirectTo: window.location.origin + "/feed" },
+      });
+      // Ruling 234: the state is identical whether or not the address already has an account, so
+      // it reveals on a fixed delay and never on the shape of the answer. Only a password the
+      // server refuses outright pulls the member back to the form.
+      const [{ error }] = await Promise.all([signUp, delay(REVEAL_MS)]);
+      if (error) {
+        // Ruling 414: every password refusal is named by its real reason. Anything that is not a
+        // password fault keeps the anti-enumeration state below (ruling 234).
+        const fault = passwordFault(error);
+        if (fault !== "other" || /password/i.test(error.message || "")) {
+          setFlag("password");
+          setRefusal(passwordFaultCopy(fault));
           return;
         }
-        setSent(email);
+        // Ruling 496: the page could not create the account, and nothing typed is lost.
+        setAlert(COPY.signUpFailed);
+        return;
       }
+      setSent(email);
     } finally {
       setBusy(false);
     }
@@ -194,8 +180,6 @@ function SignIn() {
       />
     );
 
-  const flagEmail = flag === "email" || flag === "both";
-  const flagPassword = flag === "password" || flag === "both";
   const up = mode === "up";
 
   return (
@@ -213,74 +197,47 @@ function SignIn() {
         />
       }
     >
-      {/* noValidate: the alert block is the one place a form-level auth message is announced
-          (handoff section 2), so the browser's own validation bubble must not pre-empt it. A
-          password refusal is the exception ruling 392 names: it renders in the field's own line. */}
-      <form
+      <SignInForm
+        form={form}
         onSubmit={(e) => void submit(e)}
-        noValidate
-        aria-busy={busy || waitingFor !== null}
-        style={{ display: "flex", flexDirection: "column", gap: 14 }}
+        pending={waitingFor !== null}
+        passwordAutoComplete={up ? "new-password" : "current-password"}
+        {...(up ? { passwordHint: COPY.passwordHint } : {})}
+        submitLabel={up ? "Create account" : "Sign in"}
+        busyLabel={up ? "Creating your account" : "Signing in"}
+        forgot={
+          // Sign-in additions, in DOM order after the Password field (handoff section 1): the link
+          // first, left-aligned under the field; the separator and the provider buttons after the
+          // submit, which is where sign-up carries them too.
+          !up && (
+            <button
+              type="button"
+              data-testid="forgot-password"
+              onClick={() => void navigate({ to: "/reset" })}
+              style={{
+                all: "unset",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                alignSelf: "flex-start",
+                minHeight: "var(--target-primary)",
+                fontSize: 15,
+                fontWeight: 500,
+                color: "var(--ink-2)",
+              }}
+            >
+              Forgot your password?
+            </button>
+          )
+        }
       >
-        {alert && <AuthAlert>{alert}</AuthAlert>}
-        {status && <AuthStatus>{status}</AuthStatus>}
-        <Input
-          label="Email"
-          type="email"
-          value={email}
-          onChange={(e) => setEmail((e.target as HTMLInputElement).value)}
-          autoComplete="email"
-          aria-invalid={flagEmail}
-          required
-        />
-        <PasswordField
-          label="Password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          autoComplete={up ? "new-password" : "current-password"}
-          aria-invalid={flagPassword}
-          {...(refusal ? { error: refusal } : up ? { hint: COPY.passwordHint } : {})}
-          required
-        />
-        {/* Sign-in additions, in DOM order after the Password field (handoff section 1): the link
-            first, left-aligned under the field; the separator and the provider buttons after the
-            submit, which is where sign-up carries them too. */}
-        {!up && (
-          <button
-            type="button"
-            data-testid="forgot-password"
-            onClick={() => void navigate({ to: "/reset" })}
-            style={{
-              all: "unset",
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              alignSelf: "flex-start",
-              minHeight: "var(--target-primary)",
-              fontSize: 15,
-              fontWeight: 500,
-              color: "var(--ink-2)",
-            }}
-          >
-            Forgot your password?
-          </button>
-        )}
-        <Button type="submit" disabled={busy || waitingFor !== null} full>
-          {up
-            ? busy
-              ? "Creating your account"
-              : "Create account"
-            : busy
-              ? "Signing in"
-              : "Sign in"}
-        </Button>
         <OrSeparator />
         <ProviderButtons
           waitingFor={waitingFor}
-          disabled={busy || waitingFor !== null}
+          disabled={form.busy || waitingFor !== null}
           onStart={(p) => void onProvider(p)}
         />
-      </form>
+      </SignInForm>
     </AuthPage>
   );
 }

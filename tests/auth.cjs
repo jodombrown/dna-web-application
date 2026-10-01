@@ -725,4 +725,194 @@ async function runAuthFlows(browserType, bname, [w, h], theme) {
   }
 }
 
-module.exports = { runAuthLayout, runAuthFlows };
+// ---------------------------------------------------------------------------------------------
+// Handoff 40-B section 6: the admin app at its own host, ADMIN_BASE, the dna-admin deployment this
+// run uploaded. Three browser arms; the fourth, the bundles, is tests/admin-bundles.cjs. Arm 1 runs
+// signed out against the deployment with nothing mocked, because a signed-out visit makes no
+// request the arm needs to control. Arms 2 and 3 sign the two seeded accounts in for real
+// (MEMBER_* and OWNER_*, the secrets the live job already holds) and read what the console renders
+// from public.admin_session_state(): the refusal for member-test, which holds no role, and the
+// enrolment or the code step for owner-test, which holds editor. The founder's aal2 path is a
+// device check (61) and no arm. Without the host or the credentials each arm reports unproven (228).
+// Usage: ADMIN_BASE=https://<id>.dna-admin.pages.dev SPECIAL=admin node tests/matrix.cjs
+
+const ADMIN_BASE = (process.env.ADMIN_BASE || "").replace(/\/$/, "");
+const ADMIN_H1 = "h1";
+
+async function adminContext(browserType, [w, h], theme) {
+  const browser = await launch(browserType);
+  const ctx = await browser.newContext({
+    viewport: { width: w, height: h },
+    hasTouch: w <= 1024,
+    isMobile: w < 1024,
+    deviceScaleFactor: 1,
+    colorScheme: theme,
+  });
+  const page = await ctx.newPage();
+  await page.addInitScript(
+    ({ theme }) => {
+      try {
+        localStorage.setItem("dna.theme", theme);
+      } catch {}
+    },
+    { theme },
+  );
+  return { browser, page };
+}
+
+async function heading(page) {
+  return (
+    await page
+      .locator(ADMIN_H1)
+      .first()
+      .innerText()
+      .catch(() => "")
+  ).trim();
+}
+
+/** Arm 1: signed out, `/` and any other path land on the sign-in, with no sign-up and no provider. */
+async function runAdminSignedOut(browserType, bname, [w, h], theme) {
+  const tag = `${bname}-${w}x${h}-${theme}-admin signed-out`;
+  M.armStart(tag);
+  if (!ADMIN_BASE) {
+    M.unproven(tag, "ADMIN_BASE is not set, so there is no admin deployment to read");
+    return;
+  }
+  const { browser, page } = await adminContext(browserType, [w, h], theme);
+  try {
+    for (const path of ["/", "/anything"]) {
+      await page.goto(ADMIN_BASE + path, { waitUntil: "networkidle" });
+      await hydrated(page);
+      await page.waitForURL("**/sign-in", { timeout: 15000 }).catch(() => undefined);
+      record(
+        `${tag} | ${path} lands on the sign-in`,
+        new URL(page.url()).pathname === "/sign-in",
+        page.url(),
+      );
+    }
+    record(`${tag} | the heading reads DNA Admin`, (await heading(page)) === "DNA Admin");
+    record(
+      `${tag} | no provider button`,
+      (await page.locator('[data-testid^="provider-"]').count()) === 0,
+    );
+    const text = await page.locator("body").innerText();
+    record(
+      `${tag} | no sign-up`,
+      !/Create an account|Create your account/.test(text),
+      text.slice(0, 120),
+    );
+    record(
+      `${tag} | the reset line names the member app`,
+      /app\.diasporanetwork\.africa\/reset/.test(text),
+    );
+    await noOverflow(page, `${tag} |`);
+  } catch (e) {
+    record(`${tag} flow`, false, String(e).slice(0, 200));
+  } finally {
+    await browser.close().catch(() => undefined);
+  }
+}
+
+async function adminSignIn(page, email, password) {
+  await page.goto(ADMIN_BASE + "/sign-in", { waitUntil: "networkidle" });
+  await hydrated(page);
+  await page.fill('input[type="email"]', email);
+  await page.fill('input[type="password"]', password);
+  await page.click('button[type="submit"]');
+}
+
+/**
+ * Arms 2 and 3: the two seeded accounts, for real. member-test holds no role and is refused with
+ * a sentence and a sign-out; owner-test holds editor and at aal1 sees enrolment or the code step,
+ * and the enrolment must produce a QR code, which is what proves TOTP is enabled on the project
+ * (handoff section 3, item 6). Neither ever sees the shell.
+ */
+async function runAdminAccounts(browserType, bname, [w, h], theme) {
+  const tag = `${bname}-${w}x${h}-${theme}-admin accounts`;
+  M.armStart(tag);
+  const { MEMBER_EMAIL, MEMBER_PASSWORD, OWNER_EMAIL, OWNER_PASSWORD } = process.env;
+  if (!ADMIN_BASE) {
+    M.unproven(tag, "ADMIN_BASE is not set, so there is no admin deployment to read");
+    return;
+  }
+  if (!MEMBER_EMAIL || !MEMBER_PASSWORD || !OWNER_EMAIL || !OWNER_PASSWORD) {
+    M.unproven(tag, "MEMBER_* and OWNER_* are not set, so no account can sign in");
+    return;
+  }
+  const shellShown = async (page) =>
+    (await page.locator('[data-testid="admin-shell"]').count()) > 0;
+
+  // member-test: refused.
+  {
+    const { browser, page } = await adminContext(browserType, [w, h], theme);
+    try {
+      await adminSignIn(page, MEMBER_EMAIL, MEMBER_PASSWORD);
+      await page.waitForSelector('[data-testid="admin-refusal"]', { timeout: 20000 });
+      record(
+        `${tag} | member-test reads No admin access`,
+        (await heading(page)) === "No admin access",
+      );
+      record(
+        `${tag} | the refusal line`,
+        (await page.locator("body").innerText()).includes(
+          "This account does not have access to the DNA admin console.",
+        ),
+      );
+      record(`${tag} | member-test never sees the shell`, !(await shellShown(page)));
+      await page.click('[data-testid="admin-sign-out"]');
+      await page.waitForURL("**/sign-in", { timeout: 15000 }).catch(() => undefined);
+      record(
+        `${tag} | sign out returns to the sign-in`,
+        new URL(page.url()).pathname === "/sign-in",
+        page.url(),
+      );
+    } catch (e) {
+      record(`${tag} member flow`, false, String(e).slice(0, 200));
+    } finally {
+      await browser.close().catch(() => undefined);
+    }
+  }
+
+  // owner-test: a role at aal1, so the second step and never the shell.
+  {
+    const { browser, page } = await adminContext(browserType, [w, h], theme);
+    try {
+      await adminSignIn(page, OWNER_EMAIL, OWNER_PASSWORD);
+      await page.waitForSelector('[data-testid="admin-enrol"], [data-testid="admin-code"]', {
+        timeout: 20000,
+      });
+      const h1 = await heading(page);
+      record(
+        `${tag} | owner-test sees enrolment or the code step`,
+        h1 === "Set up two-step sign-in" || h1 === "Two-step sign-in",
+        h1,
+      );
+      record(`${tag} | owner-test never sees the shell`, !(await shellShown(page)));
+      if (h1 === "Set up two-step sign-in") {
+        // The QR code and the secret are what enrolment is; without them TOTP is off on the project.
+        const qr = await page
+          .waitForSelector('[data-testid="admin-qr"]', { timeout: 20000 })
+          .then(() => true)
+          .catch(() => false);
+        const alert = await page
+          .locator('[data-testid="auth-alert"]')
+          .innerText()
+          .catch(() => "");
+        record(`${tag} | enrolment shows a QR code and the secret`, qr, alert.slice(0, 120));
+      } else {
+        record(
+          `${tag} | the code step offers the Code field`,
+          (await page.locator('input[autocomplete="one-time-code"]').count()) === 1,
+        );
+      }
+    } catch (e) {
+      record(`${tag} owner flow`, false, String(e).slice(0, 200));
+    } finally {
+      // The session lives in this context's storage and goes with it; no sign-out control exists on
+      // the second step, by the copy table.
+      await browser.close().catch(() => undefined);
+    }
+  }
+}
+
+module.exports = { runAuthLayout, runAuthFlows, runAdminSignedOut, runAdminAccounts };

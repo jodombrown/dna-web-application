@@ -4,7 +4,7 @@
 // layer, so the real client code paths run against a deterministic backend. Backend behaviour
 // (RLS, the feed view) is verified separately in SQL against the live project.
 // Usage: BASE=https://b2-shell-feed.dna-web-application.pages.dev WEBKIT=1 node tests/matrix.cjs
-// Env: ONLY='[390,844]' runs one viewport; SPECIAL=publish,guards,keyboard,silence,shell,width,targeted,profile,connect,event,discovery,vocab,block,auth,onboarding,mount,sheet,gate runs flows only.
+// Env: ONLY='[390,844]' runs one viewport; SPECIAL=publish,guards,keyboard,silence,shell,width,targeted,profile,connect,event,discovery,vocab,block,auth,onboarding,mount,sheet,gate,admin runs flows only.
 // Ruling 1237: an arm that loses its web process is run again once, alone, in a fresh browser, by
 // `drive()` below; CRASH_PROBE=<arm tag> is the harness probe that proves it (off by default).
 // Brief 3 profile flows live in tests/profile.cjs and Brief 4 Connect flows in tests/connect.cjs; both share this mock.
@@ -6594,6 +6594,13 @@ if (require.main === module)
         // Brief 4B (rulings 230 to 236, 240): sign-in's additions, the two reset routes and the
         // signed-in change-password path. The layout pass runs everywhere; the state flows run on
         // the two representative layouts, as vocab and block do.
+        // Handoff 40-B section 6: the admin app's arms at ADMIN_BASE, the dna-admin deployment.
+        if (process.env.SPECIAL.includes("admin")) {
+          const { runAdminSignedOut, runAdminAccounts } = require("./auth.cjs");
+          await drive(runAdminSignedOut, bt, bname, [390, 844], "light");
+          await drive(runAdminSignedOut, bt, bname, [1280, 800], "dark");
+          await drive(runAdminAccounts, bt, bname, [1280, 800], "light");
+        }
         if (process.env.SPECIAL.includes("auth")) {
           const { runAuthLayout, runAuthFlows } = require("./auth.cjs");
           for (const vp of process.env.ONLY ? [JSON.parse(process.env.ONLY)] : VIEWPORTS)

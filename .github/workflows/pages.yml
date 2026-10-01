@@ -57,43 +57,23 @@ jobs:
       - name: No applied migration file was amended (ruling 466)
         run: node tests/migration-lint.cjs
       - run: bun run build
+      # Handoff 40-B section 6, arm 4: the member app's bundle carries no admin read and no admin
+      # copy (Brief 12 guardrail 1). Read from the output this job just built.
+      - name: The member bundle carries nothing admin (handoff 40-B)
+        run: node tests/admin-bundles.cjs member
       - name: Cloudflare secrets missing
         if: ${{ env.CF_API_TOKEN == '' || env.CF_ACCOUNT_ID == '' }}
         run: echo "::notice::Deploy skipped. Add CLOUDFLARE_API_TOKEN (Pages:Edit) and CLOUDFLARE_ACCOUNT_ID as repository secrets to enable per-branch Pages previews."
-      # Genuinely idempotent (ruling 147): ask whether the project exists before creating it,
-      # and treat "already exists" (code 8000002) as the steady state rather than an error.
-      # A step that is red on every run teaches us to stop reading red.
+      # Genuinely idempotent (ruling 147): the script asks whether the project exists before
+      # creating it, and treats "already exists" (code 8000002) as the steady state rather than an
+      # error. One script for this project and for dna-admin (handoff 40-B section 2).
       - name: Ensure the Pages project exists
         if: ${{ env.CF_API_TOKEN != '' && env.CF_ACCOUNT_ID != '' }}
         env:
           PROJECT: dna-web-application
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: |
-          set -uo pipefail
-          code=$(curl -sS -o /dev/null -w '%{http_code}' \
-            -H "Authorization: Bearer $CF_API_TOKEN" \
-            "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/pages/projects/$PROJECT" \
-            || echo 000)
-          if [ "$code" = "200" ]; then
-            echo "Pages project $PROJECT already exists; nothing to create."
-            exit 0
-          fi
-          if [ "$code" != "404" ]; then
-            echo "::notice::Could not read the Pages project (HTTP $code). Trying create and tolerating 'already exists'."
-          fi
-          # Hold wrangler's output back so a tolerated "already exists" never prints as an error.
-          out=$(bunx wrangler pages project create "$PROJECT" --production-branch=main 2>&1) && status=0 || status=$?
-          if [ "$status" -eq 0 ]; then
-            echo "Created Pages project $PROJECT."
-            exit 0
-          fi
-          if printf '%s\n' "$out" | grep -qE '8000002|already exists'; then
-            echo "Pages project $PROJECT already exists; nothing to create."
-            exit 0
-          fi
-          printf '%s\n' "$out"
-          exit "$status"
+        run: scripts/ensure-pages-project.sh
       - name: Deploy to Cloudflare Pages
         id: deploy
         if: ${{ env.CF_API_TOKEN != '' && env.CF_ACCOUNT_ID != '' }}
@@ -126,6 +106,146 @@ jobs:
             exit 1
           fi
           echo "Deployment ${ID:-(no id returned)} at $URL. The test jobs read this URL; the branch alias, ${ALIAS:-none returned}, is read by no job."
+
+  # Handoff 40-B section 2 (Brief 12 12A-2, rulings 1290, 1291): the admin app, built from admin/
+  # and uploaded to its own Pages project, dna-admin, which the founder attaches to
+  # admin.diasporanetwork.africa. The member job's steps, one for one, against the admin build and
+  # project. Its own job with no `needs` in either direction, so it neither delays nor gates the
+  # member app's deploy, and the member app's test jobs never wait on it.
+  deploy-admin:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      deployments: write
+    outputs:
+      # Ruling 1141, as in the member job: this deployment's own URL, never the branch alias.
+      url: ${{ steps.deploy.outputs.deployment-url }}
+      deployed: ${{ steps.deploy.outcome == 'success' }}
+    env:
+      CF_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CF_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: scripts/retry.sh 3 bun install --frozen-lockfile
+      # `bun run lint` in the member job already covers admin/ (eslint runs on the whole tree); the
+      # admin tree's types are its own project.
+      - run: bunx tsc --noEmit -p admin/tsconfig.json
+      - run: bun run build:admin
+      # Handoff 40-B section 6, arm 4: the admin bundle carries no member route.
+      - name: The admin bundle carries no member route (handoff 40-B)
+        run: node tests/admin-bundles.cjs admin
+      - name: Cloudflare secrets missing
+        if: ${{ env.CF_API_TOKEN == '' || env.CF_ACCOUNT_ID == '' }}
+        run: echo "::notice::Admin deploy skipped. Add CLOUDFLARE_API_TOKEN (Pages:Edit) and CLOUDFLARE_ACCOUNT_ID as repository secrets to enable per-branch Pages previews."
+      - name: Ensure the Pages project exists
+        if: ${{ env.CF_API_TOKEN != '' && env.CF_ACCOUNT_ID != '' }}
+        env:
+          PROJECT: dna-admin
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: scripts/ensure-pages-project.sh
+      - name: Deploy to Cloudflare Pages (dna-admin)
+        id: deploy
+        if: ${{ env.CF_API_TOKEN != '' && env.CF_ACCOUNT_ID != '' }}
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy admin/dist --project-name=dna-admin --branch=${{ github.ref_name }} --commit-hash=${{ github.sha }} --commit-dirty=true
+      - name: The admin deployment's own URL (ruling 1141)
+        if: ${{ steps.deploy.outcome == 'success' }}
+        env:
+          URL: ${{ steps.deploy.outputs.deployment-url }}
+          ALIAS: ${{ steps.deploy.outputs.pages-deployment-alias-url }}
+          ID: ${{ steps.deploy.outputs.pages-deployment-id }}
+        run: |
+          set -uo pipefail
+          if [ -z "$URL" ]; then
+            echo "::error::The admin deploy step returned no deployment-url, so the admin arms have no deployment to test. No host is built from the branch name (ruling 1141)."
+            exit 1
+          fi
+          if [ "$URL" = "$ALIAS" ]; then
+            echo "::error::The admin deploy step's deployment-url is the branch alias, $ALIAS, and not the deployment's own URL (ruling 1141)."
+            exit 1
+          fi
+          echo "Admin deployment ${ID:-(no id returned)} at $URL. The admin arms read this URL; the branch alias, ${ALIAS:-none returned}, is read by no job."
+          {
+            echo "### Admin deployment (handoff 40-B)"
+            echo ""
+            echo "dna-admin at \`$URL\`, built from \`${{ github.sha }}\`. Alias: \`${ALIAS:-none}\`."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # Handoff 40-B section 6: the admin arms, against the dna-admin deployment this run uploaded.
+  # Chromium on the runner; the founder's device check (61) covers Safari until a design lands.
+  admin-arms:
+    needs: deploy-admin
+    if: ${{ needs.deploy-admin.outputs.deployed == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      ADMIN_BASE: ${{ needs.deploy-admin.outputs.url }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: The host this job tests (ruling 1141)
+        env:
+          BASE: ${{ needs.deploy-admin.outputs.url }}
+          KIND: push
+        run: scripts/host-tested.sh
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: scripts/retry.sh 3 bun install --frozen-lockfile
+      - name: The admin deployment serves every path the arms open (ruling 217)
+        env:
+          BASE: ${{ needs.deploy-admin.outputs.url }}
+          APP: admin
+        run: scripts/deployment-serves.sh
+      - name: Install Chromium
+        run: scripts/retry.sh 3 bunx playwright install --with-deps chromium
+      - name: Run the admin arms (chromium)
+        env:
+          ENGINE: chromium
+          SPECIAL: admin
+          OUT: ${{ github.workspace }}/matrix-out
+          # The two seeded accounts the live job already signs in (ruling 218); without them arms 2
+          # and 3 report unproven (ruling 228), which is what a fork PR gets.
+          OWNER_EMAIL: ${{ secrets.OWNER_EMAIL }}
+          OWNER_PASSWORD: ${{ secrets.OWNER_PASSWORD }}
+          MEMBER_EMAIL: ${{ secrets.MEMBER_EMAIL }}
+          MEMBER_PASSWORD: ${{ secrets.MEMBER_PASSWORD }}
+        run: |
+          set -o pipefail
+          mkdir -p "$OUT"
+          node tests/matrix.cjs 2>&1 | tee "$OUT/matrix.log"
+      - name: Arms, in the tail (rulings 267, 292)
+        if: always()
+        env:
+          OUT: ${{ github.workspace }}/matrix-out
+        run: |
+          set -uo pipefail
+          log="$OUT/matrix.log"
+          if [ ! -s "$log" ]; then
+            echo "The admin arms step produced no output; it did not reach tests/matrix.cjs."
+            exit 0
+          fi
+          tail=$(sed -n '/=== arms by tier/,$p' "$log")
+          [ -n "$tail" ] || tail=$(tail -80 "$log")
+          {
+            echo "### admin arms, chromium (handoff 40-B; ruling 292: arms, not a total)"
+            echo '```'
+            printf '%s\n' "$tail"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: admin-arms-run-${{ github.run_number }}
+          path: matrix-out
+          if-no-files-found: warn
 
   # Ruling 218's arms, in their own job.
   #
