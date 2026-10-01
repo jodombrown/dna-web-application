@@ -1,0 +1,10 @@
+{
+  // Cloudflare Pages project for admin.diasporanetwork.africa (Brief 12 12A-2, rulings 1290, 1291).
+  // Nitro (preset cloudflare-pages) emits admin/dist with _worker.js, _routes.json and the static
+  // assets; the deploy job uploads it to this project and never to dna-web-application.
+  "$schema": "https://raw.githubusercontent.com/cloudflare/workers-sdk/main/packages/wrangler/config-schema.json",
+  "name": "dna-admin",
+  "compatibility_date": "2026-09-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "pages_build_output_dir": "dist",
+}

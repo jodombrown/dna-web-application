@@ -1,0 +1,13 @@
+# The admin host's static-asset headers (handoff 40-B section 5): ruling 438's six, as the member
+# app's public/_headers carries them, with the image sources cut to the host's own files and the QR
+# code's data: URL, plus X-Robots-Tag so no asset of this host is indexed. The worker sets the same
+# set, with the per-response nonce, on every SSR response in admin/src/server.ts. Nitro appends its
+# own asset cache rule below at build time (admin/dist/_headers).
+/*
+  Content-Security-Policy: default-src 'self'; connect-src 'self' https://dgspjevjoblujcoljvkn.supabase.co wss://dgspjevjoblujcoljvkn.supabase.co; img-src 'self' data:; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'
+  X-Frame-Options: DENY
+  Referrer-Policy: strict-origin-when-cross-origin
+  Strict-Transport-Security: max-age=31536000; includeSubDomains
+  X-Content-Type-Options: nosniff
+  Permissions-Policy: camera=(), geolocation=(), microphone=()
+  X-Robots-Tag: noindex
