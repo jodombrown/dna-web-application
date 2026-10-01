@@ -27,6 +27,12 @@
 //                                   delivery row, no meeting_link row and no event_host_settings
 //                                   row; the owner sees all three. Unproven until the Pass 1
 //                                   migrations are on the project.
+//   Brief 12 12A (1177, 1178, 1265,  the admin gate is the database: no policy cites is_admin, the
+//   1266; handoff 40-A)              admin persona at aal1 holds a role and gets none, at aal2 grants
+//                                   and revokes through the two audited RPCs, a member with no role
+//                                   and signed out are refused, the two logs carry their append-only
+//                                   triggers, and vocabularies() serves the six role kinds. The
+//                                   admin persona is the id live_arms_admin_member() answers (382).
 //
 // Nothing here is secret: the connection string arrives from the runner and never from this file.
 const fs = require("fs");
@@ -40,8 +46,15 @@ const SEEDED_FILLING = [
   "01e7c23d-5811-41fa-bb67-fe9b7a80cdbd",
 ];
 
-function claims(uid) {
-  return JSON.stringify({ sub: uid, role: "authenticated", aud: "authenticated" });
+/**
+ * The claims PostgREST would set for a signed-in member. `aal` is the session's authenticator
+ * assurance level as Supabase Auth writes it, "aal1" or "aal2"; left out, the claims carry none,
+ * which the admin gate (1265) reads as not aal2.
+ */
+function claims(uid, aal) {
+  const c = { sub: uid, role: "authenticated", aud: "authenticated" };
+  if (aal) c.aal = aal;
+  return JSON.stringify(c);
 }
 
 /**
@@ -105,9 +118,9 @@ async function attempt(client, text, values) {
   }
 }
 
-async function actAs(client, uid) {
+async function actAs(client, uid, aal) {
   await client.query("set local role authenticated");
-  await client.query("select set_config('request.jwt.claims', $1, true)", [claims(uid)]);
+  await client.query("select set_config('request.jwt.claims', $1, true)", [claims(uid, aal)]);
 }
 
 async function actAsSelf(client) {
@@ -167,7 +180,7 @@ async function runLiveDbArms({ record, skip }) {
     discoveryFormat: "Brief 9 (586, 693): an in-person facet drops the online lane",
     discoverySubInsert: "Brief 9 (1039): a direct insert into member_subscriptions is refused",
     discoveryThresholds: "Brief 9 (1045): a member cannot read private.convene_thresholds",
-    discoveryEditors: "Brief 9 (1040): a member cannot read public.editors",
+    discoveryRoles: "Brief 12 12A (1177): a member cannot read public.platform_roles",
     discoveryRetired:
       "Brief 9 (1041, 1093): events and the retired soon, online and near lenses are refused with 22023",
     discoveryDismissAll: "Brief 9 (1044): a dismissal in all is refused with 22023",
@@ -214,6 +227,21 @@ async function runLiveDbArms({ record, skip }) {
       "Handoff 37-C (1196, 1225): event_public_page carries the presenter's headline and links and no family, read signed out",
     presenterSubscribe:
       "Handoff 37-C (1039, 1196): set_subscription flips viewer.subscribed on event_page for the event's family",
+    admin: "Brief 12 12A (1266): no row in pg_policies cites is_admin",
+    adminAal1:
+      "Brief 12 12A (1265): the admin persona at aal1 reads holds_role true and roles empty and is refused admin_grant_role with 42501; at aal2 the same call is answered",
+    adminGrant:
+      "Brief 12 12A (1177, 1178): the admin persona at aal2 grants analyst to member-test, who then reads holds_role true with analyst among roles; the revocation returns them to holds_role false",
+    adminRefused:
+      "Brief 12 12A (1265, 1266): member-test at aal2 with no role is refused admin_grant_role with 42501, and a direct select on platform_roles, admin_actions and admin_reads is refused with 42501",
+    adminLastAdmin:
+      "Brief 12 12A: the admin persona revoking its own admin row is refused with 22023 while it is the only live admin",
+    adminAppendOnly:
+      "Brief 12 12A (1178): pg_trigger shows the update, delete and truncate triggers on admin_actions and admin_reads (the service-role refusal itself is not exercisable by live_arms and is not claimed)",
+    adminSignedOut:
+      "Brief 12 12A: signed out cannot execute admin_session_state, admin_grant_role or admin_revoke_role (42501)",
+    adminVocab:
+      "Brief 12 12A (1177): vocabularies() carries platform_role_kinds as the six roles in order",
   };
   // G143: a block that opens with a presence probe carries every arm it holds in `names`, under one key
   // prefix, so a probe that fails reports each of them UNPROVEN and the job's total does not fall with
@@ -1841,11 +1869,12 @@ async function runLiveDbArms({ record, skip }) {
         !floors.ok && floors.code === "42501",
         floors.ok ? "read " + floors.rows.length + " row(s)" : failed(floors),
       );
-      const editors = await attempt(client, "select * from public.editors");
+      // 1177: public.editors is folded into platform_roles, which has no client grant either.
+      const roles = await attempt(client, "select * from public.platform_roles");
       record(
-        names.discoveryEditors,
-        !editors.ok && editors.code === "42501",
-        editors.ok ? "read " + editors.rows.length + " row(s)" : failed(editors),
+        names.discoveryRoles,
+        !roles.ok && roles.code === "42501",
+        roles.ok ? "read " + roles.rows.length + " row(s)" : failed(roles),
       );
 
       // 1093: the lens set is five, so events and the three retired lenses are all refused.
@@ -2296,6 +2325,245 @@ async function runLiveDbArms({ record, skip }) {
           : held.code + " " + held.message,
       );
     });
+
+    // ------------------------------------------------------------------------------------------
+    // Brief 12 12A (rulings 1177, 1178, 1265, 1266; 20261001120000; handoff 40-A). The admin gate is
+    // the database. Every arm opens with the same presence probe so that before the apply the block
+    // reports UNPROVEN as a whole (G143, 228). The admin persona is the member id
+    // live_arms_admin_member() answers, read as live_arms itself (382); the arms then act as that
+    // member with an aal claim of their choosing, exactly as Supabase Auth would set it. Each arm is
+    // its own rolled-back transaction, so a grant one arm makes is gone before the next begins.
+    // ------------------------------------------------------------------------------------------
+    const adminPresent = async () => {
+      await actAsSelf(client);
+      const present = await client.query(
+        "select to_regprocedure('public.admin_session_state()') is not null as ok",
+      );
+      return !!present.rows[0] && present.rows[0].ok === true;
+    };
+    const adminMember = async () => {
+      await actAsSelf(client);
+      const r = await attempt(client, "select public.live_arms_admin_member() as id");
+      return r.ok && r.rows[0] ? r.rows[0].id : null;
+    };
+    const stateAs = async (uid, aal) => {
+      await actAs(client, uid, aal);
+      const r = await attempt(client, "select public.admin_session_state() as s");
+      return r.ok ? { ok: true, s: r.rows[0] && r.rows[0].s } : r;
+    };
+    const roleList = (st) => (st.ok && st.s && Array.isArray(st.s.roles) ? st.s.roles : null);
+    const fmt = (r) => (r.ok ? "answered" : r.code + " " + r.message);
+    if (!(await adminPresent())) {
+      for (const n of armsOf("admin"))
+        skip(n, "20261001120000_b12a_access_audit.sql is not on the project yet");
+    } else {
+      // 1. No policy anywhere cites is_admin (1266). pg_policies is readable by every role.
+      await inTransaction(client, async () => {
+        await actAsSelf(client);
+        const cites = await attempt(
+          client,
+          "select schemaname || '.' || tablename || '.' || policyname as p from pg_policies where qual ilike '%is_admin%' or with_check ilike '%is_admin%' order by 1",
+        );
+        record(
+          names.admin,
+          cites.ok && cites.rows.length === 0,
+          cites.ok
+            ? cites.rows.length
+              ? cites.rows.map((r) => r.p).join(", ")
+              : "none"
+            : fmt(cites),
+        );
+      });
+
+      // 2. The admin persona at aal1: a role holder with no admin reach; at aal2 the same call answers.
+      await inTransaction(client, async () => {
+        const adminId = await adminMember();
+        if (!adminId) {
+          skip(names.adminAal1, "live_arms_admin_member() answered no admin");
+          return;
+        }
+        const at1 = await stateAs(adminId, "aal1");
+        const roles1 = roleList(at1);
+        const grant1 = await attempt(
+          client,
+          "select public.admin_grant_role($1::uuid, 'analyst', 'live arm: aal1 control') as id",
+          [adminId === member.id ? owner.id : member.id],
+        );
+        const at2 = await stateAs(adminId, "aal2");
+        const roles2 = roleList(at2);
+        const grant2 = await attempt(
+          client,
+          "select public.admin_grant_role($1::uuid, 'analyst', 'live arm: aal2 control') as id",
+          [adminId === member.id ? owner.id : member.id],
+        );
+        record(
+          names.adminAal1,
+          at1.ok &&
+            at1.s.holds_role === true &&
+            Array.isArray(roles1) &&
+            roles1.length === 0 &&
+            !grant1.ok &&
+            grant1.code === "42501" &&
+            at2.ok &&
+            Array.isArray(roles2) &&
+            roles2.includes("admin") &&
+            grant2.ok,
+          "aal1 " +
+            (at1.ok ? JSON.stringify(at1.s) : fmt(at1)) +
+            " grant " +
+            fmt(grant1) +
+            "; aal2 roles " +
+            JSON.stringify(roles2) +
+            " grant " +
+            fmt(grant2),
+        );
+      });
+
+      // 3. Grant, read as the grantee, revoke, read again (1177, 1178).
+      await inTransaction(client, async () => {
+        const adminId = await adminMember();
+        if (!adminId || adminId === member.id) {
+          skip(names.adminGrant, adminId ? "the admin persona is member-test" : "no admin");
+          return;
+        }
+        await actAs(client, adminId, "aal2");
+        const granted = await attempt(
+          client,
+          "select public.admin_grant_role($1::uuid, 'analyst', 'live arm: grant analyst to member-test') as id",
+          [member.id],
+        );
+        const holding = await stateAs(member.id, "aal2");
+        const held = roleList(holding);
+        await actAs(client, adminId, "aal2");
+        const revoked = await attempt(
+          client,
+          "select public.admin_revoke_role($1::uuid, 'analyst', 'live arm: revoke analyst from member-test') as id",
+          [member.id],
+        );
+        const after = await stateAs(member.id, "aal2");
+        record(
+          names.adminGrant,
+          granted.ok &&
+            typeof granted.rows[0].id !== "undefined" &&
+            holding.ok &&
+            holding.s.holds_role === true &&
+            Array.isArray(held) &&
+            held.includes("analyst") &&
+            revoked.ok &&
+            after.ok &&
+            after.s.holds_role === false &&
+            Array.isArray(roleList(after)) &&
+            roleList(after).length === 0,
+          "grant " +
+            fmt(granted) +
+            " then " +
+            (holding.ok ? JSON.stringify(holding.s) : fmt(holding)) +
+            "; revoke " +
+            fmt(revoked) +
+            " then " +
+            (after.ok ? JSON.stringify(after.s) : fmt(after)),
+        );
+      });
+
+      // 4. A member with no role: refused the write, and refused every direct read (1265, 1266).
+      await inTransaction(client, async () => {
+        await actAs(client, member.id, "aal2");
+        const grant = await attempt(
+          client,
+          "select public.admin_grant_role($1::uuid, 'analyst', 'live arm: a member grants') as id",
+          [owner.id],
+        );
+        const reads = [];
+        for (const t of ["platform_roles", "admin_actions", "admin_reads"]) {
+          const r = await attempt(client, "select * from public." + t + " limit 1");
+          if (r.ok || r.code !== "42501") reads.push(t + " " + fmt(r));
+        }
+        record(
+          names.adminRefused,
+          !grant.ok && grant.code === "42501" && reads.length === 0,
+          "grant " +
+            fmt(grant) +
+            (reads.length ? "; reads " + reads.join(", ") : "; all three reads refused"),
+        );
+      });
+
+      // 5. The last live admin cannot revoke itself (22023), so the company cannot lock itself out.
+      await inTransaction(client, async () => {
+        const adminId = await adminMember();
+        if (!adminId) {
+          skip(names.adminLastAdmin, "live_arms_admin_member() answered no admin");
+          return;
+        }
+        await actAs(client, adminId, "aal2");
+        const self = await attempt(
+          client,
+          "select public.admin_revoke_role($1::uuid, 'admin', 'live arm: the last admin revokes itself') as id",
+          [adminId],
+        );
+        record(
+          names.adminLastAdmin,
+          !self.ok && self.code === "22023",
+          self.ok
+            ? "revoked: either a second live admin exists or the guard did not hold"
+            : fmt(self),
+        );
+      });
+
+      // 6. The append-only triggers are on both logs (1178). live_arms holds no write on either
+      // table, so the refusal itself is read from the catalog and not exercised; the arm says so.
+      await inTransaction(client, async () => {
+        await actAsSelf(client);
+        const trg = await attempt(
+          client,
+          "select tgrelid::regclass::text || ':' || tgname as t from pg_trigger where not tgisinternal and tgrelid in ('public.admin_actions'::regclass, 'public.admin_reads'::regclass) order by 1",
+        );
+        const want = [
+          "admin_actions:admin_actions_append_only",
+          "admin_actions:admin_actions_no_truncate",
+          "admin_reads:admin_reads_append_only",
+          "admin_reads:admin_reads_no_truncate",
+        ];
+        const have = trg.ok ? trg.rows.map((r) => r.t) : [];
+        record(
+          names.adminAppendOnly,
+          trg.ok && want.every((w) => have.includes(w)),
+          (trg.ok ? have.join(", ") : fmt(trg)) +
+            "; catalog only, the service-role refusal is not exercisable as live_arms",
+        );
+      });
+
+      // 7. Signed out holds no execute on any of the three.
+      await inTransaction(client, async () => {
+        await client.query("set local role anon");
+        await client.query("select set_config('request.jwt.claims', '', true)");
+        const calls = [];
+        for (const [n, sql] of [
+          ["admin_session_state", "select public.admin_session_state()"],
+          ["admin_grant_role", "select public.admin_grant_role($1::uuid, 'analyst', 'x')"],
+          ["admin_revoke_role", "select public.admin_revoke_role($1::uuid, 'analyst', 'x')"],
+        ]) {
+          const r = await attempt(client, sql, sql.includes("$1") ? [member.id] : undefined);
+          if (r.ok || r.code !== "42501") calls.push(n + " " + fmt(r));
+        }
+        record(names.adminSignedOut, calls.length === 0, calls.join("; ") || "all three refused");
+      });
+
+      // 8. The vocabulary serves the six roles in their one order (1177).
+      await inTransaction(client, async () => {
+        await actAs(client, member.id, "aal2");
+        const v = await attempt(
+          client,
+          "select public.vocabularies() -> 'platform_role_kinds' as k",
+        );
+        const kinds = v.ok && Array.isArray(v.rows[0].k) ? v.rows[0].k.map((k) => k.value) : null;
+        const want = ["admin", "editor", "moderator", "support", "finance", "analyst"];
+        record(
+          names.adminVocab,
+          !!kinds && JSON.stringify(kinds) === JSON.stringify(want),
+          v.ok ? JSON.stringify(kinds) : fmt(v),
+        );
+      });
+    }
   } finally {
     await client.end().catch(() => {});
   }
