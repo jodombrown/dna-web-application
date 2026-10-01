@@ -2506,6 +2506,8 @@ async function drive(fn, ...args) {
 // a total (rulings 228 and 317).
 // ---------------------------------------------------------------------------
 const EXPECTED_PATH = path.join(__dirname, "expected-counts.json");
+/** Handoff 40-B: the arms tests/auth.cjs runs against the admin host, swept by the admin run alone. */
+const ADMIN_ARM = /-admin (signed-out|accounts)$/;
 
 function loadExpected() {
   try {
@@ -2636,7 +2638,13 @@ function accountForArms({ full, engines }) {
     }
   }
 
-  if (!full) {
+  // Handoff 40-B: the admin arms are declared beside every other arm, so a stale or short count
+  // is caught the same way, but they run only in the admin-arms job, under SPECIAL=admin against
+  // ADMIN_BASE, the dna-admin deployment, and never in a full run, which has no admin host to read.
+  // So the full run's sweep leaves them out, and the SPECIAL=admin run sweeps exactly them: an
+  // admin arm that stopped running is still found in what was declared, in the job that owes it.
+  const adminRun = !full && (process.env.SPECIAL || "").includes("admin");
+  if (!full && !adminRun) {
     console.log(
       "ruling 292: SPECIAL, ONLY or THEME is set, so this is a subset run and arms that did not " +
         "run are not swept for. The missing-arm sweep is a full-run check.",
@@ -2645,7 +2653,9 @@ function accountForArms({ full, engines }) {
   }
   // Ruling 228's case, and the one a total conceals: an arm that stopped running entirely emits
   // nothing, so it appears nowhere in what was observed and can only be found in what was declared.
-  const inScope = (arm) => engines.some((e) => arm.startsWith(e + "-") || arm.startsWith(e + " "));
+  const inScope = (arm) =>
+    engines.some((e) => arm.startsWith(e + "-") || arm.startsWith(e + " ")) &&
+    ADMIN_ARM.test(arm) === adminRun;
   for (const arm of Object.keys(expected)) {
     if (seen.has(arm) || !inScope(arm)) continue;
     record(
