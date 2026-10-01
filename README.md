@@ -1,7 +1,6 @@
 # DNA | Web Application (Sept 3, 2026)
 
-we are going to start blank
-
+WE ARE PREPARING FOR LAUNCH
 ## Host, deploy path and rules
 
 - Host: Cloudflare Pages, project `dna-web-application`. The app is TanStack Start with SSR; Nitro's
