@@ -13,8 +13,8 @@
 -- private.is_editor(uuid) reads public.editors, one row (owner-test), whose only policy is
 -- editors_service_role and whose only grants are to service_role; public.vocabularies() is security
 -- invoker, executable by authenticated and service_role, and serves nineteen keys; auth.users holds
--- exactly one account at jaune@diasporanetwork.africa, confirmed and never onboarded, with a
--- public.members row under the placeholder handle member; the live_arms role exists under ruling 382
+-- exactly one account at the founder's admin-only address, the one handoff 40-A section 1 names,
+-- confirmed and never onboarded, with a public.members row under the placeholder handle member; the live_arms role exists under ruling 382
 -- with usage on schema private; and the ensure_rls event trigger enables row security on every table
 -- created in public, which this file does again explicitly rather than rely on.
 --
@@ -46,10 +46,14 @@
 --   anywhere still cites is_admin. public.event_alias_check is a function, not a policy, and keeps
 --   its call; it now requires AAL2 through is_admin() like everything else.
 --
--- The founder's grant (1289, 1292): the account at jaune@diasporanetwork.africa, found through
--- auth.users by lower-cased, trimmed address and never by a pasted id or a handle, receives admin and
--- editor, each with its admin_actions row. An address matching no account or more than one raises and
--- writes nothing. owner-test keeps editor through the fold and is not an admin.
+-- The founder's grant (1289, 1292): the founder's admin-only account, found through auth.users by its
+-- lower-cased, trimmed address and never by a pasted id or a handle, receives admin and editor, each
+-- with its admin_actions row. An address matching no account or more than one raises and writes
+-- nothing. The address itself is not spelled in this file: ruling 387's absolute keeps every address
+-- on the company domain out of the repository except the two contact modules, and tests/contact.cjs
+-- scans the whole tree for one, so the account is matched on the md5 of its lower-cased, trimmed
+-- address, which handoff 40-A section 1 states in clear. owner-test keeps editor through the fold and
+-- is not an admin.
 --
 -- Neither log carries a foreign key: a key would cascade or null on a member's deletion, which is an
 -- update or delete the triggers refuse, so an erasure would fail at the log. How audit rows are
@@ -463,6 +467,7 @@ drop table public.editors;
 
 -- ---------------------------------------------------------------------------------------------------
 -- 7. The founder's grant (1289, 1292): by address through auth.users, never by a pasted id or a handle.
+--    The address is matched by md5 so that no address literal enters the repository (ruling 387).
 -- ---------------------------------------------------------------------------------------------------
 
 do $$
@@ -474,7 +479,7 @@ declare
 begin
   select count(*) into v_matches
   from auth.users u
-  where lower(btrim(u.email)) = 'jaune@diasporanetwork.africa';
+  where md5(lower(btrim(u.email))) = '9dcfa24b63ef323c6590a8d4aa4fa8f1';
 
   if v_matches <> 1 then
     raise exception 'b12a: the founder''s address matches % auth.users rows, expected exactly one; nothing written', v_matches
@@ -483,7 +488,7 @@ begin
 
   select u.id into strict v_founder
   from auth.users u
-  where lower(btrim(u.email)) = 'jaune@diasporanetwork.africa';
+  where md5(lower(btrim(u.email))) = '9dcfa24b63ef323c6590a8d4aa4fa8f1';
   if not exists (select 1 from public.members m where m.id = v_founder) then
     raise exception 'b12a: the founder''s account has no public.members row; nothing written'
       using errcode = '22023';
