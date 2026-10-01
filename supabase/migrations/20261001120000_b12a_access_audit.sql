@@ -41,7 +41,12 @@
 --
 -- What this folds and drops.
 --   public.editors and editors_service_role, after each row becomes a live editor row in
---   platform_roles with a role.migrated action (1177).
+--   platform_roles with a role.migrated action (1177). public.convene_picks.picked_by referenced
+--   editors(member_id) on delete restrict, the one object outside the table that depended on it (read
+--   through pg_depend after a first apply was refused on the drop and rolled back whole); its key now
+--   references public.members(id) on delete restrict, and the rule the old key enforced, that only an
+--   editor can be named as a pick's picker, moves to a before insert or update of picked_by trigger
+--   that raises 23503 unless private.is_editor(new.picked_by).
 --   The 66 is_admin() policies, by name (1266), and a guard that fails the apply if any policy
 --   anywhere still cites is_admin. public.event_alias_check is a function, not a policy, and keeps
 --   its call; it now requires AAL2 through is_admin() like everything else.
@@ -61,7 +66,7 @@
 -- built here.
 --
 -- What this file does not touch: any member surface's projection or write path, any policy that does
--- not cite is_admin, any grant on an existing table, auth.mfa_factors or the project's Auth settings,
+-- not cite is_admin, any grant on an existing table, any row of convene_picks, auth.mfa_factors or the project's Auth settings,
 -- surface_events (12C), any admin_* projection (12B), src/, tests/, docs/GAPS.md and CLAUDE.md.
 
 -- ---------------------------------------------------------------------------------------------------
@@ -443,6 +448,7 @@ comment on function public.admin_revoke_role(uuid, text, text) is
 
 -- ---------------------------------------------------------------------------------------------------
 -- 6. Fold public.editors in and drop it (1177). The helpers above already read platform_roles.
+--    convene_picks' key on editors is re-pointed at members first, with its rule kept by a trigger.
 -- ---------------------------------------------------------------------------------------------------
 
 do $$
@@ -461,6 +467,41 @@ begin
   end loop;
 end;
 $$;
+
+-- The one dependent outside the table (1177): the picker's key moves from editors to members, same
+-- name, same on delete restrict, so a pick keeps naming a member who cannot be deleted under it.
+alter table public.convene_picks drop constraint convene_picks_picked_by_fkey;
+alter table public.convene_picks
+  add constraint convene_picks_picked_by_fkey
+  foreign key (picked_by) references public.members (id) on delete restrict;
+
+-- Ruling 1177's replacement for the editors key: the old key let only an editor be named as a pick's
+-- picker, and a key to members alone would not. Fires on insert and on a change of picked_by only, so
+-- a pick already made is not re-judged when its line or withdrawal changes. Definer, so the editor
+-- read does not depend on the writing role's own grant on private.is_editor.
+create function private.convene_pick_picker_is_editor()
+returns trigger
+language plpgsql
+security definer
+set search_path to ''
+as $$
+begin
+  if not private.is_editor(new.picked_by) then
+    raise exception 'convene_picks: picked_by % holds no live editor role (ruling 1177)', new.picked_by
+      using errcode = '23503';
+  end if;
+  return new;
+end;
+$$;
+
+revoke all on function private.convene_pick_picker_is_editor() from public;
+
+create trigger convene_picks_picker_is_editor
+  before insert or update of picked_by on public.convene_picks
+  for each row execute function private.convene_pick_picker_is_editor();
+
+comment on trigger convene_picks_picker_is_editor on public.convene_picks is
+  'Ruling 1177''s replacement for the foreign key convene_picks.picked_by held on public.editors: only a member with a live editor row in public.platform_roles can be named as a pick''s picker. Raises 23503, as the key did.';
 
 drop policy if exists editors_service_role on public.editors;
 drop table public.editors;
