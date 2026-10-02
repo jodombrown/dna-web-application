@@ -469,7 +469,9 @@ async function runEvent(browserType, bname, [w, h], theme) {
       tag +
         " loaded: Going is three names and others; the list marks Connection and Shared (739), no numeral",
       /^Going/.test(goingText.trim()) &&
-        /Adaeze Nwosu, Ngozi Eze, Thandiwe Dube are going, and others/.test(goingText) &&
+        // The founder's ruling (handoff 41-C): the one joiner's shape, src/lib/names.ts.
+        /Adaeze Nwosu, Ngozi Eze, Thandiwe Dube and others are going/.test(goingText) &&
+        !/, and others/.test(goingText) &&
         (await page.locator('[data-going-row="connection"]').count()) === 3 &&
         (await page.locator('[data-going-row="shared"]').count()) === 1 &&
         (await page.locator('[data-going-row="member"]').count()) === 2 &&

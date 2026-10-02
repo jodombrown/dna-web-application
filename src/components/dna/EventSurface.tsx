@@ -73,6 +73,7 @@ import { EventShareSheet } from "./EventShareSheet";
 import { toastStyle } from "./FeedSurface";
 import { RoleInvitationSheet } from "./RoleInvitationSheet";
 import { RsvpSheet } from "./RsvpSheet";
+import { joinNames } from "@/lib/names";
 
 export const EVENT_PAGE_KEY = "event-page";
 
@@ -677,12 +678,15 @@ export function EventSurface({
             <>
               <div data-event-going style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                 <CapsLabel>{ev.past ? "Went" : "Going"}</CapsLabel>
+                {/* The founder's ruling (handoff 41-C): the platform's one joiner and its shape, the
+                    names comma-joined then one "and others" ("Ama, Kofi, Nana and others are
+                    going"), as Discovery's going row and the Messenger read it. */}
                 <p style={{ margin: 0, fontSize: 15, lineHeight: 1.45 }}>
-                  {page.going
-                    .slice(0, 3)
-                    .map((g) => g.name)
-                    .join(", ")}
-                  {ev.past ? " were there, and others" : " are going, and others"}
+                  {joinNames(
+                    page.going.slice(0, 3).map((g) => g.name),
+                    true,
+                  )}
+                  {ev.past ? " were there" : " are going"}
                 </p>
               </div>
               <div
