@@ -17,9 +17,18 @@
 // Production additions: homeHref renders the logo and Home item as real links (hover-intent prefetch,
 // ruling 84); onIntentC prefetches a C route from the inline dock; maxWidth takes "none", so the
 // expanded row can take a surface's own edges, as Discovery's canvas under 1123.
+// Brief 14 (SPEC 41-14 Part A item 2; extraction 41-14 section 5.1, the staged
+// `messages/strand-patch/AppHeader.jsx`; amends 99, 1175, 1190): a `messages` slot, rendered after the
+// bell at both variants. At expanded the side tracks grow to `SIDE_TRACK_FOUR` only when the slot is
+// passed, so every existing caller keeps 148 and renders unchanged. At compact and medium the control
+// sits after the bell and before the avatar, and unlike the bell it stays on the dense lens row at the
+// compact tier (1334: the control is beside the bell at every tier, and the compact row at 360 places
+// it beside the lens bar where the bell leaves). `MessagesControl` is exported beside the header: the
+// message-circle IconButton with NotificationBell's 8px --pulse-for-you dot and no numeral (82, 1344).
 import { Fragment, useState, type CSSProperties, type MouseEvent, type ReactNode } from "react";
 import { Avatar } from "./Avatar";
 import { Icon } from "./Icon";
+import { IconButton } from "./IconButton";
 import { LensBar, type Lens } from "./LensBar";
 import { PulseDock, type PulseState } from "./PulseDock";
 import { assetBase, type C } from "./cmeta";
@@ -33,6 +42,8 @@ import { assetBase, type C } from "./cmeta";
  * would size the dock to its content and pack the Cs; the dock is meant to keep filling its track.
  */
 const SIDE_TRACK = 44 * 3 + 8 * 2;
+/** Brief 14 (5.1): four controls, Home, the bell, Messages and the avatar, with three 8 gaps: 200. */
+const SIDE_TRACK_FOUR = 44 * 4 + 8 * 3;
 
 export type HeaderLensBar<Id extends string = string> = {
   lenses: Lens<Id>[];
@@ -63,8 +74,57 @@ export type AppHeaderProps = {
   lensBar?: HeaderLensBar | null | undefined;
   maxWidth?: number | "none" | undefined;
   children?: ReactNode;
+  /** Brief 14 (1334, 1344): the Messages control, after the bell at both variants. Absent, the row is
+   *  as it was, side tracks included. */
+  messages?: ReactNode;
   style?: CSSProperties | undefined;
 };
+
+export type MessagesControlProps = {
+  /** Any unmuted, unarchived thread is unread: the dot, never a numeral (82). */
+  unread: boolean;
+  /** On a /messages route: `aria-current="page"`. */
+  active?: boolean | undefined;
+  onClick?: (() => void) | undefined;
+  style?: CSSProperties | undefined;
+};
+
+/** The Messages control (Brief 14, ruling 1344): message-circle, named `Messages` or `New messages`,
+ *  NotificationBell's dot shape. Mounted in AppHeader's `messages` slot; no surface composes its own. */
+export function MessagesControl({ unread, active, onClick, style }: MessagesControlProps) {
+  return (
+    <span style={{ position: "relative", display: "inline-flex", flex: "none", ...style }}>
+      <IconButton
+        name="message-circle"
+        label={unread ? "New messages" : "Messages"}
+        active={active}
+        aria-current={active ? "page" : undefined}
+        onClick={onClick}
+        data-testid="messages"
+        data-unread={unread ? "1" : undefined}
+      />
+      {unread && (
+        <span
+          aria-hidden="true"
+          data-testid="messages-dot"
+          style={{
+            position: "absolute",
+            top: 9,
+            right: 9,
+            width: 8,
+            height: 8,
+            borderRadius: 999,
+            background: "var(--pulse-for-you)",
+            border: "2px solid var(--bg)",
+            boxSizing: "content-box",
+            pointerEvents: "none",
+            transition: "background var(--dur-default) var(--ease)",
+          }}
+        />
+      )}
+    </span>
+  );
+}
 
 /** App shell header (ruling 69). Mounted once at the app root; no surface composes its own. */
 export function AppHeader({
@@ -86,9 +146,12 @@ export function AppHeader({
   lensBar,
   maxWidth = 1440,
   children,
+  messages,
   style,
 }: AppHeaderProps) {
   const exp = variant === "expanded";
+  // Brief 14 (5.1): the side track reserves the fourth control only when the slot is passed.
+  const side = messages !== undefined && messages !== null ? SIDE_TRACK_FOUR : SIDE_TRACK;
   const logo = assetBase() + "logo.png";
   const [hh, setHh] = useState(false);
   const HomeTag = homeHref ? "a" : "button";
@@ -128,7 +191,7 @@ export function AppHeader({
           ...(exp
             ? {
                 display: "grid",
-                gridTemplateColumns: `${SIDE_TRACK}px minmax(0, 1fr) ${SIDE_TRACK}px`,
+                gridTemplateColumns: `${side}px minmax(0, 1fr) ${side}px`,
               }
             : {}),
           width: "100%",
@@ -245,6 +308,8 @@ export function AppHeader({
             </HomeTag>
           )}
           {!(showLens && tier === "compact") && children}
+          {/* Brief 14 (5.1): after the bell, before the avatar; stays on the dense lens row. */}
+          {messages}
           <button
             type="button"
             onClick={onAvatar}

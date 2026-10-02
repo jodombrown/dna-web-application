@@ -80,6 +80,13 @@
 // hidden, so the hidden list's scroll is never written; on Show list it runs only if the key
 // changed while the list was hidden.
 //
+// Brief 14 (SPEC 41-14 Part A item 3; extraction 41-14 section 5.2; ruling 1369): three props on the
+// route form, `avatar`, `subtitle` and `control`, rendered in that order between the back control
+// and the cluster at `--space-2` gaps, exactly as the prototype draws the thread's row. Below
+// `--tier-expanded` the thread is this bar extended; it draws no header of its own. Existing callers
+// pass none and render the row they had. The expanded branches do not read them: at expanded the
+// thread draws its own header row inside the pane body (extraction 1.5, "Header row (expanded)").
+//
 // `DiscoverySurface` (handoff 31-B) is the one caller. It binds `onClose`, `closeLabel`,
 // `selectedKey` (the open event) and the stepping pair, and renders the Pane only while an item is
 // open, so no page passes `open`. G110's binding of `paneWidth` 520, `height` and the three tool
@@ -146,6 +153,12 @@ export type PaneProps = {
   shareLabel?: string | undefined;
   /** The pane's maximum width with the list hidden. Default 720; a number is px. */
   hiddenWidth?: number | string | undefined;
+  /** Brief 14 (1369). Route form only: an Avatar or a group mark before the title. */
+  avatar?: ReactNode;
+  /** Brief 14 (1369). Route form only: one line under the title in --text-xs --ink-3, wrapping. */
+  subtitle?: string | undefined;
+  /** Brief 14 (1369). Route form only: one control at the row's end, before the cluster. */
+  control?: ReactNode;
   style?: CSSProperties | undefined;
 };
 
@@ -216,6 +229,9 @@ export function Pane({
   onShare,
   shareLabel = "Share",
   hiddenWidth = 720,
+  avatar,
+  subtitle,
+  control,
   style,
 }: PaneProps) {
   const listCol = useRef<HTMLDivElement>(null);
@@ -357,19 +373,44 @@ export function Pane({
           }}
         >
           <IconButton name="arrow-left" label={backLabel} onClick={onBack} />
+          {avatar}
           <span
+            data-pane-title
             style={{
               flex: 1,
               minWidth: 0,
-              fontSize: "var(--text-m)",
-              fontWeight: "var(--weight-medium)" as unknown as number,
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
+              display: "flex",
+              flexDirection: "column",
+              gap: 1,
             }}
           >
-            {cold ? backLabel : title}
+            <span
+              style={{
+                fontSize: "var(--text-m)",
+                fontWeight: "var(--weight-medium)" as unknown as number,
+                lineHeight: subtitle ? 1.3 : undefined,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {cold ? backLabel : title}
+            </span>
+            {subtitle && (
+              <span
+                data-pane-subtitle
+                style={{
+                  fontSize: "var(--text-xs)",
+                  lineHeight: 1.35,
+                  color: "var(--ink-3)",
+                  textWrap: "pretty",
+                }}
+              >
+                {subtitle}
+              </span>
+            )}
           </span>
+          {control}
           {cluster}
         </div>
         <div aria-live="polite" style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
