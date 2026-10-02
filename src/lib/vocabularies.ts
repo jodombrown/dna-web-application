@@ -52,6 +52,14 @@ export type Vocabularies = {
    * heading its section shows. No surface keeps a heading map; the first consumer is Brief 8's Hub.
    */
   event_block_kinds: { value: string; label: string }[];
+  /** Brief 14 (1331): Messenger's thread kinds; surfaced false marks respond and introduction. */
+  thread_kinds: { value: string; label: string; surfaced: boolean }[];
+  /** Brief 14 (1348): the three mute durations. */
+  message_mute_durations: { value: string; label: string }[];
+  /** Brief 14 (1349): the six report reasons, as Extraction 41-14 rendered them. */
+  message_report_reasons: { value: string; label: string }[];
+  /** Brief 14 (1370): the five reactions, words and never glyphs. */
+  message_reaction_kinds: { value: string; label: string }[];
 };
 
 export async function loadVocabularies(): Promise<Vocabularies | null> {
