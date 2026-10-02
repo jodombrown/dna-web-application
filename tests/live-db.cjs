@@ -33,6 +33,11 @@
 //                                   and signed out are refused, the two logs carry their append-only
 //                                   triggers, and vocabularies() serves the six role kinds. The
 //                                   admin persona is the id live_arms_admin_member() answers (382).
+//   Brief 12 12C part 1 (1179, 1284,  the recording layer and the ledger: record_event refuses and
+//   1294 to 1300; handoff 40-C)       accepts by the kind's row, a move writes one history row and
+//                                   the side is read from history, is_african follows the African
+//                                   Union list, the derivation is idempotent over the seeded data,
+//                                   the four cron jobs are scheduled, and the catalogue is complete.
 //
 // Nothing here is secret: the connection string arrives from the runner and never from this file.
 const fs = require("fs");
@@ -242,6 +247,19 @@ async function runLiveDbArms({ record, skip }) {
       "Brief 12 12A: signed out cannot execute admin_session_state, admin_grant_role or admin_revoke_role (42501)",
     adminVocab:
       "Brief 12 12A (1177): vocabularies() carries platform_role_kinds as the six roles in order",
+    mobil:
+      "Brief 12 12C (1179, 1297, 1298): record_event refuses an unknown kind, a disallowed prop, a member object and a signed-out non-public kind with 22023, accepts a signed-in feed_viewed and a signed-out event_page_viewed, and a member cannot read surface_events",
+    mobilHistory:
+      "Brief 12 12C (1295): a change of current_country writes one member_profile_history row, a save that changes none of the three writes none, and the table refuses update and delete",
+    mobilAfrican:
+      "Brief 12 12C (1295): every African Union member world_countries carries reads is_african true, and the United States reads false",
+    mobilDerive:
+      "Brief 12 12C (1284, 1294, 1296): the ledger holds Engaging rows for the accepted introductions on the seeded data and none for any RSVP, follow, save or heart, and re-running the derivation adds nothing",
+    mobilSide:
+      "Brief 12 12C (1295): a member living in Accra reads continent side with their own stance, and after a move to London reads diaspora while a moment before the move still reads continent",
+    mobilCron: "Brief 12 12C (1179): the four cron jobs exist with their schedules",
+    mobilCatalogue:
+      "Brief 12 12C (1299, 1300): every table the migration created has a catalogue row with a treatment other than unreviewed, and no table in public is without a row",
   };
   // G143: a block that opens with a presence probe carries every arm it holds in `names`, under one key
   // prefix, so a probe that fails reports each of them UNPROVEN and the job's total does not fall with
@@ -2561,6 +2579,414 @@ async function runLiveDbArms({ record, skip }) {
           names.adminVocab,
           !!kinds && JSON.stringify(kinds) === JSON.stringify(want),
           v.ok ? JSON.stringify(kinds) : fmt(v),
+        );
+      });
+    }
+
+    // ------------------------------------------------------------------------------------------
+    // Brief 12 12C part 1 (rulings 1179, 1284, 1294 to 1300; 20261002120000; handoff 40-C). The
+    // recording layer and the mobilization ledger. Every arm opens with the same presence probe so
+    // that before the apply the block reports UNPROVEN as a whole (G143, 228). live_arms reads the
+    // history, the log and the ledger under policies confined to the two test accounts, reads the
+    // catalogue whole, and executes profile_at, member_side, derive_mobilization_v1 and
+    // mobilization_jobs (382). Each arm is its own rolled-back transaction: a row record_event
+    // writes, a history row a move writes and a derivation's upsert are all gone before the next
+    // arm begins (269).
+    // ------------------------------------------------------------------------------------------
+    const RECORD_EVENT =
+      "public.record_event(text, text, uuid, text, text, public.anchor_kind, uuid, jsonb, text)";
+    const mobilPresent = async () => {
+      await actAsSelf(client);
+      const present = await client.query("select to_regprocedure($1) is not null as ok", [
+        RECORD_EVENT,
+      ]);
+      return !!present.rows[0] && present.rows[0].ok === true;
+    };
+    /** record_event with the envelope the app will send; props and object default to none. */
+    const recordEvent = (kind, opts = {}) =>
+      attempt(
+        client,
+        "select public.record_event($1, 'app', $2::uuid, $3, null, $4::public.anchor_kind, $5::uuid, $6::jsonb, 'wide')",
+        [
+          kind,
+          opts.session,
+          opts.surface || "/",
+          opts.objectKind || null,
+          opts.objectId || null,
+          JSON.stringify(opts.props || {}),
+        ],
+      );
+    const newUuid = async () => {
+      await actAsSelf(client);
+      const r = await client.query("select gen_random_uuid()::text as u");
+      return r.rows[0].u;
+    };
+    if (!(await mobilPresent())) {
+      for (const n of armsOf("mobil"))
+        skip(n, "20261002120000_b12c_recording_ledger.sql is not on the project yet");
+    } else {
+      // 1. The one writer refuses what the kind does not allow and accepts what it does (1179, 1297,
+      // 1298). The accepted calls are proven by the row they leave, read back as live_arms under its
+      // test-account policy; a member reading the table directly is refused at the grant.
+      await inTransaction(client, async () => {
+        const session = await newUuid();
+        await actAs(client, member.id);
+        const unknown = await recordEvent("no_such_kind", { session });
+        const badProp = await recordEvent("feed_viewed", {
+          session,
+          props: { lens: "all", ip: "x" },
+        });
+        const memberObject = await recordEvent("profile_viewed", {
+          session,
+          objectKind: "member",
+          objectId: owner.id,
+        });
+        const accepted = await recordEvent("feed_viewed", { session, props: { lens: "all" } });
+        const memberRead = await attempt(client, "select id from public.surface_events limit 1");
+        await client.query("set local role anon");
+        await client.query("select set_config('request.jwt.claims', '', true)");
+        const signedOutPrivate = await recordEvent("feed_viewed", {
+          session,
+          props: { lens: "all" },
+        });
+        const signedOutPublic = await recordEvent("event_page_viewed", {
+          session,
+          surface: "/e/x",
+          objectKind: "event",
+          objectId: session,
+        });
+        await actAsSelf(client);
+        const rows = await attempt(
+          client,
+          "select kind, member_id is null as anon from public.surface_events where session_id = $1::uuid order by id",
+          [session],
+        );
+        const written = rows.ok ? rows.rows.map((r) => r.kind + (r.anon ? "(anon)" : "")) : null;
+        const refused = (r) => !r.ok && r.code === "22023";
+        record(
+          names.mobil,
+          refused(unknown) &&
+            refused(badProp) &&
+            refused(memberObject) &&
+            refused(signedOutPrivate) &&
+            accepted.ok &&
+            signedOutPublic.ok &&
+            !memberRead.ok &&
+            memberRead.code === "42501" &&
+            JSON.stringify(written) === JSON.stringify(["feed_viewed", "event_page_viewed(anon)"]),
+          "unknown " +
+            fmt(unknown) +
+            "; prop " +
+            fmt(badProp) +
+            "; member object " +
+            fmt(memberObject) +
+            "; signed-out feed_viewed " +
+            fmt(signedOutPrivate) +
+            "; signed-in feed_viewed " +
+            fmt(accepted) +
+            "; signed-out event_page_viewed " +
+            fmt(signedOutPublic) +
+            "; member read " +
+            fmt(memberRead) +
+            "; rows " +
+            (rows.ok ? JSON.stringify(written) : fmt(rows)),
+        );
+      });
+
+      // 2. History: one row per change of the three columns, none for a save that changes none of
+      // them, and no update or delete (1295). live_arms holds select only, so the refusal it meets is
+      // the grant's; the append-only triggers are read from the catalog.
+      await inTransaction(client, async () => {
+        const count = async () => {
+          await actAsSelf(client);
+          const r = await attempt(
+            client,
+            "select count(*)::int as n from public.member_profile_history where member_id = $1::uuid",
+            [member.id],
+          );
+          return r.ok ? r.rows[0].n : null;
+        };
+        const before = await count();
+        await actAs(client, member.id);
+        const move = await attempt(
+          client,
+          "update public.members set current_country = 'Kenya', current_place = 'Nairobi' where id = $1::uuid",
+          [member.id],
+        );
+        const afterMove = await count();
+        await actAs(client, member.id);
+        const same = await attempt(
+          client,
+          "update public.members set headline = coalesce(headline, '') where id = $1::uuid",
+          [member.id],
+        );
+        const afterSame = await count();
+        await actAsSelf(client);
+        const upd = await attempt(
+          client,
+          "update public.member_profile_history set source = 'change' where member_id = $1::uuid",
+          [member.id],
+        );
+        const del = await attempt(
+          client,
+          "delete from public.member_profile_history where member_id = $1::uuid",
+          [member.id],
+        );
+        const trg = await attempt(
+          client,
+          "select tgname from pg_trigger where not tgisinternal and tgrelid = 'public.member_profile_history'::regclass order by 1",
+        );
+        const have = trg.ok ? trg.rows.map((r) => r.tgname) : [];
+        record(
+          names.mobilHistory,
+          move.ok &&
+            same.ok &&
+            before !== null &&
+            afterMove === before + 1 &&
+            afterSame === afterMove &&
+            !upd.ok &&
+            upd.code === "42501" &&
+            !del.ok &&
+            del.code === "42501" &&
+            have.includes("member_profile_history_append_only") &&
+            have.includes("member_profile_history_no_truncate"),
+          "rows " +
+            before +
+            " -> " +
+            afterMove +
+            " after the move -> " +
+            afterSame +
+            " after a same-value save; update " +
+            fmt(upd) +
+            "; delete " +
+            fmt(del) +
+            "; triggers " +
+            (trg.ok ? have.join(", ") : fmt(trg)),
+        );
+      });
+
+      // 3. Which countries are African (1295): every public.countries name that world_countries
+      // carries reads true, and a non-member reads false. Both tables are the member's to read.
+      await inTransaction(client, async () => {
+        await actAs(client, member.id);
+        const au = await attempt(
+          client,
+          "select count(*)::int as members, count(*) filter (where w.is_african)::int as flagged, string_agg(c.name, ', ') filter (where not w.is_african) as missed from public.countries c join public.world_countries w on w.name = c.name",
+        );
+        const us = await attempt(
+          client,
+          "select is_african from public.world_countries where name = 'United States'",
+        );
+        const flagged = await attempt(
+          client,
+          "select count(*)::int as n from public.world_countries where is_african",
+        );
+        const r = au.ok ? au.rows[0] : null;
+        record(
+          names.mobilAfrican,
+          !!r &&
+            r.members === 54 &&
+            r.flagged === 54 &&
+            us.ok &&
+            us.rows[0] &&
+            us.rows[0].is_african === false &&
+            flagged.ok &&
+            flagged.rows[0].n === 54,
+          (r
+            ? r.flagged +
+              " of " +
+              r.members +
+              " matched members flagged" +
+              (r.missed ? ", missed " + r.missed : "")
+            : fmt(au)) +
+            "; United States " +
+            (us.ok && us.rows[0] ? String(us.rows[0].is_african) : fmt(us)) +
+            "; flagged in all " +
+            (flagged.ok ? flagged.rows[0].n : fmt(flagged)) +
+            " (the Sahrawi Arab Democratic Republic has no world_countries row under ruling 142)",
+        );
+      });
+
+      // 4. The derivation on the seeded data (1284, 1294, 1296): Engaging intro rows for the test
+      // accounts' accepted introductions, nothing keyed on an RSVP, follow, save or heart, and a
+      // re-run that writes or changes nothing.
+      await inTransaction(client, async () => {
+        await actAsSelf(client);
+        const read = async () =>
+          attempt(
+            client,
+            "select act_key, depth, source, member_side, member_stance::text as member_stance, counterparty_side, direction, bridging from public.mobilization_ledger where definition_version = 1 order by act_key",
+          );
+        const before = await read();
+        const rerun = await attempt(
+          client,
+          "select private.derive_mobilization_v1(null::timestamptz, null::timestamptz) as n",
+        );
+        const after = await read();
+        const rows = before.ok ? before.rows : [];
+        const intros = rows.filter((r) => r.act_key.startsWith("intro:"));
+        const forbidden = rows.filter((r) => /^(rsvp|follow|save|heart|reaction):/.test(r.act_key));
+        const prefixes = [...new Set(rows.map((r) => r.act_key.split(":")[0]))];
+        record(
+          names.mobilDerive,
+          before.ok &&
+            intros.length > 0 &&
+            intros.every(
+              (r) =>
+                r.depth === "engaging" &&
+                r.source === "counterparty" &&
+                r.member_side &&
+                r.member_stance &&
+                r.counterparty_side &&
+                r.direction &&
+                typeof r.bridging === "boolean",
+            ) &&
+            forbidden.length === 0 &&
+            rerun.ok &&
+            rerun.rows[0].n === 0 &&
+            after.ok &&
+            JSON.stringify(after.rows) === JSON.stringify(rows),
+          (before.ok
+            ? rows.length +
+              " row(s) on the test accounts, prefixes " +
+              JSON.stringify(prefixes) +
+              ", intro rows " +
+              intros.length
+            : fmt(before)) +
+            "; re-run wrote " +
+            (rerun.ok ? rerun.rows[0].n : fmt(rerun)) +
+            (after.ok && before.ok && JSON.stringify(after.rows) !== JSON.stringify(rows)
+              ? "; rows changed"
+              : ""),
+        );
+      });
+
+      // 5. Side and stance as they were (1295): member-test lives in Accra, so continent with their
+      // own stance; after a move to London the same moment reads diaspora, and a moment before the
+      // move still reads continent, because the side is read from the history and not from the row.
+      await inTransaction(client, async () => {
+        const sideAt = async (at) => {
+          await actAsSelf(client);
+          const r = await attempt(
+            client,
+            "select private.member_side($1::uuid, " +
+              at +
+              ") as side, (private.profile_at($1::uuid, " +
+              at +
+              ")).stance::text as stance, (private.profile_at($1::uuid, " +
+              at +
+              ")).current_place as place",
+            [member.id],
+          );
+          return r.ok ? r.rows[0] : r;
+        };
+        await actAs(client, member.id);
+        const own = await attempt(
+          client,
+          "select stance::text as stance, current_country, current_place from public.members where id = $1::uuid",
+          [member.id],
+        );
+        const home = own.ok ? own.rows[0] : null;
+        const accra = await sideAt("now()");
+        await actAs(client, member.id);
+        const move = await attempt(
+          client,
+          "update public.members set current_country = 'United Kingdom', current_place = 'London' where id = $1::uuid",
+          [member.id],
+        );
+        const london = await sideAt("now()");
+        const earlier = await sideAt("now() - interval '1 minute'");
+        record(
+          names.mobilSide,
+          !!home &&
+            home.current_place === "Accra" &&
+            accra.side === "continent" &&
+            accra.stance === home.stance &&
+            move.ok &&
+            london.side === "diaspora" &&
+            london.stance === home.stance &&
+            earlier.side === "continent",
+          "home " +
+            (home
+              ? home.current_place + ", " + home.current_country + ", " + home.stance
+              : fmt(own)) +
+            "; now " +
+            JSON.stringify(accra) +
+            "; after the move " +
+            JSON.stringify(london) +
+            "; a minute before " +
+            JSON.stringify(earlier),
+        );
+      });
+
+      // 6. The four jobs with their schedules (1179), through the definer the migration grants
+      // live_arms, because cron.job is supabase_admin's.
+      await inTransaction(client, async () => {
+        await actAsSelf(client);
+        const jobs = await attempt(
+          client,
+          "select jobname, schedule, active from private.mobilization_jobs() order by jobname",
+        );
+        const want = {
+          dna_mobilization_derive_hourly: "7 * * * *",
+          dna_surface_events_partition_monthly: "10 2 20 * *",
+          dna_surface_events_retention_daily: "35 3 * * *",
+          dna_surface_events_rollup_hourly: "12 * * * *",
+        };
+        const have = jobs.ok
+          ? Object.fromEntries(jobs.rows.map((j) => [j.jobname, j.schedule]))
+          : {};
+        record(
+          names.mobilCron,
+          jobs.ok &&
+            jobs.rows.length === 4 &&
+            Object.entries(want).every(([n, s]) => have[n] === s) &&
+            jobs.rows.every((j) => j.active === true),
+          jobs.ok
+            ? jobs.rows
+                .map((j) => j.jobname + " " + j.schedule + (j.active ? "" : " (inactive)"))
+                .join("; ")
+            : fmt(jobs),
+        );
+      });
+
+      // 7. The catalogue (1299, 1300): the seven tables this migration made carry a real treatment,
+      // and every table in public, partitions excepted, has a row.
+      await inTransaction(client, async () => {
+        await actAsSelf(client);
+        const made = [
+          "admin_catalogue",
+          "member_profile_history",
+          "mobilization_ledger",
+          "partner_acts",
+          "surface_event_kinds",
+          "surface_event_rollups",
+          "surface_events",
+        ];
+        const rows = await attempt(
+          client,
+          "select table_name, admin_treatment, dia_treatment from public.admin_catalogue where schema_name = 'public' and table_name = any($1::text[]) order by table_name",
+          [made],
+        );
+        const missing = await attempt(
+          client,
+          "select string_agg(c.relname, ', ' order by c.relname) as t from pg_class c join pg_namespace n on n.oid = c.relnamespace where n.nspname = 'public' and c.relkind in ('r', 'p') and not c.relispartition and not exists (select 1 from public.admin_catalogue a where a.schema_name = 'public' and a.table_name = c.relname)",
+        );
+        const treated = rows.ok ? rows.rows : [];
+        record(
+          names.mobilCatalogue,
+          rows.ok &&
+            treated.length === made.length &&
+            treated.every((r) => r.admin_treatment !== "unreviewed") &&
+            missing.ok &&
+            missing.rows[0].t === null,
+          (rows.ok
+            ? treated
+                .map((r) => r.table_name + ":" + r.admin_treatment + "/" + r.dia_treatment)
+                .join(", ")
+            : fmt(rows)) +
+            "; without a row: " +
+            (missing.ok ? missing.rows[0].t || "none" : fmt(missing)),
         );
       });
     }
