@@ -1,19 +1,25 @@
 // Handoff 41-B section 5 (rulings 1346, 1374; 1343; 228): the Messenger media routes on the deployed
 // preview, driven through Playwright's request context against BASE with the two seeded accounts
-// (ruling 218), for real. Nothing is mocked: the bearer comes from Supabase Auth, the pair's thread
-// is opened through messenger_open_one_to_one (a request and an accept first when the pair is not
-// connected, which on the project they are not), the bytes go to R2 through POST /api/messages/media,
-// come back through GET /api/messages/media/{id} with the Range the arm asks for, are refused signed
-// out and to a member no message carries them to, and go when the message is deleted for everyone
-// and DELETE removes the object.
+// (ruling 218), for real. Nothing is mocked: the bearer comes from Supabase Auth, the thread is a
+// community group the owner leads with member-test in it, the bytes go to R2 through POST
+// /api/messages/media, come back through GET /api/messages/media/{id} with the Range the arm asks
+// for, are refused signed out and to a member no message carries them to, and go when the message
+// is deleted for everyone and DELETE removes the object.
 //
-// What this leaves on the project: one accepted request and one one_to_one thread between the two
-// test accounts, made once and reused on every later run, and per run two messages that end deleted
-// for everyone (body null, media_id null) in that thread; every media row and every object is
-// removed by the arm itself. The third-member refusal (a member outside the thread) is the live-db
-// arm's, acted as the admin persona in SQL, because the runner holds credentials for two accounts
-// and no third; here the 403 is the thread's other member asking for an object no message carries
-// to them yet, which messenger_media_access refuses the same way.
+// The thread is a group and never the pair's one_to_one, on purpose. The pair's thread needs a
+// request and an accept between the two accounts (they are not connected on the project), and a
+// committed request row is exactly what the 41-A live arms must not find: their openPair sends a
+// fresh request inside a rolled-back transaction and is refused with request_exists while one
+// stands. Run 473's live job showed that after this arm's first version left one. A group costs
+// the pair nothing: created once by name, reused on every later run, member-test invited and
+// accepted once, and no 41-A arm reads a group it did not create.
+//
+// What this leaves on the project: that one group thread, and per run two messages that end
+// deleted for everyone (body null, media_id null) in it; every media row and every object is removed
+// by the arm itself. The third-member refusal (a member outside the thread) is the live-db arm's,
+// acted as the admin persona in SQL, because the runner holds credentials for two accounts and no
+// third; here the 403 is the thread's other member asking for an object no message carries to them
+// yet, which messenger_media_access refuses the same way.
 //
 // Every check is named in CHECKS and emitted exactly once, in order, so the arm's count is fixed
 // (ruling 317): a check the flow never reached is emitted UNPROVEN, and a run without the account
@@ -158,28 +164,33 @@ async function runMessengerMedia(browserType, bname) {
       return;
     }
 
-    // The pair's thread: open it, or request and accept first when the pair is not connected.
-    const openPair = async () => {
-      let open = await rpc(owner.token, "messenger_open_one_to_one", { p_other: member.id });
-      if (open.status === 200 && typeof open.body === "string") return open.body;
-      await rpc(owner.token, "messenger_request_send", {
-        p_recipient: member.id,
-        p_body: "A request from the Messenger media arm",
-      });
-      const pending = await rest(
-        member.token,
-        "messenger_requests_view?select=request_id,state&sender_id=eq." + owner.id,
+    // The group: found by name as the owner, or created with member-test in it; member-test accepts
+    // the invitation once (a later run finds them active and the accept is refused as not_invited,
+    // which is the steady state and not a failure).
+    const GROUP = "41-B media arm";
+    const openGroup = async () => {
+      const mine = await rest(
+        owner.token,
+        "messenger_threads_view?select=thread_id,kind,name&kind=eq.community_group&name=eq." +
+          encodeURIComponent(GROUP),
       );
-      for (const row of Array.isArray(pending.body) ? pending.body : []) {
-        if (row.state === "pending")
-          await rpc(member.token, "messenger_request_accept", { p_request: row.request_id });
+      let id = Array.isArray(mine.body) && mine.body.length ? mine.body[0].thread_id : null;
+      if (!id) {
+        const made = await rpc(owner.token, "messenger_thread_create_group", {
+          p_name: GROUP,
+          p_member_ids: [member.id],
+        });
+        id = made.status === 200 && typeof made.body === "string" ? made.body : null;
       }
-      open = await rpc(owner.token, "messenger_open_one_to_one", { p_other: member.id });
-      return open.status === 200 && typeof open.body === "string" ? open.body : null;
+      if (!id) return null;
+      await rpc(member.token, "messenger_thread_invite_accept", { p_thread: id });
+      return id;
     };
-    const thread = await openPair();
+    const thread = await openGroup();
     if (!thread) {
-      skipRest("the pair's thread could not be opened through messenger_open_one_to_one");
+      skipRest(
+        "the arm's group thread could not be found or created through messenger_thread_create_group",
+      );
       return;
     }
 
@@ -204,6 +215,9 @@ async function runMessengerMedia(browserType, bname) {
       );
       return;
     }
+    // Ruling 930: a record and not an assertion. record() prints no detail for a passing check, so
+    // the shape the binding was read through on this host is printed here, where a reader can quote it.
+    console.log(`ENV ${tag} | x-dna-env-source on ${BASE}: ${envSource} (probe ${probe.status()})`);
     check(
       CHECKS[1],
       probe.status() === 400 &&
