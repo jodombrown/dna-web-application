@@ -294,7 +294,7 @@ async function runLiveDbArms({ record, skip }) {
       "Brief 14 41-A (1353): rate_limit_check('message_send') answers thirty times and refuses the 31st in a minute",
     messengerPublication: "Brief 14 41-A (1351): the supabase_realtime publication holds no table",
     messengerRealtime:
-      "Brief 14 41-A (1351): the realtime.messages policy's predicate grants inbox:{self}, denies inbox:{other}, and a client insert into realtime.messages is refused",
+      "Brief 14 41-A (1351): the realtime.messages policy's predicate grants inbox:{self}, denies inbox:{other}, no client role holds an insert policy on realtime.messages, and a client insert does not land",
     messengerVocab:
       "Brief 14 41-A (1331, 1348, 1349, 1370): vocabularies() carries the seven thread kinds, three mute durations, six report reasons and five reaction words",
     messengerGrants:
@@ -3507,12 +3507,20 @@ async function runLiveDbArms({ record, skip }) {
         );
       });
 
-      // 11. The realtime.messages policy's predicate, and the insert refusal (1351).
+      // 11. The realtime.messages policy's predicate, and the insert refusal (1351). realtime.messages
+      // is partitioned by day on the project, and a row for a day with no partition is refused by
+      // tuple routing (23514) before row security is consulted, so the refusal is proven two ways:
+      // the catalog holds no insert policy for a client role, and the insert itself does not land,
+      // whichever of the two refusals answers first.
       await inTransaction(client, async () => {
         await actAsSelf(client);
         const policy = await attempt(
           client,
           "select qual from pg_policies where schemaname = 'realtime' and tablename = 'messages' and policyname = 'messenger_topics_select'",
+        );
+        const writers = await attempt(
+          client,
+          "select count(*)::int as n from pg_policies where schemaname = 'realtime' and tablename = 'messages' and cmd in ('INSERT', 'ALL') and (roles::text[] && array['anon', 'authenticated', 'public'])",
         );
         await actAs(client, owner.id);
         const self = await attempt(client, "select private.messenger_topic_allowed($1) as ok", [
@@ -3535,10 +3543,14 @@ async function runLiveDbArms({ record, skip }) {
             self.rows[0].ok === true &&
             other.ok &&
             other.rows[0].ok === false &&
+            writers.ok &&
+            writers.rows[0].n === 0 &&
             !insert.ok &&
-            insert.code === "42501",
+            (insert.code === "42501" || insert.code === "23514"),
           "policy " +
             (policy.ok ? policy.rows.length + " row(s)" : fmt(policy)) +
+            "; client insert policies " +
+            (writers.ok ? writers.rows[0].n : fmt(writers)) +
             "; self " +
             (self.ok ? self.rows[0].ok : fmt(self)) +
             "; other " +
