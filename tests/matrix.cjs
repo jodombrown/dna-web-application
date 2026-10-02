@@ -4,7 +4,7 @@
 // layer, so the real client code paths run against a deterministic backend. Backend behaviour
 // (RLS, the feed view) is verified separately in SQL against the live project.
 // Usage: BASE=https://b2-shell-feed.dna-web-application.pages.dev WEBKIT=1 node tests/matrix.cjs
-// Env: ONLY='[390,844]' runs one viewport; SPECIAL=publish,guards,keyboard,silence,shell,width,targeted,profile,connect,event,discovery,vocab,block,auth,onboarding,mount,sheet,gate,admin runs flows only.
+// Env: ONLY='[390,844]' runs one viewport; SPECIAL=publish,guards,keyboard,silence,shell,width,targeted,profile,connect,event,discovery,vocab,block,auth,onboarding,mount,sheet,gate,admin,media runs flows only.
 // Ruling 1237: an arm that loses its web process is run again once, alone, in a fresh browser, by
 // `drive()` below; CRASH_PROBE=<arm tag> is the harness probe that proves it (off by default).
 // Brief 3 profile flows live in tests/profile.cjs and Brief 4 Connect flows in tests/connect.cjs; both share this mock.
@@ -6611,6 +6611,12 @@ if (require.main === module)
           await drive(runAdminSignedOut, bt, bname, [1280, 800], "dark");
           await drive(runAdminAccounts, bt, bname, [1280, 800], "light");
         }
+        // Handoff 41-B section 5: the Messenger media routes on the deployed URL, with the two
+        // seeded accounts for real (tests/messenger-media.cjs).
+        if (process.env.SPECIAL.includes("media")) {
+          const { runMessengerMedia } = require("./messenger-media.cjs");
+          await drive(runMessengerMedia, bt, bname);
+        }
         if (process.env.SPECIAL.includes("auth")) {
           const { runAuthLayout, runAuthFlows } = require("./auth.cjs");
           for (const vp of process.env.ONLY ? [JSON.parse(process.env.ONLY)] : VIEWPORTS)
@@ -6763,6 +6769,10 @@ if (require.main === module)
       // (tests/sheet.cjs).
       const { runSheets } = require("./sheet.cjs");
       await runSheets(bt, bname);
+      // Handoff 41-B section 5 (rulings 1346, 1374): the Messenger media routes against the
+      // deployment, once per engine, with the two seeded accounts (tests/messenger-media.cjs).
+      const { runMessengerMedia } = require("./messenger-media.cjs");
+      await drive(runMessengerMedia, bt, bname);
     }
     finish({ full: true, engines: engines.map(([n]) => n) });
   })().catch((e) => {

@@ -392,6 +392,7 @@
   "chromium-820x1180-shell": 32,
   "chromium-820x1180-targeted": 9,
   "chromium-820x1180-width": 14,
+  "chromium-messenger-media": 13,
   "webkit 1024x1366 dark connect": 49,
   "webkit 1024x1366 light connect": 49,
   "webkit 1280x800 dark connect": 55,
@@ -781,5 +782,6 @@
   "webkit-820x1180-light-sheet-composer": 7,
   "webkit-820x1180-shell": 32,
   "webkit-820x1180-targeted": 9,
-  "webkit-820x1180-width": 14
+  "webkit-820x1180-width": 14,
+  "webkit-messenger-media": 13
 }
