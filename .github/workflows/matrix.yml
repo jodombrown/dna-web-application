@@ -18,7 +18,7 @@ on:
         required: false
         default: ""
       special:
-        description: Run flows only (publish, keyboard, silence, shell, width, targeted, profile, connect, event, discovery, vocab, block, auth, onboarding, mount, sheet, gate)
+        description: Run flows only (publish, keyboard, silence, shell, width, targeted, profile, connect, event, discovery, vocab, block, auth, onboarding, mount, sheet, gate, media)
         required: false
         default: ""
       only:
@@ -297,6 +297,13 @@ jobs:
           # is what makes a changed count explainable by arm group rather than merely different.
           DUMP_LABELS: ${{ inputs.dump_labels }}
           RULING200_PROBE: ${{ inputs.probe }}
+          # Handoff 41-B section 5: the Messenger media arm (special=media, and the full run) signs
+          # the two seeded accounts in for real (ruling 218); without them it reports every check
+          # unproven (ruling 228). The same four the onboard and dia-latency jobs already carry.
+          OWNER_EMAIL: ${{ secrets.OWNER_EMAIL }}
+          OWNER_PASSWORD: ${{ secrets.OWNER_PASSWORD }}
+          MEMBER_EMAIL: ${{ secrets.MEMBER_EMAIL }}
+          MEMBER_PASSWORD: ${{ secrets.MEMBER_PASSWORD }}
           # Ruling 1237: the crash-retry probe, empty on every run but the two that prove the retry.
           CRASH_PROBE: ${{ inputs.crash_probe }}
           CRASH_PROBE_ATTEMPTS: ${{ inputs.crash_probe_attempts }}

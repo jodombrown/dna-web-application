@@ -1,10 +1,21 @@
 // Generated from the canonical Supabase project (dgspjevjoblujcoljvkn) with the Supabase MCP
-// generate_typescript_types tool on handoff 41-A's branch (#89, Brief 14 Messenger schema and server),
-// after the nine b14a migrations 20261002130000 to 20261002130800 were applied and recorded by Chat
-// through execute_sql, each in the same transaction as its change, and every recorded text read back
-// at its file's drift md5: enums be7e2e56, vocabularies a53690c4, reachability_and_settings 5b78d0fc,
-// threads 8bd68ad6, messages e7526302, functions 34f5894d, realtime 0146ed6a, rate_limits 3fc5a8a3,
-// retention 571da8ca (the files at 5604ca7); 81 rows in schema_migrations.
+// generate_typescript_types tool on handoff 41-B's branch (#91, Messenger media on R2), after
+// 20261002150000_b14b_message_media was applied and recorded by Chat through execute_sql in the same
+// transaction as its change and read back at the file's drift md5 345ed33b4bd6bdf78c84a02decc1f2a1
+// (the file at 546b0c5); 83 rows in schema_migrations.
+//
+// What 41-B changes here (1346, 1374): `media.width` and `media.height` nullable (audio carries
+// neither), and the five `messenger_media_*` wrappers the two server routes call with the member's
+// own JWT: `messenger_media_record`, `messenger_media_access`, `messenger_media_locate`,
+// `messenger_media_marked` and `messenger_media_forget`. The private writer, the sweep and the
+// access predicate's helpers are absent by design, as every private function is.
+//
+// Also present, and explained by no migration in this tree: the `admin_overview_*` functions, the
+// `admin_dia_notes` table and the columns of 20261002140000_b12b_overview, which PR #90 (handoff 45-B, Lane C) carries and Chat applied before
+// this regeneration. The generator returns what the project holds (ruling 225's window, G58: the
+// project is ahead of this checkout by that one file until #90 merges), and a regeneration that
+// left them out by hand would be a hand-written types file. #90 regenerates this file too, so the
+// second of the two to merge regenerates once more.
 //
 // Nothing here is hand-written except this header and the `Views` helper at the end, which the
 // generator drops and every regeneration restores (`src/lib/feed.ts` reads it). The regeneration
@@ -122,6 +133,36 @@ export type Database = {
           recorded_at?: string;
           schema_name?: string;
           table_name?: string;
+        };
+        Relationships: [];
+      };
+      admin_dia_notes: {
+        Row: {
+          compare: string;
+          definition_version: number;
+          grain: string;
+          period_start: string;
+          statements: Json;
+          tz: string;
+          written_at: string;
+        };
+        Insert: {
+          compare: string;
+          definition_version: number;
+          grain: string;
+          period_start: string;
+          statements?: Json;
+          tz: string;
+          written_at?: string;
+        };
+        Update: {
+          compare?: string;
+          definition_version?: number;
+          grain?: string;
+          period_start?: string;
+          statements?: Json;
+          tz?: string;
+          written_at?: string;
         };
         Relationships: [];
       };
@@ -354,6 +395,7 @@ export type Database = {
         Row: {
           continental_place: string;
           created_at: string;
+          density_threshold: number | null;
           diaspora_place: string;
           id: string;
           sector: string | null;
@@ -362,6 +404,7 @@ export type Database = {
         Insert: {
           continental_place: string;
           created_at?: string;
+          density_threshold?: number | null;
           diaspora_place: string;
           id: string;
           sector?: string | null;
@@ -370,6 +413,7 @@ export type Database = {
         Update: {
           continental_place?: string;
           created_at?: string;
+          density_threshold?: number | null;
           diaspora_place?: string;
           id?: string;
           sector?: string | null;
@@ -1030,14 +1074,14 @@ export type Database = {
           crop: Json | null;
           delete_requested_at: string | null;
           focal_point: Json | null;
-          height: number;
+          height: number | null;
           id: string;
           kind: string;
           mime: string;
           optimized: boolean;
           owner_id: string;
           storage_path: string;
-          width: number;
+          width: number | null;
         };
         Insert: {
           bucket: string;
@@ -1046,14 +1090,14 @@ export type Database = {
           crop?: Json | null;
           delete_requested_at?: string | null;
           focal_point?: Json | null;
-          height: number;
+          height?: number | null;
           id?: string;
           kind: string;
           mime: string;
           optimized?: boolean;
           owner_id: string;
           storage_path: string;
-          width: number;
+          width?: number | null;
         };
         Update: {
           bucket?: string;
@@ -1062,14 +1106,14 @@ export type Database = {
           crop?: Json | null;
           delete_requested_at?: string | null;
           focal_point?: Json | null;
-          height?: number;
+          height?: number | null;
           id?: string;
           kind?: string;
           mime?: string;
           optimized?: boolean;
           owner_id?: string;
           storage_path?: string;
-          width?: number;
+          width?: number | null;
         };
         Relationships: [
           {
@@ -3728,9 +3772,36 @@ export type Database = {
       };
     };
     Functions: {
+      admin_dia_note_read: {
+        Args: { p_compare: string; p_grain: string; p_tz: string };
+        Returns: Json;
+      };
+      admin_dia_note_write: {
+        Args: {
+          p_compare: string;
+          p_grain: string;
+          p_statements: Json;
+          p_tz: string;
+        };
+        Returns: undefined;
+      };
       admin_grant_role: {
         Args: { p_member: string; p_reason: string; p_role: string };
         Returns: number;
+      };
+      admin_overview_company: { Args: never; Returns: Json };
+      admin_overview_levers: {
+        Args: { p_compare: string; p_grain: string; p_tz: string };
+        Returns: Json;
+      };
+      admin_overview_mobilization: {
+        Args: { p_compare: string; p_grain: string; p_tz: string };
+        Returns: Json;
+      };
+      admin_overview_network: { Args: { p_tz: string }; Returns: Json };
+      admin_overview_window: {
+        Args: { p_compare: string; p_grain: string; p_tz: string };
+        Returns: Json;
       };
       admin_revoke_role: {
         Args: { p_member: string; p_reason: string; p_role: string };
@@ -3871,6 +3942,56 @@ export type Database = {
         Returns: string;
       };
       messenger_mark_unread: { Args: { p_thread: string }; Returns: undefined };
+      messenger_media_access: { Args: { p_media: string }; Returns: boolean };
+      messenger_media_forget: { Args: { p_media: string }; Returns: boolean };
+      messenger_media_locate: {
+        Args: { p_media: string };
+        Returns: {
+          allowed: boolean;
+          byte_size: number;
+          mime: string;
+          storage_path: string;
+        }[];
+      };
+      messenger_media_marked: {
+        Args: { p_limit?: number };
+        Returns: {
+          media_id: string;
+          storage_path: string;
+        }[];
+      };
+      messenger_media_record: {
+        Args: {
+          p_byte_size: number;
+          p_height?: number;
+          p_mime: string;
+          p_storage_path: string;
+          p_thread: string;
+          p_width?: number;
+        };
+        Returns: {
+          bucket: string;
+          byte_size: number;
+          created_at: string;
+          crop: Json | null;
+          delete_requested_at: string | null;
+          focal_point: Json | null;
+          height: number | null;
+          id: string;
+          kind: string;
+          mime: string;
+          optimized: boolean;
+          owner_id: string;
+          storage_path: string;
+          width: number | null;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "media";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
+      };
       messenger_mute: {
         Args: { p_duration?: string; p_thread: string };
         Returns: undefined;
@@ -4425,5 +4546,4 @@ export const Constants = {
   },
 } as const;
 
-/** Row type of a view (app addition kept across regenerations; the generator emits Tables only). */
 export type Views<T extends keyof DefaultSchema["Views"]> = DefaultSchema["Views"][T]["Row"];
