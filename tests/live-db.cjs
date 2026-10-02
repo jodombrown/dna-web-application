@@ -38,8 +38,18 @@
 //                                   the side is read from history, is_african follows the African
 //                                   Union list, the derivation is idempotent over the seeded data,
 //                                   the four cron jobs are scheduled, and the catalogue is complete.
+//   Brief 14 41-A (1330 to 1353,     Messenger's schema and server: a request accepted opens the
+//   1368 to 1373; handoff 41-A)       pair's thread, a third member reads none of it, a blocked pair
+//                                   reads zero rows, a late joiner sees nothing before joined_seq,
+//                                   a send is idempotent and seq is dense, tick is 2 while receipts
+//                                   are off, search stays inside scope, the 31st send in a minute
+//                                   is refused, the publication stays empty, and the realtime topic
+//                                   predicate grants the member's own inbox and denies another's.
+//                                   The cap's refusal needs 257 member rows the project does not
+//                                   hold and reports unproven (228); the trigger's presence is read.
 //
 // Nothing here is secret: the connection string arrives from the runner and never from this file.
+const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
 
@@ -260,6 +270,35 @@ async function runLiveDbArms({ record, skip }) {
     mobilCron: "Brief 12 12C (1179): the four cron jobs exist with their schedules",
     mobilCatalogue:
       "Brief 12 12C (1299, 1300): every table the migration created has a catalogue row with a treatment other than unreviewed, and no table in public is without a row",
+    messenger:
+      "Brief 14 41-A (1330, 1341): owner-test's request to member-test is pending, accept opens the pair's thread with the request text as seq 1, both rows active, and the sender then opens the same thread",
+    messengerThird:
+      "Brief 14 41-A (1116, 1349): a third member selects none of the thread's messages and lists no thread",
+    messengerBlocked:
+      "Brief 14 41-A (1349): after member-test blocks owner-test, the one_to_one select returns zero rows to the blocked member and a send is refused with blocked",
+    messengerHistory:
+      "Brief 14 41-A (1342): in a group of three with history off, the late joiner reads nothing before joined_seq and reads the message sent after",
+    messengerIdempotent:
+      "Brief 14 41-A (1351): a second send with the same client_id returns the first row unchanged",
+    messengerSeq:
+      "Brief 14 41-A (1351): two sends in sequence take seq 2 and 3 under the lock on the thread row (true concurrency needs two connections on a committed fixture, which 269 forbids; sequential density is what is proven)",
+    messengerCap:
+      "Brief 14 41-A (1332): the 257th active community_group member is refused with group_full",
+    messengerCapTrigger:
+      "Brief 14 41-A (1332): on_thread_members_cap is a before insert or update trigger on thread_members and its function names the ceiling internally",
+    messengerTick:
+      "Brief 14 41-A (1345): the author's own message reads tick 2 after the recipient reads it with receipts off, and 3 once both have receipts on",
+    messengerSearch:
+      "Brief 14 41-A (1338, 1347): search returns the row inside scope and excludes a thread the caller left",
+    messengerRate:
+      "Brief 14 41-A (1353): rate_limit_check('message_send') answers thirty times and refuses the 31st in a minute",
+    messengerPublication: "Brief 14 41-A (1351): the supabase_realtime publication holds no table",
+    messengerRealtime:
+      "Brief 14 41-A (1351): the realtime.messages policy's predicate grants inbox:{self}, denies inbox:{other}, no client role holds an insert policy on realtime.messages, and a client insert does not land",
+    messengerVocab:
+      "Brief 14 41-A (1331, 1348, 1349, 1370): vocabularies() carries the seven thread kinds, three mute durations, six report reasons and five reaction words",
+    messengerGrants:
+      "Brief 14 41-A (1116): no client role holds insert, update or delete on any table 41-A created, and every one of them has a catalogue row",
   };
   // G143: a block that opens with a presence probe carries every arm it holds in `names`, under one key
   // prefix, so a probe that fails reports each of them UNPROVEN and the job's total does not fall with
@@ -2985,6 +3024,606 @@ async function runLiveDbArms({ record, skip }) {
             : fmt(rows)) +
             "; without a row: " +
             (missing.ok ? missing.rows[0].t || "none" : fmt(missing)),
+        );
+      });
+    }
+
+    // ------------------------------------------------------------------------------------------
+    // Brief 14 41-A (rulings 1330 to 1353, 1368 to 1373; 20261002130000 to 20261002130800; handoff
+    // 41-A). Messenger's schema and server. Every arm opens with the same presence probe so that
+    // before the apply the block reports UNPROVEN as a whole (G143, 228). The arms act as the two
+    // test accounts and, for a third member, as the admin persona live_arms_admin_member() answers
+    // (382), through the public.messenger_* wrappers a client calls; live_arms reads threads,
+    // thread_members, messages and requests under policies confined to the test accounts. Each arm
+    // is its own rolled-back transaction (269): the request, the thread, the block, the group and
+    // the rate-limit hits are all gone before the next arm begins.
+    // ------------------------------------------------------------------------------------------
+    const MESSENGER_SEND =
+      "public.messenger_send(uuid, uuid, text, public.message_kind, uuid, uuid, uuid[], jsonb)";
+    const messengerPresent = async () => {
+      await actAsSelf(client);
+      const present = await client.query("select to_regprocedure($1) is not null as ok", [
+        MESSENGER_SEND,
+      ]);
+      return !!present.rows[0] && present.rows[0].ok === true;
+    };
+    // A client id minted here, as the app mints it, so no arm has to leave the member's role for it.
+    const uuid = () => crypto.randomUUID();
+    const send = (thread, clientId, body) =>
+      attempt(client, "select id, seq, body from public.messenger_send($1::uuid, $2::uuid, $3)", [
+        thread,
+        clientId,
+        body,
+      ]);
+    /** owner-test asks member-test, member-test accepts; answers the thread id or the refusal. */
+    const openPair = async () => {
+      await actAs(client, owner.id);
+      const req = await attempt(
+        client,
+        "select id, state from public.messenger_request_send($1::uuid, $2)",
+        [member.id, "A request from the live arms"],
+      );
+      if (!req.ok) return { ok: false, step: "request", r: req };
+      await actAs(client, member.id);
+      const acc = await attempt(client, "select public.messenger_request_accept($1::uuid) as t", [
+        req.rows[0].id,
+      ]);
+      if (!acc.ok) return { ok: false, step: "accept", r: acc };
+      return { ok: true, thread: acc.rows[0].t, request: req.rows[0] };
+    };
+    if (!(await messengerPresent())) {
+      for (const n of armsOf("messenger"))
+        skip(
+          n,
+          "the 41-A migrations (20261002130000 to 20261002130800) are not on the project yet",
+        );
+    } else {
+      // 1. The request and the accept (1330, 1341).
+      await inTransaction(client, async () => {
+        const pair = await openPair();
+        let detail = pair.ok ? "accepted" : pair.step + " " + fmt(pair.r);
+        let ok = false;
+        if (pair.ok) {
+          const first = await attempt(
+            client,
+            "select seq, body, author_name from public.messenger_messages_view where thread_id = $1::uuid order by seq",
+            [pair.thread],
+          );
+          await actAs(client, owner.id);
+          const again = await attempt(
+            client,
+            "select public.messenger_open_one_to_one($1::uuid) as t",
+            [member.id],
+          );
+          await actAsSelf(client);
+          const rows = await attempt(
+            client,
+            "select member_id, state from public.thread_members where thread_id = $1::uuid order by member_id",
+            [pair.thread],
+          );
+          const active = rows.ok ? rows.rows.filter((r) => r.state === "active").length : -1;
+          ok =
+            pair.request.state === "pending" &&
+            first.ok &&
+            first.rows.length === 1 &&
+            Number(first.rows[0].seq) === 1 &&
+            first.rows[0].body === "A request from the live arms" &&
+            first.rows[0].author_name === owner.name &&
+            again.ok &&
+            again.rows[0].t === pair.thread &&
+            active === 2;
+          detail +=
+            "; seq 1 " +
+            (first.ok ? JSON.stringify(first.rows[0]) : fmt(first)) +
+            "; reopen " +
+            (again.ok
+              ? again.rows[0].t === pair.thread
+                ? "same thread"
+                : "other thread"
+              : fmt(again)) +
+            "; active rows " +
+            active;
+        }
+        record(names.messenger, ok, detail);
+      });
+
+      // 2. A third member reads none of it (1116, 1349).
+      await inTransaction(client, async () => {
+        const third = await attempt(client, "select public.live_arms_admin_member() as id");
+        const thirdId = third.ok && third.rows[0] ? third.rows[0].id : null;
+        if (!thirdId) {
+          skip(names.messengerThird, "live_arms_admin_member() answered no third member");
+          return;
+        }
+        const pair = await openPair();
+        if (!pair.ok) {
+          record(names.messengerThird, false, pair.step + " " + fmt(pair.r));
+          return;
+        }
+        await actAs(client, owner.id);
+        await send(pair.thread, uuid(), "Only for the pair");
+        await actAs(client, thirdId);
+        const msgs = await attempt(
+          client,
+          "select count(*)::int as n from public.messages where thread_id = $1::uuid",
+          [pair.thread],
+        );
+        const list = await attempt(
+          client,
+          "select count(*)::int as n from public.messenger_threads_view where thread_id = $1::uuid",
+          [pair.thread],
+        );
+        await actAs(client, member.id);
+        const own = await attempt(
+          client,
+          "select count(*)::int as n from public.messages where thread_id = $1::uuid",
+          [pair.thread],
+        );
+        record(
+          names.messengerThird,
+          msgs.ok &&
+            msgs.rows[0].n === 0 &&
+            list.ok &&
+            list.rows[0].n === 0 &&
+            own.ok &&
+            own.rows[0].n === 2,
+          "third reads " +
+            (msgs.ok ? msgs.rows[0].n : fmt(msgs)) +
+            " messages and lists " +
+            (list.ok ? list.rows[0].n : fmt(list)) +
+            "; member-test reads " +
+            (own.ok ? own.rows[0].n : fmt(own)),
+        );
+      });
+
+      // 3. A block closes the pair's thread both ways (1349).
+      await inTransaction(client, async () => {
+        const pair = await openPair();
+        if (!pair.ok) {
+          record(names.messengerBlocked, false, pair.step + " " + fmt(pair.r));
+          return;
+        }
+        await actAs(client, owner.id);
+        await send(pair.thread, uuid(), "Before the block");
+        await actAs(client, member.id);
+        const before = await attempt(
+          client,
+          "select count(*)::int as n from public.messages where thread_id = $1::uuid",
+          [pair.thread],
+        );
+        const block = await attempt(
+          client,
+          "insert into public.member_blocks (blocker_id, blocked_id) values ($1::uuid, $2::uuid)",
+          [member.id, owner.id],
+        );
+        await actAs(client, owner.id);
+        const after = await attempt(
+          client,
+          "select count(*)::int as n from public.messages where thread_id = $1::uuid",
+          [pair.thread],
+        );
+        const refused = await send(pair.thread, uuid(), "After the block");
+        record(
+          names.messengerBlocked,
+          before.ok &&
+            before.rows[0].n === 2 &&
+            block.ok &&
+            after.ok &&
+            after.rows[0].n === 0 &&
+            !refused.ok &&
+            refused.message === "blocked",
+          "before " +
+            (before.ok ? before.rows[0].n : fmt(before)) +
+            "; block " +
+            fmt(block) +
+            "; after " +
+            (after.ok ? after.rows[0].n : fmt(after)) +
+            "; send " +
+            fmt(refused),
+        );
+      });
+
+      // 4. History off: the late joiner sees nothing before joined_seq (1342).
+      await inTransaction(client, async () => {
+        const third = await attempt(client, "select public.live_arms_admin_member() as id");
+        const thirdId = third.ok && third.rows[0] ? third.rows[0].id : null;
+        if (!thirdId) {
+          skip(names.messengerHistory, "live_arms_admin_member() answered no third member");
+          return;
+        }
+        await actAs(client, owner.id);
+        const group = await attempt(
+          client,
+          "select public.messenger_thread_create_group($1, array[$2::uuid, $3::uuid]) as t",
+          ["Live arms group", member.id, thirdId],
+        );
+        if (!group.ok) {
+          record(names.messengerHistory, false, "create " + fmt(group));
+          return;
+        }
+        const g = group.rows[0].t;
+        await actAs(client, member.id);
+        const acceptEarly = await attempt(
+          client,
+          "select public.messenger_thread_invite_accept($1::uuid)",
+          [g],
+        );
+        await actAs(client, owner.id);
+        const early = await send(g, uuid(), "Before the third joined");
+        await actAs(client, thirdId);
+        const invited = await attempt(
+          client,
+          "select invited from public.messenger_threads_view where thread_id = $1::uuid",
+          [g],
+        );
+        const acceptLate = await attempt(
+          client,
+          "select public.messenger_thread_invite_accept($1::uuid)",
+          [g],
+        );
+        const none = await attempt(
+          client,
+          "select count(*)::int as n from public.messenger_messages_view where thread_id = $1::uuid",
+          [g],
+        );
+        await actAs(client, owner.id);
+        const late = await send(g, uuid(), "After the third joined");
+        await actAs(client, thirdId);
+        const one = await attempt(
+          client,
+          "select seq from public.messenger_messages_view where thread_id = $1::uuid order by seq",
+          [g],
+        );
+        await actAs(client, member.id);
+        const both = await attempt(
+          client,
+          "select count(*)::int as n from public.messenger_messages_view where thread_id = $1::uuid",
+          [g],
+        );
+        record(
+          names.messengerHistory,
+          acceptEarly.ok &&
+            early.ok &&
+            invited.ok &&
+            invited.rows.length === 1 &&
+            invited.rows[0].invited === true &&
+            acceptLate.ok &&
+            none.ok &&
+            none.rows[0].n === 0 &&
+            late.ok &&
+            one.ok &&
+            one.rows.length === 1 &&
+            Number(one.rows[0].seq) === 2 &&
+            both.ok &&
+            both.rows[0].n === 2,
+          "invited " +
+            (invited.ok ? JSON.stringify(invited.rows) : fmt(invited)) +
+            "; late joiner before " +
+            (none.ok ? none.rows[0].n : fmt(none)) +
+            ", after " +
+            (one.ok ? JSON.stringify(one.rows.map((r) => Number(r.seq))) : fmt(one)) +
+            "; early member " +
+            (both.ok ? both.rows[0].n : fmt(both)),
+        );
+      });
+
+      // 5. Idempotent send, and dense seq (1351).
+      await inTransaction(client, async () => {
+        const pair = await openPair();
+        if (!pair.ok) {
+          record(names.messengerIdempotent, false, pair.step + " " + fmt(pair.r));
+          record(names.messengerSeq, false, pair.step + " " + fmt(pair.r));
+          return;
+        }
+        await actAs(client, owner.id);
+        const cid = uuid();
+        const first = await send(pair.thread, cid, "First body");
+        const again = await send(pair.thread, cid, "A replay with another body");
+        const next = await send(pair.thread, uuid(), "Second body");
+        record(
+          names.messengerIdempotent,
+          first.ok &&
+            again.ok &&
+            first.rows[0].id === again.rows[0].id &&
+            again.rows[0].body === "First body",
+          "first " +
+            fmt(first) +
+            "; replay " +
+            (again.ok ? JSON.stringify(again.rows[0]) : fmt(again)),
+        );
+        record(
+          names.messengerSeq,
+          first.ok && next.ok && Number(first.rows[0].seq) === 2 && Number(next.rows[0].seq) === 3,
+          "seq " +
+            (first.ok ? first.rows[0].seq : fmt(first)) +
+            " then " +
+            (next.ok ? next.rows[0].seq : fmt(next)),
+        );
+      });
+
+      // 6. The cap (1332). The refusal needs 256 active members and the project holds far fewer, so
+      // it is unproven here (228) and was exercised on a local replay of the chain; what the
+      // project can prove is the trigger's presence and shape.
+      await inTransaction(client, async () => {
+        await actAsSelf(client);
+        const members = await attempt(client, "select count(*)::int as n from public.members");
+        const n = members.ok ? members.rows[0].n : null;
+        skip(
+          names.messengerCap,
+          "live_arms reads " +
+            (n === null ? "an unknown number of" : n) +
+            " member rows (its policy admits the two test accounts) and the refusal needs 257 distinct members a rolled-back fixture cannot mint (241, 269); exercised on a local replay of the chain instead",
+        );
+        const trig = await attempt(
+          client,
+          "select t.tgname, t.tgtype, p.proname, position('256' in p.prosrc) > 0 as names_cap from pg_trigger t join pg_proc p on p.oid = t.tgfoid where t.tgrelid = 'public.thread_members'::regclass and t.tgname = 'on_thread_members_cap' and not t.tgisinternal",
+        );
+        const row = trig.ok && trig.rows[0];
+        // tgtype bit 1 is row, bit 2 is before, bit 4 is insert, bit 16 is update.
+        const type = row ? Number(row.tgtype) : 0;
+        record(
+          names.messengerCapTrigger,
+          !!row &&
+            (type & 1) === 1 &&
+            (type & 2) === 2 &&
+            (type & 4) === 4 &&
+            (type & 16) === 16 &&
+            row.proname === "thread_members_cap" &&
+            row.names_cap === true,
+          row ? row.tgname + " type " + type + " -> " + row.proname : fmt(trig),
+        );
+      });
+
+      // 7. Ticks (1345).
+      await inTransaction(client, async () => {
+        const pair = await openPair();
+        if (!pair.ok) {
+          record(names.messengerTick, false, pair.step + " " + fmt(pair.r));
+          return;
+        }
+        await actAs(client, owner.id);
+        const sent = await send(pair.thread, uuid(), "Tick me");
+        const tick = (label) =>
+          attempt(
+            client,
+            "select tick from public.messenger_messages_view where message_id = $1::uuid",
+            [sent.ok ? sent.rows[0].id : null],
+          ).then((r) => ({ label, v: r.ok && r.rows[0] ? Number(r.rows[0].tick) : fmt(r) }));
+        await actAs(client, owner.id);
+        const stored = await tick("stored");
+        await actAs(client, member.id);
+        await attempt(client, "select public.messenger_read_to($1::uuid, $2::bigint)", [
+          pair.thread,
+          2,
+        ]);
+        await actAs(client, owner.id);
+        const readOff = await tick("read with receipts off");
+        await attempt(client, "select public.messenger_settings_set(true, null, null)");
+        const oneOn = await tick("only the author on");
+        await actAs(client, member.id);
+        await attempt(client, "select public.messenger_settings_set(true, null, null)");
+        await actAs(client, owner.id);
+        const bothOn = await tick("both on");
+        record(
+          names.messengerTick,
+          sent.ok && stored.v === 1 && readOff.v === 2 && oneOn.v === 2 && bothOn.v === 3,
+          [stored, readOff, oneOn, bothOn].map((t) => t.label + " " + t.v).join("; "),
+        );
+      });
+
+      // 8. Search inside scope (1338, 1347).
+      await inTransaction(client, async () => {
+        const third = await attempt(client, "select public.live_arms_admin_member() as id");
+        const thirdId = third.ok && third.rows[0] ? third.rows[0].id : null;
+        if (!thirdId) {
+          skip(names.messengerSearch, "live_arms_admin_member() answered no third member");
+          return;
+        }
+        await actAs(client, owner.id);
+        const group = await attempt(
+          client,
+          "select public.messenger_thread_create_group($1, array[$2::uuid, $3::uuid]) as t",
+          ["Search group", member.id, thirdId],
+        );
+        if (!group.ok) {
+          record(names.messengerSearch, false, "create " + fmt(group));
+          return;
+        }
+        const g = group.rows[0].t;
+        await actAs(client, member.id);
+        await attempt(client, "select public.messenger_thread_invite_accept($1::uuid)", [g]);
+        await actAs(client, owner.id);
+        await send(g, uuid(), "The quokka word appears here");
+        await actAs(client, member.id);
+        const found = await attempt(
+          client,
+          "select thread_id, seq, headline from public.messenger_search($1)",
+          ["quokka"],
+        );
+        await actAs(client, thirdId);
+        const outside = await attempt(
+          client,
+          "select count(*)::int as n from public.messenger_search($1)",
+          ["quokka"],
+        );
+        await actAs(client, member.id);
+        await attempt(client, "select public.messenger_thread_leave($1::uuid)", [g]);
+        const gone = await attempt(
+          client,
+          "select count(*)::int as n from public.messenger_search($1)",
+          ["quokka"],
+        );
+        record(
+          names.messengerSearch,
+          found.ok &&
+            found.rows.length === 1 &&
+            found.rows[0].thread_id === g &&
+            Number(found.rows[0].seq) === 1 &&
+            outside.ok &&
+            outside.rows[0].n === 0 &&
+            gone.ok &&
+            gone.rows[0].n === 0,
+          "member " +
+            (found.ok
+              ? JSON.stringify(found.rows.map((r) => [Number(r.seq), r.headline]))
+              : fmt(found)) +
+            "; invited third " +
+            (outside.ok ? outside.rows[0].n : fmt(outside)) +
+            "; after leaving " +
+            (gone.ok ? gone.rows[0].n : fmt(gone)),
+        );
+      });
+
+      // 9. The ceiling (1353): thirty answered, the 31st refused, inside one rolled-back minute.
+      await inTransaction(client, async () => {
+        await actAs(client, member.id);
+        const answers = [];
+        for (let i = 0; i < 31; i++) {
+          const r = await attempt(client, "select public.rate_limit_check('message_send') as ok");
+          answers.push(r.ok ? r.rows[0].ok : fmt(r));
+        }
+        const first30 = answers.slice(0, 30).every((a) => a === true);
+        record(
+          names.messengerRate,
+          first30 && answers[30] === false,
+          "first thirty " +
+            (first30 ? "answered" : JSON.stringify(answers.slice(0, 30))) +
+            "; 31st " +
+            answers[30],
+        );
+      });
+
+      // 10. The publication stays empty (1351).
+      await inTransaction(client, async () => {
+        await actAsSelf(client);
+        const pub = await attempt(
+          client,
+          "select count(*)::int as n from pg_publication_tables where pubname = 'supabase_realtime'",
+        );
+        record(
+          names.messengerPublication,
+          pub.ok && pub.rows[0].n === 0,
+          pub.ok ? "tables " + pub.rows[0].n : fmt(pub),
+        );
+      });
+
+      // 11. The realtime.messages policy's predicate, and the insert refusal (1351). realtime.messages
+      // is partitioned by day on the project, and a row for a day with no partition is refused by
+      // tuple routing (23514) before row security is consulted, so the refusal is proven two ways:
+      // the catalog holds no insert policy for a client role, and the insert itself does not land,
+      // whichever of the two refusals answers first.
+      await inTransaction(client, async () => {
+        await actAsSelf(client);
+        const policy = await attempt(
+          client,
+          "select qual from pg_policies where schemaname = 'realtime' and tablename = 'messages' and policyname = 'messenger_topics_select'",
+        );
+        const writers = await attempt(
+          client,
+          "select count(*)::int as n from pg_policies where schemaname = 'realtime' and tablename = 'messages' and cmd in ('INSERT', 'ALL') and (roles::text[] && array['anon', 'authenticated', 'public'])",
+        );
+        await actAs(client, owner.id);
+        const self = await attempt(client, "select private.messenger_topic_allowed($1) as ok", [
+          "inbox:" + owner.id,
+        ]);
+        const other = await attempt(client, "select private.messenger_topic_allowed($1) as ok", [
+          "inbox:" + member.id,
+        ]);
+        const insert = await attempt(
+          client,
+          "insert into realtime.messages (topic, extension, payload, event, private) values ($1, 'broadcast', '{}'::jsonb, 'x', true)",
+          ["inbox:" + owner.id],
+        );
+        record(
+          names.messengerRealtime,
+          policy.ok &&
+            policy.rows.length === 1 &&
+            /messenger_topic_allowed/.test(policy.rows[0].qual) &&
+            self.ok &&
+            self.rows[0].ok === true &&
+            other.ok &&
+            other.rows[0].ok === false &&
+            writers.ok &&
+            writers.rows[0].n === 0 &&
+            !insert.ok &&
+            (insert.code === "42501" || insert.code === "23514"),
+          "policy " +
+            (policy.ok ? policy.rows.length + " row(s)" : fmt(policy)) +
+            "; client insert policies " +
+            (writers.ok ? writers.rows[0].n : fmt(writers)) +
+            "; self " +
+            (self.ok ? self.rows[0].ok : fmt(self)) +
+            "; other " +
+            (other.ok ? other.rows[0].ok : fmt(other)) +
+            "; insert " +
+            fmt(insert),
+        );
+      });
+
+      // 12. The four vocabularies (1331, 1348, 1349, 1370).
+      await inTransaction(client, async () => {
+        await actAs(client, member.id);
+        const v = await attempt(client, "select public.vocabularies() as v");
+        const j = v.ok ? v.rows[0].v : null;
+        const len = (k) => (j && Array.isArray(j[k]) ? j[k].length : -1);
+        const values = (k) => (j && Array.isArray(j[k]) ? j[k].map((x) => x.value) : []);
+        record(
+          names.messengerVocab,
+          len("thread_kinds") === 7 &&
+            len("message_mute_durations") === 3 &&
+            len("message_report_reasons") === 6 &&
+            len("message_reaction_kinds") === 5 &&
+            JSON.stringify(values("message_reaction_kinds")) ===
+              JSON.stringify(["agree", "thanks", "noted", "well_done", "sorry_to_hear"]),
+          v.ok
+            ? "thread_kinds " +
+                len("thread_kinds") +
+                ", mute " +
+                len("message_mute_durations") +
+                ", reasons " +
+                len("message_report_reasons") +
+                ", reactions " +
+                values("message_reaction_kinds").join(" ")
+            : fmt(v),
+        );
+      });
+
+      // 13. No client write grant on any new table, and every one in the catalogue (1116, 1299).
+      await inTransaction(client, async () => {
+        await actAsSelf(client);
+        const made = [
+          "threads",
+          "thread_members",
+          "messages",
+          "message_reactions",
+          "message_mentions",
+          "message_requests",
+          "message_reports",
+          "message_view_audit",
+          "member_messaging_settings",
+          "messenger_dia_dismissals",
+          "thread_kinds",
+          "message_mute_durations",
+          "message_report_reasons",
+          "message_reaction_kinds",
+        ];
+        const grants = await attempt(
+          client,
+          "select string_agg(table_name || ':' || grantee || ':' || privilege_type, ', ') as g from information_schema.role_table_grants where table_schema = 'public' and grantee in ('anon', 'authenticated') and privilege_type in ('INSERT', 'UPDATE', 'DELETE') and table_name = any($1::text[])",
+          [made],
+        );
+        const rows = await attempt(
+          client,
+          "select count(*)::int as n from public.admin_catalogue where schema_name = 'public' and table_name = any($1::text[])",
+          [made],
+        );
+        record(
+          names.messengerGrants,
+          grants.ok && grants.rows[0].g === null && rows.ok && rows.rows[0].n === made.length,
+          "write grants " +
+            (grants.ok ? grants.rows[0].g || "none" : fmt(grants)) +
+            "; catalogue rows " +
+            (rows.ok ? rows.rows[0].n + "/" + made.length : fmt(rows)),
         );
       });
     }

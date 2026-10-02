@@ -1,7 +1,10 @@
 // Generated from the canonical Supabase project (dgspjevjoblujcoljvkn) with the Supabase MCP
-// generate_typescript_types tool on handoff 40-C's branch (#87, Brief 12 12C part 1), after
-// 20261002120000 was applied and recorded in the same transaction as its change, and its recorded
-// text read back at the file's drift md5 (529f5a791eab9b95715129c98471b044, the file at 7f328a7).
+// generate_typescript_types tool on handoff 41-A's branch (#89, Brief 14 Messenger schema and server),
+// after the nine b14a migrations 20261002130000 to 20261002130800 were applied and recorded by Chat
+// through execute_sql, each in the same transaction as its change, and every recorded text read back
+// at its file's drift md5: enums be7e2e56, vocabularies a53690c4, reachability_and_settings 5b78d0fc,
+// threads 8bd68ad6, messages e7526302, functions 34f5894d, realtime 0146ed6a, rate_limits 3fc5a8a3,
+// retention 571da8ca (the files at 5604ca7); 81 rows in schema_migrations.
 //
 // Nothing here is hand-written except this header and the `Views` helper at the end, which the
 // generator drops and every regeneration restores (`src/lib/feed.ts` reads it). The regeneration
@@ -11,7 +14,20 @@
 // file byte for byte, and `tests/migration-drift.cjs` reads it, so the generator returns it. Every
 // object the generator returns is explained by a migration in this tree, so nothing is left out.
 //
-// What 20261002120000 changes here (1179, 1280 to 1288, 1295 to 1300): the tables
+// What 41-A changes here (1330 to 1353, 1368 to 1373): the tables `threads`, `thread_members`,
+// `messages`, `message_reactions`, `message_mentions`, `message_requests`, `message_reports`,
+// `message_view_audit`, `member_messaging_settings`, `messenger_dia_dismissals` and the four
+// vocabularies `thread_kinds`, `message_mute_durations`, `message_report_reasons` and
+// `message_reaction_kinds`; `members.reachability` and `media.delete_requested_at`; the enums
+// `reachability`, `thread_member_role`, `thread_member_state`, `message_kind`,
+// `message_request_state` and `message_report_state`; the three `Views` entries
+// `messenger_threads_view`, `messenger_messages_view` and `messenger_requests_view`; and the
+// `messenger_*` wrappers, the only Messenger functions a client calls. The private write paths,
+// the projections' helpers, the broadcast triggers and the purge are absent by design, as every
+// private function is. `surface_events_2026_10` and `surface_events_2026_11` are still the two
+// partitions that exist.
+//
+// What 20261002120000 changed (1179, 1280 to 1288, 1295 to 1300): the tables
 // `member_profile_history`, `surface_event_kinds`, `surface_events`, `partner_acts`,
 // `mobilization_ledger`, `surface_event_rollups` and `admin_catalogue`; `world_countries.is_african`;
 // and the function `record_event`, the one client-callable writer. `surface_events_2026_10` and
@@ -1012,6 +1028,7 @@ export type Database = {
           byte_size: number;
           created_at: string;
           crop: Json | null;
+          delete_requested_at: string | null;
           focal_point: Json | null;
           height: number;
           id: string;
@@ -1027,6 +1044,7 @@ export type Database = {
           byte_size: number;
           created_at?: string;
           crop?: Json | null;
+          delete_requested_at?: string | null;
           focal_point?: Json | null;
           height: number;
           id?: string;
@@ -1042,6 +1060,7 @@ export type Database = {
           byte_size?: number;
           created_at?: string;
           crop?: Json | null;
+          delete_requested_at?: string | null;
           focal_point?: Json | null;
           height?: number;
           id?: string;
@@ -1547,6 +1566,41 @@ export type Database = {
           },
         ];
       };
+      member_messaging_settings: {
+        Row: {
+          link_previews_enabled: boolean;
+          media_notice_seen_at: string | null;
+          member_id: string;
+          receipts_chosen_at: string | null;
+          receipts_enabled: boolean;
+          updated_at: string;
+        };
+        Insert: {
+          link_previews_enabled?: boolean;
+          media_notice_seen_at?: string | null;
+          member_id: string;
+          receipts_chosen_at?: string | null;
+          receipts_enabled?: boolean;
+          updated_at?: string;
+        };
+        Update: {
+          link_previews_enabled?: boolean;
+          media_notice_seen_at?: string | null;
+          member_id?: string;
+          receipts_chosen_at?: string | null;
+          receipts_enabled?: boolean;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "member_messaging_settings_member_id_fkey";
+            columns: ["member_id"];
+            isOneToOne: true;
+            referencedRelation: "members";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       member_origin: {
         Row: {
           heritage: Database["public"]["Enums"]["heritage_kind"] | null;
@@ -1859,6 +1913,7 @@ export type Database = {
           pattern: Database["public"]["Enums"]["masthead_pattern"];
           profile_private: boolean;
           profile_shared: boolean;
+          reachability: Database["public"]["Enums"]["reachability"];
           stance: Database["public"]["Enums"]["stance"];
           stance_declared_at: string | null;
           updated_at: string;
@@ -1883,6 +1938,7 @@ export type Database = {
           pattern?: Database["public"]["Enums"]["masthead_pattern"];
           profile_private?: boolean;
           profile_shared?: boolean;
+          reachability?: Database["public"]["Enums"]["reachability"];
           stance?: Database["public"]["Enums"]["stance"];
           stance_declared_at?: string | null;
           updated_at?: string;
@@ -1907,6 +1963,7 @@ export type Database = {
           pattern?: Database["public"]["Enums"]["masthead_pattern"];
           profile_private?: boolean;
           profile_shared?: boolean;
+          reachability?: Database["public"]["Enums"]["reachability"];
           stance?: Database["public"]["Enums"]["stance"];
           stance_declared_at?: string | null;
           updated_at?: string;
@@ -1927,6 +1984,440 @@ export type Database = {
             isOneToOne: false;
             referencedRelation: "countries";
             referencedColumns: ["name"];
+          },
+        ];
+      };
+      message_mentions: {
+        Row: {
+          member_id: string;
+          message_id: string;
+        };
+        Insert: {
+          member_id: string;
+          message_id: string;
+        };
+        Update: {
+          member_id?: string;
+          message_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "message_mentions_member_id_fkey";
+            columns: ["member_id"];
+            isOneToOne: false;
+            referencedRelation: "members";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "message_mentions_message_id_fkey";
+            columns: ["message_id"];
+            isOneToOne: false;
+            referencedRelation: "messages";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "message_mentions_message_id_fkey";
+            columns: ["message_id"];
+            isOneToOne: false;
+            referencedRelation: "messenger_messages_view";
+            referencedColumns: ["message_id"];
+          },
+        ];
+      };
+      message_mute_durations: {
+        Row: {
+          duration: string | null;
+          label: string;
+          position: number;
+          value: string;
+        };
+        Insert: {
+          duration?: string | null;
+          label: string;
+          position: number;
+          value: string;
+        };
+        Update: {
+          duration?: string | null;
+          label?: string;
+          position?: number;
+          value?: string;
+        };
+        Relationships: [];
+      };
+      message_reaction_kinds: {
+        Row: {
+          label: string;
+          position: number;
+          value: string;
+        };
+        Insert: {
+          label: string;
+          position: number;
+          value: string;
+        };
+        Update: {
+          label?: string;
+          position?: number;
+          value?: string;
+        };
+        Relationships: [];
+      };
+      message_reactions: {
+        Row: {
+          created_at: string;
+          member_id: string;
+          message_id: string;
+          reaction: string;
+        };
+        Insert: {
+          created_at?: string;
+          member_id: string;
+          message_id: string;
+          reaction: string;
+        };
+        Update: {
+          created_at?: string;
+          member_id?: string;
+          message_id?: string;
+          reaction?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "message_reactions_member_id_fkey";
+            columns: ["member_id"];
+            isOneToOne: false;
+            referencedRelation: "members";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "message_reactions_message_id_fkey";
+            columns: ["message_id"];
+            isOneToOne: false;
+            referencedRelation: "messages";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "message_reactions_message_id_fkey";
+            columns: ["message_id"];
+            isOneToOne: false;
+            referencedRelation: "messenger_messages_view";
+            referencedColumns: ["message_id"];
+          },
+          {
+            foreignKeyName: "message_reactions_reaction_fkey";
+            columns: ["reaction"];
+            isOneToOne: false;
+            referencedRelation: "message_reaction_kinds";
+            referencedColumns: ["value"];
+          },
+        ];
+      };
+      message_report_reasons: {
+        Row: {
+          label: string;
+          position: number;
+          value: string;
+        };
+        Insert: {
+          label: string;
+          position: number;
+          value: string;
+        };
+        Update: {
+          label?: string;
+          position?: number;
+          value?: string;
+        };
+        Relationships: [];
+      };
+      message_reports: {
+        Row: {
+          created_at: string;
+          id: string;
+          message_id: string | null;
+          note: string | null;
+          reason: string;
+          reporter_id: string | null;
+          state: Database["public"]["Enums"]["message_report_state"];
+        };
+        Insert: {
+          created_at?: string;
+          id?: string;
+          message_id?: string | null;
+          note?: string | null;
+          reason: string;
+          reporter_id?: string | null;
+          state?: Database["public"]["Enums"]["message_report_state"];
+        };
+        Update: {
+          created_at?: string;
+          id?: string;
+          message_id?: string | null;
+          note?: string | null;
+          reason?: string;
+          reporter_id?: string | null;
+          state?: Database["public"]["Enums"]["message_report_state"];
+        };
+        Relationships: [
+          {
+            foreignKeyName: "message_reports_message_id_fkey";
+            columns: ["message_id"];
+            isOneToOne: false;
+            referencedRelation: "messages";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "message_reports_message_id_fkey";
+            columns: ["message_id"];
+            isOneToOne: false;
+            referencedRelation: "messenger_messages_view";
+            referencedColumns: ["message_id"];
+          },
+          {
+            foreignKeyName: "message_reports_reason_fkey";
+            columns: ["reason"];
+            isOneToOne: false;
+            referencedRelation: "message_report_reasons";
+            referencedColumns: ["value"];
+          },
+          {
+            foreignKeyName: "message_reports_reporter_id_fkey";
+            columns: ["reporter_id"];
+            isOneToOne: false;
+            referencedRelation: "members";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      message_requests: {
+        Row: {
+          body: string;
+          created_at: string;
+          decided_at: string | null;
+          id: string;
+          recipient_id: string;
+          sender_id: string;
+          state: Database["public"]["Enums"]["message_request_state"];
+          thread_id: string | null;
+        };
+        Insert: {
+          body: string;
+          created_at?: string;
+          decided_at?: string | null;
+          id?: string;
+          recipient_id: string;
+          sender_id: string;
+          state?: Database["public"]["Enums"]["message_request_state"];
+          thread_id?: string | null;
+        };
+        Update: {
+          body?: string;
+          created_at?: string;
+          decided_at?: string | null;
+          id?: string;
+          recipient_id?: string;
+          sender_id?: string;
+          state?: Database["public"]["Enums"]["message_request_state"];
+          thread_id?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "message_requests_recipient_id_fkey";
+            columns: ["recipient_id"];
+            isOneToOne: false;
+            referencedRelation: "members";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "message_requests_sender_id_fkey";
+            columns: ["sender_id"];
+            isOneToOne: false;
+            referencedRelation: "members";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "message_requests_thread_id_fkey";
+            columns: ["thread_id"];
+            isOneToOne: false;
+            referencedRelation: "messenger_threads_view";
+            referencedColumns: ["thread_id"];
+          },
+          {
+            foreignKeyName: "message_requests_thread_id_fkey";
+            columns: ["thread_id"];
+            isOneToOne: false;
+            referencedRelation: "threads";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      message_view_audit: {
+        Row: {
+          id: number;
+          report_id: string;
+          staff_id: string | null;
+          viewed_at: string;
+        };
+        Insert: {
+          id?: never;
+          report_id: string;
+          staff_id?: string | null;
+          viewed_at?: string;
+        };
+        Update: {
+          id?: never;
+          report_id?: string;
+          staff_id?: string | null;
+          viewed_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "message_view_audit_report_id_fkey";
+            columns: ["report_id"];
+            isOneToOne: false;
+            referencedRelation: "message_reports";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "message_view_audit_staff_id_fkey";
+            columns: ["staff_id"];
+            isOneToOne: false;
+            referencedRelation: "members";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      messages: {
+        Row: {
+          author_deleted_at: string | null;
+          author_id: string | null;
+          body: string | null;
+          client_id: string;
+          created_at: string;
+          deleted_at: string | null;
+          edited_at: string | null;
+          id: string;
+          kind: Database["public"]["Enums"]["message_kind"];
+          link_preview: Json | null;
+          media_id: string | null;
+          pinned_by: string | null;
+          reply_to: string | null;
+          search: unknown;
+          seq: number;
+          thread_id: string;
+        };
+        Insert: {
+          author_deleted_at?: string | null;
+          author_id?: string | null;
+          body?: string | null;
+          client_id: string;
+          created_at?: string;
+          deleted_at?: string | null;
+          edited_at?: string | null;
+          id?: string;
+          kind?: Database["public"]["Enums"]["message_kind"];
+          link_preview?: Json | null;
+          media_id?: string | null;
+          pinned_by?: string | null;
+          reply_to?: string | null;
+          search?: unknown;
+          seq: number;
+          thread_id: string;
+        };
+        Update: {
+          author_deleted_at?: string | null;
+          author_id?: string | null;
+          body?: string | null;
+          client_id?: string;
+          created_at?: string;
+          deleted_at?: string | null;
+          edited_at?: string | null;
+          id?: string;
+          kind?: Database["public"]["Enums"]["message_kind"];
+          link_preview?: Json | null;
+          media_id?: string | null;
+          pinned_by?: string | null;
+          reply_to?: string | null;
+          search?: unknown;
+          seq?: number;
+          thread_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "messages_author_id_fkey";
+            columns: ["author_id"];
+            isOneToOne: false;
+            referencedRelation: "members";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "messages_media_id_fkey";
+            columns: ["media_id"];
+            isOneToOne: false;
+            referencedRelation: "media";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "messages_pinned_by_fkey";
+            columns: ["pinned_by"];
+            isOneToOne: false;
+            referencedRelation: "members";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "messages_reply_to_fkey";
+            columns: ["reply_to"];
+            isOneToOne: false;
+            referencedRelation: "messages";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "messages_reply_to_fkey";
+            columns: ["reply_to"];
+            isOneToOne: false;
+            referencedRelation: "messenger_messages_view";
+            referencedColumns: ["message_id"];
+          },
+          {
+            foreignKeyName: "messages_thread_id_fkey";
+            columns: ["thread_id"];
+            isOneToOne: false;
+            referencedRelation: "messenger_threads_view";
+            referencedColumns: ["thread_id"];
+          },
+          {
+            foreignKeyName: "messages_thread_id_fkey";
+            columns: ["thread_id"];
+            isOneToOne: false;
+            referencedRelation: "threads";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      messenger_dia_dismissals: {
+        Row: {
+          dismissed_at: string;
+          member_id: string;
+          signal_key: string;
+        };
+        Insert: {
+          dismissed_at?: string;
+          member_id: string;
+          signal_key: string;
+        };
+        Update: {
+          dismissed_at?: string;
+          member_id?: string;
+          signal_key?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "messenger_dia_dismissals_member_id_fkey";
+            columns: ["member_id"];
+            isOneToOne: false;
+            referencedRelation: "members";
+            referencedColumns: ["id"];
           },
         ];
       };
@@ -2883,6 +3374,175 @@ export type Database = {
         };
         Relationships: [];
       };
+      thread_kinds: {
+        Row: {
+          label: string;
+          position: number;
+          surfaced: boolean;
+          value: string;
+        };
+        Insert: {
+          label: string;
+          position: number;
+          surfaced: boolean;
+          value: string;
+        };
+        Update: {
+          label?: string;
+          position?: number;
+          surfaced?: boolean;
+          value?: string;
+        };
+        Relationships: [];
+      };
+      thread_members: {
+        Row: {
+          archived_at: string | null;
+          delivered_seq: number;
+          invited_by: string | null;
+          joined_at: string | null;
+          joined_seq: number;
+          last_opened_at: string | null;
+          member_id: string;
+          muted_until: string | null;
+          pinned_at: string | null;
+          read_seq: number;
+          role: Database["public"]["Enums"]["thread_member_role"];
+          state: Database["public"]["Enums"]["thread_member_state"];
+          thread_id: string;
+        };
+        Insert: {
+          archived_at?: string | null;
+          delivered_seq?: number;
+          invited_by?: string | null;
+          joined_at?: string | null;
+          joined_seq?: number;
+          last_opened_at?: string | null;
+          member_id: string;
+          muted_until?: string | null;
+          pinned_at?: string | null;
+          read_seq?: number;
+          role?: Database["public"]["Enums"]["thread_member_role"];
+          state?: Database["public"]["Enums"]["thread_member_state"];
+          thread_id: string;
+        };
+        Update: {
+          archived_at?: string | null;
+          delivered_seq?: number;
+          invited_by?: string | null;
+          joined_at?: string | null;
+          joined_seq?: number;
+          last_opened_at?: string | null;
+          member_id?: string;
+          muted_until?: string | null;
+          pinned_at?: string | null;
+          read_seq?: number;
+          role?: Database["public"]["Enums"]["thread_member_role"];
+          state?: Database["public"]["Enums"]["thread_member_state"];
+          thread_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "thread_members_invited_by_fkey";
+            columns: ["invited_by"];
+            isOneToOne: false;
+            referencedRelation: "members";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "thread_members_member_id_fkey";
+            columns: ["member_id"];
+            isOneToOne: false;
+            referencedRelation: "members";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "thread_members_thread_id_fkey";
+            columns: ["thread_id"];
+            isOneToOne: false;
+            referencedRelation: "messenger_threads_view";
+            referencedColumns: ["thread_id"];
+          },
+          {
+            foreignKeyName: "thread_members_thread_id_fkey";
+            columns: ["thread_id"];
+            isOneToOne: false;
+            referencedRelation: "threads";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      threads: {
+        Row: {
+          anchor_id: string | null;
+          anchor_kind: Database["public"]["Enums"]["anchor_kind"] | null;
+          created_at: string;
+          created_by: string | null;
+          history_visible_to_new: boolean;
+          id: string;
+          kind: string;
+          last_activity_at: string;
+          name: string | null;
+          pair_key: string | null;
+          parent_thread_id: string | null;
+        };
+        Insert: {
+          anchor_id?: string | null;
+          anchor_kind?: Database["public"]["Enums"]["anchor_kind"] | null;
+          created_at?: string;
+          created_by?: string | null;
+          history_visible_to_new?: boolean;
+          id?: string;
+          kind: string;
+          last_activity_at?: string;
+          name?: string | null;
+          pair_key?: string | null;
+          parent_thread_id?: string | null;
+        };
+        Update: {
+          anchor_id?: string | null;
+          anchor_kind?: Database["public"]["Enums"]["anchor_kind"] | null;
+          created_at?: string;
+          created_by?: string | null;
+          history_visible_to_new?: boolean;
+          id?: string;
+          kind?: string;
+          last_activity_at?: string;
+          name?: string | null;
+          pair_key?: string | null;
+          parent_thread_id?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "threads_created_by_fkey";
+            columns: ["created_by"];
+            isOneToOne: false;
+            referencedRelation: "members";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "threads_kind_fkey";
+            columns: ["kind"];
+            isOneToOne: false;
+            referencedRelation: "thread_kinds";
+            referencedColumns: ["value"];
+          },
+          {
+            foreignKeyName: "threads_parent_thread_id_fkey";
+            columns: ["parent_thread_id"];
+            isOneToOne: false;
+            referencedRelation: "messenger_threads_view";
+            referencedColumns: ["thread_id"];
+          },
+          {
+            foreignKeyName: "threads_parent_thread_id_fkey";
+            columns: ["parent_thread_id"];
+            isOneToOne: false;
+            referencedRelation: "threads";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       world_countries: {
         Row: {
           is_african: boolean;
@@ -2924,6 +3584,147 @@ export type Database = {
           status: Database["public"]["Enums"]["post_status"] | null;
         };
         Relationships: [];
+      };
+      messenger_messages_view: {
+        Row: {
+          author_avatar_path: string | null;
+          author_id: string | null;
+          author_name: string | null;
+          blocked: boolean | null;
+          body: string | null;
+          created_at: string | null;
+          deleted: boolean | null;
+          edited: boolean | null;
+          edited_at: string | null;
+          former_member: boolean | null;
+          kind: Database["public"]["Enums"]["message_kind"] | null;
+          link_preview: Json | null;
+          media_id: string | null;
+          mentions: string[] | null;
+          message_id: string | null;
+          own: boolean | null;
+          pinned: boolean | null;
+          reactions: Json | null;
+          read_by: Json | null;
+          read_by_others: boolean | null;
+          reply_to: Json | null;
+          seq: number | null;
+          thread_id: string | null;
+          tick: number | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "messages_author_id_fkey";
+            columns: ["author_id"];
+            isOneToOne: false;
+            referencedRelation: "members";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "messages_thread_id_fkey";
+            columns: ["thread_id"];
+            isOneToOne: false;
+            referencedRelation: "messenger_threads_view";
+            referencedColumns: ["thread_id"];
+          },
+          {
+            foreignKeyName: "messages_thread_id_fkey";
+            columns: ["thread_id"];
+            isOneToOne: false;
+            referencedRelation: "threads";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      messenger_requests_view: {
+        Row: {
+          body: string | null;
+          created_at: string | null;
+          decided_at: string | null;
+          mutual_names: Json | null;
+          mutual_others: boolean | null;
+          request_id: string | null;
+          sender_avatar_path: string | null;
+          sender_handle: string | null;
+          sender_headline: string | null;
+          sender_id: string | null;
+          sender_name: string | null;
+          sender_stance: string | null;
+          shared_space_names: Json | null;
+          shared_space_others: boolean | null;
+          state: Database["public"]["Enums"]["message_request_state"] | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "message_requests_sender_id_fkey";
+            columns: ["sender_id"];
+            isOneToOne: false;
+            referencedRelation: "members";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      messenger_threads_view: {
+        Row: {
+          anchor_id: string | null;
+          anchor_kind: Database["public"]["Enums"]["anchor_kind"] | null;
+          archived: boolean | null;
+          avatar_path: string | null;
+          created_at: string | null;
+          delivered_seq: number | null;
+          headline: string | null;
+          history_visible_to_new: boolean | null;
+          invited: boolean | null;
+          kind: string | null;
+          last_activity_at: string | null;
+          last_author_id: string | null;
+          last_kind: Database["public"]["Enums"]["message_kind"] | null;
+          last_line: string | null;
+          last_seq: number | null;
+          member_names: Json | null;
+          muted: boolean | null;
+          name: string | null;
+          other_member_id: string | null;
+          others: boolean | null;
+          parent_thread_id: string | null;
+          pinned: boolean | null;
+          pinned_at: string | null;
+          read_seq: number | null;
+          role: Database["public"]["Enums"]["thread_member_role"] | null;
+          state: Database["public"]["Enums"]["thread_member_state"] | null;
+          thread_id: string | null;
+          unread: boolean | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "messages_author_id_fkey";
+            columns: ["last_author_id"];
+            isOneToOne: false;
+            referencedRelation: "members";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "threads_kind_fkey";
+            columns: ["kind"];
+            isOneToOne: false;
+            referencedRelation: "thread_kinds";
+            referencedColumns: ["value"];
+          },
+          {
+            foreignKeyName: "threads_parent_thread_id_fkey";
+            columns: ["parent_thread_id"];
+            isOneToOne: false;
+            referencedRelation: "messenger_threads_view";
+            referencedColumns: ["thread_id"];
+          },
+          {
+            foreignKeyName: "threads_parent_thread_id_fkey";
+            columns: ["parent_thread_id"];
+            isOneToOne: false;
+            referencedRelation: "threads";
+            referencedColumns: ["id"];
+          },
+        ];
       };
     };
     Functions: {
@@ -3022,6 +3823,239 @@ export type Database = {
         Returns: Json;
       };
       live_arms_admin_member: { Args: never; Returns: string };
+      messenger_archive: { Args: { p_thread: string }; Returns: undefined };
+      messenger_delete: { Args: { p_message: string }; Returns: Json };
+      messenger_delivered_to: {
+        Args: { p_seq: number; p_thread: string };
+        Returns: undefined;
+      };
+      messenger_dia_dismiss: { Args: { p_key: string }; Returns: undefined };
+      messenger_dia_signals: {
+        Args: never;
+        Returns: {
+          line: string;
+          request_id: string;
+          signal_key: string;
+          thread_id: string;
+        }[];
+      };
+      messenger_edit: {
+        Args: { p_body: string; p_message: string };
+        Returns: {
+          author_deleted_at: string | null;
+          author_id: string | null;
+          body: string | null;
+          client_id: string;
+          created_at: string;
+          deleted_at: string | null;
+          edited_at: string | null;
+          id: string;
+          kind: Database["public"]["Enums"]["message_kind"];
+          link_preview: Json | null;
+          media_id: string | null;
+          pinned_by: string | null;
+          reply_to: string | null;
+          search: unknown;
+          seq: number;
+          thread_id: string;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "messages";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
+      };
+      messenger_event_thread_open: {
+        Args: { p_event: string };
+        Returns: string;
+      };
+      messenger_mark_unread: { Args: { p_thread: string }; Returns: undefined };
+      messenger_mute: {
+        Args: { p_duration?: string; p_thread: string };
+        Returns: undefined;
+      };
+      messenger_open_one_to_one: { Args: { p_other: string }; Returns: string };
+      messenger_pin_message: { Args: { p_message: string }; Returns: undefined };
+      messenger_pin_thread: { Args: { p_thread: string }; Returns: undefined };
+      messenger_react: {
+        Args: { p_message: string; p_reaction: string };
+        Returns: undefined;
+      };
+      messenger_read_to: {
+        Args: { p_seq: number; p_thread: string };
+        Returns: undefined;
+      };
+      messenger_report: {
+        Args: { p_message: string; p_note?: string; p_reason: string };
+        Returns: string;
+      };
+      messenger_report_view: { Args: { p_report: string }; Returns: Json };
+      messenger_request_accept: { Args: { p_request: string }; Returns: string };
+      messenger_request_block: {
+        Args: { p_request: string };
+        Returns: undefined;
+      };
+      messenger_request_decline: {
+        Args: { p_request: string };
+        Returns: undefined;
+      };
+      messenger_request_send: {
+        Args: { p_body: string; p_recipient: string };
+        Returns: {
+          body: string;
+          created_at: string;
+          decided_at: string | null;
+          id: string;
+          recipient_id: string;
+          sender_id: string;
+          state: Database["public"]["Enums"]["message_request_state"];
+          thread_id: string | null;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "message_requests";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
+      };
+      messenger_search: {
+        Args: {
+          p_after?: string;
+          p_before?: string;
+          p_member?: string;
+          p_query: string;
+          p_thread?: string;
+        };
+        Returns: {
+          created_at: string;
+          headline: string;
+          message_id: string;
+          seq: number;
+          thread_id: string;
+        }[];
+      };
+      messenger_send: {
+        Args: {
+          p_body?: string;
+          p_client_id: string;
+          p_kind?: Database["public"]["Enums"]["message_kind"];
+          p_link_preview?: Json;
+          p_media?: string;
+          p_mentions?: string[];
+          p_reply_to?: string;
+          p_thread: string;
+        };
+        Returns: {
+          author_deleted_at: string | null;
+          author_id: string | null;
+          body: string | null;
+          client_id: string;
+          created_at: string;
+          deleted_at: string | null;
+          edited_at: string | null;
+          id: string;
+          kind: Database["public"]["Enums"]["message_kind"];
+          link_preview: Json | null;
+          media_id: string | null;
+          pinned_by: string | null;
+          reply_to: string | null;
+          search: unknown;
+          seq: number;
+          thread_id: string;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "messages";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
+      };
+      messenger_settings: {
+        Args: never;
+        Returns: {
+          link_previews_enabled: boolean;
+          media_notice_seen_at: string | null;
+          member_id: string;
+          receipts_chosen_at: string | null;
+          receipts_enabled: boolean;
+          updated_at: string;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "member_messaging_settings";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
+      };
+      messenger_settings_set: {
+        Args: {
+          p_link_previews?: boolean;
+          p_media_notice_seen?: boolean;
+          p_receipts?: boolean;
+        };
+        Returns: {
+          link_previews_enabled: boolean;
+          media_notice_seen_at: string | null;
+          member_id: string;
+          receipts_chosen_at: string | null;
+          receipts_enabled: boolean;
+          updated_at: string;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "member_messaging_settings";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
+      };
+      messenger_space_thread_sync: {
+        Args: { p_space: string };
+        Returns: string;
+      };
+      messenger_thread_create_group: {
+        Args: { p_member_ids: string[]; p_name: string };
+        Returns: string;
+      };
+      messenger_thread_invite: {
+        Args: { p_member: string; p_thread: string };
+        Returns: undefined;
+      };
+      messenger_thread_invite_accept: {
+        Args: { p_thread: string };
+        Returns: undefined;
+      };
+      messenger_thread_invite_decline: {
+        Args: { p_thread: string };
+        Returns: undefined;
+      };
+      messenger_thread_leave: { Args: { p_thread: string }; Returns: undefined };
+      messenger_thread_remove: {
+        Args: { p_member: string; p_thread: string };
+        Returns: undefined;
+      };
+      messenger_thread_set_history: {
+        Args: { p_thread: string; p_visible: boolean };
+        Returns: undefined;
+      };
+      messenger_thread_set_role: {
+        Args: {
+          p_member: string;
+          p_role: Database["public"]["Enums"]["thread_member_role"];
+          p_thread: string;
+        };
+        Returns: undefined;
+      };
+      messenger_unarchive: { Args: { p_thread: string }; Returns: undefined };
+      messenger_unpin_message: {
+        Args: { p_message: string };
+        Returns: undefined;
+      };
+      messenger_unpin_thread: { Args: { p_thread: string }; Returns: undefined };
+      messenger_unreact: {
+        Args: { p_message: string; p_reaction: string };
+        Returns: undefined;
+      };
       note_lane_act: {
         Args: { p_act: string; p_lane: string };
         Returns: undefined;
@@ -3138,6 +4172,9 @@ export type Database = {
         "First generation" | "Second generation" | "Third generation or later" | "Continental";
       link_kind: "website" | "linkedin" | "x" | "instagram";
       masthead_pattern: "kente" | "adinkra" | "mudcloth";
+      message_kind: "text" | "voice" | "media" | "system";
+      message_report_state: "open" | "reviewed" | "dismissed";
+      message_request_state: "pending" | "accepted" | "declined" | "blocked";
       notification_kind:
         | "connection_accepted"
         | "attestation_received"
@@ -3161,6 +4198,7 @@ export type Database = {
         | "contribute"
         | "convey"
         | "badges";
+      reachability: "open" | "connections_of_connections" | "off";
       registration_status: "going" | "not_going";
       request_status: "pending" | "accepted" | "declined" | "withdrawn";
       return_pathway:
@@ -3174,6 +4212,8 @@ export type Database = {
       space_role_status: "active" | "invited" | "left";
       space_status: "active" | "paused" | "completed";
       stance: "returnee" | "kin" | "anchor" | "ally" | "exploring";
+      thread_member_role: "lead" | "co_lead" | "member";
+      thread_member_state: "invited" | "active" | "left" | "removed";
       ticket_kind: "free" | "paid" | "donation";
     };
     CompositeTypes: {
@@ -3331,6 +4371,9 @@ export const Constants = {
       ],
       link_kind: ["website", "linkedin", "x", "instagram"],
       masthead_pattern: ["kente", "adinkra", "mudcloth"],
+      message_kind: ["text", "voice", "media", "system"],
+      message_report_state: ["open", "reviewed", "dismissed"],
+      message_request_state: ["pending", "accepted", "declined", "blocked"],
       notification_kind: [
         "connection_accepted",
         "attestation_received",
@@ -3356,6 +4399,7 @@ export const Constants = {
         "convey",
         "badges",
       ],
+      reachability: ["open", "connections_of_connections", "off"],
       registration_status: ["going", "not_going"],
       request_status: ["pending", "accepted", "declined", "withdrawn"],
       return_pathway: [
@@ -3374,6 +4418,8 @@ export const Constants = {
       space_role_status: ["active", "invited", "left"],
       space_status: ["active", "paused", "completed"],
       stance: ["returnee", "kin", "anchor", "ally", "exploring"],
+      thread_member_role: ["lead", "co_lead", "member"],
+      thread_member_state: ["invited", "active", "left", "removed"],
       ticket_kind: ["free", "paid", "donation"],
     },
   },
