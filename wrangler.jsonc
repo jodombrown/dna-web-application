@@ -6,5 +6,19 @@
   "name": "dna-web-application",
   "compatibility_date": "2026-09-01",
   "compatibility_flags": ["nodejs_compat"],
-  "pages_build_output_dir": "dist"
+  "pages_build_output_dir": "dist",
+  // Handoff 41-B (rulings 1346, 1374): Messenger media lives on a private R2 bucket behind the
+  // app's own routes (src/routes/api/messages/), reached as `env.MESSAGE_MEDIA`. No presigned URL
+  // and no access key exist. Pages honours top-level `r2_buckets` for production and the
+  // `env.preview` override for every preview deployment, so a preview build writes to and reads
+  // from dna-message-media-preview and never the production bucket. Wrangler reads this file at
+  // the root for every deploy (vite.config.ts turns Nitro's redirected copy off, because Wrangler
+  // refuses a redirected configuration that carries environments), so both environments deploy
+  // the same artifact from the same file and differ only by which bucket the binding resolves to.
+  "r2_buckets": [{ "binding": "MESSAGE_MEDIA", "bucket_name": "dna-message-media" }],
+  "env": {
+    "preview": {
+      "r2_buckets": [{ "binding": "MESSAGE_MEDIA", "bucket_name": "dna-message-media-preview" }],
+    },
+  },
 }

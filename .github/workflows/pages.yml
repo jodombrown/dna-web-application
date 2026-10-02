@@ -546,6 +546,14 @@ jobs:
         env:
           ENGINE: ${{ matrix.engine }}
           OUT: ${{ github.workspace }}/matrix-out
+          # Handoff 41-B section 5: the Messenger media arm (tests/messenger-media.cjs) signs the two
+          # seeded accounts in for real against the deployment's own routes (ruling 218), as the live
+          # job and the admin-arms job already do; without them the arm reports every check unproven
+          # (ruling 228), which is what a fork PR gets. matrix.yml's dispatch has carried them since 40-B.
+          OWNER_EMAIL: ${{ secrets.OWNER_EMAIL }}
+          OWNER_PASSWORD: ${{ secrets.OWNER_PASSWORD }}
+          MEMBER_EMAIL: ${{ secrets.MEMBER_EMAIL }}
+          MEMBER_PASSWORD: ${{ secrets.MEMBER_PASSWORD }}
         run: |
           set -o pipefail
           mkdir -p "$OUT"

@@ -27,7 +27,9 @@ import { Route as XCodeRouteImport } from './routes/x.$code'
 import { Route as ShellConveneLensRouteImport } from './routes/_shell/convene.$lens'
 import { Route as ShellMHandleRouteImport } from './routes/_shell/m.$handle'
 import { Route as ShellPostsIdRouteImport } from './routes/_shell/posts.$id'
+import { Route as ApiMessagesMediaRouteImport } from './routes/api/messages/media'
 import { Route as ShellConveneEventsIdRouteImport } from './routes/_shell/convene.events.$id'
+import { Route as ApiMessagesMediaIdRouteImport } from './routes/api/messages/media_.$id'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -118,10 +120,20 @@ const ShellPostsIdRoute = ShellPostsIdRouteImport.update({
   path: '/posts/$id',
   getParentRoute: () => ShellRoute,
 } as any)
+const ApiMessagesMediaRoute = ApiMessagesMediaRouteImport.update({
+  id: '/api/messages/media',
+  path: '/api/messages/media',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ShellConveneEventsIdRoute = ShellConveneEventsIdRouteImport.update({
   id: '/events/$id',
   path: '/events/$id',
   getParentRoute: () => ShellConveneRoute,
+} as any)
+const ApiMessagesMediaIdRoute = ApiMessagesMediaIdRouteImport.update({
+  id: '/api/messages/media_/$id',
+  path: '/api/messages/media/$id',
+  getParentRoute: () => rootRouteImport,
 } as any)
 
 export interface FileRoutesByFullPath {
@@ -142,7 +154,9 @@ export interface FileRoutesByFullPath {
   '/convene/$lens': typeof ShellConveneLensRoute
   '/m/$handle': typeof ShellMHandleRoute
   '/posts/$id': typeof ShellPostsIdRoute
+  '/api/messages/media': typeof ApiMessagesMediaRoute
   '/convene/events/$id': typeof ShellConveneEventsIdRoute
+  '/api/messages/media/$id': typeof ApiMessagesMediaIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -162,7 +176,9 @@ export interface FileRoutesByTo {
   '/convene/$lens': typeof ShellConveneLensRoute
   '/m/$handle': typeof ShellMHandleRoute
   '/posts/$id': typeof ShellPostsIdRoute
+  '/api/messages/media': typeof ApiMessagesMediaRoute
   '/convene/events/$id': typeof ShellConveneEventsIdRoute
+  '/api/messages/media/$id': typeof ApiMessagesMediaIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -184,7 +200,9 @@ export interface FileRoutesById {
   '/_shell/convene/$lens': typeof ShellConveneLensRoute
   '/_shell/m/$handle': typeof ShellMHandleRoute
   '/_shell/posts/$id': typeof ShellPostsIdRoute
+  '/api/messages/media': typeof ApiMessagesMediaRoute
   '/_shell/convene/events/$id': typeof ShellConveneEventsIdRoute
+  '/api/messages/media_/$id': typeof ApiMessagesMediaIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -206,7 +224,9 @@ export interface FileRouteTypes {
     | '/convene/$lens'
     | '/m/$handle'
     | '/posts/$id'
+    | '/api/messages/media'
     | '/convene/events/$id'
+    | '/api/messages/media/$id'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -226,7 +246,9 @@ export interface FileRouteTypes {
     | '/convene/$lens'
     | '/m/$handle'
     | '/posts/$id'
+    | '/api/messages/media'
     | '/convene/events/$id'
+    | '/api/messages/media/$id'
   id:
     | '__root__'
     | '/'
@@ -247,7 +269,9 @@ export interface FileRouteTypes {
     | '/_shell/convene/$lens'
     | '/_shell/m/$handle'
     | '/_shell/posts/$id'
+    | '/api/messages/media'
     | '/_shell/convene/events/$id'
+    | '/api/messages/media_/$id'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -261,6 +285,8 @@ export interface RootRouteChildren {
   ESlugRoute: typeof ESlugRoute
   ResetNewRoute: typeof ResetNewRoute
   XCodeRoute: typeof XCodeRoute
+  ApiMessagesMediaRoute: typeof ApiMessagesMediaRoute
+  ApiMessagesMediaIdRoute: typeof ApiMessagesMediaIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -391,12 +417,26 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ShellPostsIdRouteImport
       parentRoute: typeof ShellRoute
     }
+    '/api/messages/media': {
+      id: '/api/messages/media'
+      path: '/api/messages/media'
+      fullPath: '/api/messages/media'
+      preLoaderRoute: typeof ApiMessagesMediaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_shell/convene/events/$id': {
       id: '/_shell/convene/events/$id'
       path: '/events/$id'
       fullPath: '/convene/events/$id'
       preLoaderRoute: typeof ShellConveneEventsIdRouteImport
       parentRoute: typeof ShellConveneRoute
+    }
+    '/api/messages/media_/$id': {
+      id: '/api/messages/media_/$id'
+      path: '/api/messages/media/$id'
+      fullPath: '/api/messages/media/$id'
+      preLoaderRoute: typeof ApiMessagesMediaIdRouteImport
+      parentRoute: typeof rootRouteImport
     }
   }
 }
@@ -448,6 +488,8 @@ const rootRouteChildren: RootRouteChildren = {
   ESlugRoute: ESlugRoute,
   ResetNewRoute: ResetNewRoute,
   XCodeRoute: XCodeRoute,
+  ApiMessagesMediaRoute: ApiMessagesMediaRoute,
+  ApiMessagesMediaIdRoute: ApiMessagesMediaIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

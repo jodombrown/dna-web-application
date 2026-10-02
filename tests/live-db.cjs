@@ -47,6 +47,13 @@
 //                                   predicate grants the member's own inbox and denies another's.
 //                                   The cap's refusal needs 257 member rows the project does not
 //                                   hold and reports unproven (228); the trigger's presence is read.
+//   Brief 14 41-B (1346, 1374; 346,  Messenger media on R2, the database half: the one writer records a
+//   347, 1343, 1353; handoff 41-B)    row for each test account with the Messenger bucket and kind, an
+//                                   unknown mime, a key outside the thread, audio with a size and an
+//                                   object over the ceiling are each refused in a word, the access
+//                                   question is true for the thread's other member and false for a
+//                                   third, the locate hands the key only where access holds, and a
+//                                   delete-for-everyone marks the row for the sweep that forgets it.
 //
 // Nothing here is secret: the connection string arrives from the runner and never from this file.
 const crypto = require("crypto");
@@ -299,6 +306,16 @@ async function runLiveDbArms({ record, skip }) {
       "Brief 14 41-A (1331, 1348, 1349, 1370): vocabularies() carries the seven thread kinds, three mute durations, six report reasons and five reaction words",
     messengerGrants:
       "Brief 14 41-A (1116): no client role holds insert, update or delete on any table 41-A created, and every one of them has a catalogue row",
+    r2mediaRecord:
+      "Brief 14 41-B (1346, 1374): messenger_media_record writes a Messenger row for each test account, bucket r2:message-media, kind message, optimized for an image and not for audio",
+    r2mediaMime:
+      "Brief 14 41-B (1374): an unknown mime, audio with a size, an image without one and an object over 104857600 bytes are each refused in a word",
+    r2mediaPath:
+      "Brief 14 41-B (1374): a key outside the thread's own prefix and a key over 240 characters are refused",
+    r2mediaAccess:
+      "Brief 14 41-B (1346, 1349): messenger_media_access is true for the thread's other member once the message carries the object, false for a third member, and messenger_media_locate hands the key only where access holds",
+    r2mediaSweep:
+      "Brief 14 41-B (1343, F4): a delete-for-everyone marks the row, messenger_media_marked lists it, messenger_media_forget drops it once and not twice, and access is false from the mark on",
   };
   // G143: a block that opens with a presence probe carries every arm it holds in `names`, under one key
   // prefix, so a probe that fails reports each of them UNPROVEN and the job's total does not fall with
@@ -3624,6 +3641,425 @@ async function runLiveDbArms({ record, skip }) {
             (grants.ok ? grants.rows[0].g || "none" : fmt(grants)) +
             "; catalogue rows " +
             (rows.ok ? rows.rows[0].n + "/" + made.length : fmt(rows)),
+        );
+      });
+    }
+
+    // ------------------------------------------------------------------------------------------
+    // Brief 14 41-B (rulings 1346, 1374; 346, 347; 1343, 1353; 20261002150000; handoff 41-B).
+    // Messenger media on R2, the database half: the functions the two server routes call, acted
+    // as the two test accounts through the public.messenger_media_* wrappers, with the pair's
+    // thread opened the way the 41-A arms open it. Every arm is its own rolled-back transaction
+    // (269): the request, the thread, the media rows and the message are gone before the next
+    // begins. The R2 object itself is the route's and is proven by tests/messenger-media.cjs on
+    // the deployed URL; nothing here reaches a bucket. One presence probe gates the block (G143).
+    // ------------------------------------------------------------------------------------------
+    const MEDIA_RECORD =
+      "public.messenger_media_record(uuid, text, text, integer, integer, integer)";
+    const mediaPresent = async () => {
+      await actAsSelf(client);
+      const present = await client.query("select to_regprocedure($1) is not null as ok", [
+        MEDIA_RECORD,
+      ]);
+      return !!present.rows[0] && present.rows[0].ok === true;
+    };
+    /** A key under the thread's own prefix, as the route mints it: thread/client_id/object. */
+    const mediaKey = (thread) => thread + "/" + uuid() + "/" + uuid();
+    const recordMedia = (thread, key, mime, size, w, h) =>
+      attempt(
+        client,
+        "select id, owner_id, bucket, kind, mime, width, height, byte_size, optimized, delete_requested_at from public.messenger_media_record($1::uuid, $2, $3, $4::int, $5::int, $6::int)",
+        [thread, key, mime, size, w, h],
+      );
+    const access = (id) =>
+      attempt(client, "select public.messenger_media_access($1::uuid) as ok", [id]);
+    const locate = (id) =>
+      attempt(
+        client,
+        "select allowed, storage_path, mime, byte_size from public.messenger_media_locate($1::uuid)",
+        [id],
+      );
+    if (!(await mediaPresent())) {
+      for (const n of armsOf("r2media"))
+        skip(n, "the 41-B migration (20261002150000) is not on the project yet");
+    } else {
+      // 1. The writer, for both test accounts (1374: one insert path).
+      await inTransaction(client, async () => {
+        const pair = await openPair();
+        if (!pair.ok) {
+          record(names.r2mediaRecord, false, pair.step + " " + fmt(pair.r));
+          return;
+        }
+        await actAs(client, owner.id);
+        const image = await recordMedia(
+          pair.thread,
+          mediaKey(pair.thread),
+          "image/jpeg",
+          1024,
+          10,
+          10,
+        );
+        await actAs(client, member.id);
+        const audio = await recordMedia(
+          pair.thread,
+          mediaKey(pair.thread),
+          "audio/webm",
+          2048,
+          null,
+          null,
+        );
+        const i = image.ok ? image.rows[0] : null;
+        const a = audio.ok ? audio.rows[0] : null;
+        record(
+          names.r2mediaRecord,
+          !!i &&
+            !!a &&
+            i.owner_id === owner.id &&
+            a.owner_id === member.id &&
+            i.bucket === "r2:message-media" &&
+            a.bucket === "r2:message-media" &&
+            i.kind === "message" &&
+            a.kind === "message" &&
+            i.mime === "image/jpeg" &&
+            a.mime === "audio/webm" &&
+            i.width === 10 &&
+            i.height === 10 &&
+            a.width === null &&
+            a.height === null &&
+            i.byte_size === 1024 &&
+            a.byte_size === 2048 &&
+            i.optimized === true &&
+            a.optimized === false &&
+            i.delete_requested_at === null,
+          "image " +
+            (image.ok ? JSON.stringify(i) : fmt(image)) +
+            "; audio " +
+            (audio.ok ? JSON.stringify(a) : fmt(audio)),
+        );
+      });
+
+      // 2. The refusals by mime and size (1374), each a word with its code.
+      await inTransaction(client, async () => {
+        const pair = await openPair();
+        if (!pair.ok) {
+          record(names.r2mediaMime, false, pair.step + " " + fmt(pair.r));
+          return;
+        }
+        await actAs(client, owner.id);
+        const pdf = await recordMedia(
+          pair.thread,
+          mediaKey(pair.thread),
+          "application/pdf",
+          1024,
+          10,
+          10,
+        );
+        const audioSized = await recordMedia(
+          pair.thread,
+          mediaKey(pair.thread),
+          "audio/mp4",
+          1024,
+          10,
+          10,
+        );
+        const imageUnsized = await recordMedia(
+          pair.thread,
+          mediaKey(pair.thread),
+          "image/png",
+          1024,
+          null,
+          null,
+        );
+        const over = await recordMedia(
+          pair.thread,
+          mediaKey(pair.thread),
+          "video/mp4",
+          104857601,
+          10,
+          10,
+        );
+        const atCeiling = await recordMedia(
+          pair.thread,
+          mediaKey(pair.thread),
+          "video/mp4",
+          104857600,
+          10,
+          10,
+        );
+        const refusedAs = (r, word) => !r.ok && r.code === "22023" && r.message === word;
+        record(
+          names.r2mediaMime,
+          refusedAs(pdf, "bad_media") &&
+            refusedAs(audioSized, "bad_media") &&
+            refusedAs(imageUnsized, "bad_media") &&
+            refusedAs(over, "too_large") &&
+            atCeiling.ok &&
+            atCeiling.rows[0].byte_size === 104857600,
+          "pdf " +
+            fmt(pdf) +
+            "; audio with a size " +
+            fmt(audioSized) +
+            "; image without one " +
+            fmt(imageUnsized) +
+            "; over " +
+            fmt(over) +
+            "; at the ceiling " +
+            fmt(atCeiling),
+        );
+      });
+
+      // 3. The key must sit under the thread's own prefix and within 240 characters (1374).
+      await inTransaction(client, async () => {
+        const pair = await openPair();
+        if (!pair.ok) {
+          record(names.r2mediaPath, false, pair.step + " " + fmt(pair.r));
+          return;
+        }
+        await actAs(client, owner.id);
+        const outside = await recordMedia(
+          pair.thread,
+          mediaKey(uuid()),
+          "image/jpeg",
+          1024,
+          10,
+          10,
+        );
+        const bare = await recordMedia(pair.thread, pair.thread + "/", "image/jpeg", 1024, 10, 10);
+        const long = await recordMedia(
+          pair.thread,
+          pair.thread + "/" + "x".repeat(240),
+          "image/jpeg",
+          1024,
+          10,
+          10,
+        );
+        const notMember = await (async () => {
+          const third = await attempt(client, "select public.live_arms_admin_member() as id");
+          const thirdId = third.ok && third.rows[0] ? third.rows[0].id : null;
+          if (!thirdId) return { ok: false, code: "skip", message: "no third member" };
+          await actAs(client, thirdId);
+          return recordMedia(pair.thread, mediaKey(pair.thread), "image/jpeg", 1024, 10, 10);
+        })();
+        record(
+          names.r2mediaPath,
+          !outside.ok &&
+            outside.code === "22023" &&
+            outside.message === "bad_media" &&
+            !bare.ok &&
+            bare.code === "22023" &&
+            !long.ok &&
+            long.code === "22023" &&
+            !notMember.ok &&
+            (notMember.code === "skip" ||
+              (notMember.code === "42501" && notMember.message === "not_a_member")),
+          "outside " +
+            fmt(outside) +
+            "; bare " +
+            fmt(bare) +
+            "; long " +
+            fmt(long) +
+            "; a third member " +
+            fmt(notMember),
+        );
+      });
+
+      // 4. Access and locate (1346, 1349): the owner before any message, the other member once the
+      //    message carries it, and a third member never.
+      await inTransaction(client, async () => {
+        const third = await attempt(client, "select public.live_arms_admin_member() as id");
+        const thirdId = third.ok && third.rows[0] ? third.rows[0].id : null;
+        if (!thirdId) {
+          skip(names.r2mediaAccess, "live_arms_admin_member() answered no third member");
+          return;
+        }
+        const pair = await openPair();
+        if (!pair.ok) {
+          record(names.r2mediaAccess, false, pair.step + " " + fmt(pair.r));
+          return;
+        }
+        await actAs(client, owner.id);
+        const key = mediaKey(pair.thread);
+        const made = await recordMedia(pair.thread, key, "image/jpeg", 1024, 10, 10);
+        if (!made.ok) {
+          record(names.r2mediaAccess, false, "record " + fmt(made));
+          return;
+        }
+        const id = made.rows[0].id;
+        const ownerBefore = await access(id);
+        await actAs(client, member.id);
+        const memberBefore = await access(id);
+        const memberLocateBefore = await locate(id);
+        await actAs(client, owner.id);
+        const sent = await attempt(
+          client,
+          "select id from public.messenger_send($1::uuid, $2::uuid, null, 'media', null, $3::uuid)",
+          [pair.thread, uuid(), id],
+        );
+        await actAs(client, member.id);
+        const memberAfter = await access(id);
+        const memberLocate = await locate(id);
+        await actAs(client, thirdId);
+        const thirdAfter = await access(id);
+        const thirdLocate = await locate(id);
+        const absent = await locate(uuid());
+        await actAsSelf(client);
+        const signedOut = await access(id);
+        const ml = memberLocate.ok ? memberLocate.rows[0] : null;
+        const tl = thirdLocate.ok ? thirdLocate.rows[0] : null;
+        const mb = memberLocateBefore.ok ? memberLocateBefore.rows[0] : null;
+        record(
+          names.r2mediaAccess,
+          ownerBefore.ok &&
+            ownerBefore.rows[0].ok === true &&
+            memberBefore.ok &&
+            memberBefore.rows[0].ok === false &&
+            !!mb &&
+            mb.allowed === false &&
+            mb.storage_path === null &&
+            sent.ok &&
+            memberAfter.ok &&
+            memberAfter.rows[0].ok === true &&
+            !!ml &&
+            ml.allowed === true &&
+            ml.storage_path === key &&
+            ml.mime === "image/jpeg" &&
+            ml.byte_size === 1024 &&
+            thirdAfter.ok &&
+            thirdAfter.rows[0].ok === false &&
+            !!tl &&
+            tl.allowed === false &&
+            tl.storage_path === null &&
+            absent.ok &&
+            absent.rows.length === 0 &&
+            // Signed out there is no grant to execute the function at all (revoked from public and
+            // anon), so the refusal is 42501 and not a false; either is the answer the route never
+            // reaches, because memberFromRequest refuses first.
+            (signedOut.ok ? signedOut.rows[0].ok === false : signedOut.code === "42501"),
+          "owner before send " +
+            (ownerBefore.ok ? ownerBefore.rows[0].ok : fmt(ownerBefore)) +
+            "; member before " +
+            (memberBefore.ok ? memberBefore.rows[0].ok : fmt(memberBefore)) +
+            "; send " +
+            fmt(sent) +
+            "; member after " +
+            (memberAfter.ok ? memberAfter.rows[0].ok : fmt(memberAfter)) +
+            "; member locate " +
+            (ml ? JSON.stringify(ml) : fmt(memberLocate)) +
+            "; third " +
+            (thirdAfter.ok ? thirdAfter.rows[0].ok : fmt(thirdAfter)) +
+            "; third locate " +
+            (tl ? JSON.stringify(tl) : fmt(thirdLocate)) +
+            "; absent rows " +
+            (absent.ok ? absent.rows.length : fmt(absent)) +
+            "; signed out " +
+            (signedOut.ok ? signedOut.rows[0].ok : "refused " + fmt(signedOut)),
+        );
+      });
+
+      // 5. The mark and the sweep (1343, F4).
+      await inTransaction(client, async () => {
+        const pair = await openPair();
+        if (!pair.ok) {
+          record(names.r2mediaSweep, false, pair.step + " " + fmt(pair.r));
+          return;
+        }
+        await actAs(client, owner.id);
+        const key = mediaKey(pair.thread);
+        const made = await recordMedia(pair.thread, key, "video/webm", 4096, 16, 9);
+        if (!made.ok) {
+          record(names.r2mediaSweep, false, "record " + fmt(made));
+          return;
+        }
+        const id = made.rows[0].id;
+        const sent = await attempt(
+          client,
+          "select id from public.messenger_send($1::uuid, $2::uuid, null, 'media', null, $3::uuid)",
+          [pair.thread, uuid(), id],
+        );
+        const markedBefore = await attempt(
+          client,
+          "select count(*)::int as n from public.messenger_media_marked(100) where media_id = $1::uuid",
+          [id],
+        );
+        const del = sent.ok
+          ? await attempt(client, "select public.messenger_delete($1::uuid) as j", [
+              sent.rows[0].id,
+            ])
+          : { ok: false, code: "skip", message: "no message" };
+        const marked = await attempt(
+          client,
+          "select media_id, storage_path from public.messenger_media_marked(100) where media_id = $1::uuid",
+          [id],
+        );
+        const accessMarked = await access(id);
+        const forgot = await attempt(
+          client,
+          "select public.messenger_media_forget($1::uuid) as ok",
+          [id],
+        );
+        const again = await attempt(
+          client,
+          "select public.messenger_media_forget($1::uuid) as ok",
+          [id],
+        );
+        const gone = await attempt(
+          client,
+          "select count(*)::int as n from public.messenger_media_marked(100) where media_id = $1::uuid",
+          [id],
+        );
+        const unmarkedForget = await (async () => {
+          const other = await recordMedia(
+            pair.thread,
+            mediaKey(pair.thread),
+            "image/webp",
+            512,
+            4,
+            4,
+          );
+          if (!other.ok) return other;
+          return attempt(client, "select public.messenger_media_forget($1::uuid) as ok", [
+            other.rows[0].id,
+          ]);
+        })();
+        record(
+          names.r2mediaSweep,
+          sent.ok &&
+            markedBefore.ok &&
+            markedBefore.rows[0].n === 0 &&
+            del.ok &&
+            del.rows[0].j &&
+            del.rows[0].j.storage_path === key &&
+            marked.ok &&
+            marked.rows.length === 1 &&
+            marked.rows[0].storage_path === key &&
+            accessMarked.ok &&
+            accessMarked.rows[0].ok === false &&
+            forgot.ok &&
+            forgot.rows[0].ok === true &&
+            again.ok &&
+            again.rows[0].ok === false &&
+            gone.ok &&
+            gone.rows[0].n === 0 &&
+            unmarkedForget.ok &&
+            unmarkedForget.rows[0].ok === false,
+          "send " +
+            fmt(sent) +
+            "; marked before " +
+            (markedBefore.ok ? markedBefore.rows[0].n : fmt(markedBefore)) +
+            "; delete " +
+            (del.ok ? JSON.stringify(del.rows[0].j) : fmt(del)) +
+            "; marked " +
+            (marked.ok ? marked.rows.length : fmt(marked)) +
+            "; access once marked " +
+            (accessMarked.ok ? accessMarked.rows[0].ok : fmt(accessMarked)) +
+            "; forget " +
+            (forgot.ok ? forgot.rows[0].ok : fmt(forgot)) +
+            "; again " +
+            (again.ok ? again.rows[0].ok : fmt(again)) +
+            "; gone " +
+            (gone.ok ? gone.rows[0].n : fmt(gone)) +
+            "; forget of an unmarked row " +
+            (unmarkedForget.ok ? unmarkedForget.rows[0].ok : fmt(unmarkedForget)),
         );
       });
     }

@@ -5,7 +5,10 @@
 // surface.
 import { functionsUrl, getSupabase, SUPABASE_PUBLISHABLE_KEY } from "./supabase";
 
-export type MediaBucket = "profile-media" | "post-media";
+/** The two Supabase Storage buckets (ruling 1340: post-media and profile-media keep this path). */
+export type StorageBucket = "profile-media" | "post-media";
+/** Every bucket a public.media row may name; the third is Cloudflare R2 behind the app's own routes. */
+export type MediaBucket = StorageBucket | "r2:message-media";
 export type ImageFormat = "image/jpeg" | "image/webp";
 
 /** The pipeline's shared ceilings. A normalised master is far under the 10 MB bucket limit. */
@@ -151,7 +154,7 @@ export type Transform = {
  * caller always gets a URL. Private buckets require the signed variant; the transform rides on it.
  */
 export async function deliverImageUrl(
-  bucket: MediaBucket,
+  bucket: StorageBucket,
   path: string | null | undefined,
   transform?: Transform,
 ): Promise<string | undefined> {
@@ -163,4 +166,226 @@ export async function deliverImageUrl(
   }
   const { data } = await sb.storage.from(bucket).createSignedUrl(path, 60 * 60);
   return data?.signedUrl ?? undefined;
+}
+
+// ---------------------------------------------------------------------------------------------------
+// Handoff 41-B (rulings 1346, 1374; 346, 347): the client half of Messenger media. The object lives on
+// a private R2 bucket behind the app's own routes, so nothing here signs a URL and nothing reads the
+// bucket directly: an upload is one POST of the bytes to /api/messages/media with the bearer, and a
+// read is one GET of /api/messages/media/{id} with the bearer, turned into an object URL for <img>,
+// <video> and <audio>. post-media and profile-media keep the Storage path above (1340).
+// ---------------------------------------------------------------------------------------------------
+
+/** The route's byte ceiling for every mime, mirrored from the server helper. */
+export const MESSAGE_MEDIA_MAX_BYTES = 104857600;
+/** Ten minutes, the bound on a voice note. */
+export const MESSAGE_AUDIO_MAX_MS = 600000;
+/**
+ * Ruling 345: bounded in time, and longer than a profile image's bound because a 100 MB video on a
+ * mobile connection is a different upload; a stall still resolves to the failed state.
+ */
+export const MESSAGE_MEDIA_UPLOAD_TIMEOUT_MS = 5 * 60_000;
+
+export type MessageMediaMime =
+  | "image/jpeg"
+  | "image/png"
+  | "image/webp"
+  | "video/mp4"
+  | "video/webm"
+  | "audio/webm"
+  | "audio/mp4";
+
+const MESSAGE_MEDIA_MIMES: readonly string[] = [
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "video/mp4",
+  "video/webm",
+  "audio/webm",
+  "audio/mp4",
+];
+
+/**
+ * What the caller knows that the bytes do not. An image needs nothing (normalizeImage measures it);
+ * a video is measured from a loaded <video> element unless the caller already has the size; a voice
+ * note carries its duration from the recorder, which the route bounds at ten minutes.
+ */
+export type MessageMediaMeta =
+  | { kind: "image" }
+  | { kind: "video"; width?: number; height?: number }
+  | { kind: "audio"; durationMs: number };
+
+export type MessageMediaRefusal =
+  "not_signed_in" | "not_a_member" | "bad_media" | "too_large" | "rate_limited" | "failed";
+
+export type MessageMediaUpload =
+  | {
+      ok: true;
+      mediaId: string;
+      mime: MessageMediaMime;
+      width: number | null;
+      height: number | null;
+      byteSize: number;
+      /** An object URL of the bytes that were sent, for the composer's own preview. */
+      previewUrl: string;
+    }
+  | { ok: false; reason: MessageMediaRefusal };
+
+/** The route's path for one media object; the bytes still need the bearer, so see fetchMessageMedia. */
+export function messageMediaUrl(mediaId: string): string {
+  return "/api/messages/media/" + encodeURIComponent(mediaId);
+}
+
+async function bearer(): Promise<string | null> {
+  const sb = getSupabase();
+  if (!sb) return null;
+  const { data } = await sb.auth.getSession();
+  return data.session?.access_token ?? null;
+}
+
+/** A video's pixel size from its own metadata, through a detached element; null when it cannot load. */
+async function measureVideo(blob: Blob): Promise<{ width: number; height: number } | null> {
+  if (typeof document === "undefined") return null;
+  const url = URL.createObjectURL(blob);
+  try {
+    return await new Promise((resolve) => {
+      const video = document.createElement("video");
+      video.preload = "metadata";
+      video.muted = true;
+      const timer = setTimeout(() => resolve(null), 15_000);
+      video.onloadedmetadata = () => {
+        clearTimeout(timer);
+        resolve(
+          video.videoWidth > 0 && video.videoHeight > 0
+            ? { width: video.videoWidth, height: video.videoHeight }
+            : null,
+        );
+      };
+      video.onerror = () => {
+        clearTimeout(timer);
+        resolve(null);
+      };
+      video.src = url;
+    });
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+function refusalWord(word: unknown, status: number): MessageMediaRefusal {
+  if (
+    word === "not_signed_in" ||
+    word === "not_a_member" ||
+    word === "bad_media" ||
+    word === "too_large" ||
+    word === "rate_limited"
+  )
+    return word;
+  if (status === 401) return "not_signed_in";
+  if (status === 403) return "not_a_member";
+  if (status === 413) return "too_large";
+  if (status === 429) return "rate_limited";
+  return "failed";
+}
+
+/**
+ * Upload one media object for a message in `thread`, keyed by the message's own `clientId` so a
+ * retried send and its object stay together. Images go through normalizeImage first, unchanged
+ * (346, 347): the route transforms nothing (1374), so an image the browser cannot decode is refused
+ * here rather than sent with its metadata intact. Videos are measured from their own metadata.
+ * The answer is the media id the client hands to messenger_send(..., 'media' | 'voice', ..., mediaId).
+ */
+export async function uploadMessageMedia(
+  thread: string,
+  clientId: string,
+  file: File | Blob,
+  meta: MessageMediaMeta,
+): Promise<MessageMediaUpload> {
+  const token = await bearer();
+  if (!token) return { ok: false, reason: "not_signed_in" };
+
+  let blob: Blob = file;
+  let mime = (file.type || "").split(";")[0]!.trim().toLowerCase();
+  const query = new URLSearchParams({ thread, client_id: clientId });
+
+  if (meta.kind === "image") {
+    if (!(file instanceof File)) return { ok: false, reason: "bad_media" };
+    const normalized = await normalizeImage(file);
+    if (!normalized) return { ok: false, reason: "bad_media" };
+    blob = normalized.blob;
+    mime = normalized.type;
+    query.set("w", String(normalized.width));
+    query.set("h", String(normalized.height));
+  } else if (meta.kind === "video") {
+    const size =
+      meta.width && meta.height
+        ? { width: meta.width, height: meta.height }
+        : await measureVideo(file);
+    if (!size) return { ok: false, reason: "bad_media" };
+    query.set("w", String(size.width));
+    query.set("h", String(size.height));
+  } else {
+    if (!Number.isInteger(meta.durationMs) || meta.durationMs < 1)
+      return { ok: false, reason: "bad_media" };
+    if (meta.durationMs > MESSAGE_AUDIO_MAX_MS) return { ok: false, reason: "too_large" };
+    query.set("duration_ms", String(meta.durationMs));
+  }
+
+  if (!MESSAGE_MEDIA_MIMES.includes(mime)) return { ok: false, reason: "bad_media" };
+  if (blob.size < 1) return { ok: false, reason: "bad_media" };
+  if (blob.size > MESSAGE_MEDIA_MAX_BYTES) return { ok: false, reason: "too_large" };
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), MESSAGE_MEDIA_UPLOAD_TIMEOUT_MS);
+  try {
+    const res = await fetch("/api/messages/media?" + query.toString(), {
+      method: "POST",
+      headers: { Authorization: "Bearer " + token, "Content-Type": mime },
+      body: blob,
+      signal: controller.signal,
+    });
+    const out = (await res.json().catch(() => null)) as {
+      media_id?: string;
+      mime?: string;
+      width?: number | null;
+      height?: number | null;
+      byte_size?: number;
+      error?: string;
+    } | null;
+    if (!res.ok || !out || !out.media_id)
+      return { ok: false, reason: refusalWord(out?.error, res.status) };
+    return {
+      ok: true,
+      mediaId: out.media_id,
+      mime: (out.mime ?? mime) as MessageMediaMime,
+      width: out.width ?? null,
+      height: out.height ?? null,
+      byteSize: out.byte_size ?? blob.size,
+      previewUrl: URL.createObjectURL(blob),
+    };
+  } catch {
+    // A timeout abort, a network drop, a refused JSON: every rejection surfaces (ruling 345).
+    return { ok: false, reason: "failed" };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * The bytes of one media object as an object URL for an <img>, <video> or <audio> source. The route
+ * needs the bearer, which an element's own request cannot carry, so the fetch happens here and the
+ * caller revokes the URL when the element goes. Null when signed out, refused, or absent.
+ */
+export async function fetchMessageMedia(mediaId: string): Promise<string | null> {
+  const token = await bearer();
+  if (!token) return null;
+  try {
+    const res = await fetch(messageMediaUrl(mediaId), {
+      headers: { Authorization: "Bearer " + token },
+    });
+    if (!res.ok) return null;
+    return URL.createObjectURL(await res.blob());
+  } catch {
+    return null;
+  }
 }
