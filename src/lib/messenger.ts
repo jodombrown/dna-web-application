@@ -219,6 +219,13 @@ async function call<T>(p: PromiseLike<{ data: T; error: unknown }>): Promise<T> 
   return data;
 }
 
+/** A wrapper that answers a uuid; a null answer is a failure the caller reads as not sent. */
+async function callId(p: PromiseLike<{ data: string | null; error: unknown }>): Promise<string> {
+  const id = await call(p);
+  if (!id) throw new MessengerError(null, NOT_SENT_LINE);
+  return id;
+}
+
 export type SendArgs = {
   thread: string;
   clientId: string;
@@ -288,13 +295,13 @@ export const requestSend = (recipient: string, body: string) =>
   call(sb().rpc("messenger_request_send", { p_recipient: recipient, p_body: body }));
 /** Returns the thread the accept opened. */
 export const requestAccept = (request: string) =>
-  call(sb().rpc("messenger_request_accept", { p_request: request }));
+  callId(sb().rpc("messenger_request_accept", { p_request: request }));
 export const requestDecline = (request: string) =>
   call(sb().rpc("messenger_request_decline", { p_request: request }));
 export const requestBlock = (request: string) =>
   call(sb().rpc("messenger_request_block", { p_request: request }));
 export const createGroup = (name: string, memberIds: string[]) =>
-  call(sb().rpc("messenger_thread_create_group", { p_name: name, p_member_ids: memberIds }));
+  callId(sb().rpc("messenger_thread_create_group", { p_name: name, p_member_ids: memberIds }));
 export const invite = (thread: string, member: string) =>
   call(sb().rpc("messenger_thread_invite", { p_thread: thread, p_member: member }));
 export const inviteAccept = (thread: string) =>
@@ -314,11 +321,11 @@ export const setRole = (
 ) =>
   call(sb().rpc("messenger_thread_set_role", { p_thread: thread, p_member: member, p_role: role }));
 export const spaceThreadSync = (space: string) =>
-  call(sb().rpc("messenger_space_thread_sync", { p_space: space }));
+  callId(sb().rpc("messenger_space_thread_sync", { p_space: space }));
 export const eventThreadOpen = (event: string) =>
-  call(sb().rpc("messenger_event_thread_open", { p_event: event }));
+  callId(sb().rpc("messenger_event_thread_open", { p_event: event }));
 export const openOneToOne = (other: string) =>
-  call(sb().rpc("messenger_open_one_to_one", { p_other: other }));
+  callId(sb().rpc("messenger_open_one_to_one", { p_other: other }));
 export const report = (message: string, reason: string, note: string | null) =>
   call(
     sb().rpc(
@@ -646,4 +653,11 @@ export function threadC(kind: string | null): "connect" | "convene" | "collabora
 /** Any row that is unread, not muted and not archived lights the header's dot (SPEC Part C item 3). */
 export function anyUnread(threads: readonly ThreadView[]): boolean {
   return threads.some((t) => !!t.unread && !t.muted && !t.archived);
+}
+
+declare module "@tanstack/history" {
+  interface HistoryState {
+    /** Brief 14: a search result or the pinned strip opening the thread at one message (1338, 1371). */
+    focusSeq?: number;
+  }
 }

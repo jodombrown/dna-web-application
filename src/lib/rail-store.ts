@@ -30,12 +30,21 @@ import { useSyncExternalStore, type ReactNode } from "react";
 
 export type RailSlot = { label: string | null; node: ReactNode } | null;
 export type ColumnPad = "inset" | null;
-export type ShellLayout = {
-  mode: "lanes";
-  rail: "open" | "collapsed";
-  top: ReactNode;
-  key: string;
-} | null;
+// Brief 14 (handoff 41-C; rulings 1368, 1047): `canvas` is the Messenger's. At expanded the surface
+// takes one full-width column, no rails (612: a surface carrying a pane renders no right rail),
+// bounded to the visible height so the Pane beside the list scrolls its own columns; below expanded
+// it is the thread route's own form: the shell's scroller does not scroll, main fills the height
+// with no padding, and the dock is not rendered (1368), so the composer sits on the safe-area inset.
+// `maxWidth` is the expanded column's cap; the prototype's expanded canvas is 1120.
+export type ShellLayout =
+  | {
+      mode: "lanes";
+      rail: "open" | "collapsed";
+      top: ReactNode;
+      key: string;
+    }
+  | { mode: "canvas"; key: string; maxWidth?: number | undefined }
+  | null;
 
 type State = { left: RailSlot; right: RailSlot; pad: ColumnPad; layout: ShellLayout };
 
@@ -69,6 +78,17 @@ export function setColumnPad(pad: ColumnPad) {
 
 export function setShellLayout(layout: ShellLayout) {
   state = { ...state, layout };
+  emit();
+}
+
+/**
+ * Clears the layout only while it is still the one `key` named. Two surfaces can hold the shell in
+ * turn across a tier change (the Messenger's list at expanded and its thread below it both ask for
+ * `canvas`), and an unmount cleanup that cleared unconditionally would take the other's with it.
+ */
+export function clearShellLayout(key: string) {
+  if (state.layout?.key !== key) return;
+  state = { ...state, layout: null };
   emit();
 }
 

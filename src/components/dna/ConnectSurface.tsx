@@ -69,6 +69,7 @@ import {
   type FilterOptions,
 } from "@/lib/connect";
 import { setColumnPad, setLeftRail, setRightRail } from "@/lib/rail-store";
+import { openOneToOne, refusalOf } from "@/lib/messenger";
 import { useMode, useTier, useWide } from "@/lib/tier";
 
 const TOAST_MS = 2400;
@@ -394,6 +395,12 @@ export function ConnectSurface({ member, search }: { member: Member; search: Con
     );
     setSending(false);
   };
+  // Brief 14 (SPEC 41-14 Part C item 4; lifts 117): Message on a connected member's card resolves
+  // the pair's thread through messenger_open_one_to_one and opens it; a refusal reads as its line.
+  const onMessage = (c: ConnectCard) =>
+    void openOneToOne(c.id)
+      .then((thread) => navigate({ to: "/messages/$thread", params: { thread } }))
+      .catch((e) => say(refusalOf(e).line));
   const openProfile = (c: ConnectCard) =>
     void navigate({ to: "/m/$handle", params: { handle: c.handle }, search: {} });
 
@@ -424,6 +431,7 @@ export function ConnectSurface({ member, search }: { member: Member; search: Con
           onDecline={() => onDecline(c)}
           onFollow={() => onFollow(c)}
           onDismiss={() => onDismiss(c)}
+          onMessage={c.rel === "connected" ? () => onMessage(c) : undefined}
         />
       </CardFade>
     );

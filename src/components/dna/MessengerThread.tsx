@@ -1,0 +1,1630 @@
+// Brief 14, handoff 41-C, SPEC 41-14 Part C item 2: the thread (extraction 41-14 sections 1.5, 1.6,
+// 1.7 and 2). Below expanded it is its own route on Pane's extended route bar with no dock and the
+// composer on the safe-area inset (1368, 1369); at expanded the same component renders inside the
+// Pane on /messages with the URL still /messages/{thread} (1047, 1023). Reads:
+// messenger_messages_view by seq with a cursor on seq, the thread's row from the list cache, the
+// settings, the vocabularies, the thread's roster for mentions and Manage. Writes: the wrappers and
+// 41-B's routes alone, through src/lib/messenger.ts and src/lib/media.ts. Realtime: thread:{id}
+// while open; a message event refetches that one row by seq, a cursor event updates ticks locally
+// for a pair and refetches the own rows it touches in a group, a rejoin refetches from the last seq
+// held under the `Catching up` line. Every label is the extraction's. No count, presence or typing
+// state anywhere; the unsent text lives here, in this tab, and nowhere else (1351).
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useLocation, useNavigate } from "@tanstack/react-router";
+import {
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
+import { Avatar } from "@/components/strand/Avatar";
+import { BlockedMessageLine } from "@/components/strand/BlockedMessageLine";
+import { Button } from "@/components/strand/Button";
+import { DaySeparator } from "@/components/strand/DaySeparator";
+import { DiaLine } from "@/components/strand/DiaLine";
+import { IconButton } from "@/components/strand/IconButton";
+import { Input } from "@/components/strand/Input";
+import { MediaBlock } from "@/components/strand/MediaBlock";
+import type { MenuItem, MenuRule } from "@/components/strand/Menu";
+import { MessageBubble, type MessageReaction } from "@/components/strand/MessageBubble";
+import { MessageComposer, type ComposerMention } from "@/components/strand/MessageComposer";
+import { Pane } from "@/components/strand/Pane";
+import { PinnedStrip } from "@/components/strand/PinnedStrip";
+import { Select } from "@/components/strand/Select";
+import { Sheet } from "@/components/strand/Sheet";
+import { Switch } from "@/components/strand/Switch";
+import { GroupMark } from "@/components/strand/ThreadRow";
+import { Ticks, tickStatus } from "@/components/strand/Ticks";
+import { Toast } from "@/components/strand/Toast";
+import { VoicePlayer } from "@/components/strand/VoicePlayer";
+import { toastStyle } from "@/components/dna/FeedSurface";
+import { MessengerPaneContext } from "@/components/dna/MessengerSurface";
+import type { Member } from "@/lib/auth";
+import { loadNetwork } from "@/lib/connect";
+import type { Json } from "@/lib/database.types";
+import { unfurl } from "@/lib/dia";
+import { messageMediaUrl, uploadMessageMedia } from "@/lib/media";
+import {
+  clockLabel,
+  dayKey,
+  dayLabel,
+  deleteForEveryone,
+  diaDismiss,
+  edit as editMessage,
+  flushCursors,
+  invite as inviteMember,
+  inviteAccept,
+  inviteDecline,
+  leave as leaveThread,
+  loadDiaSignals,
+  loadMessageAt,
+  loadMessages,
+  loadThread,
+  MESSAGE_PAGE,
+  membersLine,
+  MessengerError,
+  pinMessage,
+  react as reactTo,
+  readTo,
+  refusalOf,
+  remove as removeMember,
+  report as reportMessage,
+  REFUSAL_LINES,
+  send as sendMessage,
+  setHistory,
+  settingsSet,
+  subscribeThread,
+  threadC,
+  unpinMessage,
+  unreact,
+  type MessageView,
+  type ThreadView,
+} from "@/lib/messenger";
+import {
+  SETTINGS_KEY,
+  SIGNALS_KEY,
+  THREADS_KEY,
+  refreshThreadRow,
+  useMessagingSettings,
+  useThreads,
+} from "@/lib/messenger-inbox";
+import { useAudio, useAvatarUrl, useMessageMedia, useRecorder } from "@/lib/messenger-media";
+import { firstName, joinNames, nameList } from "@/lib/names";
+import { clearShellLayout, setShellLayout } from "@/lib/rail-store";
+import { getSupabase } from "@/lib/supabase";
+import { useMode, useTier } from "@/lib/tier";
+import { loadVocabularies } from "@/lib/vocabularies";
+
+const MESSAGES_KEY = (threadId: string) => ["messenger", "messages", threadId] as const;
+const ROSTER_KEY = (threadId: string) => ["messenger", "roster", threadId] as const;
+
+const QUIET = {
+  margin: 0,
+  fontSize: "var(--text-s)",
+  lineHeight: "var(--text-s-lh)",
+  color: "var(--ink-3)",
+  textWrap: "pretty" as const,
+};
+
+const CAPS = {
+  fontSize: "var(--text-xs)",
+  lineHeight: "var(--text-xs-lh)",
+  letterSpacing: "var(--tracking-caps)",
+  textTransform: "uppercase" as const,
+  fontWeight: "var(--weight-medium)" as unknown as number,
+  color: "var(--ink-3)",
+};
+
+const EDIT_WINDOW_MS = 60 * 60_000;
+const DELETE_WINDOW_MS = 60 * 3_600_000;
+const LIMITED_MS = 20_000;
+
+type RosterMember = { id: string; name: string; role: string; state: string };
+
+type Draft = {
+  text: string;
+  quote: MessageView | null;
+  editing: MessageView | null;
+  media: { kind: "image" | "video"; file: File; url: string } | null;
+  voice: { blob: Blob; mime: string; durationMs: number } | null;
+  preview: { url: string; domain: string; title: string | null; image: string | null } | null;
+  previewRemoved: string | null;
+  notice: boolean;
+  uploadError: string | null;
+  failed: { clientId: string } | null;
+  mentioned: ComposerMention[];
+};
+
+const EMPTY_DRAFT: Draft = {
+  text: "",
+  quote: null,
+  editing: null,
+  media: null,
+  voice: null,
+  preview: null,
+  previewRemoved: null,
+  notice: false,
+  uploadError: null,
+  failed: null,
+  mentioned: [],
+};
+
+const URL_IN_TEXT = /(https?:\/\/[^\s<>"']+|\b[a-z0-9-]+\.[a-z]{2,}(?:\/\S*)?)/i;
+
+function sortBySeq(rows: MessageView[]): MessageView[] {
+  const seen = new Map<number, MessageView>();
+  for (const r of rows) if (r.seq !== null) seen.set(r.seq, r);
+  return [...seen.values()].sort((a, b) => (a.seq ?? 0) - (b.seq ?? 0));
+}
+
+function LinkPreview({ preview }: { preview: Json }) {
+  const p = (preview ?? {}) as Record<string, unknown>;
+  const url = typeof p["url"] === "string" ? p["url"] : "";
+  if (!url) return null;
+  const image = typeof p["image_url"] === "string" ? (p["image_url"] as string) : null;
+  return (
+    <MediaBlock
+      kind="link"
+      src={url}
+      domain={typeof p["domain"] === "string" ? (p["domain"] as string) : undefined}
+      title={typeof p["title"] === "string" ? (p["title"] as string) : undefined}
+      items={image ? [image] : []}
+    />
+  );
+}
+
+function MessageMedia({ mediaId }: { mediaId: string }) {
+  const media = useMessageMedia(mediaId);
+  if (!media) return <span aria-busy="true" style={{ display: "block", minHeight: 44 }} />;
+  const video = media.mime.startsWith("video/");
+  return <MediaBlock kind={video ? "video" : "image"} src={media.url} alt="" />;
+}
+
+function VoiceNote({ mediaId, own }: { mediaId: string; own: boolean }) {
+  const media = useMessageMedia(mediaId);
+  const audio = useAudio(media?.url ?? null);
+  return (
+    <VoicePlayer
+      duration={audio.duration}
+      position={audio.position}
+      playing={audio.playing}
+      onToggle={audio.toggle}
+      onSeek={audio.seek}
+      own={own}
+    />
+  );
+}
+
+function sheetHead(title: string, onClose?: () => void): ReactNode {
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 8,
+        height: 56,
+        padding: onClose ? "0 8px 0 20px" : "0 20px",
+        borderBottom: "1px solid var(--line)",
+        flex: "none",
+      }}
+    >
+      <h2 data-sheet-heading style={{ flex: 1, margin: 0, fontSize: 17, fontWeight: 700 }}>
+        {title}
+      </h2>
+      {onClose && <IconButton name="x" label="Close" onClick={onClose} />}
+    </div>
+  );
+}
+
+const SHEET_BODY = {
+  flex: 1,
+  overflowY: "auto" as const,
+  padding: 20,
+  display: "flex",
+  flexDirection: "column" as const,
+  gap: "var(--space-4)",
+};
+
+export function MessengerThread({ member, threadId }: { member: Member; threadId: string }) {
+  const tier = useTier();
+  // Expanded: inside the Pane on /messages, where the header row is the thread's own under Pane's
+  // close control; otherwise the route form. Read from the tree (MessengerPaneContext), not the tier.
+  const inPane = useContext(MessengerPaneContext);
+  const compact = tier === "compact";
+  const mode = useMode();
+  const navigate = useNavigate();
+  const qc = useQueryClient();
+  const focusSeq = useLocation({
+    select: (l) => (l.state as { focusSeq?: number }).focusSeq ?? null,
+  });
+  const threads = useThreads(member);
+  const cached = (threads.data ?? []).find((t) => t.thread_id === threadId) ?? null;
+  const threadQ = useQuery({
+    queryKey: ["messenger", "thread", threadId],
+    queryFn: () => loadThread(threadId),
+    enabled: !cached,
+  });
+  const thread: ThreadView | null = cached ?? threadQ.data ?? null;
+  const settings = useMessagingSettings(member);
+  const receipts = !!settings.data?.receipts_enabled;
+  const previewsOn = !!settings.data?.link_previews_enabled;
+  const vocab = useQuery({ queryKey: ["vocabularies"], queryFn: loadVocabularies });
+  const signals = useQuery({ queryKey: SIGNALS_KEY(member.id), queryFn: loadDiaSignals });
+  const group = !!thread && thread.kind !== "one_to_one";
+  const c = threadC(thread?.kind ?? null);
+  const lead = thread?.role === "lead" || thread?.role === "co_lead";
+  const invited = !!thread?.invited;
+  const roster = useQuery({
+    queryKey: ROSTER_KEY(threadId),
+    queryFn: async (): Promise<RosterMember[]> => {
+      const sb = getSupabase();
+      if (!sb) return [];
+      const { data: tms } = await sb
+        .from("thread_members")
+        .select("member_id,role,state")
+        .eq("thread_id", threadId);
+      const ids = (tms ?? []).map((t) => t.member_id);
+      if (!ids.length) return [];
+      const { data: ms } = await sb.from("members").select("id,name").in("id", ids);
+      const name = new Map((ms ?? []).map((m) => [m.id, m.name]));
+      return (tms ?? []).map((t) => ({
+        id: t.member_id,
+        name: name.get(t.member_id) ?? "",
+        role: t.role,
+        state: t.state,
+      }));
+    },
+    enabled: group,
+  });
+  const others: ComposerMention[] = useMemo(
+    () =>
+      (roster.data ?? [])
+        .filter((r) => r.id !== member.id && r.state === "active")
+        .map((r) => ({ id: r.id, name: r.name })),
+    [roster.data, member.id],
+  );
+  const mentionNames = useMemo(
+    () => [...others.map((o) => o.name), member.name, ...nameList(thread?.member_names)],
+    [others, member.name, thread?.member_names],
+  );
+
+  // 1368: below expanded the thread route has no dock and fills the height.
+  useEffect(() => {
+    if (inPane) return;
+    setShellLayout({ mode: "canvas", key: "messages:" + threadId });
+    return () => clearShellLayout("messages:" + threadId);
+  }, [inPane, threadId]);
+
+  // The log.
+  const messages = useQuery({
+    queryKey: MESSAGES_KEY(threadId),
+    queryFn: () => loadMessages(threadId),
+  });
+  const rows = useMemo(() => sortBySeq(messages.data ?? []), [messages.data]);
+  const maxSeq = rows.length ? (rows[rows.length - 1]?.seq ?? 0) : 0;
+  const minSeq = rows.length ? (rows[0]?.seq ?? 0) : 0;
+  const [catchingUp, setCatchingUp] = useState(false);
+  const [olderDone, setOlderDone] = useState(false);
+  const [focused, setFocused] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+  const toastTimer = useRef<number | null>(null);
+  const say = useCallback((t: string) => {
+    setToast(t);
+    if (toastTimer.current) window.clearTimeout(toastTimer.current);
+    toastTimer.current = window.setTimeout(() => setToast(null), 2600);
+  }, []);
+  const upsert = useCallback(
+    (row: MessageView | null, seq?: number) => {
+      qc.setQueryData<MessageView[]>(MESSAGES_KEY(threadId), (prev) => {
+        const list = prev ?? [];
+        if (!row) return seq !== undefined ? list.filter((r) => r.seq !== seq) : list;
+        return sortBySeq([...list.filter((r) => r.seq !== row.seq), row]);
+      });
+    },
+    [qc, threadId],
+  );
+  const refetchRow = useCallback(
+    async (seq: number) => {
+      const row = await loadMessageAt(threadId, seq).catch(() => null);
+      upsert(row, seq);
+      return row;
+    },
+    [threadId, upsert],
+  );
+  const refetchRows = useCallback(
+    async (seqs: number[]) => {
+      const sb = getSupabase();
+      if (!sb || !seqs.length) return;
+      const { data } = await sb
+        .from("messenger_messages_view")
+        .select("*")
+        .eq("thread_id", threadId)
+        .in("seq", seqs);
+      for (const r of data ?? []) upsert(r);
+    },
+    [threadId, upsert],
+  );
+  const maxSeqRef = useRef(0);
+  maxSeqRef.current = maxSeq;
+  const rowsRef = useRef(rows);
+  rowsRef.current = rows;
+
+  // Reading: everything held is read while the thread is open (cursors debounced in the lib).
+  useEffect(() => {
+    if (maxSeq > 0 && !invited) readTo(threadId, maxSeq);
+  }, [threadId, maxSeq, invited]);
+  useEffect(() => () => flushCursors(threadId), [threadId]);
+
+  // Realtime (1351).
+  useEffect(() => {
+    const off = subscribeThread(threadId, {
+      onMessage: (seq) => {
+        void refetchRow(seq).then(() => {
+          if (seq > maxSeqRef.current) readTo(threadId, seq);
+        });
+      },
+      onCursor: (p) => {
+        if (p.member_id === member.id) return;
+        const own = rowsRef.current.filter((r) => r.own && (r.seq ?? 0) <= p.read_seq);
+        if (!group) {
+          // A pair: the other member's cursors are the whole story (1336).
+          qc.setQueryData<MessageView[]>(MESSAGES_KEY(threadId), (prev) =>
+            (prev ?? []).map((r) => {
+              if (!r.own || r.seq === null) return r;
+              const delivered = r.seq <= p.delivered_seq;
+              const read = r.seq <= p.read_seq;
+              const tick = read
+                ? Math.max(r.tick ?? 1, 2)
+                : delivered
+                  ? Math.max(r.tick ?? 1, 2)
+                  : r.tick;
+              return tick === r.tick ? r : { ...r, tick };
+            }),
+          );
+          // The read state depends on both members' receipts, which the projection decides.
+          void refetchRows(own.map((r) => r.seq ?? 0).filter((s) => s > 0));
+        } else {
+          void refetchRows(
+            rowsRef.current
+              .filter(
+                (r) =>
+                  r.own &&
+                  (r.seq ?? 0) <= Math.max(p.read_seq, p.delivered_seq) &&
+                  (r.tick ?? 0) < 3,
+              )
+              .map((r) => r.seq ?? 0)
+              .filter((s) => s > 0),
+          );
+        }
+      },
+      onReconnect: () => {
+        setCatchingUp(true);
+        void loadMessages(threadId, { after: maxSeqRef.current, limit: 200 })
+          .then((late) => {
+            for (const r of late) upsert(r);
+            const top = late.length ? (late[late.length - 1]?.seq ?? 0) : 0;
+            if (top > 0) readTo(threadId, top);
+          })
+          .catch(() => undefined)
+          .finally(() => setCatchingUp(false));
+      },
+    });
+    return off;
+  }, [threadId, member.id, group, qc, refetchRow, refetchRows, upsert]);
+
+  // Scrolling: the log's foot on open and on a new row; a focused message is brought up and ringed.
+  const log = useRef<HTMLDivElement>(null);
+  const lastSeen = useRef(0);
+  useEffect(() => {
+    const el = log.current;
+    if (!el) return;
+    if (focusSeq && rows.some((r) => r.seq === focusSeq)) return;
+    if (maxSeq !== lastSeen.current) {
+      lastSeen.current = maxSeq;
+      el.scrollTop = el.scrollHeight;
+    }
+  }, [maxSeq, rows, focusSeq]);
+  useEffect(() => {
+    if (!focusSeq || !rows.length) return;
+    const row = rows.find((r) => r.seq === focusSeq);
+    if (!row) {
+      if (minSeq > focusSeq && !olderDone)
+        void loadMessages(threadId, { before: minSeq, limit: MESSAGE_PAGE }).then((older) => {
+          if (!older.length) setOlderDone(true);
+          for (const r of older) upsert(r);
+        });
+      return;
+    }
+    setFocused(row.message_id ?? null);
+    window.setTimeout(() => {
+      const el = log.current?.querySelector<HTMLElement>('[data-msg="' + row.message_id + '"]');
+      const c = log.current;
+      if (el && c) c.scrollTop = el.offsetTop - 72;
+    }, 60);
+    const t = window.setTimeout(() => setFocused(null), 2200);
+    return () => window.clearTimeout(t);
+  }, [focusSeq, rows, minSeq, olderDone, threadId, upsert]);
+  const loadOlder = () => {
+    if (olderDone || !minSeq) return;
+    void loadMessages(threadId, { before: minSeq }).then((older) => {
+      if (!older.length) setOlderDone(true);
+      for (const r of older) upsert(r);
+    });
+  };
+
+  // The composer's state, this tab only (1351).
+  const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT);
+  const patch = (p: Partial<Draft>) => setDraft((d) => ({ ...d, ...p }));
+  const [sending, setSending] = useState(false);
+  const [limitedUntil, setLimitedUntil] = useState(0);
+  const [, tick] = useState(0);
+  useEffect(() => {
+    if (!limitedUntil) return;
+    const t = window.setTimeout(() => tick((n) => n + 1), Math.max(0, limitedUntil - Date.now()));
+    return () => window.clearTimeout(t);
+  }, [limitedUntil]);
+  const limited = limitedUntil > Date.now();
+  const recorder = useRecorder();
+  const imageInput = useRef<HTMLInputElement>(null);
+  const videoInput = useRef<HTMLInputElement>(null);
+  const [picker, setPicker] = useState<string | null>(null);
+  const [expandedBlocked, setExpandedBlocked] = useState<Record<string, boolean>>({});
+  const [sheet, setSheet] = useState<
+    | { kind: "info"; row: MessageView }
+    | { kind: "report"; row: MessageView; reason: string; note: string; done: boolean }
+    | { kind: "leave" }
+    | { kind: "manage" }
+    | null
+  >(null);
+  const [busy, setBusy] = useState(false);
+
+  const fail = (e: unknown) => {
+    const err = e instanceof MessengerError ? e : refusalOf(e);
+    if (err.word === "rate_limited") setLimitedUntil(Date.now() + LIMITED_MS);
+    return err;
+  };
+  const act = async (fn: () => Promise<unknown>, done?: string) => {
+    setBusy(true);
+    try {
+      await fn();
+      if (done) say(done);
+    } catch (e) {
+      say(fail(e).line);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // The link preview draft (1343): only while the setting is on, removable before sending.
+  const previewTimer = useRef<number | null>(null);
+  const onText = (text: string) => {
+    const m = URL_IN_TEXT.exec(text);
+    const url = m ? (/^https?:\/\//i.test(m[0]) ? m[0] : "https://" + m[0]) : null;
+    patch({ text, failed: null });
+    if (previewTimer.current) window.clearTimeout(previewTimer.current);
+    if (!previewsOn || !url) {
+      if (!url && draft.preview) patch({ preview: null });
+      return;
+    }
+    if (draft.previewRemoved === url || draft.preview?.url === url) return;
+    previewTimer.current = window.setTimeout(() => {
+      void unfurl(url).then((meta) => {
+        setDraft((d) => {
+          if (d.previewRemoved === url || !URL_IN_TEXT.test(d.text)) return d;
+          return {
+            ...d,
+            preview: {
+              url,
+              domain: url.replace(/^https?:\/\//, "").split("/")[0] ?? "",
+              title: meta?.title ?? null,
+              image: meta?.image ?? null,
+            },
+          };
+        });
+      });
+    }, 600);
+  };
+
+  const attach = (kind: "image" | "video") => {
+    (kind === "image" ? imageInput : videoInput).current?.click();
+  };
+  const onFile = (kind: "image" | "video", files: FileList | null) => {
+    const file = files?.[0];
+    if (!file) return;
+    const ok = kind === "image" ? file.type.startsWith("image/") : file.type.startsWith("video/");
+    if (!ok) {
+      patch({ uploadError: REFUSAL_LINES.bad_media });
+      return;
+    }
+    if (draft.media) URL.revokeObjectURL(draft.media.url);
+    patch({
+      media: { kind, file, url: URL.createObjectURL(file) },
+      voice: null,
+      uploadError: null,
+      notice: settings.data?.media_notice_seen_at === null,
+    });
+  };
+  // The media notice (1346): once, written on OK.
+  const noticeOk = () => {
+    patch({ notice: false });
+    void settingsSet({ mediaNoticeSeen: true })
+      .then((row) => qc.setQueryData(SETTINGS_KEY(member.id), row))
+      .catch(() => undefined);
+  };
+
+  const startRecording = () => {
+    if (draft.editing || limited) return;
+    void recorder.start();
+  };
+  const stopRecording = () => {
+    void recorder.stop().then((r) => {
+      if (r) patch({ voice: r, media: null });
+    });
+  };
+
+  const clearDraft = () => {
+    if (draft.media) URL.revokeObjectURL(draft.media.url);
+    setDraft(EMPTY_DRAFT);
+  };
+
+  const sendNow = async () => {
+    if (sending || limited || !thread) return;
+    if (draft.editing) {
+      const body = draft.text.trim();
+      if (!body) return;
+      setSending(true);
+      try {
+        await editMessage(draft.editing.message_id ?? "", body);
+        await refetchRow(draft.editing.seq ?? 0);
+        clearDraft();
+      } catch (e) {
+        say(fail(e).line);
+      } finally {
+        setSending(false);
+      }
+      return;
+    }
+    const body = draft.text.trim();
+    if (!body && !draft.media && !draft.voice) return;
+    const clientId = draft.failed?.clientId ?? crypto.randomUUID();
+    setSending(true);
+    try {
+      let mediaId: string | null = null;
+      let kind: "text" | "media" | "voice" = "text";
+      if (draft.media) {
+        const up = await uploadMessageMedia(threadId, clientId, draft.media.file, {
+          kind: draft.media.kind,
+        });
+        if (!up.ok) {
+          if (up.reason === "rate_limited") setLimitedUntil(Date.now() + LIMITED_MS);
+          else if (up.reason === "bad_media" || up.reason === "too_large")
+            patch({ uploadError: REFUSAL_LINES[up.reason] });
+          else patch({ failed: { clientId } });
+          return;
+        }
+        mediaId = up.mediaId;
+        kind = "media";
+      } else if (draft.voice) {
+        const up = await uploadMessageMedia(threadId, clientId, draft.voice.blob, {
+          kind: "audio",
+          durationMs: draft.voice.durationMs,
+        });
+        if (!up.ok) {
+          if (up.reason === "rate_limited") setLimitedUntil(Date.now() + LIMITED_MS);
+          else patch({ failed: { clientId } });
+          return;
+        }
+        mediaId = up.mediaId;
+        kind = "voice";
+      }
+      const mentions = draft.mentioned
+        .filter((m) => draft.text.includes("@" + m.name))
+        .map((m) => m.id);
+      const preview =
+        previewsOn && draft.preview
+          ? ({
+              url: draft.preview.url,
+              domain: draft.preview.domain,
+              title: draft.preview.title,
+              image_url: draft.preview.image,
+            } as Json)
+          : null;
+      const row = await sendMessage({
+        thread: threadId,
+        clientId,
+        body: body || null,
+        kind,
+        replyTo: draft.quote?.message_id ?? null,
+        media: mediaId,
+        mentions,
+        linkPreview: preview,
+      });
+      if (row) await refetchRow(row.seq);
+      clearDraft();
+      void refreshThreadRow(qc, member.id, threadId);
+    } catch (e) {
+      const err = fail(e);
+      if (err.word !== "rate_limited") patch({ failed: { clientId } });
+      if (err.word && err.word !== "rate_limited" && err.word !== "empty") say(err.line);
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const toggleReaction = (row: MessageView, word: string) => {
+    const list = reactionsOf(row);
+    const mine = list.find((r) => r.own);
+    void act(async () => {
+      if (mine && mine.word === word) await unreact(row.message_id ?? "", word);
+      else await reactTo(row.message_id ?? "", word);
+      await refetchRow(row.seq ?? 0);
+    });
+    setPicker(null);
+  };
+
+  const reactionLabel = (value: string) =>
+    vocab.data?.message_reaction_kinds.find((k) => k.value === value)?.label ?? value;
+  const reactionsOf = (row: MessageView): (MessageReaction & { value: string })[] => {
+    const list = Array.isArray(row.reactions) ? (row.reactions as Record<string, unknown>[]) : [];
+    return list.map((r) => {
+      const value = typeof r["reaction"] === "string" ? (r["reaction"] as string) : "";
+      const names = nameList(r["names"]).map((n) => (n === member.name ? "you" : firstName(n)));
+      return {
+        value,
+        word: reactionLabel(value),
+        names: joinNames(names, !!r["others"]),
+        own: !!r["own"],
+      };
+    });
+  };
+
+  const menuFor = (row: MessageView): (MenuItem | MenuRule | false | null | undefined)[] => {
+    const age = Date.now() - new Date(row.created_at ?? 0).getTime();
+    const own = !!row.own;
+    const items: (MenuItem | MenuRule | false | null)[] = [
+      {
+        id: "reply",
+        label: "Reply",
+        icon: "reply",
+        onSelect: () => patch({ quote: row, editing: null }),
+      },
+      { id: "react", label: "React", onSelect: () => setPicker(row.message_id ?? null) },
+      own && row.kind === "text" && age < EDIT_WINDOW_MS && !row.deleted
+        ? {
+            id: "edit",
+            label: "Edit",
+            onSelect: () =>
+              patch({ editing: row, text: row.body ?? "", quote: null, media: null, voice: null }),
+          }
+        : null,
+      group && lead
+        ? {
+            id: "pin",
+            label: row.pinned ? "Unpin" : "Pin",
+            icon: "pin",
+            onSelect: () =>
+              void act(async () => {
+                await (row.pinned
+                  ? unpinMessage(row.message_id ?? "")
+                  : pinMessage(row.message_id ?? ""));
+                await qc.invalidateQueries({ queryKey: MESSAGES_KEY(threadId) });
+              }),
+          }
+        : null,
+      group && own
+        ? { id: "info", label: "Message info", onSelect: () => setSheet({ kind: "info", row }) }
+        : null,
+      { rule: true },
+      own && age < DELETE_WINDOW_MS
+        ? {
+            id: "delete",
+            label: "Delete for everyone",
+            tone: "danger",
+            onSelect: () =>
+              void act(async () => {
+                const mediaId = row.media_id;
+                const out = await deleteForEveryone(row.message_id ?? "");
+                if (out.storage_path && mediaId) {
+                  const sb = getSupabase();
+                  const token = sb ? (await sb.auth.getSession()).data.session?.access_token : null;
+                  if (token)
+                    await fetch(messageMediaUrl(mediaId), {
+                      method: "DELETE",
+                      headers: { Authorization: "Bearer " + token },
+                    }).catch(() => undefined);
+                }
+                await refetchRow(row.seq ?? 0);
+              }),
+          }
+        : null,
+      !own
+        ? {
+            id: "report",
+            label: "Report",
+            tone: "danger",
+            icon: "flag",
+            onSelect: () => setSheet({ kind: "report", row, reason: "", note: "", done: false }),
+          }
+        : null,
+    ];
+    return items;
+  };
+
+  // Header: avatar or group mark, name, subtitle, control (1369).
+  const avatar = useAvatarUrl(thread?.avatar_path, 40);
+  const subtitle = thread
+    ? thread.kind === "one_to_one"
+      ? (thread.headline ?? "")
+      : membersLine(thread)
+    : "";
+  const control: ReactNode = !thread ? null : invited ? (
+    <div style={{ display: "flex", gap: "var(--space-2)" }}>
+      <Button
+        c="connect"
+        size="sm"
+        disabled={busy}
+        onClick={() =>
+          void act(async () => {
+            await inviteAccept(threadId);
+            await refreshThreadRow(qc, member.id, threadId);
+            await qc.invalidateQueries({ queryKey: MESSAGES_KEY(threadId) });
+          })
+        }
+      >
+        Accept
+      </Button>
+      <Button
+        variant="secondary"
+        size="sm"
+        disabled={busy}
+        onClick={() =>
+          void act(async () => {
+            await inviteDecline(threadId);
+            await refreshThreadRow(qc, member.id, threadId);
+            void navigate({ to: "/messages" });
+          })
+        }
+      >
+        Decline
+      </Button>
+    </div>
+  ) : group && lead && (thread.kind === "community_group" || thread.kind === "event_thread") ? (
+    <Button
+      variant="secondary"
+      size="sm"
+      onClick={() => setSheet({ kind: "manage" })}
+      data-testid="manage"
+    >
+      Manage
+    </Button>
+  ) : thread.kind === "event_thread" && thread.anchor_id ? (
+    <Button
+      variant="secondary"
+      size="sm"
+      c="convene"
+      onClick={() =>
+        void navigate({ to: "/convene/events/$id", params: { id: thread.anchor_id as string } })
+      }
+    >
+      Open the event
+    </Button>
+  ) : thread.kind === "community_group" ? (
+    <Button
+      variant="secondary"
+      size="sm"
+      onClick={() => setSheet({ kind: "leave" })}
+      data-testid="leave"
+    >
+      Leave
+    </Button>
+  ) : null;
+  const mark =
+    thread?.kind === "one_to_one" ? (
+      <Avatar name={thread.name ?? ""} src={avatar} size={40} />
+    ) : (
+      <GroupMark size={40} />
+    );
+
+  const pinned = group ? rows.find((r) => r.pinned && !r.deleted) : undefined;
+  const quietSignal = (signals.data ?? []).find((s) => s.thread_id === threadId);
+
+  // The log.
+  const items: ReactNode[] = [];
+  let day: string | null = null;
+  for (const r of rows) {
+    const key = dayKey(r.created_at ?? "");
+    if (key !== day) {
+      day = key;
+      items.push(<DaySeparator key={"d" + r.seq} label={dayLabel(r.created_at ?? "")} />);
+    }
+    if (r.blocked) {
+      items.push(
+        <BlockedMessageLine
+          key={r.message_id}
+          name={r.author_name ?? ""}
+          text={r.body}
+          time={clockLabel(r.created_at ?? "")}
+          expanded={!!expandedBlocked[r.message_id ?? ""]}
+          onToggle={() =>
+            setExpandedBlocked((e) => ({ ...e, [r.message_id ?? ""]: !e[r.message_id ?? ""] }))
+          }
+        />,
+      );
+      continue;
+    }
+    const reply = r.reply_to as Record<string, unknown> | null;
+    const quote = reply
+      ? {
+          from: reply["author_name"] === member.name ? "You" : String(reply["author_name"] ?? ""),
+          text:
+            reply["deleted"] === true
+              ? "This message was deleted"
+              : typeof reply["line"] === "string"
+                ? (reply["line"] as string)
+                : reply["kind"] === "voice"
+                  ? "Voice note"
+                  : reply["kind"] === "media"
+                    ? "Image"
+                    : "",
+        }
+      : null;
+    const reactions = reactionsOf(r);
+    const mine = reactions.find((x) => x.own);
+    items.push(
+      <MessageBubble
+        key={r.message_id}
+        id={r.message_id ?? undefined}
+        own={!!r.own}
+        c={c}
+        text={r.body}
+        quote={quote}
+        media={r.kind === "media" && r.media_id ? <MessageMedia mediaId={r.media_id} /> : undefined}
+        voice={
+          r.kind === "voice" && r.media_id ? (
+            <VoiceNote mediaId={r.media_id} own={!!r.own} />
+          ) : undefined
+        }
+        link={previewsOn && r.link_preview ? <LinkPreview preview={r.link_preview} /> : undefined}
+        reactions={reactions.map(({ word, names, own }) => ({ word, names, own }))}
+        edited={!!r.edited}
+        pinned={!!r.pinned}
+        deleted={!!r.deleted}
+        time={clockLabel(r.created_at ?? "")}
+        status={tickStatus(r.tick)}
+        receipts={receipts}
+        senderName={group && !r.own ? r.author_name : null}
+        mentionNames={mentionNames}
+        focused={focused === r.message_id}
+        input={mode}
+        onReply={r.deleted ? undefined : () => patch({ quote: r, editing: null })}
+        onReact={
+          r.deleted
+            ? undefined
+            : () => setPicker((p) => (p === r.message_id ? null : (r.message_id ?? null)))
+        }
+        onToggleReaction={(word) => {
+          const value = reactions.find((x) => x.word === word)?.value ?? word;
+          toggleReaction(r, value);
+        }}
+        picker={
+          picker === r.message_id
+            ? {
+                words: (vocab.data?.message_reaction_kinds ?? []).map((k) => k.label),
+                current: mine?.word,
+                onPick: (word) => {
+                  const value =
+                    vocab.data?.message_reaction_kinds.find((k) => k.label === word)?.value ?? word;
+                  toggleReaction(r, value);
+                },
+                onClose: () => setPicker(null),
+              }
+            : null
+        }
+        menuItems={r.deleted ? [] : menuFor(r)}
+      />,
+    );
+  }
+  if (!messages.isPending && !rows.length)
+    items.push(
+      <div
+        key="empty"
+        data-testid="thread-empty"
+        style={{
+          flex: 1,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: "var(--space-6) var(--space-4)",
+        }}
+      >
+        <p style={{ ...QUIET, textAlign: "center" }}>
+          {group && thread
+            ? "Nobody has written yet. " + membersLine(thread) + " are here."
+            : "Nothing yet. Say hello."}
+        </p>
+      </div>,
+    );
+  if (quietSignal)
+    items.push(
+      <div key="dia" style={{ padding: "var(--space-3) var(--space-4) 0" }}>
+        <DiaLine
+          state="done"
+          text={quietSignal.line}
+          escapeLabel="Dismiss"
+          onNotThis={() =>
+            void act(async () => {
+              await diaDismiss(quietSignal.signal_key);
+              await qc.invalidateQueries({ queryKey: SIGNALS_KEY(member.id) });
+            })
+          }
+        />
+      </div>,
+    );
+  if (catchingUp)
+    items.push(
+      <div
+        key="sync"
+        role="status"
+        aria-live="polite"
+        data-testid="catching-up"
+        style={{
+          display: "flex",
+          justifyContent: "center",
+          padding: "var(--space-3) var(--space-4)",
+        }}
+      >
+        <span style={{ fontSize: "var(--text-xs)", color: "var(--ink-3)" }}>
+          Catching up on what arrived while you were away
+        </span>
+      </div>,
+    );
+
+  const composer = (
+    <>
+      <input
+        ref={imageInput}
+        type="file"
+        accept="image/*"
+        hidden
+        onChange={(e) => {
+          onFile("image", e.target.files);
+          e.target.value = "";
+        }}
+      />
+      <input
+        ref={videoInput}
+        type="file"
+        accept="video/*"
+        hidden
+        onChange={(e) => {
+          onFile("video", e.target.files);
+          e.target.value = "";
+        }}
+      />
+      <MessageComposer
+        value={draft.text}
+        onChange={onText}
+        onSend={() => void sendNow()}
+        c={c}
+        quote={
+          draft.quote
+            ? {
+                from: draft.quote.own ? "yourself" : (draft.quote.author_name ?? ""),
+                text:
+                  draft.quote.body ??
+                  (draft.quote.kind === "voice"
+                    ? "Voice note"
+                    : draft.quote.kind === "media"
+                      ? "Image"
+                      : ""),
+              }
+            : null
+        }
+        onRemoveQuote={() => patch({ quote: null })}
+        editing={!!draft.editing}
+        onRemoveEdit={() => patch({ editing: null, text: "" })}
+        media={
+          draft.media
+            ? {
+                kind: draft.media.kind,
+                thumbnail:
+                  draft.media.kind === "image" ? (
+                    <MediaBlock kind="image" src={draft.media.url} alt="" ratio="1/1" />
+                  ) : (
+                    <MediaBlock kind="video" src={draft.media.url} ratio="1/1" />
+                  ),
+              }
+            : null
+        }
+        onRemoveMedia={() => {
+          if (draft.media) URL.revokeObjectURL(draft.media.url);
+          patch({ media: null, notice: false });
+        }}
+        voice={draft.voice ? { durationMs: draft.voice.durationMs } : null}
+        onRemoveVoice={() => patch({ voice: null })}
+        preview={
+          previewsOn && draft.preview ? (
+            <MediaBlock
+              kind="link"
+              src={draft.preview.url}
+              domain={draft.preview.domain}
+              title={draft.preview.title ?? undefined}
+              items={draft.preview.image ? [draft.preview.image] : []}
+            />
+          ) : undefined
+        }
+        onRemovePreview={() => patch({ preview: null, previewRemoved: draft.preview?.url ?? null })}
+        mentions={others}
+        onMention={(m) =>
+          setDraft((d) => ({ ...d, mentioned: [...d.mentioned.filter((x) => x.id !== m.id), m] }))
+        }
+        notice={draft.notice}
+        onNoticeOk={noticeOk}
+        error={draft.uploadError}
+        onErrorOk={() => patch({ uploadError: null })}
+        failed={!!draft.failed}
+        onRetry={() => void sendNow()}
+        limited={limited}
+        input={mode}
+        onAttach={attach}
+        recording={recorder.elapsed}
+        onRecordStart={startRecording}
+        onRecordStop={stopRecording}
+        onRecordCancel={recorder.cancel}
+      />
+    </>
+  );
+
+  const logNode = (
+    <div
+      ref={log}
+      role="log"
+      aria-label="Messages"
+      data-testid="message-log"
+      onScroll={(e) => {
+        if (e.currentTarget.scrollTop < 80) loadOlder();
+      }}
+      style={{
+        flex: 1,
+        minHeight: 0,
+        overflowY: "auto",
+        display: "flex",
+        flexDirection: "column",
+        gap: 2,
+        padding: "var(--space-2) 0 var(--space-3)",
+        overscrollBehavior: "contain",
+      }}
+    >
+      {items}
+    </div>
+  );
+
+  const strip = pinned ? (
+    <PinnedStrip
+      from={pinned.own ? "You" : firstName(pinned.author_name)}
+      text={pinned.body ?? (pinned.kind === "voice" ? "Voice note" : "Media")}
+      onOpen={() => {
+        setFocused(pinned.message_id ?? null);
+        const el = log.current?.querySelector<HTMLElement>(
+          '[data-msg="' + pinned.message_id + '"]',
+        );
+        if (el && log.current) log.current.scrollTop = el.offsetTop - 72;
+        window.setTimeout(() => setFocused(null), 2200);
+      }}
+    />
+  ) : null;
+
+  // Sheets (561, 584): one decision each.
+  const close = () => setSheet(null);
+  let sheetNode: ReactNode = null;
+  if (sheet?.kind === "info") {
+    const r = sheet.row;
+    const st = tickStatus(r.tick);
+    const readBy = receipts && r.read_by ? joinNames(nameList(r.read_by), !!r.read_by_others) : "";
+    const large = receipts && r.read_by === null && (r.tick ?? 0) >= 2 && group;
+    sheetNode = (
+      <Sheet
+        open
+        onClose={close}
+        variant={compact ? "sheet" : "drawer"}
+        label="Message info"
+        actions={
+          <Button variant="secondary" onClick={close}>
+            Done
+          </Button>
+        }
+      >
+        {sheetHead("Message info", close)}
+        <div style={SHEET_BODY} data-testid="message-info">
+          <div
+            style={{
+              padding: "var(--space-2) var(--space-3)",
+              borderRadius: "var(--radius-m)",
+              background: "var(--c-" + c + "-tint)",
+              fontSize: "var(--text-s)",
+              lineHeight: "var(--text-s-lh)",
+            }}
+          >
+            {r.body ?? (r.kind === "voice" ? "Voice note" : "Media")}
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-2)" }}>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "var(--space-2)",
+                fontSize: "var(--text-s)",
+              }}
+            >
+              <Ticks status={st === "read" ? "acknowledged" : st} c={c} receipts={receipts} />
+              {st === "stored" ? "Sent" : "Delivered"}
+            </div>
+            {readBy && (
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "var(--space-2)",
+                  fontSize: "var(--text-s)",
+                }}
+              >
+                <Ticks status="read" c={c} receipts />
+                Read by {readBy}
+              </div>
+            )}
+            {!receipts ? (
+              <p style={QUIET}>Read receipts are off, so nothing here says who has read it.</p>
+            ) : large ? (
+              <p style={QUIET}>This group is large, so who has read it is not shown.</p>
+            ) : null}
+          </div>
+        </div>
+      </Sheet>
+    );
+  } else if (sheet?.kind === "report") {
+    const r = sheet.row;
+    const first = firstName(r.author_name);
+    sheetNode = sheet.done ? (
+      <Sheet
+        open
+        onClose={close}
+        variant={compact ? "sheet" : "drawer"}
+        label="Reported"
+        actions={
+          <Button variant="secondary" onClick={close}>
+            Done
+          </Button>
+        }
+      >
+        {sheetHead("Reported", close)}
+        <div style={SHEET_BODY} data-testid="report-done">
+          <p style={QUIET}>
+            Thank you. Someone will look at this one message and nothing else from the conversation.{" "}
+            {first || "The member"} is not told.
+          </p>
+        </div>
+      </Sheet>
+    ) : (
+      <Sheet
+        open
+        onClose={close}
+        variant={compact ? "sheet" : "drawer"}
+        label="Report this message"
+        actions={
+          <>
+            <Button variant="secondary" onClick={close}>
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              data-destructive
+              disabled={!sheet.reason || busy}
+              onClick={() =>
+                void act(async () => {
+                  await reportMessage(r.message_id ?? "", sheet.reason, sheet.note.trim() || null);
+                  setSheet({ ...sheet, done: true });
+                })
+              }
+              data-testid="report-submit"
+            >
+              Submit
+            </Button>
+          </>
+        }
+      >
+        {sheetHead("Report this message", close)}
+        <div style={SHEET_BODY} data-testid="report-sheet">
+          <div
+            style={{
+              padding: "var(--space-2) var(--space-3)",
+              borderRadius: "var(--radius-m)",
+              background: "var(--bg-sunken)",
+              fontSize: "var(--text-xs)",
+              lineHeight: "var(--text-xs-lh)",
+              color: "var(--ink-2)",
+            }}
+          >
+            <b style={{ fontWeight: 500 }}>{r.author_name}: </b>
+            {r.body ?? (r.kind === "voice" ? "Voice note" : "Media")}
+          </div>
+          <Select
+            label="Reason"
+            options={[
+              { value: "", label: "Choose one" },
+              ...(vocab.data?.message_report_reasons ?? []).map((x) => ({
+                value: x.value,
+                label: x.label,
+              })),
+            ]}
+            value={sheet.reason}
+            onChange={(e) => setSheet({ ...sheet, reason: e.target.value })}
+          />
+          <Input
+            label="Anything else, optional"
+            value={sheet.note}
+            onChange={(e) => setSheet({ ...sheet, note: (e.target as HTMLInputElement).value })}
+          />
+        </div>
+      </Sheet>
+    );
+  } else if (sheet?.kind === "leave" && thread) {
+    const name = thread.name ?? "";
+    sheetNode = (
+      <Sheet
+        open
+        onClose={close}
+        variant={compact ? "sheet" : "drawer"}
+        label={"Leave " + name + "?"}
+        actions={
+          <>
+            <Button variant="secondary" onClick={close}>
+              Stay
+            </Button>
+            <Button
+              variant="danger"
+              data-destructive
+              disabled={busy}
+              onClick={() =>
+                void act(
+                  async () => {
+                    await leaveThread(threadId);
+                    close();
+                    await qc.invalidateQueries({ queryKey: THREADS_KEY(member.id) });
+                    void navigate({ to: "/messages" });
+                  },
+                  "You left " + name + ". Nothing was written in the conversation.",
+                )
+              }
+              data-testid="leave-confirm"
+            >
+              Leave
+            </Button>
+          </>
+        }
+      >
+        {sheetHead("Leave " + name + "?", close)}
+        <div style={SHEET_BODY}>
+          <p style={QUIET}>
+            You stop receiving messages from this group. Leaving writes nothing in the conversation.
+          </p>
+        </div>
+      </Sheet>
+    );
+  } else if (sheet?.kind === "manage" && thread) {
+    sheetNode = (
+      <ManageSheet
+        member={member}
+        thread={thread}
+        roster={roster.data ?? []}
+        compact={compact}
+        busy={busy}
+        onClose={close}
+        onAct={act}
+        onChanged={async () => {
+          await qc.invalidateQueries({ queryKey: ROSTER_KEY(threadId) });
+          await refreshThreadRow(qc, member.id, threadId);
+        }}
+      />
+    );
+  }
+
+  const toastNode = toast && (
+    <div style={toastStyle(tier)}>
+      <Toast>{toast}</Toast>
+    </div>
+  );
+
+  if (inPane)
+    return (
+      <div
+        data-messenger-thread
+        data-thread={threadId}
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          height: "100%",
+          minHeight: 0,
+          background: "var(--bg)",
+          fontFamily: "var(--font-sans)",
+          color: "var(--ink)",
+        }}
+      >
+        <div
+          data-thread-header
+          style={{
+            flex: "none",
+            display: "flex",
+            alignItems: "center",
+            gap: "var(--space-2)",
+            padding: "var(--space-3) 56px var(--space-3) var(--space-4)",
+            borderBottom: "1px solid var(--line)",
+            background: "var(--bg)",
+          }}
+        >
+          {mark}
+          <div style={{ display: "flex", flexDirection: "column", minWidth: 0, flex: 1, gap: 1 }}>
+            <span
+              style={{
+                fontSize: "var(--text-m)",
+                fontWeight: 500,
+                lineHeight: 1.3,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {thread?.name ?? ""}
+            </span>
+            {subtitle && (
+              <span
+                style={{
+                  fontSize: "var(--text-xs)",
+                  color: "var(--ink-3)",
+                  lineHeight: 1.35,
+                  textWrap: "pretty",
+                }}
+              >
+                {subtitle}
+              </span>
+            )}
+          </div>
+          {control}
+        </div>
+        {strip}
+        {logNode}
+        {!invited && composer}
+        {sheetNode}
+        {toastNode}
+      </div>
+    );
+
+  return (
+    <>
+      <Pane
+        tier={tier}
+        title={thread?.name ?? "Conversation"}
+        onBack={() => void navigate({ to: "/messages" })}
+        backLabel="Back to Messages"
+        avatar={mark}
+        subtitle={subtitle || undefined}
+        control={control}
+        style={{ flex: 1, minHeight: 0, height: "100%" }}
+      >
+        <div
+          data-messenger-thread
+          data-thread={threadId}
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            height: "100%",
+            minHeight: 0,
+            background: "var(--bg)",
+          }}
+        >
+          {strip}
+          {logNode}
+          {!invited && (
+            <div
+              style={{
+                flex: "none",
+                paddingBottom: "env(safe-area-inset-bottom)",
+                background: "var(--bg)",
+              }}
+            >
+              {composer}
+            </div>
+          )}
+        </div>
+      </Pane>
+      {sheetNode}
+      {toastNode}
+    </>
+  );
+}
+
+function ManageSheet({
+  member,
+  thread,
+  roster,
+  compact,
+  busy,
+  onClose,
+  onAct,
+  onChanged,
+}: {
+  member: Member;
+  thread: ThreadView;
+  roster: RosterMember[];
+  compact: boolean;
+  busy: boolean;
+  onClose: () => void;
+  onAct: (fn: () => Promise<unknown>, done?: string) => Promise<void>;
+  onChanged: () => Promise<void>;
+}) {
+  const threadId = thread.thread_id ?? "";
+  const network = useQuery({ queryKey: ["connect", "network", member.id], queryFn: loadNetwork });
+  const blocks = useQuery({
+    queryKey: ["blocks", member.id],
+    queryFn: async () => {
+      const sb = getSupabase();
+      if (!sb) return [] as string[];
+      const { data } = await sb
+        .from("member_blocks")
+        .select("blocked_id")
+        .eq("blocker_id", member.id);
+      return (data ?? []).map((b) => b.blocked_id);
+    },
+  });
+  const blocked = new Set(blocks.data ?? []);
+  const active = roster.filter((r) => r.state === "active" && r.id !== member.id);
+  const invitedRows = roster.filter((r) => r.state === "invited");
+  const inThread = new Set(
+    roster.filter((r) => r.state === "active" || r.state === "invited").map((r) => r.id),
+  );
+  const connections = (network.data?.connections ?? []).filter(
+    (c) => !inThread.has(c.id) && !blocked.has(c.id),
+  );
+  const row = (name: string, note: string | null, ctl: ReactNode, key: string) => (
+    <div
+      key={key}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: "var(--space-3)",
+        minHeight: "var(--target-primary)",
+      }}
+    >
+      <Avatar name={name} size={32} />
+      <span
+        style={{
+          flex: 1,
+          minWidth: 0,
+          fontSize: "var(--text-s)",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+        }}
+      >
+        {name}
+        {note && <span style={{ color: "var(--ink-3)" }}>, {note}</span>}
+      </span>
+      {ctl}
+    </div>
+  );
+  const name = thread.name ?? "";
+  return (
+    <Sheet
+      open
+      onClose={onClose}
+      variant={compact ? "sheet" : "drawer"}
+      label={"Manage " + name}
+      actions={
+        <Button variant="secondary" onClick={onClose}>
+          Done
+        </Button>
+      }
+    >
+      {sheetHead("Manage " + name, onClose)}
+      <div style={SHEET_BODY} data-testid="manage-sheet">
+        {/* Rename: 41-A carries no rename wrapper for a group, so the extraction's Name field and
+            Rename act are not drawn; named in the closing report. */}
+        <Switch
+          style={{ display: "flex" }}
+          label="History for new members. Off: a member who joins sees messages from then on."
+          checked={!!thread.history_visible_to_new}
+          disabled={busy}
+          onChange={(v) =>
+            void onAct(async () => {
+              await setHistory(threadId, v);
+              await onChanged();
+            })
+          }
+        />
+        <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-1)" }}>
+          <span style={CAPS}>Members</span>
+          {row(member.name, "you, lead", null, "me")}
+          {active.map((r) =>
+            row(
+              r.name,
+              blocked.has(r.id)
+                ? "blocked by you"
+                : r.role === "lead" || r.role === "co_lead"
+                  ? "lead"
+                  : null,
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={busy}
+                onClick={() =>
+                  void onAct(
+                    async () => {
+                      await removeMember(threadId, r.id);
+                      await onChanged();
+                    },
+                    firstName(r.name) + " was removed.",
+                  )
+                }
+              >
+                Remove
+              </Button>,
+              r.id,
+            ),
+          )}
+          {invitedRows.map((r) =>
+            row(
+              r.name,
+              "invited",
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={busy}
+                onClick={() =>
+                  void onAct(async () => {
+                    await removeMember(threadId, r.id);
+                    await onChanged();
+                  })
+                }
+              >
+                Withdraw
+              </Button>,
+              r.id,
+            ),
+          )}
+        </div>
+        {connections.length > 0 && (
+          <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-1)" }}>
+            <span style={CAPS}>Invite from your connections</span>
+            {connections.map((cx) =>
+              row(
+                cx.name,
+                null,
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  c="connect"
+                  disabled={busy}
+                  onClick={() =>
+                    void onAct(
+                      async () => {
+                        await inviteMember(threadId, cx.id);
+                        await onChanged();
+                      },
+                      firstName(cx.name) + " is invited and shows as invited until they accept.",
+                    )
+                  }
+                >
+                  Invite
+                </Button>,
+                cx.id,
+              ),
+            )}
+          </div>
+        )}
+        <p style={QUIET}>Pin a message from its own menu. Only one message is pinned at a time.</p>
+      </div>
+    </Sheet>
+  );
+}

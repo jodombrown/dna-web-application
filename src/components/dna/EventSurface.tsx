@@ -48,6 +48,8 @@ import {
 } from "@/lib/event-page";
 import { setSubscription } from "@/lib/discovery";
 import { deliverImageUrl } from "@/lib/media";
+import { eventThreadOpen, inviteAccept, openOneToOne, refusalOf } from "@/lib/messenger";
+import { getSupabase } from "@/lib/supabase";
 import { useBackToOrigin } from "@/lib/origin";
 import { PaneShareContext } from "@/lib/pane-share";
 import { useTier } from "@/lib/tier";
@@ -154,6 +156,55 @@ export function EventSurface({
   });
   const page = pageQ.data ?? null;
   const hostId = page?.host?.id ?? null;
+  // Brief 14 (SPEC 41-14 Part C item 4; 1334): the event thread. The host opens it through
+  // messenger_event_thread_open; an attendee who is going joins it through
+  // messenger_thread_invite_accept, which needs the thread's id, and the id is readable only once
+  // the member is in the thread (threads_member_select), so an attendee's Message resolves what
+  // they can read and otherwise reports the refusal line (closing report). Message host opens the
+  // pair's thread through messenger_open_one_to_one.
+  const eventThread = useQuery({
+    queryKey: ["messenger", "event-thread", member.id, id],
+    queryFn: async () => {
+      const sb = getSupabase();
+      if (!sb) return null;
+      const { data } = await sb
+        .from("threads")
+        .select("id")
+        .eq("kind", "event_thread")
+        .eq("anchor_kind", "event")
+        .eq("anchor_id", id)
+        .maybeSingle();
+      return data?.id ?? null;
+    },
+    enabled: !!page && !page.viewer.is_host,
+  });
+  const messageEvent = () =>
+    void (async () => {
+      try {
+        let thread: string | null;
+        if (page?.viewer.is_host) thread = await eventThreadOpen(id);
+        else {
+          thread = eventThread.data ?? null;
+          if (!thread) throw refusalOf({ message: "not_a_member" });
+          await inviteAccept(thread);
+        }
+        if (thread) await navigate({ to: "/messages/$thread", params: { thread } });
+      } catch (e) {
+        setToast(refusalOf(e).line);
+        window.setTimeout(() => setToast(null), 2600);
+      }
+    })();
+  const messageHost = () =>
+    void (async () => {
+      if (!hostId) return;
+      try {
+        const thread = await openOneToOne(hostId);
+        await navigate({ to: "/messages/$thread", params: { thread } });
+      } catch (e) {
+        setToast(refusalOf(e).line);
+        window.setTimeout(() => setToast(null), 2600);
+      }
+    })();
   const images = useQuery({
     queryKey: [EVENT_PAGE_KEY, "images", member.id, id, page?.event.status ?? ""],
     queryFn: () => resolveImages(page as EventPage),
@@ -469,16 +520,27 @@ export function EventSurface({
         links={page.presented_by?.links}
         action={
           hostId && hostId !== member.id ? (
-            <Button
-              variant="secondary"
-              size="sm"
-              disabled={follow.isPending || following.isPending}
-              onClick={() => follow.mutate(!following.data)}
-              data-testid="event-follow"
-              aria-pressed={!!following.data}
-            >
-              {following.data ? "Following" : "Follow"}
-            </Button>
+            <span style={{ display: "inline-flex", gap: 8, flexWrap: "wrap" }}>
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={follow.isPending || following.isPending}
+                onClick={() => follow.mutate(!following.data)}
+                data-testid="event-follow"
+                aria-pressed={!!following.data}
+              >
+                {following.data ? "Following" : "Follow"}
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                c="convene"
+                onClick={messageHost}
+                data-testid="event-message-host"
+              >
+                Message host
+              </Button>
+            </span>
           ) : undefined
         }
       />
@@ -585,6 +647,14 @@ export function EventSurface({
           </Facts>
 
           {!bar && rsvpEl}
+          {/* Brief 14 (1334): the event thread, for the host and for a member who is going. */}
+          {!ev.cancelled && (page.viewer.is_host || (going && !!eventThread.data)) && (
+            <div data-event-message>
+              <Button c="convene" size="sm" onClick={messageEvent} data-testid="event-message">
+                Message
+              </Button>
+            </div>
+          )}
 
           {/* 8. Body. */}
           {page.post && <EventBody>{page.post.body}</EventBody>}

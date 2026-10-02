@@ -49,6 +49,8 @@ import { assetBase, C_LABEL, C_ORDER, type C } from "@/components/strand/cmeta";
 import { ProfileBlockControl } from "@/components/dna/ProfileBlockControl";
 import { toastStyle } from "@/components/dna/FeedSurface";
 import { IntroSheet } from "@/components/dna/IntroSheet";
+import { MessageRequestSheet } from "@/components/dna/MessageRequestSheet";
+import { openOneToOne, refusalOf, requestSend } from "@/lib/messenger";
 import { useAuth } from "@/lib/auth";
 import { sendIntroduction } from "@/lib/connect";
 import { blockMember, unblockMember } from "@/lib/blocks";
@@ -564,6 +566,18 @@ export function ProfileSurface({ handle, edit, asPublic }: ProfileSurfaceProps) 
   // The message is optional here (ruling 401); the request sheet Design draws under 401 replaces
   // this sheet when it ships.
   const [introOpen, setIntroOpen] = useState(false);
+  // Brief 14 (SPEC 41-14 Part C item 4; lifts 117): Message on a connection's profile opens the
+  // pair's thread through messenger_open_one_to_one; Send a request on a non-connection's opens the
+  // request sheet, whose write is messenger_request_send (1330, 1341). Reachability is the server's
+  // to decide: the sheet shows for every non-connection and a refusal reads as its line.
+  const [requestOpen, setRequestOpen] = useState(false);
+  const onMessage = () => {
+    if (!profile) return;
+    void openOneToOne(profile.member.id)
+      .then((thread) => navigate({ to: "/messages/$thread", params: { thread } }))
+      .catch((e) => toastMsg(refusalOf(e).line));
+  };
+  const onRequest = () => setRequestOpen(true);
   const [introMessage, setIntroMessage] = useState("");
   const [introSending, setIntroSending] = useState(false);
   const connectWith = () => {
@@ -963,6 +977,8 @@ export function ProfileSurface({ handle, edit, asPublic }: ProfileSurfaceProps) 
           rel={rel}
           first={first}
           connectWith={connectWith}
+          onMessage={onMessage}
+          onRequest={onRequest}
           relAct={relAct}
           onBlock={block}
           onUnblock={unblock}
@@ -1013,6 +1029,28 @@ export function ProfileSurface({ handle, edit, asPublic }: ProfileSurfaceProps) 
       <Toast>{toast}</Toast>
     </div>
   );
+  const requestNode = visitor && profile && (
+    <MessageRequestSheet
+      open={requestOpen}
+      member={{
+        id: profile.member.id,
+        name: profile.member.name,
+        headline: profile.member.headline,
+        stance: profile.member.stance_label ?? null,
+        avatarUrl: profile.avatarUrl,
+      }}
+      compact={compact}
+      onClose={() => setRequestOpen(false)}
+      onSend={async (body) => {
+        try {
+          await requestSend(profile.member.id, body);
+        } catch (e) {
+          throw refusalOf(e);
+        }
+        toastMsg("Request sent to " + first + ".");
+      }}
+    />
+  );
   // Ruling 417: the introduction sheet behind "Connect with {first}", signed-in visitors only.
   const introNode = visitor && profile && (
     <IntroSheet
@@ -1038,6 +1076,7 @@ export function ProfileSurface({ handle, edit, asPublic }: ProfileSurfaceProps) 
         {body}
         {toastNode}
         {introNode}
+        {requestNode}
       </>
     );
   }
@@ -1208,6 +1247,8 @@ type BodyProps = {
   rel: ProfileView["relationship"];
   first: string;
   connectWith: () => void;
+  onMessage: () => void;
+  onRequest: () => void;
   relAct: (fn: () => Promise<void>, done?: string) => Promise<void>;
   onBlock: () => Promise<void>;
   onUnblock: () => Promise<void>;
@@ -1274,6 +1315,16 @@ function ProfileBody(p: BodyProps) {
                     Connect with {p.first}
                   </Button>
                 )}
+                {p.rel.state === "none" && (
+                  <Button
+                    variant="secondary"
+                    c="connect"
+                    onClick={p.onRequest}
+                    data-testid="send-request"
+                  >
+                    Send a request
+                  </Button>
+                )}
                 {p.rel?.state === "sent" && (
                   <Button
                     variant="secondary"
@@ -1305,6 +1356,11 @@ function ProfileBody(p: BodyProps) {
                       Decline
                     </Button>
                   </>
+                )}
+                {p.rel?.state === "connected" && (
+                  <Button c="connect" onClick={p.onMessage} data-testid="profile-message">
+                    Message
+                  </Button>
                 )}
                 {p.rel?.state === "connected" && (
                   <span
