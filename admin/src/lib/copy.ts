@@ -2,8 +2,10 @@
 export const ADMIN_COPY = {
   signInHeading: "DNA Admin",
   signInButton: "Sign in",
-  resetBefore: "Forgot your password? Reset it at ",
-  resetHost: "app.diasporanetwork.africa/reset",
+  /** Ruling 1329: the address itself comes from src/lib/contact.ts (387), never from here. */
+  resetBefore: "Forgot your password? Email ",
+  resetAfter: " and we will reset it.",
+  resetSubject: "Admin password reset",
   mismatch: "That email and password do not match.",
   refusalHeading: "No admin access",
   refusalLine: "This account does not have access to the DNA admin console.",

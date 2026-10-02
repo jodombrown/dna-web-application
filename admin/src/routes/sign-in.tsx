@@ -1,11 +1,13 @@
 // The admin host's sign-in (handoff 40-B section 4, ruling 1291): the member app's SignInForm,
-// rendered with no sign-up, no provider buttons and the admin copy. Password reset stays in the
-// member app, so the line under the field names it and nothing here resets a password.
+// rendered with no sign-up, no provider buttons and the admin copy. Nothing here resets a
+// password: the line under the field asks for an email to support (ruling 1329), its address and
+// its mailto from the contact module under ruling 387, never a literal here.
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, type FormEvent } from "react";
 import { AuthPage } from "@/components/dna/AuthSurface";
 import { SignInForm, useSignInForm } from "@/components/dna/SignInForm";
 import { useAuth } from "@/lib/auth";
+import { CONTACT, mailto } from "@/lib/contact";
 import { getSupabase } from "@/lib/supabase";
 import { ADMIN_COPY } from "../lib/copy";
 
@@ -42,12 +44,13 @@ function AdminSignIn() {
           >
             {ADMIN_COPY.resetBefore}
             <a
-              href={"https://" + ADMIN_COPY.resetHost}
-              rel="noopener"
+              href={mailto("support", ADMIN_COPY.resetSubject)}
+              data-testid="admin-support-link"
               style={{ color: "var(--ink)", fontWeight: 500, textUnderlineOffset: 3 }}
             >
-              {ADMIN_COPY.resetHost}
+              {CONTACT.support.address}
             </a>
+            {ADMIN_COPY.resetAfter}
           </p>
         }
       />
