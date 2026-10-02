@@ -1,7 +1,7 @@
 // Generated from the canonical Supabase project (dgspjevjoblujcoljvkn) with the Supabase MCP
-// generate_typescript_types tool on handoff 40-A's branch (#84, Brief 12 12A), after 20261001120000
-// was applied and recorded in the same transaction as its change, and its recorded text read back at
-// the file's drift md5 (121aa5e22703b508bf95a5b83b8f0ea5, the file at 40e5f32).
+// generate_typescript_types tool on handoff 40-C's branch (#87, Brief 12 12C part 1), after
+// 20261002120000 was applied and recorded in the same transaction as its change, and its recorded
+// text read back at the file's drift md5 (529f5a791eab9b95715129c98471b044, the file at 7f328a7).
 //
 // Nothing here is hand-written except this header and the `Views` helper at the end, which the
 // generator drops and every regeneration restores (`src/lib/feed.ts` reads it). The regeneration
@@ -11,15 +11,21 @@
 // file byte for byte, and `tests/migration-drift.cjs` reads it, so the generator returns it. Every
 // object the generator returns is explained by a migration in this tree, so nothing is left out.
 //
-// What 20261001120000 changes here (1177, 1178, 1265, 1266): the tables `platform_role_kinds`, the
-// role vocabulary, `platform_roles`, who holds which role, and the two append-only logs
-// `admin_actions` and `admin_reads`; the functions `admin_session_state`, `admin_grant_role` and
-// `admin_revoke_role`, and `live_arms_admin_member`, which the generator lists because it is in
-// `public` although only `live_arms` may execute it; `editors` is gone, folded into `platform_roles`,
-// so `convene_picks.picked_by` now relates to `members` rather than `editors`. `vocabularies()` gains
-// `platform_role_kinds` inside its jsonb answer, which the generator does not see; its first reader is
-// the admin app (handoff 40-B), and `src/lib/vocabularies.ts` is unchanged by 12A. Earlier
-// regenerations' additions stand as their headers described them.
+// What 20261002120000 changes here (1179, 1280 to 1288, 1295 to 1300): the tables
+// `member_profile_history`, `surface_event_kinds`, `surface_events`, `partner_acts`,
+// `mobilization_ledger`, `surface_event_rollups` and `admin_catalogue`; `world_countries.is_african`;
+// and the function `record_event`, the one client-callable writer. `surface_events_2026_10` and
+// `surface_events_2026_11` are the two monthly partitions `private.surface_events_ensure_partitions`
+// had made when this was taken: the generator lists them because they are tables in `public`, no API
+// role holds a grant on them, nothing reads them by name, and a later regeneration carries whichever
+// months exist then. No `Views` entry changes. The private schema's functions (`profile_at`,
+// `derive_mobilization_v1`, the rollup and partition helpers) are absent by design, as before.
+//
+// What 20261001120000 changed (1177, 1178, 1265, 1266): the tables `platform_role_kinds`,
+// `platform_roles`, `admin_actions` and `admin_reads`; the functions `admin_session_state`,
+// `admin_grant_role`, `admin_revoke_role` and `live_arms_admin_member`; `editors` gone, so
+// `convene_picks.picked_by` relates to `members`. Earlier regenerations' additions stand as their
+// headers described them.
 //
 // The private functions the surfaces read are absent by design: the private schema is not exposed by
 // PostgREST, so the generator does not see it and no surface may reach it.
@@ -70,6 +76,36 @@ export type Database = {
           role_at_time?: string | null;
           target_id?: string | null;
           target_kind?: string;
+        };
+        Relationships: [];
+      };
+      admin_catalogue: {
+        Row: {
+          admin_reason: string | null;
+          admin_treatment: string;
+          dia_reason: string | null;
+          dia_treatment: string;
+          recorded_at: string;
+          schema_name: string;
+          table_name: string;
+        };
+        Insert: {
+          admin_reason?: string | null;
+          admin_treatment?: string;
+          dia_reason?: string | null;
+          dia_treatment?: string;
+          recorded_at?: string;
+          schema_name: string;
+          table_name: string;
+        };
+        Update: {
+          admin_reason?: string | null;
+          admin_treatment?: string;
+          dia_reason?: string | null;
+          dia_treatment?: string;
+          recorded_at?: string;
+          schema_name?: string;
+          table_name?: string;
         };
         Relationships: [];
       };
@@ -1540,6 +1576,44 @@ export type Database = {
           },
         ];
       };
+      member_profile_history: {
+        Row: {
+          current_country: string | null;
+          current_place: string | null;
+          id: number;
+          member_id: string;
+          source: string;
+          stance: Database["public"]["Enums"]["stance"];
+          valid_from: string;
+        };
+        Insert: {
+          current_country?: string | null;
+          current_place?: string | null;
+          id?: never;
+          member_id: string;
+          source: string;
+          stance: Database["public"]["Enums"]["stance"];
+          valid_from?: string;
+        };
+        Update: {
+          current_country?: string | null;
+          current_place?: string | null;
+          id?: never;
+          member_id?: string;
+          source?: string;
+          stance?: Database["public"]["Enums"]["stance"];
+          valid_from?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "member_profile_history_member_id_fkey";
+            columns: ["member_id"];
+            isOneToOne: false;
+            referencedRelation: "members";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       member_rail_state: {
         Row: {
           collapsed: boolean;
@@ -1856,6 +1930,63 @@ export type Database = {
           },
         ];
       };
+      mobilization_ledger: {
+        Row: {
+          act_key: string;
+          bridging: boolean;
+          c_category: Database["public"]["Enums"]["c_category"];
+          corridor_ids: string[];
+          counterparty_id: string | null;
+          counterparty_side: string | null;
+          counterparty_stance: Database["public"]["Enums"]["stance"] | null;
+          definition_version: number;
+          depth: string;
+          derived_at: string;
+          direction: string | null;
+          member_id: string;
+          member_side: string;
+          member_stance: Database["public"]["Enums"]["stance"];
+          occurred_at: string;
+          source: string;
+        };
+        Insert: {
+          act_key: string;
+          bridging?: boolean;
+          c_category: Database["public"]["Enums"]["c_category"];
+          corridor_ids?: string[];
+          counterparty_id?: string | null;
+          counterparty_side?: string | null;
+          counterparty_stance?: Database["public"]["Enums"]["stance"] | null;
+          definition_version: number;
+          depth: string;
+          derived_at?: string;
+          direction?: string | null;
+          member_id: string;
+          member_side: string;
+          member_stance: Database["public"]["Enums"]["stance"];
+          occurred_at: string;
+          source: string;
+        };
+        Update: {
+          act_key?: string;
+          bridging?: boolean;
+          c_category?: Database["public"]["Enums"]["c_category"];
+          corridor_ids?: string[];
+          counterparty_id?: string | null;
+          counterparty_side?: string | null;
+          counterparty_stance?: Database["public"]["Enums"]["stance"] | null;
+          definition_version?: number;
+          depth?: string;
+          derived_at?: string;
+          direction?: string | null;
+          member_id?: string;
+          member_side?: string;
+          member_stance?: Database["public"]["Enums"]["stance"];
+          occurred_at?: string;
+          source?: string;
+        };
+        Relationships: [];
+      };
       notifications: {
         Row: {
           actor_id: string | null;
@@ -1945,6 +2076,50 @@ export type Database = {
             columns: ["space_id"];
             isOneToOne: false;
             referencedRelation: "spaces";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      partner_acts: {
+        Row: {
+          c_category: Database["public"]["Enums"]["c_category"];
+          confirmed_by: string | null;
+          created_at: string;
+          depth: string;
+          id: string;
+          member_id: string;
+          occurred_at: string;
+          source: string;
+          source_ref: string;
+        };
+        Insert: {
+          c_category: Database["public"]["Enums"]["c_category"];
+          confirmed_by?: string | null;
+          created_at?: string;
+          depth: string;
+          id?: string;
+          member_id: string;
+          occurred_at: string;
+          source: string;
+          source_ref: string;
+        };
+        Update: {
+          c_category?: Database["public"]["Enums"]["c_category"];
+          confirmed_by?: string | null;
+          created_at?: string;
+          depth?: string;
+          id?: string;
+          member_id?: string;
+          occurred_at?: string;
+          source?: string;
+          source_ref?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "partner_acts_member_id_fkey";
+            columns: ["member_id"];
+            isOneToOne: false;
+            referencedRelation: "members";
             referencedColumns: ["id"];
           },
         ];
@@ -2496,16 +2671,231 @@ export type Database = {
         };
         Relationships: [];
       };
+      surface_event_kinds: {
+        Row: {
+          allowed_props: string[];
+          area: string;
+          feeds: string;
+          kind: string;
+          position: number;
+          public: boolean;
+        };
+        Insert: {
+          allowed_props?: string[];
+          area: string;
+          feeds: string;
+          kind: string;
+          position: number;
+          public?: boolean;
+        };
+        Update: {
+          allowed_props?: string[];
+          area?: string;
+          feeds?: string;
+          kind?: string;
+          position?: number;
+          public?: boolean;
+        };
+        Relationships: [];
+      };
+      surface_event_rollups: {
+        Row: {
+          app: string;
+          events: number;
+          hour: string;
+          kind: string;
+          members: number;
+          rolled_at: string;
+          sessions: number;
+          surface: string;
+        };
+        Insert: {
+          app: string;
+          events: number;
+          hour: string;
+          kind: string;
+          members: number;
+          rolled_at?: string;
+          sessions: number;
+          surface: string;
+        };
+        Update: {
+          app?: string;
+          events?: number;
+          hour?: string;
+          kind?: string;
+          members?: number;
+          rolled_at?: string;
+          sessions?: number;
+          surface?: string;
+        };
+        Relationships: [];
+      };
+      surface_events: {
+        Row: {
+          app: string;
+          c_category: Database["public"]["Enums"]["c_category"] | null;
+          id: number;
+          kind: string;
+          member_id: string | null;
+          object_id: string | null;
+          object_kind: Database["public"]["Enums"]["anchor_kind"] | null;
+          occurred_at: string;
+          props: Json;
+          referrer_surface: string | null;
+          session_id: string;
+          surface: string;
+          viewport: string | null;
+        };
+        Insert: {
+          app: string;
+          c_category?: Database["public"]["Enums"]["c_category"] | null;
+          id?: never;
+          kind: string;
+          member_id?: string | null;
+          object_id?: string | null;
+          object_kind?: Database["public"]["Enums"]["anchor_kind"] | null;
+          occurred_at?: string;
+          props?: Json;
+          referrer_surface?: string | null;
+          session_id: string;
+          surface: string;
+          viewport?: string | null;
+        };
+        Update: {
+          app?: string;
+          c_category?: Database["public"]["Enums"]["c_category"] | null;
+          id?: never;
+          kind?: string;
+          member_id?: string | null;
+          object_id?: string | null;
+          object_kind?: Database["public"]["Enums"]["anchor_kind"] | null;
+          occurred_at?: string;
+          props?: Json;
+          referrer_surface?: string | null;
+          session_id?: string;
+          surface?: string;
+          viewport?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "surface_events_kind_fkey";
+            columns: ["kind"];
+            isOneToOne: false;
+            referencedRelation: "surface_event_kinds";
+            referencedColumns: ["kind"];
+          },
+        ];
+      };
+      surface_events_2026_10: {
+        Row: {
+          app: string;
+          c_category: Database["public"]["Enums"]["c_category"] | null;
+          id: number;
+          kind: string;
+          member_id: string | null;
+          object_id: string | null;
+          object_kind: Database["public"]["Enums"]["anchor_kind"] | null;
+          occurred_at: string;
+          props: Json;
+          referrer_surface: string | null;
+          session_id: string;
+          surface: string;
+          viewport: string | null;
+        };
+        Insert: {
+          app: string;
+          c_category?: Database["public"]["Enums"]["c_category"] | null;
+          id?: never;
+          kind: string;
+          member_id?: string | null;
+          object_id?: string | null;
+          object_kind?: Database["public"]["Enums"]["anchor_kind"] | null;
+          occurred_at?: string;
+          props?: Json;
+          referrer_surface?: string | null;
+          session_id: string;
+          surface: string;
+          viewport?: string | null;
+        };
+        Update: {
+          app?: string;
+          c_category?: Database["public"]["Enums"]["c_category"] | null;
+          id?: never;
+          kind?: string;
+          member_id?: string | null;
+          object_id?: string | null;
+          object_kind?: Database["public"]["Enums"]["anchor_kind"] | null;
+          occurred_at?: string;
+          props?: Json;
+          referrer_surface?: string | null;
+          session_id?: string;
+          surface?: string;
+          viewport?: string | null;
+        };
+        Relationships: [];
+      };
+      surface_events_2026_11: {
+        Row: {
+          app: string;
+          c_category: Database["public"]["Enums"]["c_category"] | null;
+          id: number;
+          kind: string;
+          member_id: string | null;
+          object_id: string | null;
+          object_kind: Database["public"]["Enums"]["anchor_kind"] | null;
+          occurred_at: string;
+          props: Json;
+          referrer_surface: string | null;
+          session_id: string;
+          surface: string;
+          viewport: string | null;
+        };
+        Insert: {
+          app: string;
+          c_category?: Database["public"]["Enums"]["c_category"] | null;
+          id?: never;
+          kind: string;
+          member_id?: string | null;
+          object_id?: string | null;
+          object_kind?: Database["public"]["Enums"]["anchor_kind"] | null;
+          occurred_at?: string;
+          props?: Json;
+          referrer_surface?: string | null;
+          session_id: string;
+          surface: string;
+          viewport?: string | null;
+        };
+        Update: {
+          app?: string;
+          c_category?: Database["public"]["Enums"]["c_category"] | null;
+          id?: never;
+          kind?: string;
+          member_id?: string | null;
+          object_id?: string | null;
+          object_kind?: Database["public"]["Enums"]["anchor_kind"] | null;
+          occurred_at?: string;
+          props?: Json;
+          referrer_surface?: string | null;
+          session_id?: string;
+          surface?: string;
+          viewport?: string | null;
+        };
+        Relationships: [];
+      };
       world_countries: {
         Row: {
+          is_african: boolean;
           name: string;
           position: number;
         };
         Insert: {
+          is_african?: boolean;
           name: string;
           position: number;
         };
         Update: {
+          is_african?: boolean;
           name?: string;
           position?: number;
         };
@@ -2659,6 +3049,20 @@ export type Database = {
       public_attestations: { Args: never; Returns: Json };
       publish_post: { Args: { payload: Json }; Returns: string };
       rate_limit_check: { Args: { p_action: string }; Returns: boolean };
+      record_event: {
+        Args: {
+          p_app: string;
+          p_kind: string;
+          p_object_id: string;
+          p_object_kind: Database["public"]["Enums"]["anchor_kind"];
+          p_props: Json;
+          p_referrer: string;
+          p_session: string;
+          p_surface: string;
+          p_viewport: string;
+        };
+        Returns: undefined;
+      };
       remove_event_party: { Args: { p_party: string }; Returns: Json };
       resolve_event_link: {
         Args: { p_kind: string; p_segment: string };
