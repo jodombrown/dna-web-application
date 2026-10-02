@@ -2880,13 +2880,11 @@ async function runLiveDbArms({ record, skip }) {
           );
           return r.ok ? r.rows[0] : r;
         };
+        // The member's own stance and place come from profile_view, the one read projection: since
+        // Fix PR 01 (212 to 216) authenticated holds no column select on members for any of the three.
         await actAs(client, member.id);
-        const own = await attempt(
-          client,
-          "select stance::text as stance, current_country, current_place from public.members where id = $1::uuid",
-          [member.id],
-        );
-        const home = own.ok ? own.rows[0] : null;
+        const own = await attempt(client, "select public.profile_view() -> 'member' as m");
+        const home = own.ok && own.rows[0] && own.rows[0].m ? own.rows[0].m : null;
         const accra = await sideAt("now()");
         await actAs(client, member.id);
         const move = await attempt(
