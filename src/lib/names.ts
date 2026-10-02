@@ -1,17 +1,16 @@
-// Brief 14 (ruling 1317): names up to three then "and others", never a number. The projections
-// already cut the list at three and answer `others` beside it (private.messenger_names); this joins
-// what they answer, in words, the one way every Messenger surface reads it. Ported from the
-// prototype's `B14.names` and `B14.upToThree`.
+// The platform's one name-joiner (ruled in Chat, handoff 41-C): every surface that turns a list of
+// names or words into a sentence calls `joinNames`, and no component keeps a copy. MemberCard's
+// mutuals, Discovery's going names, places and homes, and the Messenger's member lines, read-by,
+// reactions and request context all read it. Ruling 1317's names up to three then "and others"
+// arrive from the projections already cut at three with `others` beside them
+// (private.messenger_names); with `others` true the shape is Discovery's, the names comma-joined
+// then one "and others" ("Ama, Kofi, Nana and others"), never ", and others".
 
-/** "A", "A and B", "A, B and C"; with others true, "A, B and C, and others". */
+/** "A", "A and B", "A, B and C"; with others true, "A and others", "A, B, C and others". */
 export function joinNames(names: readonly string[], others = false): string {
-  const list = names.filter((n) => !!n);
-  let out: string;
-  if (list.length === 0) out = "";
-  else if (list.length === 1) out = list[0] as string;
-  else out = list.slice(0, -1).join(", ") + " and " + list[list.length - 1];
-  if (others) out = out ? out + ", and others" : "others";
-  return out;
+  if (others) return names.length ? names.join(", ") + " and others" : "others";
+  if (names.length <= 1) return names[0] ?? "";
+  return names.slice(0, -1).join(", ") + " and " + names[names.length - 1];
 }
 
 /** The first word of a member's name, for the "{first name}: …" lines the brief writes. */

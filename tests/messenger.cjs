@@ -35,10 +35,6 @@ const IGNORED_CONSOLE = new RegExp(
     "ERR_NAME_NOT_RESOLVED",
     "ERR_FAILED",
     "\\b(?:400|406)\\b",
-    // The mock serves REST and RPC, never the Realtime socket: the join is refused or the socket
-    // cannot open, which is the network's line and not the page's.
-    "realtime\\/v1\\/websocket",
-    "WebSocket",
   ].join("|"),
 );
 
@@ -137,7 +133,7 @@ const LAYOUT_CHECKS = [
   "opening a row reaches /messages/{thread}: ringed in the Pane at expanded, its own route on Pane's bar with Back to Messages, the subtitle and no dock below (1023, 1368, 1369)",
   "the thread reads day separators, a quote, a reaction as word and name, edited, a deleted line, and ticks named Sent or Delivered with receipts off (1336, 1343, 1345, 1370)",
   "the composer sits inside the viewport with Attach, the field and the mic (1.6, 1368)",
-  "a group thread reads the pinned strip and the collapsed blocked line (1349, 1371)",
+  "a group thread reads its members and a reaction's names as names then one and others, the pinned strip and the collapsed blocked line (1317, 1349, 1370, 1371)",
   "nothing the Messenger holds is in localStorage or sessionStorage (1351)",
   "no horizontal overflow on the list or the thread (61)",
   "no page error (316)",
@@ -361,12 +357,22 @@ async function runMessengerLayout(browserType, bname, vp, theme) {
     await page.goto(BASE + "/messages/" + db.messenger.ids.group, { waitUntil: "networkidle" });
     await page.waitForSelector("[data-messenger-thread] [data-msg]", { timeout: 10000 });
     const grp = await page.evaluate(() => ({
+      sub:
+        document.querySelector("[data-pane-subtitle]")?.textContent ||
+        document.querySelector("[data-thread-header]")?.textContent ||
+        "",
+      reactions: [...document.querySelectorAll("[data-reaction]")].map((r) =>
+        r.getAttribute("aria-label"),
+      ),
       strip: document.querySelector("[data-pinned-strip]")?.textContent || "",
       blocked: document.querySelector("[data-blocked-line] button")?.textContent || "",
     }));
     check(
       LAYOUT_CHECKS[11],
-      grp.strip.includes("Pinned") &&
+      grp.sub.includes("Ama Darko, Kofi Boateng, Nana Adjei and others") &&
+        !grp.sub.includes(", and others") &&
+        grp.reactions.includes("Thanks, Ama, Kofi, Nana and others") &&
+        grp.strip.includes("Pinned") &&
         grp.strip.includes("Nana: Who is coming") &&
         grp.blocked === "Blocked message",
       JSON.stringify(grp),
@@ -404,7 +410,7 @@ const FLOW_CHECKS = [
   "React offers the five words, and a pick writes messenger_react and reads as the word and you (1370)",
   "Edit writes messenger_edit and the bubble reads edited (1343)",
   "Delete for everyone writes messenger_delete and the bubble reads This message was deleted (1343)",
-  "a lead's Pin writes messenger_pin_message and the pinned strip names it (1371)",
+  "a lead's Pin writes messenger_pin_message and the pinned strip names it, and Message info reads Read by as names then one and others (1317, 1345, 1371)",
   "the blocked line expands to the member's name, blocked (1349)",
   "the media notice shows once before the first upload and OK writes messenger_settings_set(media_notice_seen) (1346)",
   "a rate-limited send reads the extraction's line, with no number, and disables the field (1353)",
@@ -668,7 +674,9 @@ async function runMessengerFlows(browserType, bname, vp, theme) {
       JSON.stringify({ del: del?.body, deletedLines: deletedLines.length }),
     );
 
-    // 13, 14. The group: pin Ama's message as its lead, and expand the blocked line.
+    // 13, 14. The group: pin Ama's message as its lead, read Message info's Read by on the lead's
+    // own message with receipts on (1345), and expand the blocked line.
+    Mx.settings.receipts_enabled = true;
     await page.goto(BASE + "/messages/" + Mx.ids.group, { waitUntil: "networkidle" });
     await page.waitForSelector("[data-messenger-thread] [data-msg]", { timeout: 8000 });
     const ama = page.locator('[data-msg]:has-text("can you confirm the room?")').first();
@@ -680,10 +688,25 @@ async function runMessengerFlows(browserType, bname, vp, theme) {
       .locator("[data-pinned-strip]")
       .textContent()
       .catch(() => "");
+    const ownGroup = page
+      .locator('[data-msg]:has-text("Confirmed. Room on the first floor.")')
+      .first();
+    await openMenu(page, ownGroup, touch, "Message actions");
+    await pick(page, "Message info");
+    const info = await page
+      .locator('[data-testid="message-info"]')
+      .textContent({ timeout: 5000 })
+      .catch(() => "");
+    await page.keyboard.press("Escape");
+    await page.waitForTimeout(400);
+    Mx.settings.receipts_enabled = false;
     check(
       FLOW_CHECKS[12],
-      !!pin && strip.includes("Ama: @Amara Osei can you confirm the room?"),
-      strip,
+      !!pin &&
+        strip.includes("Ama: @Amara Osei can you confirm the room?") &&
+        info.includes("Read by Ama Darko, Kofi Boateng, Nana Adjei and others") &&
+        !info.includes(", and others"),
+      JSON.stringify({ strip, info: info.slice(0, 160) }),
     );
     await page.locator("[data-blocked-line] button").click();
     const blk = await page.locator("[data-blocked-line]").textContent();

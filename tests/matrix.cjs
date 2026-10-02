@@ -932,6 +932,36 @@ function seedPosts(db, n) {
 }
 
 async function mockSupabase(page, db, opts = {}) {
+  // Brief 14 (handoff 41-C): the shell keeps the member's Realtime inbox for the session (1351), so
+  // every page opens the Realtime socket. The mock serves REST and RPC and never that socket, and a
+  // socket left to the network either fails (a console error every arm's page-error check reads) or
+  // reaches the real project with the mock's unsigned token. Stubbed here, once, for every arm: the
+  // Phoenix frames (vsn 2.0.0, `[join_ref, ref, topic, event, payload]`) are answered `ok` for a
+  // join, a leave and the heartbeat, and nothing is ever broadcast, which is the mock's honest
+  // reading of a project that has no broadcast to send.
+  await page.routeWebSocket(/\/realtime\/v1\/websocket/, (ws) => {
+    ws.onMessage((message) => {
+      if (typeof message !== "string") return;
+      let frame;
+      try {
+        frame = JSON.parse(message);
+      } catch {
+        return;
+      }
+      if (!Array.isArray(frame)) return;
+      const [joinRef, ref, topic, event] = frame;
+      if (event === "phx_join" || event === "phx_leave" || event === "heartbeat")
+        ws.send(
+          JSON.stringify([
+            joinRef ?? null,
+            ref ?? null,
+            topic,
+            "phx_reply",
+            { status: "ok", response: event === "phx_join" ? { postgres_changes: [] } : {} },
+          ]),
+        );
+    });
+  });
   // Google Fonts are not reachable from this sandbox; abort so the check for page errors stays meaningful.
   await page.route(/fonts\.(googleapis|gstatic)\.com/, (r) => r.abort());
   await page.route(`**/${SB}/**`, async (route) => {

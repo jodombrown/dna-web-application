@@ -630,7 +630,7 @@ export function lastLineOf(t: ThreadView, me: string, authorFirst: string | null
   return who + (t.last_line ?? "");
 }
 
-/** The thread header's subtitle for a group (1317): `A, B and C, and others`. */
+/** The thread header's subtitle for a group (1317): `A, B, C and others`, through the one joiner. */
 export function membersLine(t: ThreadView): string {
   return joinNames(nameList(t.member_names), !!t.others);
 }

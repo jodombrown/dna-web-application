@@ -27,6 +27,7 @@ import { Button } from "@/components/strand/Button";
 import { Chip } from "@/components/strand/Chip";
 import { Icon } from "@/components/strand/Icon";
 import { IdentityMark } from "./IdentityMark";
+import { joinNames } from "@/lib/names";
 
 // Ruling 214: there is no window state on a surface. private.relationship_display maps it to
 // sent before the projection returns, so the sender sees the Pending pill and nothing else, and
@@ -72,15 +73,6 @@ export type MemberCardProps = {
   pointer?: boolean | undefined;
   style?: CSSProperties | undefined;
 };
-
-/** "A", "A and B", "A, B and C". */
-export function joinNames(a: string[]): string {
-  return a.length <= 1
-    ? (a[0] ?? "")
-    : a.length === 2
-      ? a[0] + " and " + a[1]
-      : a.slice(0, -1).join(", ") + " and " + a[a.length - 1];
-}
 
 // The reset the source achieves with `all: unset`, written out so the stylesheet focus ring applies.
 const UNSET: CSSProperties = {

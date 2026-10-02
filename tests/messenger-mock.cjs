@@ -421,8 +421,15 @@ function messengerFixture() {
       tick: 3,
       read_by: ["Ama Darko", "Kofi Boateng", "Nana Adjei"],
       read_by_others: true,
+      // The extraction's fixture reads "Thanks by Ama and Nana"; here the reaction carries
+      // others so the arm reads the one joiner's "and others" shape (handoff 41-C, ruled in Chat).
       reactions: [
-        { reaction: "thanks", names: ["Ama Darko", "Nana Adjei"], others: false, own: false },
+        {
+          reaction: "thanks",
+          names: ["Ama Darko", "Kofi Boateng", "Nana Adjei"],
+          others: true,
+          own: false,
+        },
       ],
     }),
     msg(G, 5, members.kofi.id, "The room from last time.", at(1, 16, 40), {
