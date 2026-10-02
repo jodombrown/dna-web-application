@@ -801,9 +801,34 @@ async function runAdminSignedOut(browserType, bname, [w, h], theme) {
       !/Create an account|Create your account/.test(text),
       text.slice(0, 120),
     );
+    // Ruling 1329: the line asks for an email to support, and the link is a mailto to the address
+    // it shows with the subject set. The address is read off the page, never spelled here (387).
+    const supportHref =
+      (await page.getAttribute('[data-testid="admin-support-link"]', "href")) || "";
+    const supportText = (
+      (await page
+        .locator('[data-testid="admin-support-link"]')
+        .innerText()
+        .catch(() => "")) || ""
+    ).trim();
     record(
-      `${tag} | the reset line names the member app`,
-      /app\.diasporanetwork\.africa\/reset/.test(text),
+      `${tag} | the reset line asks for an email to support`,
+      /Forgot your password\? Email \S+@\S+ and we will reset it\./.test(
+        (
+          await page
+            .locator('[data-testid="admin-reset-line"]')
+            .innerText()
+            .catch(() => "")
+        )
+          .replace(/\s+/g, " ")
+          .trim(),
+      ),
+    );
+    record(
+      `${tag} | the address is a mailto with the subject`,
+      supportText.includes("@") &&
+        supportHref === "mailto:" + supportText + "?subject=Admin%20password%20reset",
+      supportHref,
     );
     await noOverflow(page, `${tag} |`);
   } catch (e) {
