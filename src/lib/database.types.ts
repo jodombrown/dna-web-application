@@ -1,8 +1,17 @@
 // Generated from the canonical Supabase project (dgspjevjoblujcoljvkn) with the Supabase MCP
-// generate_typescript_types tool on handoff 41-B's branch (#91, Messenger media on R2), after
-// 20261002150000_b14b_message_media was applied and recorded by Chat through execute_sql in the same
-// transaction as its change and read back at the file's drift md5 345ed33b4bd6bdf78c84a02decc1f2a1
-// (the file at 546b0c5); 83 rows in schema_migrations.
+// generate_typescript_types tool on handoff 41-C's branch (#92, the Messenger surfaces), after
+// 20261002160000_b14c_message_media_rate was applied and recorded by Chat through execute_sql in the
+// same transaction as its change and read back at the file's drift md5 e68a16b26de7d8777f3abaf61378602f
+// (the file at ae1bdbc); 84 rows in schema_migrations.
+//
+// What 41-C changes here: nothing below this header. 20261002160000 replaces `private.message_send`
+// whole, without its `message_media` rate check (1353), and changes no signature; the private schema
+// is not exposed, so the generator returns the same body byte for byte as it did after 41-B, and the
+// regeneration is taken so the file names the project state it was read from.
+//
+// Before 41-C: the regeneration on handoff 41-B's branch (#91, Messenger media on R2), after
+// 20261002150000_b14b_message_media was applied and recorded at the file's drift md5
+// 345ed33b4bd6bdf78c84a02decc1f2a1 (the file at 546b0c5); 83 rows in schema_migrations.
 //
 // What 41-B changes here (1346, 1374): `media.width` and `media.height` nullable (audio carries
 // neither), and the five `messenger_media_*` wrappers the two server routes call with the member's
