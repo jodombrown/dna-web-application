@@ -3931,8 +3931,10 @@ async function runLiveDbArms({ record, skip }) {
             tl.storage_path === null &&
             absent.ok &&
             absent.rows.length === 0 &&
-            signedOut.ok &&
-            signedOut.rows[0].ok === false,
+            // Signed out there is no grant to execute the function at all (revoked from public and
+            // anon), so the refusal is 42501 and not a false; either is the answer the route never
+            // reaches, because memberFromRequest refuses first.
+            (signedOut.ok ? signedOut.rows[0].ok === false : signedOut.code === "42501"),
           "owner before send " +
             (ownerBefore.ok ? ownerBefore.rows[0].ok : fmt(ownerBefore)) +
             "; member before " +
@@ -3950,7 +3952,7 @@ async function runLiveDbArms({ record, skip }) {
             "; absent rows " +
             (absent.ok ? absent.rows.length : fmt(absent)) +
             "; signed out " +
-            (signedOut.ok ? signedOut.rows[0].ok : fmt(signedOut)),
+            (signedOut.ok ? signedOut.rows[0].ok : "refused " + fmt(signedOut)),
         );
       });
 
