@@ -316,6 +316,8 @@ async function runLiveDbArms({ record, skip }) {
       "Brief 14 41-B (1346, 1349): messenger_media_access is true for the thread's other member once the message carries the object, false for a third member, and messenger_media_locate hands the key only where access holds",
     r2mediaSweep:
       "Brief 14 41-B (1343, F4): a delete-for-everyone marks the row, messenger_media_marked lists it, messenger_media_forget drops it once and not twice, and access is false from the mark on",
+    r2mediaOnce:
+      "Brief 14 41-C (M13, 1353): a media message counts once against message_media: with one slot left under the ceiling, the record takes it and the send that carries the object is not refused",
   };
   // G143: a block that opens with a presence probe carries every arm it holds in `names`, under one key
   // prefix, so a probe that fails reports each of them UNPROVEN and the job's total does not fall with
@@ -4060,6 +4062,82 @@ async function runLiveDbArms({ record, skip }) {
             (gone.ok ? gone.rows[0].n : fmt(gone)) +
             "; forget of an unmarked row " +
             (unmarkedForget.ok ? unmarkedForget.rows[0].ok : fmt(unmarkedForget)),
+        );
+      });
+
+      // 6. M13 (handoff 41-C, SPEC 41-14 Part D; 1353): private.message_send no longer asks the
+      // message_media ceiling, because message_media_record already counted the upload. Read in
+      // the function's own definition first: before Chat applies 20261002160000 the branch is still
+      // there and the arm is unproven by name (228), never failed for a window ruling 225 opens on
+      // purpose. Then, in one rolled-back transaction: the ceiling is walked to its edge under a
+      // savepoint to learn how many slots the owner has left (real uploads from 41-B's browser arm
+      // can hold some), rolled back, and walked again to leave exactly one; the record takes it, the
+      // send carrying the object is answered, and the ceiling then refuses, so the send counted
+      // nothing.
+      await inTransaction(client, async () => {
+        await actAsSelf(client);
+        const def = await attempt(
+          client,
+          "select position('message_media' in pg_get_functiondef('private.message_send(uuid, uuid, text, public.message_kind, uuid, uuid, uuid[], jsonb)'::regprocedure)) = 0 as applied",
+        );
+        if (!def.ok || !def.rows[0].applied) {
+          skip(
+            names.r2mediaOnce,
+            def.ok
+              ? "20261002160000_b14c_message_media_rate is not on the project yet: private.message_send still asks the message_media ceiling"
+              : "private.message_send's definition could not be read: " + fmt(def),
+          );
+          return;
+        }
+        const pair = await openPair();
+        if (!pair.ok) {
+          record(names.r2mediaOnce, false, pair.step + " " + fmt(pair.r));
+          return;
+        }
+        await actAs(client, owner.id);
+        const ask = async () => {
+          const r = await attempt(client, "select public.rate_limit_check('message_media') as ok");
+          return r.ok && r.rows[0].ok === true;
+        };
+        await client.query("savepoint m13_probe");
+        let free = 0;
+        while (free < 41 && (await ask())) free += 1;
+        await client.query("rollback to savepoint m13_probe");
+        if (free < 1) {
+          skip(
+            names.r2mediaOnce,
+            "owner-test holds no message_media slot this hour (uploads from the deployment's arms), so one count cannot be told from two",
+          );
+          return;
+        }
+        for (let i = 0; i < free - 1; i += 1) await ask();
+        const made = await recordMedia(
+          pair.thread,
+          mediaKey(pair.thread),
+          "image/jpeg",
+          1024,
+          10,
+          10,
+        );
+        const sent = made.ok
+          ? await attempt(
+              client,
+              "select id from public.messenger_send($1::uuid, $2::uuid, null, 'media', null, $3::uuid)",
+              [pair.thread, uuid(), made.rows[0].id],
+            )
+          : { ok: false, code: "-", message: "no media row" };
+        const after = await ask();
+        record(
+          names.r2mediaOnce,
+          made.ok && sent.ok && after === false,
+          "slots left " +
+            free +
+            "; record " +
+            (made.ok ? "answered" : fmt(made)) +
+            "; send " +
+            (sent.ok ? "answered" : fmt(sent)) +
+            "; ceiling after " +
+            (after ? "still answering" : "refusing"),
         );
       });
     }

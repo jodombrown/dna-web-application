@@ -1,0 +1,959 @@
+// Brief 14, handoff 41-C: the Messenger's mock, served by tests/matrix.cjs's mockSupabase for the
+// responsive arms (tests/messenger.cjs `runMessengerLayout`). The fixture is EXTRACTION-41-14 section
+// 6 as the mock member (Amara Osei) sees it, shaped as the three 41-A projections answer it, so the
+// surfaces read exactly what the deployment would: no count column, names cut at three with
+// `others`, ticks on own rows, a blocked author's body null. Writes answer as the wrappers do and
+// move the fixture, so a flow can read its own effect. Nothing here is accurate about anyone.
+const { randomUUID } = require("crypto");
+
+const UID = "00000000-0000-4000-8000-0000000000e1";
+
+const ids = {
+  kofi: "11111111-1111-4111-8111-111111111001",
+  group: "11111111-1111-4111-8111-111111111002",
+  nana: "11111111-1111-4111-8111-111111111003",
+  event: "11111111-1111-4111-8111-111111111004",
+  space: "11111111-1111-4111-8111-111111111005",
+  kwame: "11111111-1111-4111-8111-111111111006",
+  book: "11111111-1111-4111-8111-111111111007",
+  esi: "11111111-1111-4111-8111-111111111008",
+};
+const members = {
+  kofi: {
+    id: "22222222-2222-4222-8222-222222222001",
+    name: "Kofi Boateng",
+    headline: "Cold chain logistics, Tema",
+  },
+  nana: {
+    id: "22222222-2222-4222-8222-222222222002",
+    name: "Nana Adjei",
+    headline: "Community organiser, Osu",
+  },
+  esi: {
+    id: "22222222-2222-4222-8222-222222222003",
+    name: "Esi Owusu",
+    headline: "Bookkeeper, Kumasi",
+  },
+  kwame: {
+    id: "22222222-2222-4222-8222-222222222004",
+    name: "Kwame Mensah",
+    headline: "Host, Corridor Suppers",
+  },
+  adwoa: {
+    id: "22222222-2222-4222-8222-222222222005",
+    name: "Adwoa Asante",
+    headline: "Product designer, Berlin",
+  },
+  yaa: {
+    id: "22222222-2222-4222-8222-222222222006",
+    name: "Yaa Mensah",
+    headline: "Events, Accra",
+  },
+  ama: {
+    id: "22222222-2222-4222-8222-222222222007",
+    name: "Ama Darko",
+    headline: "Port operations, Tema",
+  },
+  femi: {
+    id: "22222222-2222-4222-8222-222222222008",
+    name: "Femi Adeyemi",
+    headline: "Solar finance, Lagos",
+  },
+  tunde: {
+    id: "22222222-2222-4222-8222-222222222009",
+    name: "Tunde Bakare",
+    headline: "Recruiter, Manchester",
+  },
+};
+
+const MIN = 60_000;
+const HOUR = 3_600_000;
+const DAY = 86_400_000;
+
+/** An instant `days` back at `hh:mm` local, so the day separators read as the extraction names them. */
+function at(days, hh, mm) {
+  const d = new Date();
+  d.setDate(d.getDate() - days);
+  d.setHours(hh, mm, 0, 0);
+  return d.toISOString();
+}
+
+function msg(threadId, seq, author, body, created, extra = {}) {
+  const own = author === UID;
+  return {
+    message_id: randomUUID(),
+    thread_id: threadId,
+    seq,
+    author_id: author,
+    author_name: own ? "Amara Osei" : extra.author_name || "",
+    author_avatar_path: null,
+    former_member: false,
+    body,
+    kind: "text",
+    media_id: null,
+    link_preview: null,
+    reply_to: null,
+    reactions: [],
+    edited: false,
+    deleted: false,
+    pinned: false,
+    blocked: false,
+    own,
+    tick: own ? 1 : null,
+    read_by: null,
+    read_by_others: false,
+    mentions: null,
+    created_at: created,
+    edited_at: null,
+    ...extra,
+  };
+}
+
+function messengerFixture() {
+  const now = Date.now();
+  const threads = [
+    {
+      thread_id: ids.kofi,
+      kind: "one_to_one",
+      name: members.kofi.name,
+      headline: members.kofi.headline,
+      avatar_path: null,
+      other_member_id: members.kofi.id,
+      member_names: [members.kofi.name],
+      others: false,
+      last_line: "Call me when you can.",
+      last_kind: "text",
+      last_author_id: UID,
+      last_seq: 10,
+      last_activity_at: new Date(now - 20_000).toISOString(),
+      unread: false,
+      muted: false,
+      archived: false,
+      pinned: true,
+      pinned_at: at(3, 9, 0),
+      invited: false,
+      role: "member",
+      state: "active",
+      read_seq: 10,
+      delivered_seq: 10,
+      anchor_kind: null,
+      anchor_id: null,
+      parent_thread_id: null,
+      history_visible_to_new: true,
+      created_at: at(10, 9, 0),
+    },
+    {
+      thread_id: ids.group,
+      kind: "community_group",
+      name: "Accra returnees",
+      headline: null,
+      avatar_path: null,
+      other_member_id: null,
+      member_names: ["Ama Darko", "Kofi Boateng", "Nana Adjei"],
+      others: true,
+      last_line: "Running late on Thursday but on my way.",
+      last_kind: "text",
+      last_author_id: members.esi.id,
+      last_seq: 6,
+      last_activity_at: new Date(now - 3 * HOUR).toISOString(),
+      unread: true,
+      muted: false,
+      archived: false,
+      pinned: true,
+      pinned_at: at(4, 9, 0),
+      invited: false,
+      role: "lead",
+      state: "active",
+      read_seq: 4,
+      delivered_seq: 6,
+      anchor_kind: null,
+      anchor_id: null,
+      parent_thread_id: null,
+      history_visible_to_new: false,
+      created_at: at(30, 9, 0),
+    },
+    {
+      thread_id: ids.nana,
+      kind: "one_to_one",
+      name: members.nana.name,
+      headline: members.nana.headline,
+      avatar_path: null,
+      other_member_id: members.nana.id,
+      member_names: [members.nana.name],
+      others: false,
+      last_line: "Lunch next week?",
+      last_kind: "text",
+      last_author_id: members.nana.id,
+      last_seq: 1,
+      last_activity_at: at(1, 20, 11),
+      unread: true,
+      muted: true,
+      archived: false,
+      pinned: false,
+      pinned_at: null,
+      invited: false,
+      role: "member",
+      state: "active",
+      read_seq: 0,
+      delivered_seq: 1,
+      anchor_kind: null,
+      anchor_id: null,
+      parent_thread_id: null,
+      history_visible_to_new: true,
+      created_at: at(12, 9, 0),
+    },
+    {
+      thread_id: ids.event,
+      kind: "event_thread",
+      name: "Corridor Suppers: Accra",
+      headline: null,
+      avatar_path: null,
+      other_member_id: null,
+      member_names: ["Kwame Mensah", "Nana Adjei"],
+      others: false,
+      last_line: "Can I bring Kofi?",
+      last_kind: "text",
+      last_author_id: UID,
+      last_seq: 3,
+      last_activity_at: at(1, 10, 20),
+      unread: false,
+      muted: false,
+      archived: false,
+      pinned: false,
+      pinned_at: null,
+      invited: false,
+      role: "member",
+      state: "active",
+      read_seq: 3,
+      delivered_seq: 3,
+      anchor_kind: "event",
+      anchor_id: "33333333-3333-4333-8333-333333333001",
+      parent_thread_id: null,
+      history_visible_to_new: true,
+      created_at: at(5, 9, 0),
+    },
+    {
+      thread_id: ids.space,
+      kind: "space_thread",
+      name: "Tema cold chain",
+      headline: null,
+      avatar_path: null,
+      other_member_id: null,
+      member_names: ["Kwame Mensah", "Kofi Boateng", "Ama Darko"],
+      others: true,
+      last_line: "Noted. I will share the port notice here once Kofi sends it.",
+      last_kind: "text",
+      last_author_id: UID,
+      last_seq: 2,
+      last_activity_at: at(2, 8, 45),
+      unread: false,
+      muted: false,
+      archived: false,
+      pinned: false,
+      pinned_at: null,
+      invited: false,
+      role: "member",
+      state: "active",
+      read_seq: 2,
+      delivered_seq: 2,
+      anchor_kind: "space",
+      anchor_id: "44444444-4444-4444-8444-444444444001",
+      parent_thread_id: null,
+      history_visible_to_new: true,
+      created_at: at(20, 9, 0),
+    },
+    {
+      thread_id: ids.kwame,
+      kind: "one_to_one",
+      name: members.kwame.name,
+      headline: members.kwame.headline,
+      avatar_path: null,
+      other_member_id: members.kwame.id,
+      member_names: [members.kwame.name],
+      others: false,
+      last_line: "Good to meet you at the gathering. Let us talk about the harvest.",
+      last_kind: "text",
+      last_author_id: members.kwame.id,
+      last_seq: 1,
+      last_activity_at: at(8, 22, 30),
+      unread: false,
+      muted: false,
+      archived: false,
+      pinned: false,
+      pinned_at: null,
+      invited: false,
+      role: "member",
+      state: "active",
+      read_seq: 1,
+      delivered_seq: 1,
+      anchor_kind: null,
+      anchor_id: null,
+      parent_thread_id: null,
+      history_visible_to_new: true,
+      created_at: at(8, 22, 0),
+    },
+    {
+      thread_id: ids.book,
+      kind: "community_group",
+      name: "Diaspora bookkeepers",
+      headline: null,
+      avatar_path: null,
+      other_member_id: null,
+      member_names: ["Esi Owusu", "Adwoa Asante"],
+      others: false,
+      last_line: null,
+      last_kind: null,
+      last_author_id: null,
+      last_seq: null,
+      last_activity_at: at(9, 9, 0),
+      unread: false,
+      muted: false,
+      archived: false,
+      pinned: false,
+      pinned_at: null,
+      invited: false,
+      role: "lead",
+      state: "active",
+      read_seq: 0,
+      delivered_seq: 0,
+      anchor_kind: null,
+      anchor_id: null,
+      parent_thread_id: null,
+      history_visible_to_new: false,
+      created_at: at(9, 9, 0),
+    },
+    {
+      thread_id: ids.esi,
+      kind: "one_to_one",
+      name: members.esi.name,
+      headline: members.esi.headline,
+      avatar_path: null,
+      other_member_id: members.esi.id,
+      member_names: [members.esi.name],
+      others: false,
+      last_line: "Thanks for the intro to Adwoa.",
+      last_kind: "text",
+      last_author_id: members.esi.id,
+      last_seq: 1,
+      last_activity_at: at(31, 14, 0),
+      unread: false,
+      muted: false,
+      archived: true,
+      pinned: false,
+      pinned_at: null,
+      invited: false,
+      role: "member",
+      state: "active",
+      read_seq: 1,
+      delivered_seq: 1,
+      anchor_kind: null,
+      anchor_id: null,
+      parent_thread_id: null,
+      history_visible_to_new: true,
+      created_at: at(40, 9, 0),
+    },
+  ];
+  const K = members.kofi.id;
+  const kofiMsgs = [
+    msg(
+      ids.kofi,
+      1,
+      K,
+      "The buyer from Tema came through. Cold storage at the port from November.",
+      at(3, 9, 14),
+      { author_name: members.kofi.name },
+    ),
+    msg(ids.kofi, 2, UID, "That is the one from the supper?", at(3, 9, 20), {
+      tick: 3,
+      reactions: [{ reaction: "agree", names: ["Kofi Boateng"], others: false, own: false }],
+    }),
+    msg(ids.kofi, 3, UID, "Well done. Send the route plan when you have it.", at(3, 11, 10), {
+      tick: 3,
+      edited: true,
+      edited_at: at(3, 11, 12),
+    }),
+    msg(ids.kofi, 4, UID, null, at(1, 18, 52), { deleted: true }),
+    msg(
+      ids.kofi,
+      5,
+      K,
+      "The port notice is here https://tema-port.gov.gh/notices/cold-chain",
+      at(1, 19, 5),
+      {
+        author_name: members.kofi.name,
+        link_preview: {
+          url: "https://tema-port.gov.gh/notices/cold-chain",
+          domain: "tema-port.gov.gh",
+          title: "Cold chain handling notice, November onward",
+          image_url: null,
+        },
+      },
+    ),
+    msg(ids.kofi, 6, K, "Yes, the port signed off.", at(0, 8, 15), {
+      author_name: members.kofi.name,
+    }),
+    msg(ids.kofi, 7, UID, "Did the cold chain buyer get back to you?", at(0, 8, 30), { tick: 2 }),
+    msg(ids.kofi, 8, UID, "Call me when you can.", at(0, 8, 31), { tick: 1 }),
+  ];
+  kofiMsgs[2].reply_to = {
+    message_id: kofiMsgs[0].message_id,
+    seq: 1,
+    author_name: members.kofi.name,
+    kind: "text",
+    deleted: false,
+    line: kofiMsgs[0].body,
+  };
+  const G = ids.group;
+  const groupMsgs = [
+    msg(G, 1, members.nana.id, "Who is coming to the Thursday meetup at Osu?", at(1, 12, 2), {
+      author_name: members.nana.name,
+      pinned: true,
+    }),
+    msg(G, 2, members.yaa.id, null, at(1, 12, 10), {
+      author_name: members.yaa.name,
+      blocked: true,
+    }),
+    msg(G, 3, members.ama.id, "@Amara Osei can you confirm the room?", at(1, 12, 30), {
+      author_name: members.ama.name,
+      mentions: [UID],
+    }),
+    msg(G, 4, UID, "Confirmed. Room on the first floor.", at(1, 13, 5), {
+      tick: 3,
+      read_by: ["Ama Darko", "Kofi Boateng", "Nana Adjei"],
+      read_by_others: true,
+      reactions: [
+        { reaction: "thanks", names: ["Ama Darko", "Nana Adjei"], others: false, own: false },
+      ],
+    }),
+    msg(G, 5, members.kofi.id, "The room from last time.", at(1, 16, 40), {
+      author_name: members.kofi.name,
+    }),
+    msg(G, 6, members.esi.id, "Running late on Thursday but on my way.", at(0, 7, 58), {
+      author_name: members.esi.name,
+    }),
+  ];
+  const messages = {
+    [ids.kofi]: kofiMsgs,
+    [ids.group]: groupMsgs,
+    [ids.nana]: [
+      msg(ids.nana, 1, members.nana.id, "Lunch next week?", at(1, 20, 11), {
+        author_name: members.nana.name,
+      }),
+    ],
+    [ids.event]: [
+      msg(ids.event, 1, members.kwame.id, "Doors at seven. Come hungry.", at(1, 10, 0), {
+        author_name: members.kwame.name,
+      }),
+      msg(
+        ids.event,
+        2,
+        members.nana.id,
+        "Bringing two guests, both from the port.",
+        at(1, 10, 12),
+        { author_name: members.nana.name },
+      ),
+      msg(ids.event, 3, UID, "Can I bring Kofi?", at(1, 10, 20), { tick: 2 }),
+    ],
+    [ids.space]: [
+      msg(
+        ids.space,
+        1,
+        members.kwame.id,
+        "Welcome to the Space thread. Keep it to the cold chain work.",
+        at(2, 8, 0),
+        { author_name: members.kwame.name },
+      ),
+      msg(
+        ids.space,
+        2,
+        UID,
+        "Noted. I will share the port notice here once Kofi sends it.",
+        at(2, 8, 45),
+        { tick: 2 },
+      ),
+    ],
+    [ids.kwame]: [
+      msg(
+        ids.kwame,
+        1,
+        members.kwame.id,
+        "Good to meet you at the gathering. Let us talk about the harvest.",
+        at(8, 22, 30),
+        { author_name: members.kwame.name },
+      ),
+    ],
+    [ids.book]: [],
+    [ids.esi]: [
+      msg(ids.esi, 1, members.esi.id, "Thanks for the intro to Adwoa.", at(31, 14, 0), {
+        author_name: members.esi.name,
+      }),
+    ],
+  };
+  const requests = [
+    {
+      request_id: "55555555-5555-4555-8555-555555555001",
+      sender_id: members.ama.id,
+      sender_name: members.ama.name,
+      sender_handle: "ama-darko",
+      sender_headline: members.ama.headline,
+      sender_avatar_path: null,
+      sender_stance: "Returnee",
+      body: "We met through Kofi at the port. I run operations there and would like to compare notes on the November window, see tema-port.gov.gh/notices.",
+      state: "pending",
+      created_at: new Date(now - 7 * DAY).toISOString(),
+      decided_at: null,
+      mutual_names: ["Kofi Boateng", "Nana Adjei"],
+      mutual_others: false,
+      shared_space_names: ["Accra returnees"],
+      shared_space_others: false,
+    },
+    {
+      request_id: "55555555-5555-4555-8555-555555555002",
+      sender_id: members.femi.id,
+      sender_name: members.femi.name,
+      sender_handle: "femi-adeyemi",
+      sender_headline: members.femi.headline,
+      sender_avatar_path: null,
+      sender_stance: "Continental",
+      body: "Your post on cold storage finance matched a fund I advise. Open to a conversation?",
+      state: "pending",
+      created_at: new Date(now - 2 * DAY).toISOString(),
+      decided_at: null,
+      mutual_names: ["Kwame Mensah"],
+      mutual_others: false,
+      shared_space_names: [],
+      shared_space_others: false,
+    },
+    {
+      request_id: "55555555-5555-4555-8555-555555555003",
+      sender_id: members.tunde.id,
+      sender_name: members.tunde.name,
+      sender_handle: "tunde-bakare",
+      sender_headline: members.tunde.headline,
+      sender_avatar_path: null,
+      sender_stance: "Diaspora",
+      body: "Hiring for a logistics lead in Manchester. Interested?",
+      state: "declined",
+      created_at: new Date(now - 9 * DAY).toISOString(),
+      decided_at: new Date(now - 8 * DAY).toISOString(),
+      mutual_names: [],
+      mutual_others: false,
+      shared_space_names: [],
+      shared_space_others: false,
+    },
+  ];
+  return {
+    ids,
+    members,
+    threads,
+    messages,
+    requests,
+    settings: {
+      member_id: UID,
+      receipts_enabled: false,
+      receipts_chosen_at: new Date(now - 30 * DAY).toISOString(),
+      link_previews_enabled: false,
+      media_notice_seen_at: new Date(now - 30 * DAY).toISOString(),
+      updated_at: new Date(now - 30 * DAY).toISOString(),
+    },
+    signals: [
+      {
+        signal_key: "request:55555555-5555-4555-8555-555555555001",
+        line: "Ama Darko sent you a message request a week ago",
+        thread_id: null,
+        request_id: "55555555-5555-4555-8555-555555555001",
+      },
+      {
+        signal_key: "quiet:" + ids.kwame,
+        line: "You and Kwame Mensah were both at the Accra gathering and have not spoken in a while",
+        thread_id: ids.kwame,
+        request_id: null,
+      },
+    ],
+    writes: [],
+    /** Review toggles a flow can set before opening the page. */
+    fail: null,
+    firstOpen: false,
+  };
+}
+
+const VOCAB_KEYS = {
+  thread_kinds: [
+    { value: "one_to_one", label: "One to one", surfaced: true },
+    { value: "community_group", label: "Community group", surfaced: true },
+    { value: "space_thread", label: "Space thread", surfaced: true },
+    { value: "space_topic", label: "Space topic", surfaced: true },
+    { value: "event_thread", label: "Event thread", surfaced: true },
+    { value: "respond", label: "Respond", surfaced: false },
+    { value: "introduction", label: "Introduction", surfaced: false },
+  ],
+  message_mute_durations: [
+    { value: "eight_hours", label: "8 hours" },
+    { value: "one_week", label: "1 week" },
+    { value: "always", label: "Always" },
+  ],
+  message_report_reasons: [
+    { value: "harassment", label: "Harassment" },
+    { value: "spam_or_scam", label: "Spam or a scam" },
+    { value: "hate_or_threat", label: "Hate or a threat" },
+    { value: "sexual_content", label: "Sexual content" },
+    { value: "impersonation", label: "Impersonation" },
+    { value: "other", label: "Something else" },
+  ],
+  message_reaction_kinds: [
+    { value: "agree", label: "Agree" },
+    { value: "thanks", label: "Thanks" },
+    { value: "noted", label: "Noted" },
+    { value: "well_done", label: "Well done" },
+    { value: "sorry_to_hear", label: "Sorry to hear" },
+  ],
+};
+
+function eq(url, key) {
+  const v = url.searchParams.get(key);
+  return v && v.startsWith("eq.") ? v.slice(3) : null;
+}
+
+/**
+ * Answers a Messenger request from the fixture, or returns false for a path that is not one.
+ * `json(body, status)` fulfils the route; `req` is the Playwright request.
+ */
+async function handleMessenger({ p, method, url, req, json, db }) {
+  const M = db.messenger;
+  if (!M) return false;
+  const single = (req.headers()["accept"] || "").includes("object");
+  const refuse = (word, code = "P0001") =>
+    json({ code, message: word, details: null, hint: null }, 400);
+  if (p === "/rest/v1/messenger_threads_view") {
+    if (M.fail === "threads")
+      return json({ code: "PGRST", message: "forced", details: null, hint: null }, 500);
+    const id = eq(url, "thread_id");
+    let rows = M.threads.filter((t) => !id || t.thread_id === id);
+    rows = rows.slice().sort((a, b) => {
+      const pa = a.pinned_at ? 1 : 0;
+      const pb = b.pinned_at ? 1 : 0;
+      if (pa !== pb) return pb - pa;
+      return (b.last_activity_at || "").localeCompare(a.last_activity_at || "");
+    });
+    return single ? json(rows[0] || null, rows[0] ? 200 : 406) : json(rows);
+  }
+  if (p === "/rest/v1/messenger_requests_view") return json(M.requests.slice());
+  if (p === "/rest/v1/messenger_messages_view") {
+    const t = eq(url, "thread_id");
+    let rows = t ? (M.messages[t] || []).slice() : Object.values(M.messages).flat();
+    const seq = url.searchParams.get("seq");
+    const ids = url.searchParams.get("message_id");
+    if (seq && seq.startsWith("eq.")) rows = rows.filter((m) => m.seq === Number(seq.slice(3)));
+    if (seq && seq.startsWith("gt.")) rows = rows.filter((m) => m.seq > Number(seq.slice(3)));
+    if (seq && seq.startsWith("lt.")) rows = rows.filter((m) => m.seq < Number(seq.slice(3)));
+    if (seq && seq.startsWith("in.")) {
+      const set = seq.slice(4, -1).split(",").map(Number);
+      rows = rows.filter((m) => set.includes(m.seq));
+    }
+    if (ids && ids.startsWith("in.")) {
+      const set = ids
+        .slice(4, -1)
+        .split(",")
+        .map((s) => s.replace(/^"|"$/g, ""));
+      rows = rows.filter((m) => set.includes(m.message_id));
+    }
+    const order = url.searchParams.get("order") || "";
+    rows.sort((a, b) => (order.includes("desc") ? b.seq - a.seq : a.seq - b.seq));
+    const limit = Number(url.searchParams.get("limit") || 0);
+    if (limit) rows = rows.slice(0, limit);
+    return single ? json(rows[0] || null, rows[0] ? 200 : 406) : json(rows);
+  }
+  if (p === "/rest/v1/thread_members") {
+    const t = eq(url, "thread_id");
+    const th = M.threads.find((x) => x.thread_id === t);
+    if (!th) return json([]);
+    const names = th.member_names || [];
+    const all = Object.values(M.members).filter((m) => names.includes(m.name));
+    return json([
+      { member_id: UID, role: th.role, state: "active" },
+      ...all.map((m) => ({ member_id: m.id, role: "member", state: "active" })),
+    ]);
+  }
+  if (p === "/rest/v1/members" && url.searchParams.has("id")) {
+    const v = url.searchParams.get("id") || "";
+    const m = v.match(/^in\.\((.*)\)$/);
+    const set = m ? m[1].split(",").map((s) => s.replace(/^"|"$/g, "")) : [];
+    const rows = [
+      { id: UID, name: "Amara Osei" },
+      ...Object.values(M.members).map((x) => ({ id: x.id, name: x.name })),
+    ];
+    return json(rows.filter((r) => set.includes(r.id)));
+  }
+  if (p === "/rest/v1/member_blocks") return json([{ blocked_id: M.members.yaa.id }]);
+  if (p === "/rest/v1/threads") return json([]);
+  if (!p.startsWith("/rest/v1/rpc/messenger_")) return false;
+  const fn = p.slice("/rest/v1/rpc/".length);
+  const body = method === "POST" ? req.postDataJSON() || {} : {};
+  M.writes.push({ fn, body });
+  await new Promise((r) => setTimeout(r, 60));
+  if (fn === "messenger_settings")
+    return json(
+      M.firstOpen
+        ? { ...M.settings, receipts_chosen_at: null, media_notice_seen_at: null }
+        : M.settings,
+    );
+  if (fn === "messenger_settings_set") {
+    if (body.p_receipts !== undefined && body.p_receipts !== null) {
+      M.settings.receipts_enabled = body.p_receipts;
+      M.settings.receipts_chosen_at = new Date().toISOString();
+    }
+    if (body.p_link_previews !== undefined && body.p_link_previews !== null)
+      M.settings.link_previews_enabled = body.p_link_previews;
+    if (body.p_media_notice_seen) M.settings.media_notice_seen_at = new Date().toISOString();
+    M.firstOpen = false;
+    return json(M.settings);
+  }
+  if (fn === "messenger_dia_signals") return json(M.signals);
+  if (fn === "messenger_dia_dismiss") {
+    M.signals = M.signals.filter((s) => s.signal_key !== body.p_key);
+    return json(null, 204);
+  }
+  if (fn === "messenger_search") {
+    const q = String(body.p_query || "").toLowerCase();
+    const hits = [];
+    for (const [tid, list] of Object.entries(M.messages)) {
+      if (body.p_thread && body.p_thread !== tid) continue;
+      for (const m of list) {
+        if (m.deleted || !m.body || !m.body.toLowerCase().includes(q)) continue;
+        if (body.p_member && m.author_id !== body.p_member) continue;
+        if (body.p_before && !(m.created_at < body.p_before)) continue;
+        if (body.p_after && !(m.created_at >= body.p_after)) continue;
+        hits.push({
+          thread_id: tid,
+          message_id: m.message_id,
+          seq: m.seq,
+          created_at: m.created_at,
+          headline: m.body,
+        });
+      }
+    }
+    hits.sort((a, b) => b.created_at.localeCompare(a.created_at));
+    return json(hits);
+  }
+  if (fn === "messenger_send") {
+    if (M.fail === "send") return refuse("rate_limited");
+    const t = body.p_thread;
+    const list = M.messages[t] || (M.messages[t] = []);
+    const existing = list.find((m) => m.client_id === body.p_client_id);
+    if (existing) return json(existing);
+    const seq = (list.length ? list[list.length - 1].seq : 0) + 1;
+    const row = msg(t, seq, UID, body.p_body || null, new Date().toISOString(), {
+      kind: body.p_kind || "text",
+      media_id: body.p_media || null,
+      link_preview: body.p_link_preview || null,
+    });
+    row.client_id = body.p_client_id;
+    if (body.p_reply_to) {
+      const q = list.find((m) => m.message_id === body.p_reply_to);
+      if (q)
+        row.reply_to = {
+          message_id: q.message_id,
+          seq: q.seq,
+          author_name: q.own ? "Amara Osei" : q.author_name,
+          kind: q.kind,
+          deleted: q.deleted,
+          line: q.body,
+        };
+    }
+    list.push(row);
+    const th = M.threads.find((x) => x.thread_id === t);
+    if (th) {
+      th.last_line = row.body;
+      th.last_kind = row.kind;
+      th.last_author_id = UID;
+      th.last_seq = seq;
+      th.last_activity_at = row.created_at;
+      th.archived = false;
+    }
+    return json({
+      id: row.message_id,
+      thread_id: t,
+      seq,
+      client_id: body.p_client_id,
+      author_id: UID,
+      kind: row.kind,
+      body: row.body,
+      reply_to: body.p_reply_to || null,
+      media_id: row.media_id,
+      link_preview: row.link_preview,
+      created_at: row.created_at,
+      edited_at: null,
+      deleted_at: null,
+      pinned_by: null,
+      author_deleted_at: null,
+      search: null,
+    });
+  }
+  const find = (id) => {
+    for (const list of Object.values(M.messages)) {
+      const m = list.find((x) => x.message_id === id);
+      if (m) return m;
+    }
+    return null;
+  };
+  if (fn === "messenger_edit") {
+    const m = find(body.p_message);
+    if (m) {
+      m.body = body.p_body;
+      m.edited = true;
+      m.edited_at = new Date().toISOString();
+    }
+    return json(m ? { id: m.message_id, seq: m.seq } : null, m ? 200 : 400);
+  }
+  if (fn === "messenger_delete") {
+    const m = find(body.p_message);
+    if (m) {
+      m.deleted = true;
+      m.body = null;
+      m.reactions = [];
+      m.pinned = false;
+      m.link_preview = null;
+      m.media_id = null;
+    }
+    return json({ message_id: body.p_message, storage_path: null });
+  }
+  if (fn === "messenger_react" || fn === "messenger_unreact") {
+    const m = find(body.p_message);
+    if (m) {
+      m.reactions = (m.reactions || []).filter((r) => !r.own);
+      if (fn === "messenger_react")
+        m.reactions.push({
+          reaction: body.p_reaction,
+          names: ["Amara Osei"],
+          others: false,
+          own: true,
+        });
+    }
+    return json(null, 204);
+  }
+  if (fn === "messenger_pin_message" || fn === "messenger_unpin_message") {
+    const m = find(body.p_message);
+    if (m) {
+      for (const x of M.messages[m.thread_id]) x.pinned = false;
+      m.pinned = fn === "messenger_pin_message";
+    }
+    return json(null, 204);
+  }
+  const thread = () => M.threads.find((x) => x.thread_id === body.p_thread);
+  if (fn === "messenger_pin_thread") {
+    const pins = M.threads.filter((t) => t.pinned && !t.archived).length;
+    if (pins >= 3) return refuse("pins_full");
+    const t = thread();
+    if (t) {
+      t.pinned = true;
+      t.pinned_at = new Date().toISOString();
+    }
+    return json(null, 204);
+  }
+  if (fn === "messenger_unpin_thread") {
+    const t = thread();
+    if (t) {
+      t.pinned = false;
+      t.pinned_at = null;
+    }
+    return json(null, 204);
+  }
+  if (fn === "messenger_mark_unread") {
+    const t = thread();
+    if (t) t.unread = true;
+    return json(null, 204);
+  }
+  if (fn === "messenger_read_to" || fn === "messenger_delivered_to") {
+    const t = thread();
+    if (t && fn === "messenger_read_to") {
+      t.read_seq = Math.max(t.read_seq, body.p_seq);
+      t.unread = !!(t.last_seq && t.read_seq < t.last_seq);
+    }
+    return json(null, 204);
+  }
+  if (fn === "messenger_mute") {
+    const t = thread();
+    if (t) t.muted = !!body.p_duration;
+    return json(null, 204);
+  }
+  if (fn === "messenger_archive" || fn === "messenger_unarchive") {
+    const t = thread();
+    if (t) {
+      t.archived = fn === "messenger_archive";
+      if (t.archived) {
+        t.pinned = false;
+        t.pinned_at = null;
+      }
+    }
+    return json(null, 204);
+  }
+  if (fn === "messenger_request_accept") {
+    const r = M.requests.find((x) => x.request_id === body.p_request);
+    if (!r) return refuse("not_your_request", "42501");
+    M.requests = M.requests.filter((x) => x !== r);
+    const id = randomUUID();
+    M.threads.unshift({
+      thread_id: id,
+      kind: "one_to_one",
+      name: r.sender_name,
+      headline: r.sender_headline,
+      avatar_path: null,
+      other_member_id: r.sender_id,
+      member_names: [r.sender_name],
+      others: false,
+      last_line: r.body,
+      last_kind: "text",
+      last_author_id: r.sender_id,
+      last_seq: 1,
+      last_activity_at: new Date().toISOString(),
+      unread: false,
+      muted: false,
+      archived: false,
+      pinned: false,
+      pinned_at: null,
+      invited: false,
+      role: "member",
+      state: "active",
+      read_seq: 1,
+      delivered_seq: 1,
+      anchor_kind: null,
+      anchor_id: null,
+      parent_thread_id: null,
+      history_visible_to_new: true,
+      created_at: new Date().toISOString(),
+    });
+    M.messages[id] = [
+      msg(id, 1, r.sender_id, r.body, new Date().toISOString(), { author_name: r.sender_name }),
+    ];
+    return json(id);
+  }
+  if (fn === "messenger_request_decline") {
+    const r = M.requests.find((x) => x.request_id === body.p_request);
+    if (r) {
+      r.state = "declined";
+      r.decided_at = new Date().toISOString();
+    }
+    return json(null, 204);
+  }
+  if (fn === "messenger_request_block") {
+    M.requests = M.requests.filter((x) => x.request_id !== body.p_request);
+    return json(null, 204);
+  }
+  if (fn === "messenger_thread_leave") {
+    M.threads = M.threads.filter((x) => x.thread_id !== body.p_thread);
+    return json(null, 204);
+  }
+  if (fn === "messenger_thread_set_history") {
+    const t = thread();
+    if (t) t.history_visible_to_new = !!body.p_visible;
+    return json(null, 204);
+  }
+  if (fn === "messenger_report") return json(randomUUID());
+  if (fn === "messenger_open_one_to_one") {
+    const t = M.threads.find((x) => x.other_member_id === body.p_other);
+    return t ? json(t.thread_id) : refuse("request_first", "42501");
+  }
+  return json(null, 204);
+}
+
+module.exports = { messengerFixture, handleMessenger, VOCAB_KEYS, UID, ids, members };

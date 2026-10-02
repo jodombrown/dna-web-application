@@ -4,7 +4,7 @@
 // layer, so the real client code paths run against a deterministic backend. Backend behaviour
 // (RLS, the feed view) is verified separately in SQL against the live project.
 // Usage: BASE=https://b2-shell-feed.dna-web-application.pages.dev WEBKIT=1 node tests/matrix.cjs
-// Env: ONLY='[390,844]' runs one viewport; SPECIAL=publish,guards,keyboard,silence,shell,width,targeted,profile,connect,event,discovery,vocab,block,auth,onboarding,mount,sheet,gate,admin,media runs flows only.
+// Env: ONLY='[390,844]' runs one viewport; SPECIAL=publish,guards,keyboard,silence,shell,width,targeted,profile,connect,event,discovery,vocab,block,auth,onboarding,mount,sheet,gate,admin,media,messenger runs flows only.
 // Ruling 1237: an arm that loses its web process is run again once, alone, in a fresh browser, by
 // `drive()` below; CRASH_PROBE=<arm tag> is the harness probe that proves it (off by default).
 // Brief 3 profile flows live in tests/profile.cjs and Brief 4 Connect flows in tests/connect.cjs; both share this mock.
@@ -344,6 +344,8 @@ const VOCAB = {
     { value: "network", name: "Connected to your network" },
   ],
   // Handoff 37-A (1186): the kinds of host-written block, as 20260928120000 seeds them.
+  // Brief 14 (41-A, 1331, 1348, 1349, 1370): the four Messenger vocabularies (tests/messenger-mock.cjs).
+  ...require("./messenger-mock.cjs").VOCAB_KEYS,
   event_block_kinds: [
     { value: "link", label: "Links" },
     { value: "programme", label: "Programme" },
@@ -714,6 +716,9 @@ function connectCard(m, overrides) {
 
 function makeMockDb() {
   const db = {
+    // Brief 14 (handoff 41-C): the Messenger fixture, EXTRACTION-41-14 section 6 as the projections
+    // answer it (tests/messenger-mock.cjs).
+    messenger: require("./messenger-mock.cjs").messengerFixture(),
     posts: [],
     events: [],
     // Convene Pass 1: one row per delivery endpoint (521), the member's homes (633) and the
@@ -1887,6 +1892,18 @@ async function mockSupabase(page, db, opts = {}) {
       else pr.overrides[body.section] = body.payload;
       return json(null, 204);
     }
+    // Brief 14 (handoff 41-C): the Messenger's projections and wrappers (tests/messenger-mock.cjs).
+    if (
+      await require("./messenger-mock.cjs").handleMessenger({
+        p,
+        method,
+        url,
+        req,
+        json: (b, st) => json(b, st).then(() => true),
+        db,
+      })
+    )
+      return;
     if (p.startsWith("/rest/v1/")) {
       const table = p.slice("/rest/v1/".length);
       const inIds = (param) => {
@@ -6616,6 +6633,21 @@ if (require.main === module)
         if (process.env.SPECIAL.includes("media")) {
           const { runMessengerMedia } = require("./messenger-media.cjs");
           await drive(runMessengerMedia, bt, bname);
+          // Handoff 41-C item 5: the surfaces on the deployment with the same two accounts.
+          const { runMessengerLive } = require("./messenger.cjs");
+          await drive(runMessengerLive, bt, bname);
+        }
+        // Handoff 41-C item 5 (SPEC 41-14 "Arms"): the Messenger's responsive matrix at 360, 390,
+        // 820 and 1280 in both themes, and its flows on the two representative cells, on the mock.
+        if (process.env.SPECIAL.includes("messenger")) {
+          const m = require("./messenger.cjs");
+          for (const vp of m.LAYOUT_CELLS)
+            if (!only || (vp[0] === only[0] && vp[1] === only[1]))
+              for (const theme of process.env.THEME ? [process.env.THEME] : THEMES)
+                await drive(m.runMessengerLayout, bt, bname, vp, theme);
+          for (const [vp, theme] of m.FLOW_CELLS)
+            if (!only || (vp[0] === only[0] && vp[1] === only[1]))
+              await drive(m.runMessengerFlows, bt, bname, vp, theme);
         }
         if (process.env.SPECIAL.includes("auth")) {
           const { runAuthLayout, runAuthFlows } = require("./auth.cjs");
@@ -6773,6 +6805,14 @@ if (require.main === module)
       // deployment, once per engine, with the two seeded accounts (tests/messenger-media.cjs).
       const { runMessengerMedia } = require("./messenger-media.cjs");
       await drive(runMessengerMedia, bt, bname);
+      // Handoff 41-C item 5 (SPEC 41-14 "Arms"): the Messenger's surfaces, the responsive matrix and
+      // the flows on the mock, then the deployment with the two seeded accounts (tests/messenger.cjs).
+      const msg = require("./messenger.cjs");
+      for (const vp of msg.LAYOUT_CELLS)
+        for (const theme of THEMES) await drive(msg.runMessengerLayout, bt, bname, vp, theme);
+      for (const [vp, theme] of msg.FLOW_CELLS)
+        await drive(msg.runMessengerFlows, bt, bname, vp, theme);
+      await drive(msg.runMessengerLive, bt, bname);
     }
     finish({ full: true, engines: engines.map(([n]) => n) });
   })().catch((e) => {
