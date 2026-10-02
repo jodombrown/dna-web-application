@@ -136,27 +136,11 @@ export type CompanyRead = Record<
 export type Read<T> =
   { status: "loading" } | { status: "ready"; data: T } | { status: "failed"; code: string | null };
 
-/**
- * The five projections are not in `database.types.ts` until it is regenerated after the apply
- * (ruling 225: the migration is committed first, applied by Chat, and the types are taken from the
- * project only then; the generated file is never hand-edited). Until that regeneration the names
- * go through this one untyped call; nothing else in the admin app calls `rpc` untyped.
- */
 type RpcResult = { data: unknown; error: { code?: string; message: string } | null };
-function rpc(sb: Supabase, fn: string, args?: Record<string, unknown>): PromiseLike<RpcResult> {
-  const call = (
-    sb.rpc as unknown as (f: string, a?: Record<string, unknown>) => PromiseLike<RpcResult>
-  ).bind(sb);
-  return call(fn, args);
-}
 
-async function readOne<T>(
-  sb: Supabase,
-  fn: string,
-  args: Record<string, unknown>,
-): Promise<Read<T>> {
+async function readOne<T>(call: PromiseLike<RpcResult>, fn: string): Promise<Read<T>> {
   try {
-    const { data, error } = await rpc(sb, fn, args);
+    const { data, error } = await call;
     if (error) {
       console.warn(
         JSON.stringify({ event: "admin_overview_read_failed", fn, code: error.code ?? null }),
@@ -179,7 +163,7 @@ export type Reads = {
 };
 export type ReadKey = keyof Reads;
 
-/** One projection, by its key: the page's initial read runs all five in parallel; Try again runs one. */
+/** One projection, by its key, typed against the regenerated `database.types.ts`: the page's initial read runs all five in parallel; Try again runs one. */
 export function readProjection<K extends ReadKey>(
   sb: Supabase,
   key: K,
@@ -190,17 +174,30 @@ export function readProjection<K extends ReadKey>(
   const period = { p_grain: grain, p_compare: compare, p_tz: tz };
   switch (key) {
     case "window":
-      return readOne<WindowRead>(sb, "admin_overview_window", period) as Promise<Reads[K]>;
+      return readOne<WindowRead>(
+        sb.rpc("admin_overview_window", period),
+        "admin_overview_window",
+      ) as Promise<Reads[K]>;
     case "mobilization":
-      return readOne<MobilizationRead>(sb, "admin_overview_mobilization", period) as Promise<
-        Reads[K]
-      >;
+      return readOne<MobilizationRead>(
+        sb.rpc("admin_overview_mobilization", period),
+        "admin_overview_mobilization",
+      ) as Promise<Reads[K]>;
     case "levers":
-      return readOne<LeversRead>(sb, "admin_overview_levers", period) as Promise<Reads[K]>;
+      return readOne<LeversRead>(
+        sb.rpc("admin_overview_levers", period),
+        "admin_overview_levers",
+      ) as Promise<Reads[K]>;
     case "network":
-      return readOne<NetworkRead>(sb, "admin_overview_network", { p_tz: tz }) as Promise<Reads[K]>;
+      return readOne<NetworkRead>(
+        sb.rpc("admin_overview_network", { p_tz: tz }),
+        "admin_overview_network",
+      ) as Promise<Reads[K]>;
     default:
-      return readOne<CompanyRead>(sb, "admin_overview_company", {}) as Promise<Reads[K]>;
+      return readOne<CompanyRead>(
+        sb.rpc("admin_overview_company"),
+        "admin_overview_company",
+      ) as Promise<Reads[K]>;
   }
 }
 
