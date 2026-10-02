@@ -164,15 +164,20 @@ async function runMessengerMedia(browserType, bname) {
       return;
     }
 
-    // The group: found by name as the owner, or created with member-test in it; member-test accepts
-    // the invitation once (a later run finds them active and the accept is refused as not_invited,
-    // which is the steady state and not a failure).
+    // The group: the community group named GROUP that owner-test leads, read through
+    // messenger_threads_view as the owner (role lead, state active, the oldest when more than one
+    // exists), reused when present and created with member-test in it only when absent, so every
+    // run leaves at most this one thread on the project. member-test accepts the invitation once;
+    // a later run finds them active and the accept is refused as not_invited, which is the steady
+    // state and not a failure.
     const GROUP = "41-B media arm";
     const openGroup = async () => {
       const mine = await rest(
         owner.token,
-        "messenger_threads_view?select=thread_id,kind,name&kind=eq.community_group&name=eq." +
-          encodeURIComponent(GROUP),
+        "messenger_threads_view?select=thread_id,kind,name,role,state,created_at" +
+          "&kind=eq.community_group&role=eq.lead&state=eq.active&name=eq." +
+          encodeURIComponent(GROUP) +
+          "&order=created_at.asc&limit=1",
       );
       let id = Array.isArray(mine.body) && mine.body.length ? mine.body[0].thread_id : null;
       if (!id) {
