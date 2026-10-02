@@ -48,6 +48,12 @@ jobs:
       # that is asserted, which is the lesson ruling 539 was built on. Static, no deployment needed.
       - name: Every cited token resolves in both themes (ruling 485)
         run: node scripts/token-check.mjs
+      # Handoff 40-D arms 1 and 2 (Strand compile v1790885781186000, rulings 1309, 1310): the seven
+      # admin parts load from the barrel and render in every state through the SSR renderer, none
+      # branches on theme, and hasNumber answers 1301's four cases. Static: no page binds the parts
+      # yet, so no deployment carries them for a mount arm to open. Their tokens are the step above.
+      - name: The Strand admin parts render, and hasNumber reads a number (handoff 40-D)
+        run: node tests/strand-admin.cjs
       # Ruling 547, Fix PR 03 item 6: every kind in the notification registry resolves to a
       # destination, and the kinds whose destination has no surface are named rather than exempted.
       - name: Every notification kind resolves to a destination (rulings 485, 547)
