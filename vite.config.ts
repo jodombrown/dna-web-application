@@ -33,6 +33,16 @@ export default defineConfig(({ command, mode }) => ({
             // Cloudflare Pages is the deploy target (per-branch preview deployments). Nitro emits
             // dist/ with _worker.js for Pages; wrangler.jsonc points Pages at it.
             preset: "cloudflare-pages",
+            // Handoff 41-B: Wrangler reads wrangler.jsonc itself, at the root, for every deploy and
+            // for `wrangler pages dev dist`. Until 41-B Nitro also copied it into
+            // dist/_worker.js/wrangler.json and wrote .wrangler/deploy/config.json redirecting
+            // Wrangler there; Wrangler refuses a redirected configuration that carries environments
+            // ("Redirected configurations cannot include environments"), and the preview bucket's
+            // binding is an `env.preview` block (rulings 1346, 1374). The one file still decides
+            // both deploys: production and preview are `wrangler pages deploy dist` from the same
+            // checkout of the same file, so neither the compatibility date, the flags nor the
+            // bindings can diverge between them.
+            cloudflare: { deployConfig: false },
           }),
         ]
       : []),
