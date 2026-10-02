@@ -51,3 +51,15 @@ export * from "./Tooltip";
 export * from "./BodyBlocks";
 export * from "./PersonCard";
 export * from "./BrowseTile";
+// Strand compile v1790885781186000 (proposals 40, rulings 1306 and 1308; ratified 1309 and 1310;
+// handoff 40-D item 2): the seven admin parts. The admin app imports them from here like every
+// other Strand part; the member app imports none of them, and tests/admin-bundles.cjs reads that
+// off its built output. LoadError stays in src/components/dna/ (1309). DiaNote's module also
+// exports hasNumber, the 1301 check, beside the part (1310).
+export * from "./ConsoleShell";
+export * from "./MeasureCard";
+export * from "./Sparkline";
+export * from "./StackedBars";
+export * from "./BarList";
+export * from "./DataTable";
+export * from "./DiaNote";
