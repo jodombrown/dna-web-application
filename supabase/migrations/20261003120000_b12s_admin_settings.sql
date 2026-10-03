@@ -134,8 +134,13 @@ create policy reporting_zones_member_select on public.reporting_zones
   for select to authenticated using (true);
 create policy reporting_zones_service_role on public.reporting_zones
   for all to service_role using (true) with check (true);
+-- Ruling 382: the live arms prove the guard below by an insert it refuses, inside a transaction that
+-- always rolls back (handoff 45-D arm 1); live_arms gets that insert and nothing wider.
+grant insert on table public.reporting_zones to live_arms;
+create policy reporting_zones_live_arms_insert on public.reporting_zones
+  for insert to live_arms with check (true);
 comment on table public.reporting_zones is
-  'The zones the company reports in and a staff member may read in (handoff 45-D, rulings 1382, 1392, 1394), served by vocabularies() as reporting_zones. value is the IANA identifier, never a fixed offset (extraction C11); a row whose identifier pg_timezone_names does not know is refused. name and city are the words the admin writes ("Pacific time, Los Angeles"); abbreviation is the zone''s standard-time abbreviation, which the app shows only where the runtime names the zone by a bare offset, so a zone that keeps daylight time still reads PDT or BST from the runtime. Personas (1116): member, Space lead, event host and admin read it through vocabularies(), as members; service role writes it; anon is deliberately absent because no signed-out surface offers it.';
+  'The zones the company reports in and a staff member may read in (handoff 45-D, rulings 1382, 1392, 1394), served by vocabularies() as reporting_zones. value is the IANA identifier, never a fixed offset (extraction C11); a row whose identifier pg_timezone_names does not know is refused. name and city are the words the admin writes ("Pacific time, Los Angeles"); abbreviation is the zone''s standard-time abbreviation, which the app shows only where the runtime names the zone by a bare offset, so a zone that keeps daylight time still reads PDT or BST from the runtime. Personas (1116): member, Space lead, event host and admin read it through vocabularies(), as members; service role writes it; live_arms may insert, only so the arms can prove the guard refuses an unknown zone in a rolled-back transaction (382); anon is deliberately absent because no signed-out surface offers it.';
 
 create function private.reporting_zone_known()
 returns trigger
