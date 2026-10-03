@@ -216,10 +216,15 @@ export function avatarUrl(path: string | null | undefined, size = 44): Promise<s
   const key = path + "@" + size;
   let p = avatars.get(key);
   if (!p) {
+    // A signing that fails leaves the row on its initials and is not kept, so the next render asks
+    // again instead of holding a rejection for the session.
     p = deliverImageUrl("profile-media", path, {
       width: size * 2,
       height: size * 2,
       resize: "cover",
+    }).catch(() => {
+      avatars.delete(key);
+      return undefined;
     });
     avatars.set(key, p);
   }

@@ -26,7 +26,18 @@ const path = require("path");
 const crypto = require("crypto");
 const M = require("./matrix.cjs");
 
-const { launch, makeMockDb, mockSupabase, record, unproven, hydrated, BASE, OUT } = M;
+const { launch, makeMockDb, mockSupabase, record, unproven, hydrated, BASE, OUT, SB } = M;
+
+/**
+ * Ruling 357, as tests/event.cjs, tests/profile.cjs and tests/connect.cjs apply it: WebKit words a
+ * fetch the navigation cancelled as an access-control denial ("… due to access control checks."),
+ * and Playwright delivers it as a page error. Every request to the mocked origin is fulfilled
+ * in-process with access-control-allow-origin: *, so a real denial cannot happen there. Only this
+ * wording, and only for that origin, is ignored; any other page error still fails the check.
+ */
+const CANCELLED_MOCK_FETCH = new RegExp(
+  `(?:^|[\\s/])${SB.replace(/\./g, "\\.")}\\S*\\s+due to access control checks\\.?$`,
+);
 
 const IGNORED_CONSOLE = new RegExp(
   [
@@ -49,6 +60,13 @@ function armCheck(tag, list) {
     emitted.add(label);
     record(`${tag} | ${label}`, !!ok, detail);
   };
+  // One check this engine cannot exercise: unproven with its reason, never a pass (228).
+  const skip = (label, why) => {
+    if (!list.includes(label)) throw new Error("undeclared check: " + label);
+    if (emitted.has(label)) return;
+    emitted.add(label);
+    unproven(`${tag} | ${label}`, why);
+  };
   const rest = (why) => {
     for (const label of list) {
       if (emitted.has(label)) continue;
@@ -56,7 +74,7 @@ function armCheck(tag, list) {
       unproven(`${tag} | ${label}`, why);
     }
   };
-  return { check, rest };
+  return { check, rest, skip };
 }
 
 async function newPage(browserType, [w, h], theme, prepare) {
@@ -83,10 +101,15 @@ async function newPage(browserType, [w, h], theme, prepare) {
   await mockSupabase(page, db);
   const errors = [];
   page.on("pageerror", (e) => {
-    if (!IGNORED_CONSOLE.test(String(e.message || e))) errors.push(String(e.message || e));
+    const text = String(e.message || e);
+    if (!IGNORED_CONSOLE.test(text) && !CANCELLED_MOCK_FETCH.test(text)) errors.push(text);
   });
   page.on("console", (m) => {
-    if (m.type() === "error" && !IGNORED_CONSOLE.test(m.text()))
+    if (
+      m.type() === "error" &&
+      !IGNORED_CONSOLE.test(m.text()) &&
+      !CANCELLED_MOCK_FETCH.test(m.text())
+    )
       errors.push(`${m.location().url || "(no url)"} ${m.text()}`.slice(0, 300));
   });
   return { browser, page, db, errors, touch };
@@ -99,6 +122,10 @@ async function signInMock(page) {
   await page.fill('input[type="password"]', "x");
   await page.click('button[type="submit"]');
   await page.waitForURL("**/feed", { timeout: 15000 });
+  // As tests/matrix.cjs's signIn: the Feed has rendered, so the sign-in's own navigation is over
+  // before the arm starts one (on WebKit a goto issued earlier was interrupted by it, run 485).
+  await page.waitForSelector('[data-testid="compose"]', { timeout: 15000 });
+  await page.waitForLoadState("networkidle");
 }
 
 async function openMessages(page) {
@@ -860,6 +887,8 @@ async function liveSignIn(page, email, password) {
   await page.fill('input[type="password"]', password);
   await page.click('button[type="submit"]');
   await page.waitForURL(/\/(feed|welcome|messages)/, { timeout: 25000 });
+  // The landing surface's own reads settle before the arm navigates away from it (run 485).
+  await page.waitForLoadState("networkidle");
 }
 
 /** A synthetic microphone so MediaRecorder records real bytes in either engine (WebM Opus, MP4 AAC). */
@@ -882,7 +911,7 @@ async function syntheticMic(ctx) {
 async function runMessengerLive(browserType, bname) {
   const tag = `${bname}-messenger-live`;
   M.armStart(tag);
-  const { check, rest } = armCheck(tag, LIVE_CHECKS);
+  const { check, rest, skip } = armCheck(tag, LIVE_CHECKS);
   const { MEMBER_EMAIL, MEMBER_PASSWORD, OWNER_EMAIL, OWNER_PASSWORD } = process.env;
   if (!MEMBER_EMAIL || !MEMBER_PASSWORD || !OWNER_EMAIL || !OWNER_PASSWORD) {
     rest("MEMBER_* and OWNER_* are not set, so no account can sign in");
@@ -932,7 +961,17 @@ async function runMessengerLive(browserType, bname) {
     const page = await ownerCtx.newPage();
     const peer = await memberCtx.newPage();
     const errors = [];
-    page.on("pageerror", (e) => errors.push(String(e.message || e)));
+    // Ruling 357 on the deployment: WebKit words a fetch a navigation cancelled as an
+    // access-control denial, and the arm navigates away from surfaces whose reads are in flight
+    // (run 485: the Feed's avatar signing and post_saves read). Only that wording, and only for the
+    // project's own host, is ignored; any other page error still fails the check.
+    const cancelled = new RegExp(
+      `(?:^|[\\s/])${SUPABASE_URL.replace(/^https:\/\//, "").replace(/\./g, "\\.")}\\S*\\s+due to access control checks\\.?$`,
+    );
+    page.on("pageerror", (e) => {
+      const text = String(e.message || e);
+      if (!cancelled.test(text)) errors.push(text);
+    });
     await liveSignIn(page, OWNER_EMAIL, OWNER_PASSWORD);
     await liveSignIn(peer, MEMBER_EMAIL, MEMBER_PASSWORD);
     check(LIVE_CHECKS[0], !!ownerToken && !!memberToken, ownerToken ? "" : "owner token missing");
@@ -1141,18 +1180,38 @@ async function runMessengerLive(browserType, bname) {
     }
     check(LIVE_CHECKS[14], img > 0, "rendered images " + img);
 
-    // 16. A voice note from the synthetic microphone.
-    await page.click('[data-testid="record"]');
-    await page.waitForTimeout(2600);
-    await page.click('[data-testid="record"]');
-    await page.waitForTimeout(800);
-    await page.click('[data-testid="send"]').catch(() => undefined);
-    let player = 0;
-    for (let i = 0; i < 10 && !player; i++) {
-      await page.waitForTimeout(1500);
-      player = await page.locator('[data-msg][data-own="1"] [data-voice-player]').count();
+    // 16. A voice note from the synthetic microphone, where the engine can record one at all: a
+    // MediaRecorder for one of the composer's three mimes and createMediaStreamDestination for the
+    // synthetic microphone. An engine without either cannot exercise the check (228).
+    const recordable = await page.evaluate(() => {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      return {
+        recorder:
+          typeof MediaRecorder !== "undefined" &&
+          ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"].some((m) =>
+            MediaRecorder.isTypeSupported(m),
+          ),
+        destination: !!AC && typeof AC.prototype.createMediaStreamDestination === "function",
+      };
+    });
+    if (!recordable.recorder || !recordable.destination) {
+      skip(
+        LIVE_CHECKS[15],
+        `this engine cannot record a voice note: MediaRecorder for webm or mp4 audio ${recordable.recorder ? "present" : "absent"}, createMediaStreamDestination ${recordable.destination ? "present" : "absent"}`,
+      );
+    } else {
+      await page.click('[data-testid="record"]');
+      await page.waitForTimeout(2600);
+      await page.click('[data-testid="record"]');
+      await page.waitForTimeout(800);
+      await page.click('[data-testid="send"]').catch(() => undefined);
+      let player = 0;
+      for (let i = 0; i < 10 && !player; i++) {
+        await page.waitForTimeout(1500);
+        player = await page.locator('[data-msg][data-own="1"] [data-voice-player]').count();
+      }
+      check(LIVE_CHECKS[15], player > 0, "players " + player);
     }
-    check(LIVE_CHECKS[15], player > 0, "players " + player);
 
     // 17. Delete for everyone, the text message.
     await page.goto(BASE + "/messages/" + threadId, { waitUntil: "networkidle" });
