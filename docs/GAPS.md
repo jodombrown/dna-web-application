@@ -7914,7 +7914,7 @@ on the final head is cited on PR #83.
 
 ---
 
-## G197. `private.message_requests_broadcast` sends every request update to the sender's inbox, so a decline and a recover reach the sender
+## G197. `private.message_requests_broadcast` sends every request update to the sender's inbox, so a decline and a recover reach the sender — closed (PR #94, handoff 41-D Addendum 1)
 
 **Severity: moderate, an invite-boundary gate under ruling 140. Opened 3 October 2026 during handoff 41-D
 Part A2, filed under ruling 597. The number is assigned by this entry (ruling 638).**
@@ -7932,6 +7932,15 @@ Owed: the sender's copy of the broadcast carries no state the sender may not see
 only), through a new migration that replaces the trigger function. Not changed by 41-D, which commits
 its five files as Chat wrote them.
 
+**Closed by PR #94 under handoff 41-D Addendum 1 (3 October 2026).** `20261003130500_b14d_request_broadcast.sql`
+(A6) replaces `private.message_requests_broadcast` whole. The recipient's inbox still receives every
+insert and update. The sender's inbox receives the insert, their own send, and the accept, when the
+thread exists, and nothing for a decline, a recovery or a block. The trigger fires on `INSERT OR
+UPDATE` only, read live before A6 was written. The live arm `msgdBroadcast` in `tests/live-db.cjs`
+reads both inboxes from `realtime.messages` as each member inside one rolled-back transaction. It
+expects the recipient's inbox to carry the insert, the decline, the recovery and the accept, and the
+sender's to carry only the insert and the accept. It reports UNPROVEN until Chat applies the file.
+
 ---
 
 ## G198. `threads_live_arms_select` passes the member's id as the thread id, so `live_arms` reads no thread row
@@ -7948,7 +7957,7 @@ failed on it. Owed: `thread_member_in(threads.id, m.id, …)` in a new migration
 
 ---
 
-## G199. `private.event_thread_join` leaves `joined_seq` at 0, so with history off a joining attendee reads the thread's whole history
+## G199. `private.event_thread_join` leaves `joined_seq` at 0, so with history off a joining attendee reads the thread's whole history — closed (PR #94, handoff 41-D Addendum 1)
 
 **Severity: moderate. Opened 3 October 2026 during handoff 41-D Part A1, filed under ruling 597. The
 number is assigned by this entry (ruling 638).**
@@ -7963,6 +7972,18 @@ Message reads every earlier message. The host's own row from `event_thread_open`
 is right for the creator. Owed: the join sets `joined_seq` to the thread's highest `seq` on insert and on
 a rejoin, as `thread_invite_accept` does, in a new migration (466). Not changed by 41-D, which commits
 A1 as Chat wrote it.
+
+**Closed by PR #94 under handoff 41-D Addendum 1 (3 October 2026).** A1 was replaced in place before
+it was applied, which 466 allows because only an applied file is never amended. The cause was wider
+than the entry above says: `private.thread_invite_accept` already admitted a going registrant with no
+invitation and set `joined_seq`, and RLS hid the thread from a non-member, so the event page could
+never learn its id. The replacement `20261003130000_b14d_event_thread_join.sql` makes
+`private.event_thread_join` the one event-thread join path. It sets `joined_seq` to the thread's
+highest `seq` on insert and on a rejoin from `invited` or `left`. It also removes the going branch
+from `thread_invite_accept`, whose invited path is unchanged. Arm `msgd` in `tests/live-db.cjs` has the
+host write before each join and asserts `joined_seq` equals the highest `seq` at that moment, for a
+going registrant's first join, an accepted named party's first join and that party's rejoin after
+leaving.
 
 ---
 

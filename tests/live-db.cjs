@@ -60,6 +60,8 @@
 //                                   and nobody renames an event thread, the list names a group's
 //                                   last author and skips a blocked one, media reads Image or Video
 //                                   to a member who does not own it, and video/quicktime records.
+//                                   Addendum 1: joined_seq is the highest seq at a join and a rejoin,
+//                                   and a decline or a recovery broadcasts to the recipient alone.
 //   Brief 12 12B (1178, 1265, 1281,   the Overview's five projections and DIA's note cache: the gate
 //   1304, 1310, 1311, 1362 to 1365;   refuses anon, no role and aal1 and answers admin and analyst
 //   handoff 45-B)                     at aal2, every call logs one read, no member reaches the JSON,
@@ -331,7 +333,9 @@ async function runLiveDbArms({ record, skip }) {
       "Brief 14 41-B (1343, F4): a delete-for-everyone marks the row, messenger_media_marked lists it, messenger_media_forget drops it once and not twice, and access is false from the mark on",
     r2mediaOnce:
       "Brief 14 41-C (M13, 1353): a media message counts once against message_media: with one slot left under the ceiling, the record takes it and the send that carries the object is not refused",
-    msgd: "Brief 14 41-D (1384): before the host opens the event thread an attendee reads available false and join raises no_thread; after it a going registrant reads true and joins, a second join answers the same thread, an accepted named party joins, a member who is neither raises not_going, a member who left rejoins and a removed member raises not_a_member",
+    msgd: "Brief 14 41-D (1384): before the host opens the event thread an attendee reads available false and join raises no_thread; after it a going registrant reads true and joins, a second join answers the same thread, an accepted named party joins, a member who is neither raises not_going, a member who left rejoins and a removed member raises not_a_member; a first join and a rejoin each set joined_seq to the thread's highest seq at that moment (Addendum 1, G199)",
+    msgdBroadcast:
+      "Brief 14 41-D Addendum 1 (157, G197): a request's insert reaches both inboxes, its decline and its recovery reach the recipient's inbox only, and its accept reaches both, read from realtime.messages as each member",
     msgdRecover:
       "Brief 14 41-D (1341): Recover returns a declined request to pending with decided_at null, a pending one raises not_declined and another member's raises not_your_request",
     msgdRename:
@@ -4192,7 +4196,7 @@ async function runLiveDbArms({ record, skip }) {
     const msgdPresent = async () => {
       await actAsSelf(client);
       const present = await client.query(
-        "select (to_regprocedure('public.messenger_event_thread_join(uuid)') is not null and to_regprocedure('public.messenger_request_recover(uuid)') is not null and to_regprocedure('public.messenger_thread_rename(uuid, text)') is not null and to_regprocedure('private.messenger_media_word(uuid)') is not null and exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'messenger_threads_view' and column_name = 'last_author_name') and exists (select 1 from pg_constraint where conname = 'media_mime_check' and pg_get_constraintdef(oid) like '%video/quicktime%')) as ok",
+        "select (to_regprocedure('public.messenger_event_thread_join(uuid)') is not null and to_regprocedure('public.messenger_request_recover(uuid)') is not null and to_regprocedure('public.messenger_thread_rename(uuid, text)') is not null and to_regprocedure('private.messenger_media_word(uuid)') is not null and exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'messenger_threads_view' and column_name = 'last_author_name') and exists (select 1 from pg_constraint where conname = 'media_mime_check' and pg_get_constraintdef(oid) like '%video/quicktime%') and pg_get_functiondef('private.message_requests_broadcast()'::regprocedure) like '%tg_op%') as ok",
       );
       return !!present.rows[0] && present.rows[0].ok === true;
     };
@@ -4271,7 +4275,7 @@ async function runLiveDbArms({ record, skip }) {
       for (const n of armsOf("msgd"))
         skip(
           n,
-          "the 41-D migrations (20261003130000 to 20261003130400) are not on the project yet",
+          "the 41-D migrations (20261003130000 to 20261003130500) are not on the project yet",
         );
     } else {
       // 1. The event thread's join (1384).
@@ -4301,10 +4305,38 @@ async function runLiveDbArms({ record, skip }) {
           [ev.id],
         );
         const thread = opened.ok ? opened.rows[0].t : null;
+        // Addendum 1 (G199): joined_seq is the thread's highest seq at the moment of joining, on a
+        // first join and on a rejoin. The host writes before each join so the highest seq is never
+        // 0, and the arm reads it, then the row, as live_arms under the thread's live-arms policy.
+        const hostWrites = async (body) => {
+          await actAs(client, owner.id);
+          return send(thread, uuid(), body);
+        };
+        const highest = async () => {
+          await actAsSelf(client);
+          const r = await attempt(
+            client,
+            "select coalesce(max(seq), 0)::int as n from public.messages where thread_id = $1::uuid",
+            [thread],
+          );
+          return r.ok ? r.rows[0].n : null;
+        };
+        const joinedSeq = async (who) => {
+          await actAsSelf(client);
+          const r = await attempt(
+            client,
+            "select joined_seq::int as n from public.thread_members where thread_id = $1::uuid and member_id = $2::uuid",
+            [thread, who],
+          );
+          return r.ok && r.rows[0] ? r.rows[0].n : null;
+        };
+        const firstWrite = thread ? await hostWrites("Before member-test joins") : opened;
+        const maxGoing = await highest();
         await actAs(client, member.id);
         const availGoing = await available(ev.id);
         const joinGoing = await join(ev.id);
         const joinAgain = await join(ev.id);
+        const seqGoing = await joinedSeq(member.id);
         await actAs(client, thirdId);
         const availNeither = await available(ev.id);
         const joinNeither = await join(ev.id);
@@ -4320,11 +4352,20 @@ async function runLiveDbArms({ record, skip }) {
               invited.rows[0].p.id,
             ])
           : invited;
+        const secondWrite = await hostWrites("Before the named party joins");
+        const maxParty = await highest();
+        await actAs(client, thirdId);
         const joinParty = await join(ev.id);
+        const seqParty = await joinedSeq(thirdId);
+        await actAs(client, thirdId);
         const left = await attempt(client, "select public.messenger_thread_leave($1::uuid)", [
           thread,
         ]);
+        const thirdWrite = await hostWrites("While the named party is away");
+        const maxBack = await highest();
+        await actAs(client, thirdId);
         const joinBack = await join(ev.id);
+        const seqBack = await joinedSeq(thirdId);
         await actAs(client, owner.id);
         const removed = await attempt(
           client,
@@ -4358,6 +4399,15 @@ async function runLiveDbArms({ record, skip }) {
             left.ok &&
             joinBack.ok &&
             joinBack.rows[0].t === thread &&
+            firstWrite.ok &&
+            secondWrite.ok &&
+            thirdWrite.ok &&
+            maxGoing > 0 &&
+            seqGoing === maxGoing &&
+            maxParty > maxGoing &&
+            seqParty === maxParty &&
+            maxBack > maxParty &&
+            seqBack === maxBack &&
             removed.ok &&
             availRemoved.ok &&
             availRemoved.rows[0].ok === false &&
@@ -4389,6 +4439,21 @@ async function runLiveDbArms({ record, skip }) {
             fmt(left) +
             ", rejoin " +
             fmt(joinBack) +
+            "; joined_seq against the highest seq: going " +
+            seqGoing +
+            "/" +
+            maxGoing +
+            ", party " +
+            seqParty +
+            "/" +
+            maxParty +
+            ", rejoin " +
+            seqBack +
+            "/" +
+            maxBack +
+            " (host writes " +
+            [firstWrite, secondWrite, thirdWrite].map(fmt).join(", ") +
+            ")" +
             "; remove " +
             fmt(removed) +
             ", available " +
@@ -4760,6 +4825,72 @@ async function runLiveDbArms({ record, skip }) {
             (mov.ok ? JSON.stringify(mov.rows[0].mime) : fmt(mov)) +
             "; avi " +
             fmt(avi),
+        );
+      });
+
+      // 7. The request broadcast (Addendum 1, A6; 157, G197). private.message_requests_broadcast
+      // writes through realtime.send into realtime.messages, which is partitioned by day and which
+      // a member reads under messenger_topics_select for the topic the session names in
+      // realtime.topic. So the arm reads each inbox as its own member, inside the transaction that
+      // wrote the rows, and observes the sends themselves rather than the function's text. The
+      // accept is the positive control: the sender's inbox does receive a broadcast.
+      await inTransaction(client, async () => {
+        await actAs(client, owner.id);
+        const req = await attempt(
+          client,
+          "select id from public.messenger_request_send($1::uuid, $2)",
+          [member.id, "A request the live arms decline, recover and accept"],
+        );
+        if (!req.ok) {
+          record(names.msgdBroadcast, false, "request " + fmt(req));
+          return;
+        }
+        const id = req.rows[0].id;
+        await actAs(client, member.id);
+        const declined = await attempt(
+          client,
+          "select public.messenger_request_decline($1::uuid)",
+          [id],
+        );
+        const recovered = await attempt(
+          client,
+          "select public.messenger_request_recover($1::uuid)",
+          [id],
+        );
+        const accepted = await attempt(client, "select public.messenger_request_accept($1::uuid)", [
+          id,
+        ]);
+        /** The states the request's broadcasts carried on one inbox, read as that inbox's member and sorted, since every row in one transaction shares inserted_at. */
+        const inbox = async (who) => {
+          await actAs(client, who);
+          await client.query("select set_config('realtime.topic', $1, true)", ["inbox:" + who]);
+          const r = await attempt(
+            client,
+            "select payload->>'state' as state from realtime.messages where topic = $1 and event = 'request' and payload->>'id' = $2 order by 1",
+            ["inbox:" + who, id],
+          );
+          return r.ok ? r.rows.map((x) => x.state) : fmt(r);
+        };
+        const toRecipient = await inbox(member.id);
+        const toSender = await inbox(owner.id);
+        const same = (a, b) => Array.isArray(a) && a.join(",") === b.join(",");
+        record(
+          names.msgdBroadcast,
+          declined.ok &&
+            recovered.ok &&
+            accepted.ok &&
+            same(toRecipient, ["accepted", "declined", "pending", "pending"]) &&
+            same(toSender, ["pending", "accepted"]),
+          "decline " +
+            fmt(declined) +
+            "; recover " +
+            fmt(recovered) +
+            "; accept " +
+            fmt(accepted) +
+            "; recipient's inbox " +
+            JSON.stringify(toRecipient) +
+            "; sender's inbox " +
+            JSON.stringify(toSender),
         );
       });
     }
