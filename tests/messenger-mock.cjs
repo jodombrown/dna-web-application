@@ -691,8 +691,10 @@ async function handleMessenger({ p, method, url, req, json, db }) {
     ];
     return json(rows.filter((r) => set.includes(r.id)));
   }
-  if (p === "/rest/v1/member_blocks") return json([{ blocked_id: M.members.yaa.id }]);
-  if (p === "/rest/v1/threads") return json([]);
+  // Reads only: the profile's block control writes member_blocks through matrix.cjs's own handler.
+  if (p === "/rest/v1/member_blocks" && method === "GET")
+    return json([{ blocked_id: M.members.yaa.id }]);
+  if (p === "/rest/v1/threads" && method === "GET") return json([]);
   if (!p.startsWith("/rest/v1/rpc/messenger_")) return false;
   const fn = p.slice("/rest/v1/rpc/".length);
   const body = method === "POST" ? req.postDataJSON() || {} : {};
