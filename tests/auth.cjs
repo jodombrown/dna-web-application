@@ -175,9 +175,16 @@ function makeAuth() {
  * over from the server-rendered markup.
  */
 async function hydrated(page) {
-  await page.waitForFunction(() => document.documentElement.hasAttribute("data-theme"), null, {
-    timeout: 15000,
-  });
+  // Handoff 45-C: the admin root sets data-theme before first paint and marks it data-prepaint
+  // until its effect runs, so the attribute without the mark is still hydration on both apps.
+  await page.waitForFunction(
+    () => {
+      const root = document.documentElement;
+      return root.hasAttribute("data-theme") && !root.hasAttribute("data-prepaint");
+    },
+    null,
+    { timeout: 15000 },
+  );
 }
 
 /**

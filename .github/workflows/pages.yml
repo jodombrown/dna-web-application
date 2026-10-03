@@ -54,6 +54,10 @@ jobs:
       # yet, so no deployment carries them for a mount arm to open. Their tokens are the step above.
       - name: The Strand admin parts render, and hasNumber reads a number (handoff 40-D)
         run: node tests/strand-admin.cjs
+      # Handoff 45-C arm 4 (1378): admin-dia-note's SYSTEM places Direction, Depth and Source in
+      # Mobilization and calls no joined member new, and BLOCKS is unchanged. Static.
+      - name: DIA's Overview prompt (handoff 45-C, ruling 1378)
+        run: ARMS=prompt node tests/admin-dia-note.cjs
       # Ruling 547, Fix PR 03 item 6: every kind in the notification registry resolves to a
       # destination, and the kinds whose destination has no surface are named rather than exempted.
       - name: Every notification kind resolves to a destination (rulings 485, 547)
@@ -209,6 +213,12 @@ jobs:
           BASE: ${{ needs.deploy-admin.outputs.url }}
           APP: admin
         run: scripts/deployment-serves.sh
+      # Handoff 45-C arm 5 (1379): admin-dia-note's CORS answers the host this run's deploy-admin
+      # job reported, and refuses an arbitrary pages.dev origin.
+      - name: admin-dia-note answers this admin deployment's origin (handoff 45-C, ruling 1379)
+        env:
+          ADMIN_BASE: ${{ needs.deploy-admin.outputs.url }}
+        run: ARMS=origin node tests/admin-dia-note.cjs
       - name: Install Chromium
         run: scripts/retry.sh 3 bunx playwright install --with-deps chromium
       - name: Run the admin arms (chromium)
