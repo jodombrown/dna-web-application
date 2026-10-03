@@ -3786,6 +3786,10 @@ export type Database = {
       };
     };
     Functions: {
+      admin_change_history: {
+        Args: { p_before?: number; p_limit?: number };
+        Returns: Json;
+      };
       admin_dia_note_read: {
         Args: { p_compare: string; p_grain: string; p_tz: string };
         Returns: Json;
@@ -3803,6 +3807,9 @@ export type Database = {
         Args: { p_member: string; p_reason: string; p_role: string };
         Returns: number;
       };
+      admin_my_sessions: { Args: never; Returns: Json };
+      admin_org_settings_read: { Args: never; Returns: Json };
+      admin_org_settings_save: { Args: { p_patch: Json }; Returns: Json };
       admin_overview_company: { Args: never; Returns: Json };
       admin_overview_levers: {
         Args: { p_compare: string; p_grain: string; p_tz: string };
@@ -3817,11 +3824,17 @@ export type Database = {
         Args: { p_compare: string; p_grain: string; p_tz: string };
         Returns: Json;
       };
+      admin_read_log: {
+        Args: { p_before?: number; p_limit?: number };
+        Returns: Json;
+      };
       admin_revoke_role: {
         Args: { p_member: string; p_reason: string; p_role: string };
         Returns: number;
       };
       admin_session_state: { Args: never; Returns: Json };
+      admin_staff_settings_read: { Args: never; Returns: Json };
+      admin_staff_settings_save: { Args: { p_patch: Json }; Returns: Json };
       claim_guest_registrations: { Args: never; Returns: Json };
       connect_cards: {
         Args: {

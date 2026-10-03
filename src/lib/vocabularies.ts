@@ -62,6 +62,17 @@ export type Vocabularies = {
   message_reaction_kinds: { value: string; label: string }[];
   /** Ruling 1177: the platform roles and their labels, in position order; the admin console's bar reads a role's label here. */
   platform_role_kinds: { value: string; label: string }[];
+  /** Handoff 45-D (1381, 1393): the admin app's appearances; system follows each device. */
+  admin_appearances: { value: string; label: string }[];
+  /** Handoff 45-D (1304, 1392): the Overview's grains, values as the projections take them. */
+  overview_grains: { value: string; label: string }[];
+  /** Handoff 45-D (1304, 1392): the Overview's comparisons. */
+  overview_comparisons: { value: string; label: string }[];
+  /**
+   * Handoff 45-D (1382, 1394): the reporting zones by IANA identifier, each with its name and city,
+   * and the standard abbreviation shown only where the runtime names the zone by a bare offset.
+   */
+  reporting_zones: { value: string; name: string; city: string; abbreviation: string }[];
 };
 
 export async function loadVocabularies(): Promise<Vocabularies | null> {

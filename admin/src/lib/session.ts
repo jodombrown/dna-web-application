@@ -96,3 +96,71 @@ export function totpDisabled(error: unknown): boolean {
 export async function signOutHere(sb: Supabase): Promise<void> {
   await sb.auth.signOut({ scope: "local" });
 }
+
+/**
+ * Sign out everywhere (handoff 45-D Part B item 5): `signOut({ scope: "global" })` revokes every
+ * refresh token of the account, so every session ends, this one included, and the local session is
+ * cleared. Throws on failure so the page can stay signed in and say so.
+ */
+export async function signOutEverywhere(sb: Supabase): Promise<void> {
+  const { error } = await sb.auth.signOut({ scope: "global" });
+  if (error) throw error;
+}
+
+// ---------------------------------------------------------------------------------------------------
+// Re-enrolment (handoff 45-D Part B item 5; extraction §2d S3). In order: a current code is checked
+// on the existing verified factor (`mfa.challenge` and `mfa.verify` on it); only then is a new TOTP
+// factor enrolled (`mfa.enroll`); its first code is verified (`mfa.challenge` and `mfa.verify` on
+// the new factor), which makes it a verified factor; only then is the old one removed
+// (`mfa.unenroll`), which needs the aal2 session the verification has just given. Cancelling
+// between the two steps removes the new, still unverified factor, so nothing half-made is left.
+// ---------------------------------------------------------------------------------------------------
+
+/** Step 1: the current code on the existing factor. Answers its id when the code matched. */
+export async function checkCurrentCode(
+  sb: Supabase,
+  code: string,
+): Promise<{ outcome: VerifyOutcome; factorId: string | null }> {
+  const factorId = await verifiedTotpFactor(sb);
+  if (!factorId) return { outcome: "failed", factorId: null };
+  return { outcome: await verifyCode(sb, factorId, code), factorId };
+}
+
+/**
+ * Step 2's enrolment. Supabase refuses a second factor with a friendly name the account already
+ * holds, so the new entry is named with the moment it was made; any unverified TOTP factor left by
+ * an abandoned attempt is removed first, as `enrolTotp` does.
+ */
+export async function enrolReplacement(sb: Supabase): Promise<Enrolment> {
+  const factors = await sb.auth.mfa.listFactors();
+  if (factors.error) throw factors.error;
+  for (const f of factors.data.all)
+    if (f.factor_type === "totp" && f.status === "unverified") {
+      const { error } = await sb.auth.mfa.unenroll({ factorId: f.id });
+      if (error) throw error;
+    }
+  const { data, error } = await sb.auth.mfa.enroll({
+    factorType: "totp",
+    friendlyName: "DNA Admin " + new Date().toISOString().slice(0, 16).replace("T", " "),
+  });
+  if (error) throw error;
+  return { factorId: data.id, qrCode: data.totp.qr_code, secret: data.totp.secret };
+}
+
+/** Step 2's finish: verify the new factor's code, then remove the old factor. */
+export async function finishReplacement(
+  sb: Supabase,
+  oldFactorId: string,
+  newFactorId: string,
+  code: string,
+): Promise<VerifyOutcome> {
+  const outcome = await verifyCode(sb, newFactorId, code);
+  if (outcome !== "ok") return outcome;
+  const { error } = await sb.auth.mfa.unenroll({ factorId: oldFactorId });
+  return error ? "failed" : "ok";
+}
+
+/** Cancel between the steps: the new factor was never verified, so it is removed. */
+export async function abandonReplacement(sb: Supabase, newFactorId: string): Promise<void> {
+  await sb.auth.mfa.unenroll({ factorId: newFactorId }).catch(() => undefined);
+}

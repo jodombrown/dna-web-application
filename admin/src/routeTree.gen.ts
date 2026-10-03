@@ -13,6 +13,7 @@ import { Route as ConsoleRouteImport } from './routes/_console'
 import { Route as SignInRouteImport } from './routes/sign-in'
 import { Route as ConsoleIndexRouteImport } from './routes/_console/index'
 import { Route as ConsoleSplatRouteImport } from './routes/_console/$'
+import { Route as ConsoleSettingsRouteImport } from './routes/_console/settings'
 
 const ConsoleRoute = ConsoleRouteImport.update({
   id: '/_console',
@@ -33,15 +34,22 @@ const ConsoleSplatRoute = ConsoleSplatRouteImport.update({
   path: '/$',
   getParentRoute: () => ConsoleRoute,
 } as any)
+const ConsoleSettingsRoute = ConsoleSettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => ConsoleRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof ConsoleIndexRoute
   '/sign-in': typeof SignInRoute
   '/$': typeof ConsoleSplatRoute
+  '/settings': typeof ConsoleSettingsRoute
 }
 export interface FileRoutesByTo {
   '/sign-in': typeof SignInRoute
   '/$': typeof ConsoleSplatRoute
+  '/settings': typeof ConsoleSettingsRoute
   '/': typeof ConsoleIndexRoute
 }
 export interface FileRoutesById {
@@ -49,14 +57,21 @@ export interface FileRoutesById {
   '/_console': typeof ConsoleRouteWithChildren
   '/sign-in': typeof SignInRoute
   '/_console/$': typeof ConsoleSplatRoute
+  '/_console/settings': typeof ConsoleSettingsRoute
   '/_console/': typeof ConsoleIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/sign-in' | '/$'
+  fullPaths: '/' | '/sign-in' | '/$' | '/settings'
   fileRoutesByTo: FileRoutesByTo
-  to: '/sign-in' | '/$' | '/'
-  id: '__root__' | '/_console' | '/sign-in' | '/_console/$' | '/_console/'
+  to: '/sign-in' | '/$' | '/settings' | '/'
+  id:
+    | '__root__'
+    | '/_console'
+    | '/sign-in'
+    | '/_console/$'
+    | '/_console/settings'
+    | '/_console/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -94,16 +109,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ConsoleSplatRouteImport
       parentRoute: typeof ConsoleRoute
     }
+    '/_console/settings': {
+      id: '/_console/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof ConsoleSettingsRouteImport
+      parentRoute: typeof ConsoleRoute
+    }
   }
 }
 
 interface ConsoleRouteChildren {
   ConsoleSplatRoute: typeof ConsoleSplatRoute
+  ConsoleSettingsRoute: typeof ConsoleSettingsRoute
   ConsoleIndexRoute: typeof ConsoleIndexRoute
 }
 
 const ConsoleRouteChildren: ConsoleRouteChildren = {
   ConsoleSplatRoute: ConsoleSplatRoute,
+  ConsoleSettingsRoute: ConsoleSettingsRoute,
   ConsoleIndexRoute: ConsoleIndexRoute,
 }
 

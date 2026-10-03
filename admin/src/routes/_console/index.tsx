@@ -6,11 +6,18 @@
 // while the rest render. Every sentence is written in admin/src/lib/overview.ts from the
 // projections' structured values; no figure renders without a value behind it: a null with
 // not_connected renders the part's not-connected state, a zero where the extraction gives an empty
-// sentence renders that sentence (grounded-or-empty). Times are the viewer's zone, labelled (1305).
-// DIA's note arrives from the admin-dia-note Edge Function after the page has rendered and never
-// holds it up (Part D item 4).
+// sentence renders that sentence (grounded-or-empty). DIA's note arrives from the admin-dia-note Edge
+// Function after the page has rendered and never holds it up (Part D item 4).
+//
+// Handoff 45-D (1394, 1411, 1382, 1391): every projection and DIA's note are read in the company
+// reporting zone from the Organization settings, so the week is the company's for everyone; a
+// staff member's own reading zone moves only the clock times, and the window line then says so in
+// the extraction's sentence (45-12S §2f). The page opens on the person's default grain and
+// comparison, whose options are the vocabularies (1392). With DIA's note off for the company the
+// note block is not rendered and the function is not called. The page waits on the console's
+// Settings read; if it fails, the window's error state offers Try again.
 import { createFileRoute } from "@tanstack/react-router";
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { BarList, type BarListRow } from "@/components/strand/BarList";
 import { DataTable } from "@/components/strand/DataTable";
 import { DiaNote, type DiaStatement } from "@/components/strand/DiaNote";
@@ -20,10 +27,11 @@ import { StackedBars } from "@/components/strand/StackedBars";
 import { useAuth } from "@/lib/auth";
 import { getSupabase } from "@/lib/supabase";
 import { useMode, useTier } from "@/lib/tier";
+import { ADMIN_COPY, SETTINGS_COPY } from "../../lib/copy";
+import { useConsole } from "../../lib/console";
+import { zoneShortById } from "../../lib/settings";
 import {
-  COMPARES,
   DIRECTION_LABELS,
-  GRAINS,
   SIDE_LABELS,
   SOURCE_LABELS,
   changeWords,
@@ -33,7 +41,6 @@ import {
   readProjection,
   refreshLine,
   trendOf,
-  viewerZone,
   windowWords,
   type Compare,
   type DiaStatementWire,
@@ -96,10 +103,71 @@ const BLOCK_WORD: Record<Block, string> = {
 };
 
 function Overview() {
+  const { settings, reloadSettings } = useConsole();
+  if (settings.status === "ready")
+    return (
+      <OverviewPage
+        companyZone={settings.org.reporting_zone}
+        readingZone={settings.staff.reading_zone}
+        defaultGrain={settings.staff.default_grain as Grain}
+        defaultCompare={settings.staff.default_compare as Compare}
+        diaNote={settings.org.dia_note}
+      />
+    );
+  return (
+    <div
+      data-testid="admin-overview"
+      data-settings={settings.status}
+      style={{
+        height: "100%",
+        overflowY: "auto",
+        padding: "24px 16px 64px",
+        boxSizing: "border-box",
+      }}
+    >
+      <div style={{ maxWidth: 1120, margin: "0 auto" }}>
+        {settings.status === "failed" ? (
+          <MeasureCard
+            label="Window"
+            state="error"
+            errorTitle="The window could not load."
+            errorText={ADMIN_COPY.failure}
+            onRetry={reloadSettings}
+          />
+        ) : (
+          <span aria-busy="true" style={{ fontSize: 15, color: "var(--ink-2)" }}>
+            Reading the period…
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function OverviewPage({
+  companyZone,
+  readingZone,
+  defaultGrain,
+  defaultCompare,
+  diaNote,
+}: {
+  companyZone: string;
+  readingZone: string | null;
+  defaultGrain: Grain;
+  defaultCompare: Compare;
+  diaNote: boolean;
+}) {
   const { session } = useAuth();
-  const [grain, setGrain] = useState<Grain>("week");
-  const [compare, setCompare] = useState<Compare>("previous");
-  const tz = useMemo(() => viewerZone(), []);
+  const { vocab } = useConsole();
+  const [grain, setGrain] = useState<Grain>(defaultGrain);
+  const [compare, setCompare] = useState<Compare>(defaultCompare);
+  // Days and weeks in the company zone (1394); clock times in the reading zone (1411).
+  const tz = companyZone;
+  const clockTz = readingZone ?? companyZone;
+  const grainOptions = vocab && Array.isArray(vocab.overview_grains) ? vocab.overview_grains : [];
+  const compareOptions =
+    vocab && Array.isArray(vocab.overview_comparisons) ? vocab.overview_comparisons : [];
+  const zones = vocab && Array.isArray(vocab.reporting_zones) ? vocab.reporting_zones : [];
   const tier = useTier();
   const mode = useMode();
   const touch = mode === "touch";
@@ -107,7 +175,7 @@ function Overview() {
     expanded = tier === "expanded";
   const [reads, setReads] = useState<Reads>(LOADING);
   const [dia, setDia] = useState<{ loading: boolean; statements: DiaStatementWire[] }>({
-    loading: true,
+    loading: diaNote,
     statements: [],
   });
   const run = useRef(0);
@@ -139,8 +207,10 @@ function Overview() {
     if (!token) return;
     const id = ++run.current;
     setReads(LOADING);
-    setDia({ loading: true, statements: [] });
     for (const k of KEYS) readOne(k, id);
+    // DIA's note off for the company: no block and no call (1391).
+    if (!diaNote) return;
+    setDia({ loading: true, statements: [] });
     const sb = getSupabase();
     if (!sb) return;
     const ctl = new AbortController();
@@ -149,7 +219,7 @@ function Overview() {
       setDia({ loading: false, statements });
     });
     return () => ctl.abort();
-  }, [token, grain, compare, tz, readOne]);
+  }, [token, grain, compare, tz, readOne, diaNote]);
 
   const retry = (key: ReadKey) => {
     setReads((prev) => ({ ...prev, [key]: { status: "loading" } }));
@@ -166,7 +236,7 @@ function Overview() {
         : reads.levers.status === "ready"
           ? reads.levers.data
           : null;
-  const words: WindowWords | null = windowPart ? windowWords(windowPart) : null;
+  const words: WindowWords | null = windowPart ? windowWords(windowPart, clockTz) : null;
   const winShort = words?.short ?? "";
   const hasCmp = words?.hasComparison ?? false;
   const loading = (k: ReadKey) => reads[k].status === "loading";
@@ -393,7 +463,7 @@ function Overview() {
   // 4. The network
   // ---------------------------------------------------------------------------------------------
   const net = reads.network.status === "ready" ? reads.network.data : null;
-  const asOf = net ? `As of ${moment(new Date(net.as_of), tz)}.` : "";
+  const asOf = net ? `As of ${moment(new Date(net.as_of), clockTz)}.` : "";
   const sides: BarListRow[] = (net?.by_side ?? []).map((s) => ({
     id: s.side,
     label: SIDE_LABELS[s.side] ?? s.side,
@@ -452,7 +522,17 @@ function Overview() {
             <strong style={{ fontWeight: 500, color: "var(--ink)" }}>{words.periodLong}</strong>,{" "}
             {words.cmpLong}
           </span>
-          {reads.window.status === "ready" && <span>{refreshLine(reads.window.data)}</span>}
+          {reads.window.status === "ready" && (
+            <span>{refreshLine(reads.window.data, clockTz)}</span>
+          )}
+          {readingZone && (
+            <span data-testid="overview-own-zone" style={{ color: "var(--ink)" }}>
+              {SETTINGS_COPY.ownZoneSentence(
+                zoneShortById(zones, readingZone),
+                zoneShortById(zones, companyZone),
+              )}
+            </span>
+          )}
         </>
       );
     if (failed("window"))
@@ -474,6 +554,7 @@ function Overview() {
       data-testid="admin-overview"
       data-grain={grain}
       data-compare={compare}
+      data-zone={tz}
       style={{
         height: "100%",
         overflowY: "auto",
@@ -518,7 +599,7 @@ function Overview() {
               <Caps>Time grain</Caps>
               <Segment
                 label="Time grain"
-                options={GRAINS}
+                options={grainOptions}
                 value={grain}
                 onChange={(v) => setGrain(v as Grain)}
                 style={
@@ -532,7 +613,7 @@ function Overview() {
               <Caps>Compare with</Caps>
               <Segment
                 label="Comparison"
-                options={COMPARES}
+                options={compareOptions}
                 value={compare}
                 onChange={(v) => setCompare(v as Compare)}
                 style={
@@ -829,10 +910,16 @@ function Overview() {
           </Grid>
         </section>
 
-        {/* 6. DIA's note */}
-        <section aria-label="DIA's note for the week" data-testid="overview-dia">
-          <DiaNote title="DIA's note for the week" statements={statements} loading={dia.loading} />
-        </section>
+        {/* 6. DIA's note, when the company has it on (1391) */}
+        {diaNote && (
+          <section aria-label="DIA's note for the week" data-testid="overview-dia">
+            <DiaNote
+              title="DIA's note for the week"
+              statements={statements}
+              loading={dia.loading}
+            />
+          </section>
+        )}
       </div>
     </div>
   );
