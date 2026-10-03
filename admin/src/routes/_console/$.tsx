@@ -1,5 +1,5 @@
 // Any other path: signed out it lands on the sign-in through the console's gate, and signed in it
-// returns to the shell's root, because the shell has no other page yet.
+// returns to the shell's root, the Overview.
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect } from "react";
 

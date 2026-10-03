@@ -6,7 +6,7 @@ import { Outlet, createRootRoute, HeadContent, Scripts, useRouter } from "@tanst
 import type { ReactNode } from "react";
 import { AuthProvider } from "@/lib/auth";
 import appCss from "@/styles.css?url";
-import { DEVICE_THEME_SCRIPT, useDeviceTheme } from "../lib/theme";
+import { DEVICE_THEME_SCRIPT, useAppearance } from "../lib/theme";
 
 export const Route = createRootRoute({
   head: () => ({
@@ -32,7 +32,7 @@ export const Route = createRootRoute({
 function RootShell({ children }: { children: ReactNode }) {
   // Ruling 438: the CSP nonce this response was rendered with, echoed for the client-side router.
   const nonce = useRouter().options.ssr?.nonce;
-  // Ruling 1377: the device's appearance, set before first paint by the script, which carries the
+  // Rulings 1377 and 1393: the account's appearance, or the device's under System, set before first paint by the script, which carries the
   // same nonce (438) and sits after the stylesheet so it can read the resolved --bg. The attribute
   // it writes is not the server's, hence suppressHydrationWarning on <html>. The body's ground is
   // the token, so no edge of the page shows Tailwind's light --background on a dark device.
@@ -52,8 +52,8 @@ function RootShell({ children }: { children: ReactNode }) {
 }
 
 function RootComponent() {
-  // Both themes from the tokens, following the device and nothing else (1377).
-  useDeviceTheme();
+  // Both themes from the tokens: the account's appearance, or the device under System (1377, 1393).
+  useAppearance();
   return (
     <AuthProvider>
       <Outlet />

@@ -2,36 +2,31 @@
 // C; EXTRACTION-40-12B R2 §5 and §6). Five projections, read in parallel once per grain and
 // comparison change, each rendered from its own result; and every sentence the page shows, written
 // here from the projections' structured values exactly as the extractions record it, because no
-// projection returns a sentence. Times are the viewer's zone with its abbreviation (1305); weeks run
-// Monday to Sunday and every period is the current one so far against its comparison to the same
-// point (1304); whether a comparison exists is read from the projection, never assumed (1310).
+// projection returns a sentence. Weeks run Monday to Sunday and every period is the current one so
+// far against its comparison to the same point (1304); whether a comparison exists is read from the
+// projection, never assumed (1310).
+//
+// Zones (handoff 45-D, rulings 1394 and 1411). Every projection and DIA's note are read in the
+// company reporting zone, so days and weeks are the company's for every staff member; a staff
+// member's own reading zone moves only the clock times the page writes. So the words below take the
+// window's own zone (the company's) for days and dates, and a separate clock zone for times. The
+// grain and comparison options are vocabulary (1392), read through src/lib/vocabularies.ts; the
+// values the switch below branches on are the projections' own.
 import type { Supabase } from "@/lib/supabase";
 import { functionsUrl, SUPABASE_PUBLISHABLE_KEY } from "@/lib/supabase";
 
 export type Grain = "now" | "hour" | "day" | "week" | "month" | "quarter" | "year";
 export type Compare = "previous" | "last_year";
 
-export const GRAINS: { value: Grain; label: string }[] = [
-  { value: "now", label: "Now" },
-  { value: "hour", label: "Hour" },
-  { value: "day", label: "Day" },
-  { value: "week", label: "Week" },
-  { value: "month", label: "Month" },
-  { value: "quarter", label: "Quarter" },
-  { value: "year", label: "Year" },
-];
-export const COMPARES: { value: Compare; label: string }[] = [
-  { value: "previous", label: "Previous period" },
-  { value: "last_year", label: "Same period last year" },
-];
+/**
+ * Standard abbreviations from the reporting_zones vocabulary, by IANA identifier, for the zones the
+ * runtime names only by an offset (WAT, SAST, EAT). Filled once the vocabulary loads.
+ */
+const zoneAbbreviations = new Map<string, string>();
 
-/** The viewer's zone, as the SPEC names the read. */
-export function viewerZone(): string {
-  try {
-    return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
-  } catch {
-    return "UTC";
-  }
+export function registerZones(rows: { value: string; abbreviation: string }[]): void {
+  for (const r of rows)
+    if (r && r.value && r.abbreviation) zoneAbbreviations.set(r.value, r.abbreviation);
 }
 
 // ---------------------------------------------------------------------------------------------------
@@ -257,12 +252,18 @@ function parts(d: Date, tz: string, opts: Intl.DateTimeFormatOptions, locale = "
   return out;
 }
 
-/** The zone's abbreviation as the viewer would say it: PDT, GMT, BST, EAT; a numeric offset only when no locale names it. */
+/**
+ * The zone's abbreviation as the viewer would say it: PDT, GMT, BST from the runtime, which follows
+ * daylight time; WAT, SAST, EAT from the reporting_zones vocabulary where the runtime has only an
+ * offset; a numeric offset only when neither names it.
+ */
 export function zoneLabel(d: Date, tz: string): string {
   const us = parts(d, tz, { timeZoneName: "short" }, "en-US")["timeZoneName"] ?? "";
   if (us && !/^GMT[+-−]/.test(us)) return us;
   const gb = parts(d, tz, { timeZoneName: "short" }, "en-GB")["timeZoneName"] ?? "";
   if (gb && !/^GMT[+-−]/.test(gb)) return gb;
+  const named = zoneAbbreviations.get(tz);
+  if (named) return named;
   return us || gb || tz;
 }
 
@@ -337,8 +338,14 @@ export type WindowWords = {
   bucketLabel: (iso: string) => string;
 };
 
-export function windowWords(w: WindowPart): WindowWords {
+/**
+ * The window's words. Days, dates and periods are written in the window's own zone, the company's;
+ * clock times in `clockTz`, the staff member's reading zone, which is the company's when they read
+ * in it (1411).
+ */
+export function windowWords(w: WindowPart, clockTz: string = w.tz): WindowWords {
   const tz = w.tz;
+  const ct = clockTz;
   const start = new Date(w.period.start);
   const end = new Date(w.period.end);
   const has = !!w.comparison;
@@ -370,31 +377,31 @@ export function windowWords(w: WindowPart): WindowWords {
   let cmpLong: string;
   let short: string;
   let trendLabels: [string, string];
-  let bucketLabel: (iso: string) => string = (iso) => clock(new Date(iso), tz);
+  let bucketLabel: (iso: string) => string = (iso) => clock(new Date(iso), ct);
 
   switch (w.grain) {
     case "now": {
-      periodLong = `Right now, the trailing 60 minutes to ${clockZ(end, tz)}, read live`;
+      periodLong = `Right now, the trailing 60 minutes to ${clockZ(end, ct)}, read live`;
       cmpLong = has ? "against the 60 minutes before." : reason;
       short = `Trailing 60 minutes, ${has ? "vs the 60 minutes before" : "no comparison"}`;
-      trendLabels = [clock(start, tz), clock(end, tz)];
+      trendLabels = [clock(start, ct), clock(end, ct)];
       break;
     }
     case "hour": {
-      periodLong = `The hour to ${clockZ(end, tz)}, ${dayShort(end, tz)}`;
+      periodLong = `The hour to ${clockZ(end, ct)}, ${dayShort(end, tz)}`;
       cmpLong =
-        has && cs && ce ? `against the hour before, ${clock(cs, tz)} to ${clock(ce, tz)}.` : reason;
-      short = `Hour to ${clockZ(end, tz)}, ${has ? "vs the hour before" : "no comparison"}`;
-      trendLabels = [clock(start, tz), clock(end, tz)];
+        has && cs && ce ? `against the hour before, ${clock(cs, ct)} to ${clock(ce, ct)}.` : reason;
+      short = `Hour to ${clockZ(end, ct)}, ${has ? "vs the hour before" : "no comparison"}`;
+      trendLabels = [clock(start, ct), clock(end, ct)];
       break;
     }
     case "day": {
-      periodLong = `Today so far, ${dayLong(end, tz)}, to ${clockZ(end, tz)}`;
+      periodLong = `Today so far, ${dayLong(end, tz)}, to ${clockZ(end, ct)}`;
       cmpLong = has && cs ? `against ${dayShort(cs, tz)} at the same point in the day.` : reason;
-      short = `Today so far, to ${clockZ(end, tz)}, ${
+      short = `Today so far, to ${clockZ(end, ct)}, ${
         has && cs ? `vs ${dayShort(cs, tz)} at the same point` : "no comparison"
       }`;
-      trendLabels = [clock(start, tz), clock(end, tz)];
+      trendLabels = [clock(start, ct), clock(end, ct)];
       break;
     }
     case "week": {
@@ -463,9 +470,12 @@ export function windowWords(w: WindowPart): WindowWords {
   return { periodLong, cmpLong, short, hasComparison: has, trendLabels, bucketLabel };
 }
 
-/** "Mobilization Definition v1. Last refreshed Thu 1 Oct, 11:00 PDT." (at Now: "Reading live; rollups last refreshed …") */
-export function refreshLine(w: WindowRead): string {
-  const when = w.refreshed_at ? moment(new Date(w.refreshed_at), w.tz) : null;
+/**
+ * "Mobilization Definition v1. Last refreshed Thu 1 Oct, 11:00 PDT." (at Now: "Reading live; rollups
+ * last refreshed …"). A moment, written whole in the clock zone (extraction 45-12S §2f).
+ */
+export function refreshLine(w: WindowRead, clockTz: string = w.tz): string {
+  const when = w.refreshed_at ? moment(new Date(w.refreshed_at), clockTz) : null;
   const head = `Mobilization Definition v${w.definition_version}.`;
   if (w.grain === "now")
     return when

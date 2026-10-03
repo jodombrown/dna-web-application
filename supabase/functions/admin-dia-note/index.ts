@@ -11,6 +11,12 @@
 // error, refusal or no surviving statement the answer is none, and DiaNote renders its empty
 // sentence; the page never waits on this. Logs latency and counts only; never a statement.
 //
+// Handoff 45-D Part C (1391, 1394): the Organization settings are read first, as the caller, through
+// public.admin_org_settings_read. When DIA's note is off for the company the answer is no
+// statements, and neither the cache, the projections nor the Anthropic API is called; a read that
+// fails is answered the same way, so the switch can never be bypassed by a failure. The zone the
+// Overview passes is the company reporting zone, so the cache keys on it unchanged.
+//
 // CORS answers the admin origin, ADMIN_ORIGIN, and the dna-admin Pages previews, and nothing else
 // (_shared/origin.ts's rule, with the admin host in place of the app's).
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
@@ -131,6 +137,19 @@ Deno.serve(async (req) => {
   // The caller's own JWT: the projections' gate and read log are theirs (1311, 1178).
   const sb = createClient(url, anon, { global: { headers: { Authorization: auth } } });
   const period = { p_grain: grain, p_compare: compare, p_tz: tz };
+
+  const org = await sb.rpc("admin_org_settings_read");
+  const orgData = org.data as { dia_note?: unknown } | null;
+  if (org.error || !orgData || orgData.dia_note !== true) {
+    console.log(
+      JSON.stringify({
+        event: org.error ? "admin_dia_note_settings_refused" : "admin_dia_note_off",
+        latency_ms: Date.now() - started,
+        code: org.error?.code ?? null,
+      }),
+    );
+    return json({ statements: [] }, org.error ? (org.error.code === "42501" ? 403 : 200) : 200);
+  }
 
   const cached = await sb.rpc("admin_dia_note_read", period);
   if (cached.error) {

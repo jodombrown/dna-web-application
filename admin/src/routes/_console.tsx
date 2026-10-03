@@ -12,14 +12,31 @@
 // sentence and never the page. The staff name is the member's own, read the way the member app's
 // shell reads it (useAuth's members row), and the role is the first live role's label from the
 // platform_role_kinds vocabulary, never a label map in code.
-import { Outlet, createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useCallback, useEffect, useState } from "react";
+//
+// Handoff 45-D Part B: at aal2 the console also reads the vocabularies, the staff member's own
+// Settings and the company's, and hands them to its pages through ConsoleProvider. The account's
+// appearance is copied into this origin's storage as soon as it is read, so the next first paint
+// is the account's (1393). Settings is the last navigation row (1410), and the page that is current
+// follows the route. Sign out everywhere ends with the extraction's signed-out screen, which this
+// gate renders after the session has gone, in place of the redirect to the sign-in.
+import { Outlet, createFileRoute, useLocation, useNavigate } from "@tanstack/react-router";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Button } from "@/components/strand/Button";
 import { ConsoleShell } from "@/components/strand/ConsoleShell";
 import { useAuth } from "@/lib/auth";
 import { getSupabase } from "@/lib/supabase";
-import { loadVocabularies } from "@/lib/vocabularies";
-import { readAdminState, signOutHere, type AdminState } from "../lib/session";
-import { ADMIN_COPY, CONSOLE_DESTINATIONS, OVERVIEW_ROLES } from "../lib/copy";
+import { loadVocabularies, type Vocabularies } from "@/lib/vocabularies";
+import {
+  readAdminState,
+  signOutEverywhere as endEverySession,
+  signOutHere,
+  type AdminState,
+} from "../lib/session";
+import { ADMIN_COPY, CONSOLE_DESTINATIONS, OVERVIEW_ROLES, SETTINGS_COPY } from "../lib/copy";
+import { ConsoleProvider, type ConsoleContext, type SettingsRead } from "../lib/console";
+import { registerZones } from "../lib/overview";
+import { readOrgSettings, readStaffSettings } from "../lib/settings";
+import { setAppearanceCopy } from "../lib/theme";
 import { CodeStep } from "../components/CodeStep";
 import { Enrolment } from "../components/Enrolment";
 import { Failure } from "../components/Failure";
@@ -33,12 +50,16 @@ function Console() {
   const { ready, session, member } = useAuth();
   const navigate = useNavigate();
   const [read, setRead] = useState<Read>({ status: "pending" });
-  const [roleLabels, setRoleLabels] = useState<Record<string, string>>({});
+  const [vocab, setVocab] = useState<Vocabularies | null>(null);
+  const [settings, setSettings] = useState<SettingsRead>({ status: "loading" });
+  const [signedOutEverywhere, setSignedOutEverywhere] = useState(false);
   const token = session?.access_token ?? null;
+  const pathname = useLocation({ select: (l) => l.pathname });
+  const current = pathname.replace(/\/+$/, "") === "/settings" ? "settings" : "overview";
 
   useEffect(() => {
-    if (ready && !session) void navigate({ to: "/sign-in", replace: true });
-  }, [ready, session, navigate]);
+    if (ready && !session && !signedOutEverywhere) void navigate({ to: "/sign-in", replace: true });
+  }, [ready, session, signedOutEverywhere, navigate]);
 
   const reread = useCallback(async () => {
     const sb = getSupabase();
@@ -65,21 +86,132 @@ function Console() {
     void reread();
   }, [token, reread]);
 
-  // The role's label is vocabulary (1177): read once the shell is about to render.
+  // The role's label, and every option list, is vocabulary (1177, 1392): read once the shell is
+  // about to render. A failed read leaves every list empty, never a literal (194).
   const atShell = read.status === "ready" && read.state.holds_role && read.state.aal === "aal2";
   useEffect(() => {
     if (!atShell) return;
     let live = true;
     loadVocabularies()
       .then((v) => {
-        if (!live || !v || !Array.isArray(v.platform_role_kinds)) return;
-        setRoleLabels(Object.fromEntries(v.platform_role_kinds.map((k) => [k.value, k.label])));
+        if (!live || !v) return;
+        if (Array.isArray(v.reporting_zones)) registerZones(v.reporting_zones);
+        setVocab(v);
       })
       .catch(() => undefined);
     return () => {
       live = false;
     };
   }, [atShell]);
+
+  // Both Settings rows, read together; the Overview waits on them for its zone and defaults.
+  const [settingsRun, setSettingsRun] = useState(0);
+  useEffect(() => {
+    if (!atShell) return;
+    const sb = getSupabase();
+    if (!sb) return;
+    let live = true;
+    setSettings({ status: "loading" });
+    Promise.all([readStaffSettings(sb), readOrgSettings(sb)])
+      .then(([staff, org]) => {
+        if (!live) return;
+        setAppearanceCopy(staff.appearance);
+        setSettings({ status: "ready", staff, org });
+      })
+      .catch((error: unknown) => {
+        if (!live) return;
+        console.warn(
+          JSON.stringify({
+            event: "admin_settings_read_failed",
+            code: (error as { code?: string } | null)?.code ?? null,
+          }),
+        );
+        setSettings({ status: "failed" });
+      });
+    return () => {
+      live = false;
+    };
+  }, [atShell, settingsRun]);
+
+  const roleLabels = useMemo<Record<string, string>>(
+    () =>
+      vocab && Array.isArray(vocab.platform_role_kinds)
+        ? Object.fromEntries(vocab.platform_role_kinds.map((k) => [k.value, k.label]))
+        : {},
+    [vocab],
+  );
+  const roles = useMemo(() => (read.status === "ready" ? read.state.roles : []), [read]);
+  const name = member?.name ?? "";
+  const context = useMemo<ConsoleContext>(
+    () => ({
+      roles,
+      isAdmin: roles.includes("admin"),
+      name,
+      settings,
+      vocab,
+      reloadSettings: () => setSettingsRun((n) => n + 1),
+      setStaff: (staff) => setSettings((s) => (s.status === "ready" ? { ...s, staff } : s)),
+      setOrg: (org) => setSettings((s) => (s.status === "ready" ? { ...s, org } : s)),
+      signOutEverywhere: async () => {
+        const sb = getSupabase();
+        if (!sb) throw new Error("no client");
+        setSignedOutEverywhere(true);
+        try {
+          await endEverySession(sb);
+        } catch (error) {
+          setSignedOutEverywhere(false);
+          throw error;
+        }
+      },
+    }),
+    [roles, name, settings, vocab],
+  );
+
+  // Extraction §2d S2: the signed-out screen, after every session has ended, this one included.
+  if (signedOutEverywhere && ready && !session)
+    return (
+      <div
+        data-testid="admin-signed-out-everywhere"
+        style={{ minHeight: "100dvh", padding: "0 16px", boxSizing: "border-box" }}
+      >
+        <div
+          style={{
+            maxWidth: 560,
+            margin: "48px auto 0",
+            display: "flex",
+            flexDirection: "column",
+            gap: 16,
+            alignItems: "flex-start",
+          }}
+        >
+          <h1
+            style={{
+              margin: 0,
+              fontFamily: "var(--font-display)",
+              fontWeight: 400,
+              fontSize: 32,
+              lineHeight: 1.15,
+              color: "var(--ink)",
+            }}
+          >
+            {SETTINGS_COPY.signedOutTitle}
+          </h1>
+          <p style={{ margin: 0, fontSize: 17, color: "var(--ink-2)", textWrap: "pretty" }}>
+            {SETTINGS_COPY.signedOutLine}
+          </p>
+          <Button
+            variant="primary"
+            size="md"
+            onClick={() => {
+              setSignedOutEverywhere(false);
+              void navigate({ to: "/sign-in", replace: true });
+            }}
+          >
+            {SETTINGS_COPY.signInAgain}
+          </Button>
+        </div>
+      </div>
+    );
 
   // Nothing renders until the standing is known, so the shell never flashes before a refusal.
   if (!ready || !session) return null;
@@ -103,13 +235,14 @@ function Console() {
       <ConsoleShell
         staff={{ name: member?.name ?? "", role }}
         destinations={CONSOLE_DESTINATIONS}
-        current="overview"
+        current={current}
         word={ADMIN_COPY.shellHeading}
         access={access}
         noRoleText={ADMIN_COPY.noRole}
         menuTitle={ADMIN_COPY.menuTitle}
         onNavigate={(id) => {
           if (id === "overview") void navigate({ to: "/" });
+          if (id === "settings") void navigate({ to: "/settings" });
         }}
         onSignOut={() => {
           const sb = getSupabase();
@@ -117,7 +250,9 @@ function Console() {
         }}
         style={{ height: "100%" }}
       >
-        <Outlet />
+        <ConsoleProvider value={context}>
+          <Outlet />
+        </ConsoleProvider>
       </ConsoleShell>
     </div>
   );

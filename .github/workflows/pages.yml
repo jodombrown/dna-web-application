@@ -56,8 +56,8 @@ jobs:
         run: node tests/strand-admin.cjs
       # Handoff 45-C arm 4 (1378): admin-dia-note's SYSTEM places Direction, Depth and Source in
       # Mobilization and calls no joined member new, and BLOCKS is unchanged. Static.
-      - name: DIA's Overview prompt (handoff 45-C, ruling 1378)
-        run: ARMS=prompt node tests/admin-dia-note.cjs
+      - name: DIA's Overview prompt, and its off switch (handoffs 45-C and 45-D, rulings 1378 and 1391)
+        run: ARMS=prompt,off node tests/admin-dia-note.cjs
       # Ruling 547, Fix PR 03 item 6: every kind in the notification registry resolves to a
       # destination, and the kinds whose destination has no surface are named rather than exempted.
       - name: Every notification kind resolves to a destination (rulings 485, 547)
