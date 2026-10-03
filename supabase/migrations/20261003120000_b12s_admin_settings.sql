@@ -595,7 +595,7 @@ begin
       select s.id,
              s.user_agent,
              greatest(s.created_at, s.updated_at, s.refreshed_at at time zone 'UTC') as last_active_at,
-             (s.id::text = v_current) as current
+             coalesce(s.id::text = v_current, false) as current
       from auth.sessions s
       where s.user_id = auth.uid()
         and (s.not_after is null or s.not_after > now())
