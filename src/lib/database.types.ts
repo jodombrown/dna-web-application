@@ -1,17 +1,21 @@
 // Generated from the canonical Supabase project (dgspjevjoblujcoljvkn) with the Supabase MCP
-// generate_typescript_types tool on handoff 41-C's branch (#92, the Messenger surfaces), after
-// 20261002160000_b14c_message_media_rate was applied and recorded by Chat through execute_sql in the
-// same transaction as its change and read back at the file's drift md5 e68a16b26de7d8777f3abaf61378602f
-// (the file at ae1bdbc); 84 rows in schema_migrations.
+// generate_typescript_types tool on handoff 41-C's branch (#92, the Messenger surfaces), merged with
+// main at c859d54 (the merge of #90), after 20261002160000_b14c_message_media_rate was applied and
+// recorded by Chat through execute_sql in the same transaction as its change and read back at the
+// file's drift md5 e68a16b26de7d8777f3abaf61378602f (the file at ae1bdbc); 84 rows in
+// schema_migrations.
 //
 // What 41-C changes here: nothing below this header. 20261002160000 replaces `private.message_send`
 // whole, without its `message_media` rate check (1353), and changes no signature; the private schema
-// is not exposed, so the generator returns the same body byte for byte as it did after 41-B, and the
-// regeneration is taken so the file names the project state it was read from.
+// is not exposed, so the generator returns #90's body byte for byte, and the regeneration is taken so
+// the file names the project state it was read from.
 //
-// Before 41-C: the regeneration on handoff 41-B's branch (#91, Messenger media on R2), after
-// 20261002150000_b14b_message_media was applied and recorded at the file's drift md5
-// 345ed33b4bd6bdf78c84a02decc1f2a1 (the file at 546b0c5); 83 rows in schema_migrations.
+// Before 41-C: the regeneration on handoff 45-B's branch (#90, Brief 12 12B), rebased on main at
+// 0d0b79f (the merge of #91), after 20261002140000_b12b_overview was applied and recorded by Chat
+// through execute_sql in the same transaction as its change and read back at the file's drift md5
+// 66b013e945afee1f2291657adc07a53a (raw d1e9e26451afe9285b3f434493966eb0); 83 rows in
+// schema_migrations, the latest 20261002150000_b14b_message_media. Taken from the project whole,
+// never merged by hand with #91's regeneration, which it supersedes line for line.
 //
 // What 41-B changes here (1346, 1374): `media.width` and `media.height` nullable (audio carries
 // neither), and the five `messenger_media_*` wrappers the two server routes call with the member's
@@ -19,12 +23,13 @@
 // `messenger_media_marked` and `messenger_media_forget`. The private writer, the sweep and the
 // access predicate's helpers are absent by design, as every private function is.
 //
-// Also present, and explained by no migration in this tree: the `admin_overview_*` functions, the
-// `admin_dia_notes` table and the columns of 20261002140000_b12b_overview, which PR #90 (handoff 45-B, Lane C) carries and Chat applied before
-// this regeneration. The generator returns what the project holds (ruling 225's window, G58: the
-// project is ahead of this checkout by that one file until #90 merges), and a regeneration that
-// left them out by hand would be a hand-written types file. #90 regenerates this file too, so the
-// second of the two to merge regenerates once more.
+// What 20261002140000 changes here (1178, 1265, 1281, 1303, 1304, 1310, 1311, 1362 to 1365): the
+// table `admin_dia_notes`; `corridors.density_threshold`; and the functions `admin_overview_window`,
+// `admin_overview_mobilization`, `admin_overview_levers`, `admin_overview_network`,
+// `admin_overview_company`, `admin_dia_note_read` and `admin_dia_note_write`. The private schema's
+// helpers (`admin_overview_entry`, `overview_window`, `overview_buckets`, `admin_reads_count`) are
+// absent by design, as before. #91's note that these objects were unexplained by its tree is closed
+// by this file: the migration that explains them is now in the same tree.
 //
 // Nothing here is hand-written except this header and the `Views` helper at the end, which the
 // generator drops and every regeneration restores (`src/lib/feed.ts` reads it). The regeneration

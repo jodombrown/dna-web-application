@@ -14,6 +14,13 @@
 // say expanded is over --tier-expanded, and `tierFor()` in src/lib/tier.ts returns medium at 1024.
 // The shell's own measured width goes through `tierFor()`, so the app has one tier rule and the
 // one-pixel difference falls on the ruled side. A given `tier` still wins.
+//
+// Item 3, focus return (ruling 1366; handoff 45-B item C4): the compile captures the element focus
+// returns to in ConsoleMenu's passive effect, after its layout effect has already moved focus into
+// the drawer, so the element captured is the drawer's Close button, which unmounts with the drawer
+// and leaves focus on the body. The port captures `document.activeElement` in the layout effect
+// before the focus call and returns focus to it on close, which is what the extraction's pointer
+// contract says ("focus returns to the opener"). Arm C-a in tests/overview.cjs proves it.
 import {
   useEffect,
   useLayoutEffect,
@@ -372,12 +379,15 @@ function ConsoleMenu({
   children: ReactNode;
 }) {
   const dlg = useRef<HTMLDialogElement | null>(null);
+  // Ruling 1366: the element focus returns to, captured before the drawer takes focus (header, item 3).
+  const returnTo = useRef<Element | null>(null);
   const reduced = reducedMotion();
   const [entered, setEntered] = useState(reduced),
     [gone, setGone] = useState(true);
   useLayoutEffect(() => {
     if (open) {
       setGone(false);
+      returnTo.current = document.activeElement;
       const d = dlg.current;
       if (d && !d.open) d.show();
       if (d) d.getBoundingClientRect();
@@ -397,7 +407,6 @@ function ConsoleMenu({
   }, [open]);
   useEffect(() => {
     if (!open) return undefined;
-    const prev = document.activeElement;
     const key = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         e.preventDefault();
@@ -422,11 +431,13 @@ function ConsoleMenu({
     document.addEventListener("keydown", key);
     return () => {
       document.removeEventListener("keydown", key);
-      if (prev instanceof HTMLElement) prev.focus();
+      const prev = returnTo.current;
+      returnTo.current = null;
+      if (prev instanceof HTMLElement && prev.isConnected) prev.focus();
     };
-    // As compiled: the listener and the element focus returns to are captured when the drawer
-    // opens and released when it closes. Keying on `onClose` as well would re-capture the element
-    // mid-open, inside the drawer, and return focus there instead of to the opener.
+    // As compiled: the listener is attached when the drawer opens and released when it closes, and
+    // the element focus returns to is the one the layout effect captured before the drawer took
+    // focus (1366). Keying on `onClose` as well would release and re-attach mid-open.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
   if (gone && !open) return null;

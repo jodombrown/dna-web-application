@@ -60,6 +60,8 @@ export type Vocabularies = {
   message_report_reasons: { value: string; label: string }[];
   /** Brief 14 (1370): the five reactions, words and never glyphs. */
   message_reaction_kinds: { value: string; label: string }[];
+  /** Ruling 1177: the platform roles and their labels, in position order; the admin console's bar reads a role's label here. */
+  platform_role_kinds: { value: string; label: string }[];
 };
 
 export async function loadVocabularies(): Promise<Vocabularies | null> {

@@ -54,6 +54,13 @@
 //                                   question is true for the thread's other member and false for a
 //                                   third, the locate hands the key only where access holds, and a
 //                                   delete-for-everyone marks the row for the sweep that forgets it.
+//   Brief 12 12B (1178, 1265, 1281,   the Overview's five projections and DIA's note cache: the gate
+//   1304, 1310, 1311, 1362 to 1365;   refuses anon, no role and aal1 and answers admin and analyst
+//   handoff 45-B)                     at aal2, every call logs one read, no member reaches the JSON,
+//                                   a comparison before the first record is null with its reason,
+//                                   weeks start Monday in the caller's zone, time to first act reads
+//                                   a fixture member's days, what is not connected says so, and the
+//                                   cache reads null, then what was written.
 //
 // Nothing here is secret: the connection string arrives from the runner and never from this file.
 const crypto = require("crypto");
@@ -318,6 +325,22 @@ async function runLiveDbArms({ record, skip }) {
       "Brief 14 41-B (1343, F4): a delete-for-everyone marks the row, messenger_media_marked lists it, messenger_media_forget drops it once and not twice, and access is false from the mark on",
     r2mediaOnce:
       "Brief 14 41-C (M13, 1353): a media message counts once against message_media: with one slot left under the ceiling, the record takes it and the send that carries the object is not refused",
+    overview:
+      "Brief 12 12B (SPEC arm 1; 1265, 1311): every Overview projection refuses anon, member-test with no role at aal2 and the admin persona at aal1 with 42501, and answers the admin persona and an analyst at aal2",
+    overviewLog:
+      "Brief 12 12B (SPEC arm 2; 1178): every projection call writes exactly one admin_reads row naming its projection",
+    overviewNoMember:
+      "Brief 12 12B (SPEC arm 3; 1281): no projection's JSON carries a member id, handle or name, and no key names one",
+    overviewComparison:
+      "Brief 12 12B (SPEC arm 4; 1310): a comparison window with no recorded activity answers comparison null with before_first_record and first_record, and this week against last answers a window",
+    overviewWeek:
+      "Brief 12 12B (SPEC arm 5; 1304, 1305): a week in America/Los_Angeles starts Monday 00:00 Pacific, the same call in Africa/Accra starts Monday 00:00 GMT, and an unknown zone is refused with 22023",
+    overviewFirstAct:
+      "Brief 12 12B (arm B-a; 1365): a member onboarded in the window with a ledger act after it gives Time to first act that member's days, and with no act the value is null",
+    overviewNotConnected:
+      "Brief 12 12B (arm B-b; 1362 to 1364): Admitted, Invites, Story-led, Onboarding Started and drop-off, partner and DNA system sources and the four company lines answer null with not_connected",
+    overviewCache:
+      "Brief 12 12B (SPEC Part D item 4): DIA's note cache reads null before a write, answers the statements after it, and refuses a non-array with 22023",
   };
   // G143: a block that opens with a presence probe carries every arm it holds in `names`, under one key
   // prefix, so a probe that fails reports each of them UNPROVEN and the job's total does not fall with
@@ -4138,6 +4161,432 @@ async function runLiveDbArms({ record, skip }) {
             (sent.ok ? "answered" : fmt(sent)) +
             "; ceiling after " +
             (after ? "still answering" : "refusing"),
+        );
+      });
+    }
+
+    // Brief 12 12B (SPEC-40-12B Part B, handoff 45-B; 20261002140000). The Overview's five
+    // projections and DIA's note cache. Every arm opens with the same presence probe so that before
+    // the apply the block reports UNPROVEN as a whole (G143, 228). The projections are executable by
+    // authenticated, which the arms set as the admin persona at aal2 exactly as the 12A arms do; the
+    // read log is read only as a count through private.admin_reads_count (382). Each arm is its own
+    // rolled-back transaction, so a grant, a fixture row or a cached note is gone before the next.
+    // ------------------------------------------------------------------------------------------
+    const WINDOW_FN = "public.admin_overview_window(text, text, text)";
+    const overviewPresent = async () => {
+      await actAsSelf(client);
+      const present = await client.query("select to_regprocedure($1) is not null as ok", [
+        WINDOW_FN,
+      ]);
+      return !!present.rows[0] && present.rows[0].ok === true;
+    };
+    // Each projection with the arguments it takes: the period ones take grain, comparison and zone;
+    // the network takes the zone alone; the company lines take nothing.
+    const PROJECTIONS = [
+      ["admin_overview_window", "select public.admin_overview_window($1, $2, $3) as j", 3],
+      [
+        "admin_overview_mobilization",
+        "select public.admin_overview_mobilization($1, $2, $3) as j",
+        3,
+      ],
+      ["admin_overview_levers", "select public.admin_overview_levers($1, $2, $3) as j", 3],
+      ["admin_overview_network", "select public.admin_overview_network($1) as j", 1],
+      ["admin_overview_company", "select public.admin_overview_company() as j", 0],
+    ];
+    const WEEK = ["week", "previous", "America/Los_Angeles"];
+    const callAll = async (args = WEEK) => {
+      const out = {};
+      for (const [name, sql, arity] of PROJECTIONS)
+        out[name] = await attempt(client, sql, arity === 3 ? args : arity === 1 ? [args[2]] : []);
+      return out;
+    };
+    const readsCount = async (actor, projection) => {
+      const r = await client.query("select private.admin_reads_count($1::uuid, $2) as n", [
+        actor,
+        projection,
+      ]);
+      return r.rows[0].n;
+    };
+    /** The parts of a moment in a zone, as the viewer's clock would show them. */
+    const inZone = (iso, tz) => {
+      const parts = {};
+      for (const p of new Intl.DateTimeFormat("en-GB", {
+        timeZone: tz,
+        weekday: "short",
+        hour: "2-digit",
+        minute: "2-digit",
+        hourCycle: "h23",
+      }).formatToParts(new Date(iso)))
+        parts[p.type] = p.value;
+      return parts.weekday + " " + parts.hour + ":" + parts.minute;
+    };
+    if (!(await overviewPresent())) {
+      for (const n of armsOf("overview"))
+        skip(n, "20261002140000_b12b_overview.sql is not on the project yet");
+    } else {
+      // 1. The gate (SPEC arm 1): anon, a member with no role at aal2, the admin at aal1 are refused;
+      // the admin at aal2 and an analyst at aal2 are answered. The analyst is member-test, granted
+      // the role by the admin inside this transaction (1177) and released by the rollback.
+      await inTransaction(client, async () => {
+        const adminId = await adminMember();
+        if (!adminId || adminId === member.id) {
+          skip(names.overview, adminId ? "the admin persona is member-test" : "no admin");
+          return;
+        }
+        await client.query("set local role anon");
+        await client.query("select set_config('request.jwt.claims', '', true)");
+        const anonAll = await callAll();
+        await actAs(client, member.id, "aal2");
+        const noRoleAll = await callAll();
+        await actAs(client, adminId, "aal1");
+        const aal1All = await callAll();
+        await actAs(client, adminId, "aal2");
+        const adminAll = await callAll();
+        const granted = await attempt(
+          client,
+          "select public.admin_grant_role($1::uuid, 'analyst', 'live arm: analyst opens the Overview (1311)') as id",
+          [member.id],
+        );
+        await actAs(client, member.id, "aal2");
+        const analystAll = await callAll();
+        const refusedWith = (all) =>
+          PROJECTIONS.every(([n]) => !all[n].ok && all[n].code === "42501");
+        const answered = (all) =>
+          PROJECTIONS.every(([n]) => all[n].ok && all[n].rows[0] && all[n].rows[0].j);
+        const say = (label, all) =>
+          label +
+          " " +
+          PROJECTIONS.map(([n]) => n.replace("admin_overview_", "") + ":" + fmt(all[n])).join(",");
+        record(
+          names.overview,
+          refusedWith(anonAll) &&
+            refusedWith(noRoleAll) &&
+            refusedWith(aal1All) &&
+            answered(adminAll) &&
+            granted.ok &&
+            answered(analystAll),
+          [
+            say("anon", anonAll),
+            say("no role aal2", noRoleAll),
+            say("admin aal1", aal1All),
+            say("admin aal2", adminAll),
+            "grant " + fmt(granted),
+            say("analyst aal2", analystAll),
+          ].join("; "),
+        );
+      });
+
+      // 2. The log (SPEC arm 2, 1178): one admin_reads row per call, naming the projection.
+      await inTransaction(client, async () => {
+        const adminId = await adminMember();
+        if (!adminId) {
+          skip(names.overviewLog, "no admin");
+          return;
+        }
+        await actAsSelf(client);
+        const before = {};
+        for (const [n] of PROJECTIONS) before[n] = await readsCount(adminId, n);
+        await actAs(client, adminId, "aal2");
+        const all = await callAll();
+        await actAsSelf(client);
+        const after = {};
+        for (const [n] of PROJECTIONS) after[n] = await readsCount(adminId, n);
+        const deltas = PROJECTIONS.map(([n]) => [n, after[n] - before[n]]);
+        record(
+          names.overviewLog,
+          PROJECTIONS.every(([n]) => all[n].ok) && deltas.every(([, d]) => d === 1),
+          deltas.map(([n, d]) => n.replace("admin_overview_", "") + " +" + d).join(", "),
+        );
+      });
+
+      // 3. No member (SPEC arm 3, 1281): the JSON of every projection, at two grains, carries no
+      // uuid, no test-account handle or name, and no key that names a person.
+      await inTransaction(client, async () => {
+        const adminId = await adminMember();
+        if (!adminId) {
+          skip(names.overviewNoMember, "no admin");
+          return;
+        }
+        await actAs(client, adminId, "aal2");
+        const week = await callAll();
+        const year = await callAll(["year", "last_year", "Africa/Accra"]);
+        const text = JSON.stringify([week, year]);
+        const uuid = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
+        const people = [owner.handle, member.handle, owner.name, member.name].filter(Boolean);
+        const named = people.filter((p) => text.includes(p));
+        const keys = new Set();
+        const walk = (v) => {
+          if (Array.isArray(v)) v.forEach(walk);
+          else if (v && typeof v === "object")
+            for (const [k, x] of Object.entries(v)) {
+              keys.add(k);
+              walk(x);
+            }
+        };
+        for (const all of [week, year])
+          for (const [n] of PROJECTIONS) if (all[n].ok) walk(all[n].rows[0].j);
+        const personKeys = [...keys].filter((k) =>
+          /member_id|handle|avatar|^name$|display_name|email/i.test(k),
+        );
+        record(
+          names.overviewNoMember,
+          PROJECTIONS.every(([n]) => week[n].ok && year[n].ok) &&
+            !uuid.test(text) &&
+            named.length === 0 &&
+            personKeys.length === 0,
+          "uuid " +
+            (uuid.test(text) ? "found" : "none") +
+            "; names " +
+            (named.length ? named.join(",") : "none") +
+            "; person keys " +
+            (personKeys.length ? personKeys.join(",") : "none") +
+            "; " +
+            keys.size +
+            " distinct keys read",
+        );
+      });
+
+      // 4. Whether a comparison exists is computed (SPEC arm 4, 1310): the same period last year ends
+      // before the network's first record and answers null with the reason and the moment; this week
+      // against last week answers a window.
+      await inTransaction(client, async () => {
+        const adminId = await adminMember();
+        if (!adminId) {
+          skip(names.overviewComparison, "no admin");
+          return;
+        }
+        await actAs(client, adminId, "aal2");
+        const ly = await attempt(
+          client,
+          "select public.admin_overview_window('week', 'last_year', 'America/Los_Angeles') as j",
+        );
+        const prev = await attempt(
+          client,
+          "select public.admin_overview_window('week', 'previous', 'America/Los_Angeles') as j",
+        );
+        const lyJ = ly.ok ? ly.rows[0].j : {};
+        const prevJ = prev.ok ? prev.rows[0].j : {};
+        record(
+          names.overviewComparison,
+          ly.ok &&
+            lyJ.comparison === null &&
+            lyJ.comparison_reason === "before_first_record" &&
+            typeof lyJ.first_record === "string" &&
+            prev.ok &&
+            prevJ.comparison &&
+            typeof prevJ.comparison.start === "string" &&
+            prevJ.comparison_reason === null &&
+            new Date(prevJ.comparison.end) > new Date(prevJ.first_record),
+          "last year: " +
+            (ly.ok
+              ? JSON.stringify(lyJ.comparison) +
+                " " +
+                lyJ.comparison_reason +
+                " first " +
+                lyJ.first_record
+              : fmt(ly)) +
+            "; previous: " +
+            (prev.ok ? JSON.stringify(prevJ.comparison) : fmt(prev)),
+        );
+      });
+
+      // 5. Weeks start Monday 00:00 in the zone (SPEC arm 5, 1304, 1305), and an unknown zone is 22023.
+      await inTransaction(client, async () => {
+        const adminId = await adminMember();
+        if (!adminId) {
+          skip(names.overviewWeek, "no admin");
+          return;
+        }
+        await actAs(client, adminId, "aal2");
+        const la = await attempt(
+          client,
+          "select public.admin_overview_window('week', 'previous', 'America/Los_Angeles') as j",
+        );
+        const accra = await attempt(
+          client,
+          "select public.admin_overview_window('week', 'previous', 'Africa/Accra') as j",
+        );
+        const bad = await attempt(
+          client,
+          "select public.admin_overview_window('week', 'previous', 'Mars/Olympus_Mons') as j",
+        );
+        const laStart = la.ok ? la.rows[0].j.period.start : null;
+        const accraStart = accra.ok ? accra.rows[0].j.period.start : null;
+        record(
+          names.overviewWeek,
+          la.ok &&
+            accra.ok &&
+            inZone(laStart, "America/Los_Angeles") === "Mon 00:00" &&
+            inZone(accraStart, "Africa/Accra") === "Mon 00:00" &&
+            laStart !== accraStart &&
+            !bad.ok &&
+            bad.code === "22023",
+          "LA " +
+            (la.ok
+              ? laStart + " = " + inZone(laStart, "America/Los_Angeles") + " Pacific"
+              : fmt(la)) +
+            "; Accra " +
+            (accra.ok
+              ? accraStart + " = " + inZone(accraStart, "Africa/Accra") + " GMT"
+              : fmt(accra)) +
+            "; unknown zone " +
+            fmt(bad),
+        );
+      });
+
+      // B-a (1365). member-test is onboarded 45 minutes ago (live_arms may update onboarded_at on
+      // the test accounts, r382); with no act since, the trailing hour's Time to first act is null
+      // and counts nobody. An event attestation accepted now, derived into the ledger by the
+      // derivation the arms may run, is the member's first act, and the median reads that member's
+      // days: under one, so 0.0 at the projection's tenth of a day.
+      await inTransaction(client, async () => {
+        const adminId = await adminMember();
+        if (!adminId || adminId === member.id) {
+          skip(names.overviewFirstAct, adminId ? "the admin persona is member-test" : "no admin");
+          return;
+        }
+        await actAsSelf(client);
+        const onboarded = await attempt(
+          client,
+          "update public.members set onboarded_at = now() - interval '45 minutes' where id = $1::uuid",
+          [member.id],
+        );
+        const read = async () => {
+          await actAs(client, adminId, "aal2");
+          const r = await attempt(
+            client,
+            "select public.admin_overview_levers('now', 'previous', 'America/Los_Angeles') -> 'time_to_first_act' as t",
+          );
+          await actAsSelf(client);
+          return r.ok ? r.rows[0].t : r;
+        };
+        const noAct = await read();
+        const ins = await attempt(
+          client,
+          `insert into public.attestations (member_id, c_category, object_kind, object_id, attester_member_id, attester_role, accepted_at)
+           values ($1, 'convene', 'event', gen_random_uuid(), $2, 'host', now()) returning id`,
+          [member.id, owner.id],
+        );
+        const derived = await attempt(
+          client,
+          "select private.derive_mobilization_v1(now() - interval '5 minutes', now() + interval '5 minutes') as n",
+        );
+        const withAct = await read();
+        record(
+          names.overviewFirstAct,
+          onboarded.ok &&
+            noAct &&
+            noAct.value === null &&
+            noAct.members_counted === 0 &&
+            ins.ok &&
+            derived.ok &&
+            withAct &&
+            withAct.value === 0 &&
+            withAct.members_counted >= 1,
+          "no act: " +
+            JSON.stringify(noAct) +
+            "; attestation " +
+            fmt(ins) +
+            "; derive " +
+            (derived.ok ? derived.rows[0].n + " rows" : fmt(derived)) +
+            "; with act: " +
+            JSON.stringify(withAct),
+        );
+      });
+
+      // B-b (1362 to 1364): what is not connected answers null with not_connected, never a figure.
+      await inTransaction(client, async () => {
+        const adminId = await adminMember();
+        if (!adminId) {
+          skip(names.overviewNotConnected, "no admin");
+          return;
+        }
+        await actAs(client, adminId, "aal2");
+        const all = await callAll();
+        const lev = all.admin_overview_levers.ok ? all.admin_overview_levers.rows[0].j : {};
+        const net = all.admin_overview_network.ok ? all.admin_overview_network.rows[0].j : {};
+        const mob = all.admin_overview_mobilization.ok
+          ? all.admin_overview_mobilization.rows[0].j
+          : {};
+        const co = all.admin_overview_company.ok ? all.admin_overview_company.rows[0].j : {};
+        const nc = (x) => !!x && x.value === null && x.status === "not_connected";
+        const src = (k) => (mob.source || []).find((s) => s.key === k);
+        const checks = {
+          invites: nc(lev.invites),
+          story_led: nc(lev.story_led),
+          onboarding_started: nc(lev.onboarding && lev.onboarding.started),
+          onboarding_drop_off: nc(lev.onboarding && lev.onboarding.drop_off),
+          admitted: nc(net.admitted),
+          source_partner: nc(src("partner")),
+          source_dna_system: nc(src("dna_system")),
+          company: ["partnerships", "newsletter", "revenue", "chapters"].every(
+            (k) => co[k] && co[k].status === "not_connected",
+          ),
+          time_to_first_act_connected:
+            !!lev.time_to_first_act && lev.time_to_first_act.status === "connected",
+        };
+        const failedChecks = Object.entries(checks)
+          .filter(([, ok]) => !ok)
+          .map(([k]) => k);
+        record(
+          names.overviewNotConnected,
+          PROJECTIONS.every(([n]) => all[n].ok) && failedChecks.length === 0,
+          failedChecks.length
+            ? "not as ruled: " + failedChecks.join(", ")
+            : Object.keys(checks).length + " checks as ruled",
+        );
+      });
+
+      // DIA's cache (SPEC Part D item 4): null, then the statements written, then a refusal.
+      await inTransaction(client, async () => {
+        const adminId = await adminMember();
+        if (!adminId) {
+          skip(names.overviewCache, "no admin");
+          return;
+        }
+        await actAs(client, adminId, "aal2");
+        const miss = await attempt(
+          client,
+          "select public.admin_dia_note_read('week', 'previous', 'America/Los_Angeles') as j",
+        );
+        const statements = [{ text: "Mobilized members rose this period.", block: "Mobilization" }];
+        const wrote = await attempt(
+          client,
+          "select public.admin_dia_note_write('week', 'previous', 'America/Los_Angeles', $1::jsonb)",
+          [JSON.stringify(statements)],
+        );
+        const hit = await attempt(
+          client,
+          "select public.admin_dia_note_read('week', 'previous', 'America/Los_Angeles') as j",
+        );
+        const bad = await attempt(
+          client,
+          "select public.admin_dia_note_write('week', 'previous', 'America/Los_Angeles', $1::jsonb)",
+          [JSON.stringify({ x: 1 })],
+        );
+        const direct = await attempt(client, "select count(*) from public.admin_dia_notes");
+        record(
+          names.overviewCache,
+          miss.ok &&
+            miss.rows[0].j === null &&
+            wrote.ok &&
+            hit.ok &&
+            hit.rows[0].j &&
+            JSON.stringify(hit.rows[0].j.statements) === JSON.stringify(statements) &&
+            !bad.ok &&
+            bad.code === "22023" &&
+            !direct.ok &&
+            direct.code === "42501",
+          "miss " +
+            (miss.ok ? JSON.stringify(miss.rows[0].j) : fmt(miss)) +
+            "; write " +
+            fmt(wrote) +
+            "; hit " +
+            (hit.ok ? JSON.stringify(hit.rows[0].j && hit.rows[0].j.statements) : fmt(hit)) +
+            "; non-array " +
+            fmt(bad) +
+            "; direct select " +
+            fmt(direct),
         );
       });
     }

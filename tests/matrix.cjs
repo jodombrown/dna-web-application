@@ -2553,8 +2553,8 @@ async function drive(fn, ...args) {
 // a total (rulings 228 and 317).
 // ---------------------------------------------------------------------------
 const EXPECTED_PATH = path.join(__dirname, "expected-counts.json");
-/** Handoff 40-B: the arms tests/auth.cjs runs against the admin host, swept by the admin run alone. */
-const ADMIN_ARM = /-admin (signed-out|accounts)$/;
+/** Handoff 40-B: the arms tests/auth.cjs runs against the admin host, swept by the admin run alone; handoff 45-B adds tests/overview.cjs's three. */
+const ADMIN_ARM = /-admin (signed-out|accounts|overview|overview error|drawer focus)$/;
 
 function loadExpected() {
   try {
@@ -6657,6 +6657,17 @@ if (require.main === module)
           await drive(runAdminSignedOut, bt, bname, [390, 844], "light");
           await drive(runAdminSignedOut, bt, bname, [1280, 800], "dark");
           await drive(runAdminAccounts, bt, bname, [1280, 800], "light");
+          // Handoff 45-B (Brief 12 12B): the Overview's page arms and the drawer's focus return (1366).
+          const {
+            runAdminOverview,
+            runAdminOverviewError,
+            runAdminDrawerFocus,
+          } = require("./overview.cjs");
+          await drive(runAdminOverview, bt, bname, [1280, 800], "light");
+          await drive(runAdminOverview, bt, bname, [390, 844], "dark");
+          await drive(runAdminOverviewError, bt, bname, [1280, 800], "light");
+          await drive(runAdminDrawerFocus, bt, bname, [390, 844], "light");
+          await drive(runAdminDrawerFocus, bt, bname, [820, 1180], "dark");
         }
         // Handoff 41-B section 5: the Messenger media routes on the deployed URL, with the two
         // seeded accounts for real (tests/messenger-media.cjs).

@@ -1,5 +1,6 @@
 // Handoff 40-D arms 1 and 2 (Strand compile v1790885781186000, rulings 1309 and 1310): the seven
-// admin parts render, and hasNumber reads a number.
+// admin parts render, and hasNumber reads a number. Handoff 45-B arm D-a: the Edge Functions' copy
+// of hasNumber (supabase/functions/_shared/has-number.ts) is the part's rule, byte for byte.
 //
 // What the repository's Strand harness is, and why this arm is not it (555): the mount arms in
 // tests/mount.cjs read a Strand part off the page that binds it, on the deployed preview, and
@@ -465,6 +466,72 @@ function render(renderToString, name, el, expect = []) {
         hasNumber(text) === want,
         "got " + hasNumber(text),
       );
+
+    // Arm D-a (handoff 45-B Part D item 3): the Edge Functions' hasNumber in
+    // supabase/functions/_shared/has-number.ts is the same rule as the part's, as tests/contact.cjs
+    // proves for the contact module (387). The mirror is read two ways: its regular expression's
+    // source must be the part's byte for byte, and the two functions must agree on every probe,
+    // so a third copy or a drifted word list fails by name.
+    const mirrorPath = "supabase/functions/_shared/has-number.ts";
+    const mirrorSrc = fs.readFileSync(path.join(ROOT, mirrorPath), "utf8");
+    const partSrc = fs.readFileSync(path.join(ROOT, "src/components/strand/DiaNote.tsx"), "utf8");
+    const regexOf = (src, where) => {
+      const m = /NUMBER_WORDS\s*=\s*\n?\s*(\/.*\/i);/.exec(src);
+      if (!m) throw new Error("no NUMBER_WORDS regular expression in " + where);
+      return m[1];
+    };
+    let mirror = null;
+    try {
+      const ts = require("typescript");
+      const { outputText } = ts.transpileModule(mirrorSrc, {
+        compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+        fileName: mirrorPath,
+      });
+      const mod = { exports: {} };
+      require("vm").runInNewContext(outputText, { module: mod, exports: mod.exports });
+      mirror = mod.exports;
+      record("has-number parity: the Deno mirror loads", typeof mirror.hasNumber === "function");
+    } catch (e) {
+      record("has-number parity: the Deno mirror loads", false, String(e && e.message));
+    }
+    let partRegex = "",
+      mirrorRegex = "";
+    try {
+      partRegex = regexOf(partSrc, "DiaNote.tsx");
+      mirrorRegex = regexOf(mirrorSrc, mirrorPath);
+    } catch (e) {
+      record("has-number parity: both regular expressions are readable", false, String(e.message));
+    }
+    record(
+      "has-number parity: the mirror's NUMBER_WORDS is the part's byte for byte",
+      !!partRegex && partRegex === mirrorRegex,
+      partRegex === mirrorRegex
+        ? ""
+        : "part " + partRegex.length + " chars, mirror " + mirrorRegex.length,
+    );
+    if (mirror) {
+      const probes = [
+        "after two events",
+        "a third of members",
+        "5 acts",
+        "after the events in Accra",
+        "Half the corridors held steady",
+        "a dozen introductions",
+        "per cent of members",
+        "Mobilized members rose this period",
+        "Introductions were answered faster than the period before",
+        "one",
+        "someone wondered",
+        "thousands",
+        "the Onboarding lever is not yet connected",
+      ];
+      const disagree = probes.filter((t) => hasNumber(t) !== mirror.hasNumber(t));
+      record(
+        "has-number parity: the two functions agree on " + probes.length + " probes",
+        disagree.length === 0,
+        disagree.length ? "disagree on " + JSON.stringify(disagree) : "",
+      );
+    }
   } finally {
     await server.close();
   }
