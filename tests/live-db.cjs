@@ -54,6 +54,12 @@
 //                                   question is true for the thread's other member and false for a
 //                                   third, the locate hands the key only where access holds, and a
 //                                   delete-for-everyone marks the row for the sweep that forgets it.
+//   Brief 14 41-D (1341, 1384,       Messenger's held entry points: an eligible attendee joins the
+//   1386, 1387, 1396; handoff 41-D)   host's event thread and a removed one does not, Recover returns
+//                                   a declined request to pending, a lead or co-lead renames a group
+//                                   and nobody renames an event thread, the list names a group's
+//                                   last author and skips a blocked one, media reads Image or Video
+//                                   to a member who does not own it, and video/quicktime records.
 //   Brief 12 12B (1178, 1265, 1281,   the Overview's five projections and DIA's note cache: the gate
 //   1304, 1310, 1311, 1362 to 1365;   refuses anon, no role and aal1 and answers admin and analyst
 //   handoff 45-B)                     at aal2, every call logs one read, no member reaches the JSON,
@@ -325,6 +331,17 @@ async function runLiveDbArms({ record, skip }) {
       "Brief 14 41-B (1343, F4): a delete-for-everyone marks the row, messenger_media_marked lists it, messenger_media_forget drops it once and not twice, and access is false from the mark on",
     r2mediaOnce:
       "Brief 14 41-C (M13, 1353): a media message counts once against message_media: with one slot left under the ceiling, the record takes it and the send that carries the object is not refused",
+    msgd: "Brief 14 41-D (1384): before the host opens the event thread an attendee reads available false and join raises no_thread; after it a going registrant reads true and joins, a second join answers the same thread, an accepted named party joins, a member who is neither raises not_going, a member who left rejoins and a removed member raises not_a_member",
+    msgdRecover:
+      "Brief 14 41-D (1341): Recover returns a declined request to pending with decided_at null, a pending one raises not_declined and another member's raises not_your_request",
+    msgdRename:
+      "Brief 14 41-D (1387): the lead and a co-lead rename a group, the name is trimmed, a member raises not_a_lead, an event thread raises not_renamable and 81 characters raise bad_name",
+    msgdView:
+      "Brief 14 41-D (held item 4; 1386): a group row carries last_author_name for the last author, and once the viewer blocks that author the last line is the previous author's and unread ignores the blocked message",
+    msgdWord:
+      "Brief 14 41-D (held item 5): a member who does not own the media reads Image and Video in last_line, a reply's line and media_word, and a non-member reads null from private.messenger_media_word",
+    msgdQuicktime:
+      "Brief 14 41-D (1396): messenger_media_record accepts video/quicktime and still refuses a mime outside the list",
     overview:
       "Brief 12 12B (SPEC arm 1; 1265, 1311): every Overview projection refuses anon, member-test with no role at aal2 and the admin persona at aal1 with 42501, and answers the admin persona and an analyst at aal2",
     overviewLog:
@@ -4161,6 +4178,588 @@ async function runLiveDbArms({ record, skip }) {
             (sent.ok ? "answered" : fmt(sent)) +
             "; ceiling after " +
             (after ? "still answering" : "refusing"),
+        );
+      });
+    }
+
+    // Brief 14 41-D (rulings 1341, 1384, 1386, 1387, 1396; 20261003130000 to 20261003130400;
+    // handoff 41-D). The held entry points: the event thread's join, Recover, Rename, the list's
+    // last author and media word, and .mov. One presence probe gates the block (G143, 228), so
+    // before the apply every arm reports UNPROVEN. The arms act as the two test accounts and the
+    // admin persona as the third member, through the public wrappers a client calls; each is its
+    // own rolled-back transaction (269).
+    // ------------------------------------------------------------------------------------------
+    const msgdPresent = async () => {
+      await actAsSelf(client);
+      const present = await client.query(
+        "select (to_regprocedure('public.messenger_event_thread_join(uuid)') is not null and to_regprocedure('public.messenger_request_recover(uuid)') is not null and to_regprocedure('public.messenger_thread_rename(uuid, text)') is not null and to_regprocedure('private.messenger_media_word(uuid)') is not null and exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'messenger_threads_view' and column_name = 'last_author_name') and exists (select 1 from pg_constraint where conname = 'media_mime_check' and pg_get_constraintdef(oid) like '%video/quicktime%')) as ok",
+      );
+      return !!present.rows[0] && present.rows[0].ok === true;
+    };
+    const thirdMember = async () => {
+      await actAsSelf(client);
+      const third = await attempt(client, "select public.live_arms_admin_member() as id");
+      return third.ok && third.rows[0] ? third.rows[0].id : null;
+    };
+    /** owner-test publishes a free in-person event and answers its id, or null. */
+    const publishEvent = async (title) => {
+      await actAs(client, owner.id);
+      const starts = new Date(Date.now() + 21 * 86400e3);
+      starts.setUTCHours(19, 0, 0, 0);
+      const published = await attempt(client, "select public.publish_post($1::jsonb) as id", [
+        JSON.stringify({
+          verb: "convene",
+          body: "Brief 14 41-D event thread arm. Rolled back by the same run.",
+          author_kind: "member",
+          author_id: owner.id,
+          audience: "everyone",
+          host_context: "live-checks",
+          fields: {
+            "convene.title": title,
+            "convene.format": "in_person",
+            "convene.when": "in three weeks at 19:00",
+            "convene.starts_at": starts.toISOString(),
+            "convene.timezone": "Africa/Accra",
+            "convene.place_id": "live-arms-place",
+            "convene.place_name": "Front Room",
+            "convene.city": "Accra",
+            "convene.country": "Ghana",
+            "convene.lng": "-0.1747",
+            "convene.lat": "5.5559",
+            "convene.price_nature": "free",
+            "convene.delivery_intent": "In the room, at a long table.",
+          },
+        }),
+      ]);
+      if (!published.ok) return { ok: false, r: published };
+      const ev = await attempt(
+        client,
+        "select e.id from public.posts p join public.events e on e.id = p.created_object_id where p.id = $1",
+        [published.rows[0].id],
+      );
+      if (!ev.ok || !ev.rows[0])
+        return { ok: false, r: ev.ok ? { ok: false, code: "-", message: "no event" } : ev };
+      return { ok: true, id: ev.rows[0].id };
+    };
+    /** owner-test makes a group with member-test and the third, both of whom accept. */
+    const openGroup = async (thirdId, name) => {
+      await actAs(client, owner.id);
+      const group = await attempt(
+        client,
+        "select public.messenger_thread_create_group($1, array[$2::uuid, $3::uuid]) as t",
+        [name, member.id, thirdId],
+      );
+      if (!group.ok) return { ok: false, step: "create", r: group };
+      const g = group.rows[0].t;
+      for (const who of [member.id, thirdId]) {
+        await actAs(client, who);
+        const acc = await attempt(
+          client,
+          "select public.messenger_thread_invite_accept($1::uuid)",
+          [g],
+        );
+        if (!acc.ok) return { ok: false, step: "accept", r: acc };
+      }
+      return { ok: true, thread: g };
+    };
+    const available = (event) =>
+      attempt(client, "select public.messenger_event_thread_available($1::uuid) as ok", [event]);
+    const join = (event) =>
+      attempt(client, "select public.messenger_event_thread_join($1::uuid) as t", [event]);
+    const word = (r) => (r.ok ? JSON.stringify(r.rows[0]) : r.code + " " + r.message);
+    if (!(await msgdPresent())) {
+      for (const n of armsOf("msgd"))
+        skip(
+          n,
+          "the 41-D migrations (20261003130000 to 20261003130400) are not on the project yet",
+        );
+    } else {
+      // 1. The event thread's join (1384).
+      await inTransaction(client, async () => {
+        const thirdId = await thirdMember();
+        if (!thirdId) {
+          skip(names.msgd, "live_arms_admin_member() answered no third member");
+          return;
+        }
+        const ev = await publishEvent("41-D event thread arm");
+        if (!ev.ok) {
+          record(names.msgd, false, "publish " + fmt(ev.r));
+          return;
+        }
+        await actAs(client, member.id);
+        const going = await attempt(
+          client,
+          "select public.rsvp_event($1::uuid, 'going', 'everyone') as r",
+          [ev.id],
+        );
+        const availBefore = await available(ev.id);
+        const joinBefore = await join(ev.id);
+        await actAs(client, owner.id);
+        const opened = await attempt(
+          client,
+          "select public.messenger_event_thread_open($1::uuid) as t",
+          [ev.id],
+        );
+        const thread = opened.ok ? opened.rows[0].t : null;
+        await actAs(client, member.id);
+        const availGoing = await available(ev.id);
+        const joinGoing = await join(ev.id);
+        const joinAgain = await join(ev.id);
+        await actAs(client, thirdId);
+        const availNeither = await available(ev.id);
+        const joinNeither = await join(ev.id);
+        await actAs(client, owner.id);
+        const invited = await attempt(
+          client,
+          "select public.invite_event_party($1::uuid, $2::uuid, 'speaker') as p",
+          [ev.id, thirdId],
+        );
+        await actAs(client, thirdId);
+        const accepted = invited.ok
+          ? await attempt(client, "select public.respond_to_event_role($1::uuid, true) as p", [
+              invited.rows[0].p.id,
+            ])
+          : invited;
+        const joinParty = await join(ev.id);
+        const left = await attempt(client, "select public.messenger_thread_leave($1::uuid)", [
+          thread,
+        ]);
+        const joinBack = await join(ev.id);
+        await actAs(client, owner.id);
+        const removed = await attempt(
+          client,
+          "select public.messenger_thread_remove($1::uuid, $2::uuid)",
+          [thread, member.id],
+        );
+        await actAs(client, member.id);
+        const availRemoved = await available(ev.id);
+        const joinRemoved = await join(ev.id);
+        record(
+          names.msgd,
+          going.ok &&
+            availBefore.ok &&
+            availBefore.rows[0].ok === false &&
+            !joinBefore.ok &&
+            joinBefore.message === "no_thread" &&
+            !!thread &&
+            availGoing.ok &&
+            availGoing.rows[0].ok === true &&
+            joinGoing.ok &&
+            joinGoing.rows[0].t === thread &&
+            joinAgain.ok &&
+            joinAgain.rows[0].t === thread &&
+            availNeither.ok &&
+            availNeither.rows[0].ok === false &&
+            !joinNeither.ok &&
+            joinNeither.message === "not_going" &&
+            accepted.ok &&
+            joinParty.ok &&
+            joinParty.rows[0].t === thread &&
+            left.ok &&
+            joinBack.ok &&
+            joinBack.rows[0].t === thread &&
+            removed.ok &&
+            availRemoved.ok &&
+            availRemoved.rows[0].ok === false &&
+            !joinRemoved.ok &&
+            joinRemoved.message === "not_a_member",
+          "rsvp " +
+            fmt(going) +
+            "; before open: available " +
+            word(availBefore) +
+            ", join " +
+            fmt(joinBefore) +
+            "; open " +
+            fmt(opened) +
+            "; going: available " +
+            word(availGoing) +
+            ", join " +
+            (joinGoing.ok ? (joinGoing.rows[0].t === thread ? "same" : "other") : fmt(joinGoing)) +
+            ", again " +
+            (joinAgain.ok ? (joinAgain.rows[0].t === thread ? "same" : "other") : fmt(joinAgain)) +
+            "; neither: available " +
+            word(availNeither) +
+            ", join " +
+            fmt(joinNeither) +
+            "; party " +
+            fmt(accepted) +
+            ", join " +
+            fmt(joinParty) +
+            "; leave " +
+            fmt(left) +
+            ", rejoin " +
+            fmt(joinBack) +
+            "; remove " +
+            fmt(removed) +
+            ", available " +
+            word(availRemoved) +
+            ", join " +
+            fmt(joinRemoved),
+        );
+      });
+
+      // 2. Recover (1341).
+      await inTransaction(client, async () => {
+        const thirdId = await thirdMember();
+        if (!thirdId) {
+          skip(names.msgdRecover, "live_arms_admin_member() answered no third member");
+          return;
+        }
+        await actAs(client, owner.id);
+        const req = await attempt(
+          client,
+          "select id from public.messenger_request_send($1::uuid, $2)",
+          [member.id, "A request the live arms decline and recover"],
+        );
+        if (!req.ok) {
+          record(names.msgdRecover, false, "request " + fmt(req));
+          return;
+        }
+        const id = req.rows[0].id;
+        const read = async () => {
+          await actAsSelf(client);
+          return attempt(
+            client,
+            "select state, decided_at from public.message_requests where id = $1::uuid",
+            [id],
+          );
+        };
+        await actAs(client, member.id);
+        const declined = await attempt(
+          client,
+          "select public.messenger_request_decline($1::uuid)",
+          [id],
+        );
+        const before = await read();
+        await actAs(client, thirdId);
+        const foreign = await attempt(client, "select public.messenger_request_recover($1::uuid)", [
+          id,
+        ]);
+        await actAs(client, member.id);
+        const recovered = await attempt(
+          client,
+          "select public.messenger_request_recover($1::uuid)",
+          [id],
+        );
+        const after = await read();
+        await actAs(client, member.id);
+        const again = await attempt(client, "select public.messenger_request_recover($1::uuid)", [
+          id,
+        ]);
+        record(
+          names.msgdRecover,
+          declined.ok &&
+            before.ok &&
+            before.rows[0].state === "declined" &&
+            before.rows[0].decided_at !== null &&
+            !foreign.ok &&
+            foreign.message === "not_your_request" &&
+            recovered.ok &&
+            after.ok &&
+            after.rows[0].state === "pending" &&
+            after.rows[0].decided_at === null &&
+            !again.ok &&
+            again.message === "not_declined",
+          "decline " +
+            fmt(declined) +
+            "; before " +
+            word(before) +
+            "; third " +
+            fmt(foreign) +
+            "; recover " +
+            fmt(recovered) +
+            "; after " +
+            word(after) +
+            "; again " +
+            fmt(again),
+        );
+      });
+
+      // 3. Rename (1387).
+      await inTransaction(client, async () => {
+        const thirdId = await thirdMember();
+        if (!thirdId) {
+          skip(names.msgdRename, "live_arms_admin_member() answered no third member");
+          return;
+        }
+        const group = await openGroup(thirdId, "Live arms rename");
+        if (!group.ok) {
+          record(names.msgdRename, false, group.step + " " + fmt(group.r));
+          return;
+        }
+        const g = group.thread;
+        const rename = (thread, name) =>
+          attempt(client, "select public.messenger_thread_rename($1::uuid, $2)", [thread, name]);
+        const nameOf = () =>
+          attempt(
+            client,
+            "select name from public.messenger_threads_view where thread_id = $1::uuid",
+            [g],
+          );
+        await actAs(client, owner.id);
+        const role = await attempt(
+          client,
+          "select public.messenger_thread_set_role($1::uuid, $2::uuid, 'co_lead')",
+          [g, member.id],
+        );
+        const byLead = await rename(g, "  Renamed by the lead  ");
+        const leadName = await nameOf();
+        const long = await rename(g, "x".repeat(81));
+        await actAs(client, member.id);
+        const byCoLead = await rename(g, "Renamed by the co-lead");
+        const coLeadName = await nameOf();
+        await actAs(client, thirdId);
+        const byMember = await rename(g, "Renamed by a member");
+        const ev = await publishEvent("41-D rename arm");
+        let byEvent = { ok: false, code: "-", message: "no event" };
+        if (ev.ok) {
+          const opened = await attempt(
+            client,
+            "select public.messenger_event_thread_open($1::uuid) as t",
+            [ev.id],
+          );
+          byEvent = opened.ok ? await rename(opened.rows[0].t, "An event thread") : opened;
+        }
+        record(
+          names.msgdRename,
+          role.ok &&
+            byLead.ok &&
+            leadName.ok &&
+            leadName.rows[0].name === "Renamed by the lead" &&
+            byCoLead.ok &&
+            coLeadName.ok &&
+            coLeadName.rows[0].name === "Renamed by the co-lead" &&
+            !byMember.ok &&
+            byMember.message === "not_a_lead" &&
+            !long.ok &&
+            long.message === "bad_name" &&
+            !byEvent.ok &&
+            byEvent.message === "not_renamable",
+          "co_lead " +
+            fmt(role) +
+            "; lead " +
+            fmt(byLead) +
+            " reads " +
+            word(leadName) +
+            "; 81 " +
+            fmt(long) +
+            "; co-lead " +
+            fmt(byCoLead) +
+            " reads " +
+            word(coLeadName) +
+            "; member " +
+            fmt(byMember) +
+            "; event thread " +
+            fmt(byEvent),
+        );
+      });
+
+      // 4. The list's last author, and a blocked one skipped (held item 4; 1386).
+      await inTransaction(client, async () => {
+        const thirdId = await thirdMember();
+        if (!thirdId) {
+          skip(names.msgdView, "live_arms_admin_member() answered no third member");
+          return;
+        }
+        const group = await openGroup(thirdId, "Live arms last line");
+        if (!group.ok) {
+          record(names.msgdView, false, group.step + " " + fmt(group.r));
+          return;
+        }
+        const g = group.thread;
+        await actAs(client, owner.id);
+        const fromOwner = await send(g, uuid(), "From the owner");
+        await actAs(client, thirdId);
+        const fromThird = await send(g, uuid(), "From the third");
+        const row = () =>
+          attempt(
+            client,
+            "select last_line, last_author_id, last_author_name, unread from public.messenger_threads_view where thread_id = $1::uuid",
+            [g],
+          );
+        await actAs(client, member.id);
+        const read = fromOwner.ok
+          ? await attempt(client, "select public.messenger_read_to($1::uuid, $2::bigint)", [
+              g,
+              fromOwner.rows[0].seq,
+            ])
+          : fromOwner;
+        const names3 = await attempt(
+          client,
+          "select author_id, author_name from public.messenger_messages_view where thread_id = $1::uuid and author_id in ($2::uuid, $3::uuid)",
+          [g, owner.id, thirdId],
+        );
+        const nameFor = (id) =>
+          names3.ok ? (names3.rows.find((r) => r.author_id === id) || {}).author_name : undefined;
+        const before = await row();
+        const block = await attempt(
+          client,
+          "insert into public.member_blocks (blocker_id, blocked_id) values ($1::uuid, $2::uuid)",
+          [member.id, thirdId],
+        );
+        const after = await row();
+        const b = before.ok ? before.rows[0] : null;
+        const a = after.ok ? after.rows[0] : null;
+        record(
+          names.msgdView,
+          fromOwner.ok &&
+            fromThird.ok &&
+            read.ok &&
+            !!b &&
+            b.last_line === "From the third" &&
+            b.last_author_id === thirdId &&
+            !!nameFor(thirdId) &&
+            b.last_author_name === nameFor(thirdId) &&
+            b.unread === true &&
+            block.ok &&
+            !!a &&
+            a.last_line === "From the owner" &&
+            a.last_author_id === owner.id &&
+            a.last_author_name === nameFor(owner.id) &&
+            a.unread === false,
+          "sends " +
+            fmt(fromOwner) +
+            ", " +
+            fmt(fromThird) +
+            "; read_to " +
+            fmt(read) +
+            "; before " +
+            word(before) +
+            "; block " +
+            fmt(block) +
+            "; after " +
+            word(after),
+        );
+      });
+
+      // 5. Media words for a member who does not own the media (held item 5).
+      await inTransaction(client, async () => {
+        const thirdId = await thirdMember();
+        if (!thirdId) {
+          skip(names.msgdWord, "live_arms_admin_member() answered no third member");
+          return;
+        }
+        const pair = await openPair();
+        if (!pair.ok) {
+          record(names.msgdWord, false, pair.step + " " + fmt(pair.r));
+          return;
+        }
+        await actAs(client, owner.id);
+        const image = await recordMedia(
+          pair.thread,
+          mediaKey(pair.thread),
+          "image/jpeg",
+          1024,
+          10,
+          10,
+        );
+        const video = await recordMedia(
+          pair.thread,
+          mediaKey(pair.thread),
+          "video/mp4",
+          4096,
+          16,
+          9,
+        );
+        const sendMedia = (media) =>
+          attempt(
+            client,
+            "select id from public.messenger_send($1::uuid, $2::uuid, null, 'media', null, $3::uuid)",
+            [pair.thread, uuid(), media],
+          );
+        const imageMsg = image.ok ? await sendMedia(image.rows[0].id) : image;
+        const reply = imageMsg.ok
+          ? await attempt(
+              client,
+              "select id from public.messenger_send($1::uuid, $2::uuid, 'A reply to the image', 'text', $3::uuid)",
+              [pair.thread, uuid(), imageMsg.rows[0].id],
+            )
+          : imageMsg;
+        const videoMsg = video.ok ? await sendMedia(video.rows[0].id) : video;
+        await actAs(client, member.id);
+        const list = await attempt(
+          client,
+          "select last_line from public.messenger_threads_view where thread_id = $1::uuid",
+          [pair.thread],
+        );
+        const msgs = await attempt(
+          client,
+          "select message_id, media_word, reply_to from public.messenger_messages_view where thread_id = $1::uuid",
+          [pair.thread],
+        );
+        const byId = (id) => (msgs.ok ? msgs.rows.find((r) => r.message_id === id) : undefined);
+        const im = imageMsg.ok ? byId(imageMsg.rows[0].id) : undefined;
+        const vm = videoMsg.ok ? byId(videoMsg.rows[0].id) : undefined;
+        const rp = reply.ok ? byId(reply.rows[0].id) : undefined;
+        await actAs(client, thirdId);
+        const outside = image.ok
+          ? await attempt(client, "select private.messenger_media_word($1::uuid) as w", [
+              image.rows[0].id,
+            ])
+          : image;
+        record(
+          names.msgdWord,
+          videoMsg.ok &&
+            list.ok &&
+            list.rows[0].last_line === "Video" &&
+            !!im &&
+            im.media_word === "Image" &&
+            !!vm &&
+            vm.media_word === "Video" &&
+            !!rp &&
+            rp.media_word === null &&
+            !!rp.reply_to &&
+            rp.reply_to.line === "Image" &&
+            outside.ok &&
+            outside.rows[0].w === null,
+          "list " +
+            word(list) +
+            "; image " +
+            JSON.stringify(im && im.media_word) +
+            "; video " +
+            JSON.stringify(vm && vm.media_word) +
+            "; reply line " +
+            JSON.stringify(rp && rp.reply_to && rp.reply_to.line) +
+            "; non-member " +
+            word(outside),
+        );
+      });
+
+      // 6. video/quicktime records (1396).
+      await inTransaction(client, async () => {
+        const pair = await openPair();
+        if (!pair.ok) {
+          record(names.msgdQuicktime, false, pair.step + " " + fmt(pair.r));
+          return;
+        }
+        await actAs(client, owner.id);
+        const mov = await recordMedia(
+          pair.thread,
+          mediaKey(pair.thread),
+          "video/quicktime",
+          4096,
+          1920,
+          1080,
+        );
+        const avi = await recordMedia(
+          pair.thread,
+          mediaKey(pair.thread),
+          "video/x-msvideo",
+          4096,
+          1920,
+          1080,
+        );
+        record(
+          names.msgdQuicktime,
+          mov.ok &&
+            mov.rows[0].mime === "video/quicktime" &&
+            mov.rows[0].optimized === false &&
+            !avi.ok &&
+            avi.message === "bad_media",
+          "quicktime " +
+            (mov.ok ? JSON.stringify(mov.rows[0].mime) : fmt(mov)) +
+            "; avi " +
+            fmt(avi),
         );
       });
     }

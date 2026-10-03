@@ -443,6 +443,9 @@ const FLOW_CHECKS = [
   "a rate-limited send reads the extraction's line, with no number, and disables the field (1353)",
   "Report writes messenger_report with the reason and reads the plain confirmation (1349, 1350)",
   "Accept writes messenger_request_accept, toasts, and opens the new thread (1341)",
+  "a group row reads {first name}: before someone else's last message (held item 4)",
+  "Recover writes messenger_request_recover, says Back in Requests., opens no thread and the card is back in Requests (1341)",
+  "a group lead's Manage draws Rename, which writes messenger_thread_rename and says Renamed., and an event thread's Manage draws no Rename (1387)",
   "nothing the Messenger holds is in localStorage or sessionStorage (1351)",
   "no page error (316)",
 ];
@@ -518,6 +521,11 @@ async function runMessengerFlows(browserType, bname, vp, theme) {
     await openMessages(page);
     const again = await page.locator('[data-testid="receipts-sheet"]').count();
     check(FLOW_CHECKS[1], again === 0, "sheets " + again);
+    // Handoff 41-D (held item 4): Esi wrote the group's last line; emitted as check 19.
+    const esiFirst = Mx.members.esi.name.split(/\s+/)[0];
+    const groupRow = Mx.threads.find((t) => t.thread_id === Mx.ids.group);
+    const groupWant = esiFirst + ": " + groupRow.last_line;
+    const groupLine = (await rowOf("Accra returnees").textContent()) ?? "";
 
     // 3. Pins: two pinned in the fixture; Nana is the third, Corridor Suppers the refused fourth.
     await openMenu(page, rowOf("Nana Adjei"), touch, "Actions for Nana Adjei");
@@ -837,9 +845,67 @@ async function runMessengerFlows(browserType, bname, vp, theme) {
       JSON.stringify({ acc: acc?.body, url: page.url() }),
     );
 
+    // 19. The group row's prefix, read before any write of this flow touched the group's last line.
+    check(
+      FLOW_CHECKS[18],
+      groupLine.includes(groupWant),
+      JSON.stringify({ want: groupWant, row: groupLine.slice(0, 160) }),
+    );
+
+    // 20. Recover Tunde's declined request (handoff 41-D, 1341).
+    await openMessages(page);
+    await page.click('[data-testid="declined-toggle"]');
+    await page
+      .locator(
+        '[data-request-card][data-declined="1"]:has-text("Tunde") button:has-text("Recover")',
+      )
+      .click();
+    await page.waitForTimeout(400);
+    const rec = writesOf(db, "messenger_request_recover").at(-1);
+    const t3 = await toastText(page);
+    const back = await page
+      .locator('[data-request-card]:not([data-declined]):has-text("Tunde")')
+      .count();
+    check(
+      FLOW_CHECKS[19],
+      !!rec &&
+        rec.body.p_request === "55555555-5555-4555-8555-555555555003" &&
+        t3.includes("Back in Requests.") &&
+        writesOf(db, "messenger_request_accept").length === 1 &&
+        page.url().endsWith("/messages") &&
+        back === 1,
+      JSON.stringify({ rec: rec?.body, toast: t3.slice(0, 120), back, url: page.url() }),
+    );
+
+    // 21. Rename (handoff 41-D, 1387): the group the mock member leads, then an event thread they lead.
+    await page.goto(BASE + "/messages/" + Mx.ids.group, { waitUntil: "networkidle" });
+    await page.click('[data-testid="manage"]');
+    await page.waitForSelector('[data-testid="manage-sheet"]', { timeout: 5000 });
+    const field = page.locator('[data-testid="rename"] input');
+    await field.fill("Accra returnees, Thursdays");
+    await page.locator('[data-testid="rename"] button:has-text("Rename")').click();
+    await page.waitForTimeout(400);
+    const ren = writesOf(db, "messenger_thread_rename").at(-1);
+    const t4 = await toastText(page);
+    Mx.threads.find((t) => t.thread_id === Mx.ids.event).role = "lead";
+    await page.goto(BASE + "/messages/" + Mx.ids.event, { waitUntil: "networkidle" });
+    await page.click('[data-testid="manage"]');
+    await page.waitForSelector('[data-testid="manage-sheet"]', { timeout: 5000 });
+    const eventRename = await page.locator('[data-testid="rename"]').count();
+    check(
+      FLOW_CHECKS[20],
+      !!ren &&
+        ren.body.p_thread === Mx.ids.group &&
+        ren.body.p_name === "Accra returnees, Thursdays" &&
+        t4.includes("Renamed.") &&
+        eventRename === 0,
+      JSON.stringify({ ren: ren?.body, toast: t4.slice(0, 120), eventRename }),
+    );
+    await page.keyboard.press("Escape");
+
     const keys = await messengerStorage(page);
-    check(FLOW_CHECKS[18], keys.length === 0, keys.join(","));
-    check(FLOW_CHECKS[19], errors.length === 0, errors.slice(0, 3).join(" | "));
+    check(FLOW_CHECKS[21], keys.length === 0, keys.join(","));
+    check(FLOW_CHECKS[22], errors.length === 0, errors.slice(0, 3).join(" | "));
   } catch (e) {
     record(`${tag} flow`, false, String(e).slice(0, 600));
   } finally {

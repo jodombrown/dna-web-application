@@ -7911,3 +7911,67 @@ extracted; `matrix (chromium)` (`110135941861`) installed in 22 s, read `7545 of
 ordered, `apt-archives-ubuntu24-webkit-` against `apt-archives-ubuntu24-20260927.320.1-webkit-…`, so
 the key is reordered OS, engine, image version, Playwright in the commit after 444; the enforcing run
 on the final head is cited on PR #83.
+
+---
+
+## G197. `private.message_requests_broadcast` sends every request update to the sender's inbox, so a decline and a recover reach the sender
+
+**Severity: moderate, an invite-boundary gate under ruling 140. Opened 3 October 2026 during handoff 41-D
+Part A2, filed under ruling 597. The number is assigned by this entry (ruling 638).**
+
+The trigger `on_message_requests_broadcast` runs after every insert and update on
+`public.message_requests` and sends the row's `state` and `decided_at` to `inbox:{recipient_id}` and to
+`inbox:{sender_id}` alike, read live on 3 October 2026. So when the recipient declines, the sender's own
+Realtime channel carries `state: declined`, and when the recipient recovers it under 41-D's
+`private.message_request_recover`, the same channel carries `state: pending` with `decided_at` null.
+Ruling 157 says a declined status never reaches the sender, and 41-D's A2 header says the sender is not
+told either way; the sender's surfaces read neither word today, but the payload is on a channel the
+sender is authorised to subscribe to. The decline half predates 41-D; Recover adds the second word.
+
+Owed: the sender's copy of the broadcast carries no state the sender may not see (a send and an accept
+only), through a new migration that replaces the trigger function. Not changed by 41-D, which commits
+its five files as Chat wrote them.
+
+---
+
+## G198. `threads_live_arms_select` passes the member's id as the thread id, so `live_arms` reads no thread row
+
+**Severity: low, harness only. Opened 3 October 2026 during handoff 41-D Part C, filed under ruling 597.
+The number is assigned by this entry (ruling 638).**
+
+The policy's predicate is `private.thread_member_in(m.id, m.id, enum_range(NULL::thread_member_state))`,
+where `thread_members_live_arms_select` and `messages_live_arms_select` pass the row's `thread_id` first.
+No thread's id equals a member's, so the predicate is false for every row and a direct
+`select … from public.threads` as `live_arms` answers nothing. The 41-A to 41-D arms read a thread's
+name and kind through `messenger_threads_view` as a test account instead, which is why nothing has
+failed on it. Owed: `thread_member_in(threads.id, m.id, …)` in a new migration.
+
+---
+
+## G199. `private.event_thread_join` leaves `joined_seq` at 0, so with history off a joining attendee reads the thread's whole history
+
+**Severity: moderate. Opened 3 October 2026 during handoff 41-D Part A1, filed under ruling 597. The
+number is assigned by this entry (ruling 638).**
+
+`20261003130000` inserts the attendee's `thread_members` row with `joined_at` and no `joined_seq`, whose
+default is 0, and on a rejoin from `left` updates `state` and `joined_at` only.
+`private.thread_invite_accept`, the other path into a thread, writes `joined_seq` as the thread's highest
+`seq` at the moment of joining, and the late-joiner rule (1342) reads `joined_seq` when
+`history_visible_to_new` is off. `private.event_thread_open` creates event threads with history on, so
+nothing differs until a host turns history off in Manage; from then an attendee who joins through
+Message reads every earlier message. The host's own row from `event_thread_open` also carries 0, which
+is right for the creator. Owed: the join sets `joined_seq` to the thread's highest `seq` on insert and on
+a rejoin, as `thread_invite_accept` does, in a new migration (466). Not changed by 41-D, which commits
+A1 as Chat wrote it.
+
+---
+
+## G200. `private.message_media_record`'s comment still names seven mimes after `video/quicktime` made eight
+
+**Severity: low. Opened 3 October 2026 during handoff 41-D Part A5, filed under ruling 597. The number
+is assigned by this entry (ruling 638).**
+
+`create or replace function` keeps a function's comment, and `20261003130400` replaces the body without
+a `comment on function`, so the catalogue still reads "the mime must be one of the seven" from
+`20261002150000`. Owed: the comment restated with the eight in the next migration that touches the
+function.
