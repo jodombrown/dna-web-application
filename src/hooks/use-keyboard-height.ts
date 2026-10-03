@@ -25,6 +25,11 @@ export function useKeyboardViewport(active: boolean): KeyboardViewport {
       return;
     }
     const f = () => {
+      // Pinch-zoom shrinks the visual viewport too; only an unzoomed viewport is read as a keyboard.
+      if (Math.abs(vv.scale - 1) > 0.01) {
+        setKb(NONE);
+        return;
+      }
       const h = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
       const next =
         h > 80 ? { height: h, viewportHeight: vv.height, offsetTop: vv.offsetTop } : NONE;

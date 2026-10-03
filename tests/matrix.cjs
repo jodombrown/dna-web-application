@@ -6322,7 +6322,8 @@ async function runSilence(browserType, bname) {
   await browser.close();
 }
 
-// iOS keyboard surrogate: shrink visualViewport and check data-kb and Publish placement.
+// iOS keyboard surrogate: shrink visualViewport and check data-kb and Publish placement, then a
+// pinch-zoom on a thread, which must not read as a keyboard.
 async function runKeyboard(browserType, bname) {
   const tag = `${bname}-390x844-keyboard`;
   armStart(tag);
@@ -6352,6 +6353,13 @@ async function runKeyboard(browserType, bname) {
       fake.height = window.innerHeight - kb;
       target.dispatchEvent(new Event("resize"));
     };
+    // Pinch-zoom: the visual viewport shrinks by the scale and pans, with no keyboard at all.
+    window.__setZoom = (scale, offsetTop) => {
+      fake.scale = scale;
+      fake.height = window.innerHeight / scale;
+      fake.offsetTop = offsetTop;
+      target.dispatchEvent(new Event("resize"));
+    };
   });
   const db = makeMockDb();
   await mockSupabase(page, db);
@@ -6379,6 +6387,42 @@ async function runKeyboard(browserType, bname) {
     await page.evaluate(() => window.__setKeyboard(0));
     await page.waitForTimeout(100);
     record(tag + " restores on keyboard dismiss", (await dialog.getAttribute("data-kb")) === null);
+
+    // Chat on #97: a pinch-zoom is not a keyboard. On a thread with no field focused, zoom to 2
+    // and back: the thread's frame never goes fixed (1457's keyboard frame) and AppShell's
+    // keyboard-close reset never moves a window that was scrolled before the zoom.
+    await page.goto(BASE + "/messages", { waitUntil: "networkidle" });
+    await page.locator("[data-thread-row] [data-thread-open]").first().click();
+    await page.waitForSelector('[data-testid="message-field"]', { timeout: 15000 });
+    await page.waitForTimeout(300);
+    const before = await page.evaluate(() => {
+      if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+      document.documentElement.style.overflow = "auto";
+      document.body.style.minHeight = "3000px";
+      window.scrollTo(0, 40);
+      return { x: window.scrollX, y: window.scrollY };
+    });
+    const framePosition = () =>
+      page.evaluate(() => {
+        const t = document.querySelector("[data-messenger-thread]");
+        const frame = t && t.closest("section");
+        return frame ? getComputedStyle(frame).position : "no frame";
+      });
+    await page.evaluate(() => window.__setZoom(2, 200));
+    await page.waitForTimeout(150);
+    const zoomed = await framePosition();
+    await page.evaluate(() => window.__setZoom(1, 0));
+    await page.waitForTimeout(150);
+    const after = await page.evaluate(() => ({ x: window.scrollX, y: window.scrollY }));
+    record(
+      tag + " pinch-zoom on a thread is not a keyboard: no fixed frame, window scroll unchanged",
+      before.y === 40 &&
+        zoomed !== "fixed" &&
+        zoomed !== "no frame" &&
+        after.x === before.x &&
+        after.y === before.y,
+      `frame at scale 2: ${zoomed}; window before ${JSON.stringify(before)}, after ${JSON.stringify(after)}`,
+    );
   } catch (e) {
     record(tag + " flow", false, String(e).slice(0, 300));
   }
