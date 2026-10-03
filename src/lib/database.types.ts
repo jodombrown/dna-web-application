@@ -1,4 +1,20 @@
 // Generated from the canonical Supabase project (dgspjevjoblujcoljvkn) with the Supabase MCP
+// generate_typescript_types tool on handoff 45-D's branch (#95, admin Settings), merged with main at
+// dacfda0 (the merge of #94), after Chat applied 20261003120000_b12s_admin_settings through
+// execute_sql and its ledger row read back at the file's drift md5 297936668967db44f601866fba8007cc;
+// 91 rows in schema_migrations, head 20261003130500_b14d_request_broadcast. Taken from the project
+// whole, never merged by hand; it replaces the function entries 45-D carried by hand until the apply.
+//
+// What 45-D changes here (1381, 1382, 1391 to 1394, 1178): the tables `admin_appearances`,
+// `overview_grains`, `overview_comparisons`, `reporting_zones`, `admin_read_subjects`,
+// `admin_staff_settings` and `admin_org_settings`, and the functions `admin_staff_settings_read`,
+// `admin_staff_settings_save`, `admin_org_settings_read`, `admin_org_settings_save`,
+// `admin_read_log`, `admin_change_history` and `admin_my_sessions`. The private gate, the zone guard,
+// the replaced `overview_window` and `admin_org_actions_count` are absent by design, as every private
+// function is.
+//
+// Before 45-D:
+// Generated from the canonical Supabase project (dgspjevjoblujcoljvkn) with the Supabase MCP
 // generate_typescript_types tool on handoff 41-D's branch (#94, the Messenger's held entry points),
 // after Chat applied 20261003130000 to 20261003130500 through execute_sql, each ledger row's md5
 // equal to its committed file; 90 rows in schema_migrations, head 20261003130500_b14d_request_broadcast.
@@ -131,6 +147,24 @@ export type Database = {
         };
         Relationships: [];
       };
+      admin_appearances: {
+        Row: {
+          label: string;
+          position: number;
+          value: string;
+        };
+        Insert: {
+          label: string;
+          position: number;
+          value: string;
+        };
+        Update: {
+          label?: string;
+          position?: number;
+          value?: string;
+        };
+        Relationships: [];
+      };
       admin_catalogue: {
         Row: {
           admin_reason: string | null;
@@ -191,6 +225,66 @@ export type Database = {
         };
         Relationships: [];
       };
+      admin_org_settings: {
+        Row: {
+          dia_note: boolean;
+          id: boolean;
+          reporting_zone: string;
+          updated_at: string;
+          updated_by: string | null;
+        };
+        Insert: {
+          dia_note?: boolean;
+          id?: boolean;
+          reporting_zone?: string;
+          updated_at?: string;
+          updated_by?: string | null;
+        };
+        Update: {
+          dia_note?: boolean;
+          id?: boolean;
+          reporting_zone?: string;
+          updated_at?: string;
+          updated_by?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "admin_org_settings_reporting_zone_fkey";
+            columns: ["reporting_zone"];
+            isOneToOne: false;
+            referencedRelation: "reporting_zones";
+            referencedColumns: ["value"];
+          },
+          {
+            foreignKeyName: "admin_org_settings_updated_by_fkey";
+            columns: ["updated_by"];
+            isOneToOne: false;
+            referencedRelation: "members";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      admin_read_subjects: {
+        Row: {
+          block: string | null;
+          page: string;
+          position: number;
+          value: string;
+        };
+        Insert: {
+          block?: string | null;
+          page: string;
+          position: number;
+          value: string;
+        };
+        Update: {
+          block?: string | null;
+          page?: string;
+          position?: number;
+          value?: string;
+        };
+        Relationships: [];
+      };
       admin_reads: {
         Row: {
           actor: string;
@@ -211,6 +305,69 @@ export type Database = {
           projection?: string;
         };
         Relationships: [];
+      };
+      admin_staff_settings: {
+        Row: {
+          appearance: string;
+          default_compare: string;
+          default_grain: string;
+          member_id: string;
+          reading_zone: string | null;
+          updated_at: string;
+        };
+        Insert: {
+          appearance?: string;
+          default_compare?: string;
+          default_grain?: string;
+          member_id: string;
+          reading_zone?: string | null;
+          updated_at?: string;
+        };
+        Update: {
+          appearance?: string;
+          default_compare?: string;
+          default_grain?: string;
+          member_id?: string;
+          reading_zone?: string | null;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "admin_staff_settings_appearance_fkey";
+            columns: ["appearance"];
+            isOneToOne: false;
+            referencedRelation: "admin_appearances";
+            referencedColumns: ["value"];
+          },
+          {
+            foreignKeyName: "admin_staff_settings_default_compare_fkey";
+            columns: ["default_compare"];
+            isOneToOne: false;
+            referencedRelation: "overview_comparisons";
+            referencedColumns: ["value"];
+          },
+          {
+            foreignKeyName: "admin_staff_settings_default_grain_fkey";
+            columns: ["default_grain"];
+            isOneToOne: false;
+            referencedRelation: "overview_grains";
+            referencedColumns: ["value"];
+          },
+          {
+            foreignKeyName: "admin_staff_settings_member_id_fkey";
+            columns: ["member_id"];
+            isOneToOne: true;
+            referencedRelation: "members";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "admin_staff_settings_reading_zone_fkey";
+            columns: ["reading_zone"];
+            isOneToOne: false;
+            referencedRelation: "reporting_zones";
+            referencedColumns: ["value"];
+          },
+        ];
       };
       attestations: {
         Row: {
@@ -2640,6 +2797,42 @@ export type Database = {
           },
         ];
       };
+      overview_comparisons: {
+        Row: {
+          label: string;
+          position: number;
+          value: string;
+        };
+        Insert: {
+          label: string;
+          position: number;
+          value: string;
+        };
+        Update: {
+          label?: string;
+          position?: number;
+          value?: string;
+        };
+        Relationships: [];
+      };
+      overview_grains: {
+        Row: {
+          label: string;
+          position: number;
+          value: string;
+        };
+        Insert: {
+          label: string;
+          position: number;
+          value: string;
+        };
+        Update: {
+          label?: string;
+          position?: number;
+          value?: string;
+        };
+        Relationships: [];
+      };
       partner_acts: {
         Row: {
           c_category: Database["public"]["Enums"]["c_category"];
@@ -3061,6 +3254,30 @@ export type Database = {
         Update: {
           name?: string;
           position?: number;
+        };
+        Relationships: [];
+      };
+      reporting_zones: {
+        Row: {
+          abbreviation: string;
+          city: string;
+          name: string;
+          position: number;
+          value: string;
+        };
+        Insert: {
+          abbreviation: string;
+          city: string;
+          name: string;
+          position: number;
+          value: string;
+        };
+        Update: {
+          abbreviation?: string;
+          city?: string;
+          name?: string;
+          position?: number;
+          value?: string;
         };
         Relationships: [];
       };
