@@ -25,8 +25,19 @@ export const SETTINGS_KEY = (memberId: string) => ["messenger", "settings", memb
 export const SIGNALS_KEY = (memberId: string) => ["messenger", "signals", memberId] as const;
 
 /** Replaces or adds one row of the list cache from the projection; drops it when the projection no longer returns it. */
+// The latest load issued for each thread. An inbox thread_touch and a row act can both refresh the
+// same row, and their reads can resolve out of order; only the latest one issued may write, so a
+// read that began before an archive, a mute or a pin committed never puts the older row back.
+const latestLoad = new Map<string, number>();
+let loads = 0;
+
 export async function refreshThreadRow(qc: QueryClient, memberId: string, threadId: string) {
+  const key = memberId + ":" + threadId;
+  const mine = ++loads;
+  latestLoad.set(key, mine);
   const row = await loadThread(threadId).catch(() => null);
+  if (latestLoad.get(key) !== mine) return;
+  latestLoad.delete(key);
   qc.setQueryData<ThreadView[]>(THREADS_KEY(memberId), (prev) => {
     const list = prev ?? [];
     const rest = list.filter((t) => t.thread_id !== threadId);

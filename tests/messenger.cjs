@@ -1103,10 +1103,16 @@ async function runMessengerLive(browserType, bname) {
     const unmuted = !(await lrow.textContent()).includes("Muted");
     check(LIVE_CHECKS[9], mutedNow && unmuted, `muted ${mutedNow} unmuted ${unmuted}`);
     await act("Archive");
-    const gone =
-      (await page
-        .locator(`[data-testid="thread-list"] [data-thread-name]:text-is("${GROUP}")`)
-        .count()) === 0;
+    // The archive reaches the deployment and the row's refresh comes back over the network, so the
+    // list is polled rather than read once (run 488 read it once, at 1.5 s).
+    let gone = false;
+    for (let i = 0; i < 10 && !gone; i++) {
+      gone =
+        (await page
+          .locator(`[data-testid="thread-list"] [data-thread-name]:text-is("${GROUP}")`)
+          .count()) === 0;
+      if (!gone) await page.waitForTimeout(800);
+    }
     const back = await rpc(memberToken, "messenger_send", {
       p_thread: threadId,
       p_client_id: crypto.randomUUID(),
