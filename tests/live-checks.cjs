@@ -1349,7 +1349,9 @@ async function get(url, headers = {}) {
         "Brief 10 (680): the served page carries no attendee row, no going line and no member RSVP control",
         !served.text.includes("data-going-row") &&
           !served.text.includes("data-event-going") &&
-          !/are going, and others/.test(served.text) &&
+          // The going line's shape since handoff 41-C (src/lib/names.ts); the old shape is refused too,
+          // so a served page carrying either reads as the line it must not carry.
+          !/and others are going|are going, and others/.test(served.text) &&
           !served.text.includes("data-event-rsvp") &&
           !served.text.includes('data-testid="rsvp-going"'),
       );

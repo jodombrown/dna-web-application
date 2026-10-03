@@ -119,6 +119,7 @@ import { useShellScroll } from "@/lib/shell-scroll";
 import { useMode, useTier, useWide } from "@/lib/tier";
 import { loadVocabularies } from "@/lib/vocabularies";
 import { toastStyle, useShare } from "./FeedSurface";
+import { joinNames } from "@/lib/names";
 
 declare module "@tanstack/history" {
   interface HistoryState {
@@ -156,12 +157,6 @@ const PLACE_KIND: Record<ConvenePlace["kind"], string> = {
   country: "Country",
 };
 
-/** `Accra`, `Accra and Nairobi`, `Accra, Nairobi and Lagos`. */
-function joinWords(words: string[]): string {
-  if (words.length <= 1) return words[0] ?? "";
-  return words.slice(0, -1).join(", ") + " and " + words[words.length - 1];
-}
-
 function lowerFirst(s: string): string {
   return s.charAt(0).toLowerCase() + s.slice(1);
 }
@@ -194,7 +189,7 @@ function reasonFor(lane: DiscoveryLaneId, reason: DiscoveryReason): string | und
       if (names.length === 0 || names.some((n) => !n)) return undefined;
       return names.length === 1
         ? names[0] + " is going."
-        : joinWords(names as string[]) + " are going.";
+        : joinNames(names as string[]) + " are going.";
     }
     default:
       return undefined;
@@ -205,7 +200,7 @@ function reasonFor(lane: DiscoveryLaneId, reason: DiscoveryReason): string | und
 function whereFor(ev: EventView): string {
   if (ev.mode === "virtual") return "Online";
   const word = ev.mode === "hybrid" ? "Hybrid" : "In person";
-  const places = joinWords(ev.places);
+  const places = joinNames(ev.places);
   return places ? word + " · " + places : word;
 }
 
@@ -852,7 +847,7 @@ export function DiscoverySurface({
       }}
     >
       <Icon name="map-pin" size={16} />
-      <span>{joinWords(homeWords)}</span>
+      <span>{joinNames(homeWords)}</span>
     </div>
   ) : null;
 
@@ -1148,12 +1143,12 @@ export function DiscoverySurface({
 
   // The going row (1124, 1128, 1138, 1158): outside the relationship lanes, the three first names
   // `event_going_names` gave for the event, comma-joined, then "and others are going.": "Ama, Kojo,
-  // Efua and others are going." (Chat, Session 34; `joinWords` would put a second "and" before the
-  // third name). Nothing when it gave none. The relationship lanes keep their reason (1096), and the
+  // Efua and others are going." (Chat, Session 34), which is `joinNames` with others, the shape the
+  // platform's one joiner takes (handoff 41-C). Nothing when it gave none. The relationship lanes keep their reason (1096), and the
   // part lets a reason win over a going sentence.
   const goingFor = (lane: DiscoveryLaneId, eventId: string, src: Discovery | null) => {
     const names = GOING_LANES.has(lane) ? src?.goingNames.get(eventId) : undefined;
-    return names && names.length > 0 ? names.join(", ") + " and others are going." : undefined;
+    return names && names.length > 0 ? joinNames(names, true) + " are going." : undefined;
   };
 
   /** One card, from the answer `src` it came from; `inGrid` fills its track in the lens grid. */

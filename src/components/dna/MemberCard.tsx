@@ -27,6 +27,7 @@ import { Button } from "@/components/strand/Button";
 import { Chip } from "@/components/strand/Chip";
 import { Icon } from "@/components/strand/Icon";
 import { IdentityMark } from "./IdentityMark";
+import { joinNames } from "@/lib/names";
 
 // Ruling 214: there is no window state on a surface. private.relationship_display maps it to
 // sent before the projection returns, so the sender sees the Pending pill and nothing else, and
@@ -67,18 +68,11 @@ export type MemberCardProps = {
   onDecline?: (() => void) | undefined;
   onFollow?: (() => void) | undefined;
   onDismiss?: (() => void) | undefined;
+  /** Brief 14: Message on a connected member's card, opening the pair's thread (SPEC 41-14 Part C item 4). */
+  onMessage?: (() => void) | undefined;
   pointer?: boolean | undefined;
   style?: CSSProperties | undefined;
 };
-
-/** "A", "A and B", "A, B and C". */
-export function joinNames(a: string[]): string {
-  return a.length <= 1
-    ? (a[0] ?? "")
-    : a.length === 2
-      ? a[0] + " and " + a[1]
-      : a.slice(0, -1).join(", ") + " and " + a[a.length - 1];
-}
 
 // The reset the source achieves with `all: unset`, written out so the stylesheet focus ring applies.
 const UNSET: CSSProperties = {
@@ -102,6 +96,8 @@ type ActionsProps = {
   onDecline?: (() => void) | undefined;
   onFollow?: (() => void) | undefined;
   onDismiss?: (() => void) | undefined;
+  /** Brief 14 (SPEC 41-14 Part C item 4; lifts 117): Message on a connected member's card. */
+  onMessage?: (() => void) | undefined;
 };
 
 function Actions({
@@ -114,6 +110,7 @@ function Actions({
   onDecline,
   onFollow,
   onDismiss,
+  onMessage,
 }: ActionsProps) {
   const pill = (bg: string, fg: string, border: string, child: ReactNode) => (
     <span
@@ -197,6 +194,11 @@ function Actions({
             Connected
           </>,
         )}
+      {rel === "connected" && onMessage && (
+        <Button c="connect" size="sm" onClick={onMessage} data-testid="card-message">
+          Message
+        </Button>
+      )}
       {stacked ? (
         <div style={{ display: "flex", gap: 8 }}>
           {follow}
@@ -224,6 +226,7 @@ export function MemberCard({
   onDecline,
   onFollow,
   onDismiss,
+  onMessage,
   pointer,
   style,
 }: MemberCardProps) {
@@ -243,6 +246,7 @@ export function MemberCard({
       onDecline={onDecline}
       onFollow={onFollow}
       onDismiss={onDismiss}
+      onMessage={onMessage}
     />
   );
   const originLine = [

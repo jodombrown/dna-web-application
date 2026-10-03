@@ -63,3 +63,20 @@ export * from "./StackedBars";
 export * from "./BarList";
 export * from "./DataTable";
 export * from "./DiaNote";
+// Brief 14 (SPEC 41-14 Part A item 5; extraction 41-14 section 5.4, ratified 1368 to 1373; handoff
+// 41-C): the eleven Messenger parts proposed for Strand, ported from the approved prototype
+// `B14-Messenger-v1.dc.html` (compile v1790724894917128) rather than from a Strand compile, since
+// no compile carries them yet. AppHeader's `messages` slot and `MessagesControl`, Pane's route-bar
+// props and DiaLine's `escapeLabel` are the same brief's changes to parts already here. The record
+// is docs/strand-ports/v1790724894917128-b14.md.
+export * from "./ThreadRow";
+export * from "./RequestCard";
+export * from "./MessageBubble";
+export * from "./Ticks";
+export * from "./VoicePlayer";
+export * from "./VoiceRecorder";
+export * from "./MessageComposer";
+export * from "./PinnedStrip";
+export * from "./DaySeparator";
+export * from "./BlockedMessageLine";
+export * from "./SearchResultRow";

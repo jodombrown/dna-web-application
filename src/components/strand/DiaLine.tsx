@@ -1,4 +1,7 @@
 // Ported from Strand components/dna/DiaLine.jsx. Behavior unchanged (keyframes live in styles.css).
+// Brief 14 (SPEC 41-14 Part A item 4; extraction 41-14 section 5.4): `escapeLabel`, the escape's
+// word, default `Not this?` so every existing caller renders as it did; the Messenger's two lines
+// pass `Dismiss` (1350, 1373).
 import type { CSSProperties } from "react";
 
 export type DiaLineState = "thinking" | "done" | null;
@@ -7,12 +10,20 @@ export type DiaLineProps = {
   state: DiaLineState;
   text?: string | undefined;
   onNotThis?: (() => void) | undefined;
+  /** The escape's word. Default `Not this?`; the Messenger passes `Dismiss`. */
+  escapeLabel?: string | undefined;
   style?: CSSProperties | undefined;
 };
 
 /** DIA's one quiet line (ruling 52). state "thinking": pending dot, resolves within 2.5s. state "done": what DIA did + "Not this?" escape.
  *  Render nothing when DIA has nothing to say (grounded-or-empty). Never a banner, modal, or prompt. */
-export function DiaLine({ state, text, onNotThis, style }: DiaLineProps) {
+export function DiaLine({
+  state,
+  text,
+  onNotThis,
+  escapeLabel = "Not this?",
+  style,
+}: DiaLineProps) {
   if (!state) return null;
   const base: CSSProperties = {
     display: "flex",
@@ -73,7 +84,7 @@ export function DiaLine({ state, text, onNotThis, style }: DiaLineProps) {
             textUnderlineOffset: 2,
           }}
         >
-          Not this?
+          {escapeLabel}
         </button>
       )}
     </div>

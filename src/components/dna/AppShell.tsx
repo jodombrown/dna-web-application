@@ -4,6 +4,7 @@
 // expanded canvas as three independent scroll containers (ruling 104). Matches B2-Shell-Feed-v3
 // SPEC.md sections 1 and 2. The document never scrolls inside the shell: every tier scrolls its own
 // Feed column, and the 72px header swap plus the 2.5s floating composer entry read that scroller.
+import { useQueryClient } from "@tanstack/react-query";
 import { useLocation, useNavigate, useRouter } from "@tanstack/react-router";
 import {
   useCallback,
@@ -14,7 +15,7 @@ import {
   type PointerEvent,
   type ReactNode,
 } from "react";
-import { AppHeader } from "@/components/strand/AppHeader";
+import { AppHeader, MessagesControl } from "@/components/strand/AppHeader";
 import { Button } from "@/components/strand/Button";
 import { Icon } from "@/components/strand/Icon";
 import { PulseDock } from "@/components/strand/PulseDock";
@@ -26,6 +27,8 @@ import type { Member } from "@/lib/auth";
 import { openComposer, useComposerState } from "@/lib/composer-store";
 import type { FeedView } from "@/lib/feed-view";
 import { useHeaderLens } from "@/lib/header-lens-store";
+import { settingsSet } from "@/lib/messenger";
+import { SETTINGS_KEY, useMessagingSettings, useMessengerInbox } from "@/lib/messenger-inbox";
 import { useColumnPad, useLeftRail, useRightRail, useShellLayout } from "@/lib/rail-store";
 import { ShellScrollProvider, useScrollState } from "@/lib/shell-scroll";
 import { getSupabase } from "@/lib/supabase";
@@ -91,7 +94,13 @@ export function AppShell({
   // with a full-width top row over independent columns at medium and expanded; compact is one
   // column in every mode, so the mode does not reach the grid there.
   const layout = useShellLayout();
-  const lanes = !!layout && !compact;
+  const lanes = layout?.mode === "lanes" && !compact;
+  // Brief 14 (1368, 1047): the Messenger's canvas mode, see src/lib/rail-store.ts.
+  const canvas = layout?.mode === "canvas";
+  // Brief 14 (1334, 1344): the inbox for the life of the session and the Messages control's dot.
+  const inbox = useMessengerInbox(member);
+  const qc = useQueryClient();
+  const messaging = useMessagingSettings(member);
   const registeredLens = useHeaderLens();
   const scrollerRef = useRef<HTMLElement | null>(null);
   // A stable ref callback: an inline one is detached (null) during every commit and re-attached
@@ -120,6 +129,7 @@ export function AppShell({
   // pathname and keeps the key, so the lanes stay where the member left them (688).
   const pathname = useLocation({ select: (l) => l.pathname });
   const surface = feedView ? "feed" : layout ? "layout:" + layout.key : pathname;
+  const onMessages = pathname === "/messages" || pathname.startsWith("/messages/");
   useLayoutEffect(() => {
     scrollToTop();
   }, [surface, scrollToTop]);
@@ -156,7 +166,7 @@ export function AppShell({
       ro.disconnect();
       window.removeEventListener("resize", measure);
     };
-  }, [tier, lanes, inset]);
+  }, [tier, lanes, inset, canvas]);
   // Proof the shell mounted once: the stamp is set on mount and never changes across routes.
   const mounted = useRef<string>("");
   if (!mounted.current) mounted.current = String(Date.now());
@@ -269,6 +279,16 @@ export function AppShell({
           onSelectC={go}
           onIntentC={warm}
           lensBar={headerLens}
+          messages={
+            <MessagesControl
+              unread={inbox.unread}
+              active={onMessages}
+              onClick={() => {
+                setAccount(false);
+                void navigate({ to: "/messages" });
+              }}
+            />
+          }
           // 1123: on Discovery (the `lanes` layout) at expanded the header's row takes the canvas's
           // edges, 5% of the viewport each side with no maximum; every other surface keeps 1440.
           maxWidth={lanes && expanded ? "none" : undefined}
@@ -292,7 +312,53 @@ export function AppShell({
             closeKey={closeKey}
           />
         </AppHeader>
-        {lanes && layout ? (
+        {canvas && layout ? (
+          <div
+            data-canvas
+            data-layout="canvas"
+            style={
+              expanded
+                ? {
+                    flex: 1,
+                    minHeight: 0,
+                    width: "100%",
+                    maxWidth: layout.maxWidth ?? 1120,
+                    margin: "0 auto",
+                    boxSizing: "border-box",
+                    display: "flex",
+                    flexDirection: "column",
+                    padding: "24px 32px",
+                    overflow: "hidden",
+                  }
+                : {
+                    flex: 1,
+                    minHeight: 0,
+                    width: "100%",
+                    display: "flex",
+                    flexDirection: "column",
+                    overflow: "hidden",
+                  }
+            }
+          >
+            {/* main stays the second child of the root in every grid (handoff 31-B). */}
+            {null}
+            <main
+              ref={attachScroller}
+              data-scroller="feed"
+              onScroll={onScroll}
+              style={{
+                ...column,
+                overflowY: "hidden",
+                flex: 1,
+                display: "flex",
+                flexDirection: "column",
+                padding: 0,
+              }}
+            >
+              {children}
+            </main>
+          </div>
+        ) : lanes && layout && layout.mode === "lanes" ? (
           <div
             data-canvas
             data-layout={layout.mode}
@@ -516,7 +582,7 @@ export function AppShell({
             </main>
           </div>
         )}
-        {!expanded && (
+        {!expanded && !canvas && (
           <PulseDock
             fixed
             active={active ?? undefined}
@@ -754,6 +820,32 @@ export function AppShell({
                   label="Dark theme"
                   checked={theme === "dark"}
                   onChange={(on) => setTheme(on ? "dark" : "light")}
+                />
+                {/* Brief 14 (1372, 1345, 1343): the two Messenger settings, in this panel's row
+                    pattern, writing through messenger_settings_set; a conversion exception. */}
+                <Switch
+                  style={{ display: "flex" }}
+                  label="Read receipts"
+                  checked={!!messaging.data?.receipts_enabled}
+                  disabled={!messaging.data}
+                  onChange={(on) =>
+                    void settingsSet({ receipts: on }).then(
+                      (row) => qc.setQueryData(SETTINGS_KEY(member.id), row),
+                      () => undefined,
+                    )
+                  }
+                />
+                <Switch
+                  style={{ display: "flex" }}
+                  label="Link previews"
+                  checked={!!messaging.data?.link_previews_enabled}
+                  disabled={!messaging.data}
+                  onChange={(on) =>
+                    void settingsSet({ linkPreviews: on }).then(
+                      (row) => qc.setQueryData(SETTINGS_KEY(member.id), row),
+                      () => undefined,
+                    )
+                  }
                 />
                 <Button variant="secondary" size="sm" onClick={() => void signOut()}>
                   Sign out

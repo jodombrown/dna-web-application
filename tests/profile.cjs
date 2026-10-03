@@ -683,9 +683,16 @@ async function runVisitor(browserType, bname, vp, theme, mode) {
       !COUNT_RE.test(text),
       (text.match(COUNT_RE) || [])[0],
     );
+    // Brief 14 (SPEC 41-14 Part C item 4) lifts ruling 117 for a connection: Message on a connected
+    // member's profile opens the pair's thread. Every other visitor still has none.
+    const messageButtons = await page.getByRole("button", { name: /^Message$/ }).count();
     record(
-      tag + ": no Message action",
-      (await page.getByRole("button", { name: /^Message$/ }).count()) === 0,
+      tag +
+        (rel === "connected"
+          ? ": one Message action, on a connection's profile (Brief 14, lifts 117)"
+          : ": no Message action"),
+      rel === "connected" ? messageButtons === 1 : messageButtons === 0,
+      "Message buttons " + messageButtons,
     );
     record(
       tag + ": badges shown to a member",

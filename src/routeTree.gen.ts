@@ -20,12 +20,14 @@ import { Route as ShellCRouteImport } from './routes/_shell/$c'
 import { Route as ShellConnectRouteImport } from './routes/_shell/connect'
 import { Route as ShellConveneRouteImport } from './routes/_shell/convene'
 import { Route as ShellFeedRouteImport } from './routes/_shell/feed'
+import { Route as ShellMessagesRouteImport } from './routes/_shell/messages'
 import { Route as ShellPasswordRouteImport } from './routes/_shell/password'
 import { Route as ESlugRouteImport } from './routes/e.$slug'
 import { Route as ResetNewRouteImport } from './routes/reset_.new'
 import { Route as XCodeRouteImport } from './routes/x.$code'
 import { Route as ShellConveneLensRouteImport } from './routes/_shell/convene.$lens'
 import { Route as ShellMHandleRouteImport } from './routes/_shell/m.$handle'
+import { Route as ShellMessagesThreadRouteImport } from './routes/_shell/messages.$thread'
 import { Route as ShellPostsIdRouteImport } from './routes/_shell/posts.$id'
 import { Route as ApiMessagesMediaRouteImport } from './routes/api/messages/media'
 import { Route as ShellConveneEventsIdRouteImport } from './routes/_shell/convene.events.$id'
@@ -85,6 +87,11 @@ const ShellFeedRoute = ShellFeedRouteImport.update({
   path: '/feed',
   getParentRoute: () => ShellRoute,
 } as any)
+const ShellMessagesRoute = ShellMessagesRouteImport.update({
+  id: '/messages',
+  path: '/messages',
+  getParentRoute: () => ShellRoute,
+} as any)
 const ShellPasswordRoute = ShellPasswordRouteImport.update({
   id: '/password',
   path: '/password',
@@ -114,6 +121,11 @@ const ShellMHandleRoute = ShellMHandleRouteImport.update({
   id: '/m/$handle',
   path: '/m/$handle',
   getParentRoute: () => ShellRoute,
+} as any)
+const ShellMessagesThreadRoute = ShellMessagesThreadRouteImport.update({
+  id: '/$thread',
+  path: '/$thread',
+  getParentRoute: () => ShellMessagesRoute,
 } as any)
 const ShellPostsIdRoute = ShellPostsIdRouteImport.update({
   id: '/posts/$id',
@@ -147,12 +159,14 @@ export interface FileRoutesByFullPath {
   '/connect': typeof ShellConnectRoute
   '/convene': typeof ShellConveneRouteWithChildren
   '/feed': typeof ShellFeedRoute
+  '/messages': typeof ShellMessagesRouteWithChildren
   '/password': typeof ShellPasswordRoute
   '/e/$slug': typeof ESlugRoute
   '/reset/new': typeof ResetNewRoute
   '/x/$code': typeof XCodeRoute
   '/convene/$lens': typeof ShellConveneLensRoute
   '/m/$handle': typeof ShellMHandleRoute
+  '/messages/$thread': typeof ShellMessagesThreadRoute
   '/posts/$id': typeof ShellPostsIdRoute
   '/api/messages/media': typeof ApiMessagesMediaRoute
   '/convene/events/$id': typeof ShellConveneEventsIdRoute
@@ -169,12 +183,14 @@ export interface FileRoutesByTo {
   '/connect': typeof ShellConnectRoute
   '/convene': typeof ShellConveneRouteWithChildren
   '/feed': typeof ShellFeedRoute
+  '/messages': typeof ShellMessagesRouteWithChildren
   '/password': typeof ShellPasswordRoute
   '/e/$slug': typeof ESlugRoute
   '/reset/new': typeof ResetNewRoute
   '/x/$code': typeof XCodeRoute
   '/convene/$lens': typeof ShellConveneLensRoute
   '/m/$handle': typeof ShellMHandleRoute
+  '/messages/$thread': typeof ShellMessagesThreadRoute
   '/posts/$id': typeof ShellPostsIdRoute
   '/api/messages/media': typeof ApiMessagesMediaRoute
   '/convene/events/$id': typeof ShellConveneEventsIdRoute
@@ -193,12 +209,14 @@ export interface FileRoutesById {
   '/_shell/connect': typeof ShellConnectRoute
   '/_shell/convene': typeof ShellConveneRouteWithChildren
   '/_shell/feed': typeof ShellFeedRoute
+  '/_shell/messages': typeof ShellMessagesRouteWithChildren
   '/_shell/password': typeof ShellPasswordRoute
   '/e/$slug': typeof ESlugRoute
   '/reset_/new': typeof ResetNewRoute
   '/x/$code': typeof XCodeRoute
   '/_shell/convene/$lens': typeof ShellConveneLensRoute
   '/_shell/m/$handle': typeof ShellMHandleRoute
+  '/_shell/messages/$thread': typeof ShellMessagesThreadRoute
   '/_shell/posts/$id': typeof ShellPostsIdRoute
   '/api/messages/media': typeof ApiMessagesMediaRoute
   '/_shell/convene/events/$id': typeof ShellConveneEventsIdRoute
@@ -217,12 +235,14 @@ export interface FileRouteTypes {
     | '/connect'
     | '/convene'
     | '/feed'
+    | '/messages'
     | '/password'
     | '/e/$slug'
     | '/reset/new'
     | '/x/$code'
     | '/convene/$lens'
     | '/m/$handle'
+    | '/messages/$thread'
     | '/posts/$id'
     | '/api/messages/media'
     | '/convene/events/$id'
@@ -239,12 +259,14 @@ export interface FileRouteTypes {
     | '/connect'
     | '/convene'
     | '/feed'
+    | '/messages'
     | '/password'
     | '/e/$slug'
     | '/reset/new'
     | '/x/$code'
     | '/convene/$lens'
     | '/m/$handle'
+    | '/messages/$thread'
     | '/posts/$id'
     | '/api/messages/media'
     | '/convene/events/$id'
@@ -262,12 +284,14 @@ export interface FileRouteTypes {
     | '/_shell/connect'
     | '/_shell/convene'
     | '/_shell/feed'
+    | '/_shell/messages'
     | '/_shell/password'
     | '/e/$slug'
     | '/reset_/new'
     | '/x/$code'
     | '/_shell/convene/$lens'
     | '/_shell/m/$handle'
+    | '/_shell/messages/$thread'
     | '/_shell/posts/$id'
     | '/api/messages/media'
     | '/_shell/convene/events/$id'
@@ -368,6 +392,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ShellFeedRouteImport
       parentRoute: typeof ShellRoute
     }
+    '/_shell/messages': {
+      id: '/_shell/messages'
+      path: '/messages'
+      fullPath: '/messages'
+      preLoaderRoute: typeof ShellMessagesRouteImport
+      parentRoute: typeof ShellRoute
+    }
     '/_shell/password': {
       id: '/_shell/password'
       path: '/password'
@@ -409,6 +440,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/m/$handle'
       preLoaderRoute: typeof ShellMHandleRouteImport
       parentRoute: typeof ShellRoute
+    }
+    '/_shell/messages/$thread': {
+      id: '/_shell/messages/$thread'
+      path: '/$thread'
+      fullPath: '/messages/$thread'
+      preLoaderRoute: typeof ShellMessagesThreadRouteImport
+      parentRoute: typeof ShellMessagesRoute
     }
     '/_shell/posts/$id': {
       id: '/_shell/posts/$id'
@@ -455,11 +493,24 @@ const ShellConveneRouteWithChildren = ShellConveneRoute._addFileChildren(
   ShellConveneRouteChildren,
 )
 
+interface ShellMessagesRouteChildren {
+  ShellMessagesThreadRoute: typeof ShellMessagesThreadRoute
+}
+
+const ShellMessagesRouteChildren: ShellMessagesRouteChildren = {
+  ShellMessagesThreadRoute: ShellMessagesThreadRoute,
+}
+
+const ShellMessagesRouteWithChildren = ShellMessagesRoute._addFileChildren(
+  ShellMessagesRouteChildren,
+)
+
 interface ShellRouteChildren {
   ShellCRoute: typeof ShellCRoute
   ShellConnectRoute: typeof ShellConnectRoute
   ShellConveneRoute: typeof ShellConveneRouteWithChildren
   ShellFeedRoute: typeof ShellFeedRoute
+  ShellMessagesRoute: typeof ShellMessagesRouteWithChildren
   ShellPasswordRoute: typeof ShellPasswordRoute
   ShellMHandleRoute: typeof ShellMHandleRoute
   ShellPostsIdRoute: typeof ShellPostsIdRoute
@@ -470,6 +521,7 @@ const ShellRouteChildren: ShellRouteChildren = {
   ShellConnectRoute: ShellConnectRoute,
   ShellConveneRoute: ShellConveneRouteWithChildren,
   ShellFeedRoute: ShellFeedRoute,
+  ShellMessagesRoute: ShellMessagesRouteWithChildren,
   ShellPasswordRoute: ShellPasswordRoute,
   ShellMHandleRoute: ShellMHandleRoute,
   ShellPostsIdRoute: ShellPostsIdRoute,

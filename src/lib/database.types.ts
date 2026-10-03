@@ -1,5 +1,16 @@
 // Generated from the canonical Supabase project (dgspjevjoblujcoljvkn) with the Supabase MCP
-// generate_typescript_types tool on handoff 45-B's branch (#90, Brief 12 12B), rebased on main at
+// generate_typescript_types tool on handoff 41-C's branch (#92, the Messenger surfaces), merged with
+// main at c859d54 (the merge of #90), after 20261002160000_b14c_message_media_rate was applied and
+// recorded by Chat through execute_sql in the same transaction as its change and read back at the
+// file's drift md5 e68a16b26de7d8777f3abaf61378602f (the file at ae1bdbc); 84 rows in
+// schema_migrations.
+//
+// What 41-C changes here: nothing below this header. 20261002160000 replaces `private.message_send`
+// whole, without its `message_media` rate check (1353), and changes no signature; the private schema
+// is not exposed, so the generator returns #90's body byte for byte, and the regeneration is taken so
+// the file names the project state it was read from.
+//
+// Before 41-C: the regeneration on handoff 45-B's branch (#90, Brief 12 12B), rebased on main at
 // 0d0b79f (the merge of #91), after 20261002140000_b12b_overview was applied and recorded by Chat
 // through execute_sql in the same transaction as its change and read back at the file's drift md5
 // 66b013e945afee1f2291657adc07a53a (raw d1e9e26451afe9285b3f434493966eb0); 83 rows in
