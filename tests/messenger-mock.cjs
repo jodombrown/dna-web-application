@@ -681,10 +681,17 @@ async function handleMessenger({ p, method, url, req, json, db }) {
       ...all.map((m) => ({ member_id: m.id, role: "member", state: "active" })),
     ]);
   }
-  if (p === "/rest/v1/members" && url.searchParams.has("id")) {
-    const v = url.searchParams.get("id") || "";
-    const m = v.match(/^in\.\((.*)\)$/);
-    const set = m ? m[1].split(",").map((s) => s.replace(/^"|"$/g, "")) : [];
+  // Only the thread's member-name read (MessengerThread: select id,name, id in (...)). Every other
+  // members read, the signed-in member's own handle among them (src/lib/auth.tsx), falls through to
+  // matrix.cjs's handler.
+  const idIn = (url.searchParams.get("id") || "").match(/^in\.\((.*)\)$/);
+  if (
+    p === "/rest/v1/members" &&
+    method === "GET" &&
+    idIn &&
+    url.searchParams.get("select") === "id,name"
+  ) {
+    const set = idIn[1].split(",").map((s) => s.replace(/^"|"$/g, ""));
     const rows = [
       { id: UID, name: "Amara Osei" },
       ...Object.values(M.members).map((x) => ({ id: x.id, name: x.name })),
