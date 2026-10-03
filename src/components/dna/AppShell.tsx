@@ -23,6 +23,7 @@ import { Switch } from "@/components/strand/Switch";
 import type { C } from "@/components/strand/cmeta";
 import { LeftRail, RightRail } from "@/components/dna/Rails";
 import { NotificationPanel } from "@/components/dna/NotificationPanel";
+import { useKeyboardHeight } from "@/hooks/use-keyboard-height";
 import type { Member } from "@/lib/auth";
 import { openComposer, useComposerState } from "@/lib/composer-store";
 import type { FeedView } from "@/lib/feed-view";
@@ -176,6 +177,26 @@ export function AppShell({
   useEffect(() => {
     setAccount(false);
   }, [closeKey]);
+  // Ruling 1457: iOS scrolls the window, not the shell's scroller, to keep a focused field above
+  // the keyboard, and the document never scrolls inside the shell (104), so nothing scrolls it
+  // back. When the keyboard closes, a window left scrolled is returned to the origin, on every
+  // route. Rechecked a frame later, because the window can settle after visualViewport's resize.
+  const keyboard = useKeyboardHeight(true);
+  const keyboardWasUp = useRef(false);
+  useEffect(() => {
+    if (keyboard > 0) {
+      keyboardWasUp.current = true;
+      return;
+    }
+    if (!keyboardWasUp.current) return;
+    keyboardWasUp.current = false;
+    const reset = () => {
+      if (window.scrollX !== 0 || window.scrollY !== 0) window.scrollTo(0, 0);
+    };
+    reset();
+    const frame = window.requestAnimationFrame(reset);
+    return () => window.cancelAnimationFrame(frame);
+  }, [keyboard]);
   useEffect(() => {
     if (!account) return;
     const k = (e: KeyboardEvent) => {

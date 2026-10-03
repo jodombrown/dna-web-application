@@ -633,16 +633,62 @@ export function ProfileSurface({ handle, edit, asPublic }: ProfileSurfaceProps) 
   const columnRef = useRef<HTMLDivElement>(null);
   const [condensed, setCondensed] = useState(false);
   const [bleed, setBleed] = useState(0);
+  // W60: condensing takes the cover and most of the identity block out of the column, so on a
+  // short profile the scroller's clamp pulls scrollTop under RELEASE_PX and the masthead expands
+  // again, in a loop. The masthead's height is kept for each state, measured at rest (the cover's
+  // height transition finished), and it condenses only while the range left after condensing,
+  // scrollHeight - clientHeight - the difference, still exceeds RELEASE_PX. Until a condensed
+  // height has been measured the cover's own height stands in, a lower bound on the difference.
+  const condensedNow = useRef(false);
+  const mastheadPx = useRef<{
+    expanded: number | null;
+    condensed: number | null;
+    cover: number | null;
+  }>({ expanded: null, condensed: null, cover: null });
+  const measureMasthead = useCallback(() => {
+    const head = columnRef.current?.querySelector<HTMLElement>('[data-testid="masthead"]');
+    if (!head || editMode) return;
+    const cover = head.querySelector<HTMLElement>('[data-testid="cover"]');
+    const coverPx = cover ? cover.getBoundingClientRect().height : 0;
+    const coverWant = cover ? parseFloat(cover.style.height) : NaN;
+    if (!Number.isNaN(coverWant) && Math.abs(coverPx - coverWant) > 0.5) return;
+    let px: number;
+    if (getComputedStyle(head).display === "contents") {
+      const kids = Array.from(head.children) as HTMLElement[];
+      if (kids.length === 0) return;
+      const first = kids[0]!.getBoundingClientRect();
+      const last = kids[kids.length - 1]!.getBoundingClientRect();
+      px = last.bottom - first.top;
+    } else px = head.getBoundingClientRect().height;
+    if (head.dataset["condensed"] === "1") mastheadPx.current.condensed = px;
+    else {
+      mastheadPx.current.expanded = px;
+      mastheadPx.current.cover = coverPx;
+    }
+  }, [editMode]);
   useEffect(() => {
     const col = columnRef.current;
     if (!col) return;
     const scroller = col.closest("[data-scroller]") as HTMLElement | null;
     if (!scroller) return;
-    const onScroll = () =>
-      setCondensed((was) => scroller.scrollTop > (was ? RELEASE_PX : CONDENSE_PX));
+    const onScroll = () => {
+      const top = scroller.scrollTop;
+      let next: boolean;
+      if (condensedNow.current) next = top > RELEASE_PX;
+      else if (top <= CONDENSE_PX) next = false;
+      else {
+        const { expanded: e, condensed: c, cover } = mastheadPx.current;
+        const diff = e != null && c != null ? e - c : (cover ?? 0);
+        next = scroller.scrollHeight - scroller.clientHeight - diff > RELEASE_PX;
+      }
+      condensedNow.current = next;
+      setCondensed(next);
+    };
     onScroll();
     scroller.addEventListener("scroll", onScroll, { passive: true });
+    col.addEventListener("transitionend", measureMasthead);
     const measure = () => {
+      measureMasthead();
       // The banner bleeds to the frame edge on compact, medium and the public column; the rails
       // frame it on the expanded in-shell view (SPEC section 1).
       const inShellExpanded = expanded && !publicView;
@@ -656,9 +702,10 @@ export function ProfileSurface({ handle, edit, asPublic }: ProfileSurfaceProps) 
     ro.observe(scroller);
     return () => {
       scroller.removeEventListener("scroll", onScroll);
+      col.removeEventListener("transitionend", measureMasthead);
       ro.disconnect();
     };
-  }, [expanded, publicView, profile?.member.id]);
+  }, [expanded, publicView, profile?.member.id, measureMasthead]);
 
   // The C sheet on the public close.
   const [cOpen, setCOpen] = useState<C | null>(null);
