@@ -1,5 +1,16 @@
 // Generated from the canonical Supabase project (dgspjevjoblujcoljvkn) with the Supabase MCP
-// generate_typescript_types tool on handoff 41-C's branch (#92, the Messenger surfaces), merged with
+// generate_typescript_types tool on handoff 41-D's branch (#94, the Messenger's held entry points),
+// after Chat applied 20261003130000 to 20261003130500 through execute_sql, each ledger row's md5
+// equal to its committed file; 90 rows in schema_migrations, head 20261003130500_b14d_request_broadcast.
+//
+// What 41-D changes here (1341, 1384, 1386, 1387, 1396; Addendum 1): the four `messenger_*` wrappers
+// `messenger_event_thread_join`, `messenger_event_thread_available`, `messenger_request_recover` and
+// `messenger_thread_rename`, and two `Views` columns, `messenger_threads_view.last_author_name` and
+// `messenger_messages_view.media_word`. The private join, recover, rename, eligibility, availability,
+// media-word and broadcast functions are absent by design, as every private function is; the
+// `media_mime_check` constraint's new `video/quicktime` is not a type the generator emits.
+//
+// Before 41-D: the regeneration on handoff 41-C's branch (#92, the Messenger surfaces), merged with
 // main at c859d54 (the merge of #90), after 20261002160000_b14c_message_media_rate was applied and
 // recorded by Chat through execute_sql in the same transaction as its change and read back at the
 // file's drift md5 e68a16b26de7d8777f3abaf61378602f (the file at ae1bdbc); 84 rows in
@@ -3658,6 +3669,7 @@ export type Database = {
           kind: Database["public"]["Enums"]["message_kind"] | null;
           link_preview: Json | null;
           media_id: string | null;
+          media_word: string | null;
           mentions: string[] | null;
           message_id: string | null;
           own: boolean | null;
@@ -3736,6 +3748,7 @@ export type Database = {
           kind: string | null;
           last_activity_at: string | null;
           last_author_id: string | null;
+          last_author_name: string | null;
           last_kind: Database["public"]["Enums"]["message_kind"] | null;
           last_line: string | null;
           last_seq: number | null;
@@ -3951,6 +3964,14 @@ export type Database = {
           isSetofReturn: false;
         };
       };
+      messenger_event_thread_available: {
+        Args: { p_event: string };
+        Returns: boolean;
+      };
+      messenger_event_thread_join: {
+        Args: { p_event: string };
+        Returns: string;
+      };
       messenger_event_thread_open: {
         Args: { p_event: string };
         Returns: string;
@@ -4032,6 +4053,10 @@ export type Database = {
         Returns: undefined;
       };
       messenger_request_decline: {
+        Args: { p_request: string };
+        Returns: undefined;
+      };
+      messenger_request_recover: {
         Args: { p_request: string };
         Returns: undefined;
       };
@@ -4167,6 +4192,10 @@ export type Database = {
       messenger_thread_leave: { Args: { p_thread: string }; Returns: undefined };
       messenger_thread_remove: {
         Args: { p_member: string; p_thread: string };
+        Returns: undefined;
+      };
+      messenger_thread_rename: {
+        Args: { p_name: string; p_thread: string };
         Returns: undefined;
       };
       messenger_thread_set_history: {
