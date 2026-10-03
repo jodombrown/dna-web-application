@@ -4,7 +4,7 @@
 // layer, so the real client code paths run against a deterministic backend. Backend behaviour
 // (RLS, the feed view) is verified separately in SQL against the live project.
 // Usage: BASE=https://b2-shell-feed.dna-web-application.pages.dev WEBKIT=1 node tests/matrix.cjs
-// Env: ONLY='[390,844]' runs one viewport; SPECIAL=publish,guards,keyboard,silence,shell,width,targeted,profile,connect,event,discovery,vocab,block,auth,onboarding,mount,sheet,gate,admin,media runs flows only.
+// Env: ONLY='[390,844]' runs one viewport; SPECIAL=publish,guards,keyboard,silence,shell,width,targeted,profile,connect,event,discovery,vocab,block,auth,onboarding,mount,sheet,gate,admin,media,theme runs flows only.
 // Ruling 1237: an arm that loses its web process is run again once, alone, in a fresh browser, by
 // `drive()` below; CRASH_PROBE=<arm tag> is the harness probe that proves it (off by default).
 // Brief 3 profile flows live in tests/profile.cjs and Brief 4 Connect flows in tests/connect.cjs; both share this mock.
@@ -2506,8 +2506,8 @@ async function drive(fn, ...args) {
 // a total (rulings 228 and 317).
 // ---------------------------------------------------------------------------
 const EXPECTED_PATH = path.join(__dirname, "expected-counts.json");
-/** Handoff 40-B: the arms tests/auth.cjs runs against the admin host, swept by the admin run alone; handoff 45-B adds tests/overview.cjs's three. */
-const ADMIN_ARM = /-admin (signed-out|accounts|overview|overview error|drawer focus)$/;
+/** Handoff 40-B: the arms tests/auth.cjs runs against the admin host, swept by the admin run alone; handoff 45-B adds tests/overview.cjs's three and 45-C tests/theme.cjs's admin theme. */
+const ADMIN_ARM = /-admin (signed-out|accounts|overview|overview error|drawer focus|theme)$/;
 
 function loadExpected() {
   try {
@@ -2985,9 +2985,16 @@ async function shot(page, name) {
  * the arm then waits fifteen seconds for a feed that never comes (runs 379 and 431).
  */
 async function hydrated(page) {
-  await page.waitForFunction(() => document.documentElement.hasAttribute("data-theme"), null, {
-    timeout: 15000,
-  });
+  // Handoff 45-C: the admin root sets data-theme before first paint and marks it data-prepaint
+  // until its effect runs, so the attribute without the mark is still hydration on both apps.
+  await page.waitForFunction(
+    () => {
+      const root = document.documentElement;
+      return root.hasAttribute("data-theme") && !root.hasAttribute("data-prepaint");
+    },
+    null,
+    { timeout: 15000 },
+  );
 }
 
 async function signIn(page) {
@@ -6621,6 +6628,19 @@ if (require.main === module)
           await drive(runAdminOverviewError, bt, bname, [1280, 800], "light");
           await drive(runAdminDrawerFocus, bt, bname, [390, 844], "light");
           await drive(runAdminDrawerFocus, bt, bname, [820, 1180], "dark");
+          // Handoff 45-C (1377): the admin app follows the device, at both widths and both schemes.
+          const { runAdminTheme } = require("./theme.cjs");
+          for (const vp of [
+            [390, 844],
+            [1280, 800],
+          ])
+            for (const theme of ["light", "dark"]) await drive(runAdminTheme, bt, bname, vp, theme);
+        }
+        // Handoff 45-C arm 3: the member app's theme on a dark device with no stored choice.
+        if (process.env.SPECIAL.includes("theme")) {
+          const { runMemberTheme } = require("./theme.cjs");
+          await drive(runMemberTheme, bt, bname, [390, 844]);
+          await drive(runMemberTheme, bt, bname, [1280, 800]);
         }
         // Handoff 41-B section 5: the Messenger media routes on the deployed URL, with the two
         // seeded accounts for real (tests/messenger-media.cjs).
@@ -6784,6 +6804,11 @@ if (require.main === module)
       // deployment, once per engine, with the two seeded accounts (tests/messenger-media.cjs).
       const { runMessengerMedia } = require("./messenger-media.cjs");
       await drive(runMessengerMedia, bt, bname);
+      // Handoff 45-C arm 3 (1377): the member app's theme on a dark device with no stored choice
+      // renders as main did at c859d54, at one compact and one expanded width (tests/theme.cjs).
+      const { runMemberTheme } = require("./theme.cjs");
+      await drive(runMemberTheme, bt, bname, [390, 844]);
+      await drive(runMemberTheme, bt, bname, [1280, 800]);
     }
     finish({ full: true, engines: engines.map(([n]) => n) });
   })().catch((e) => {
