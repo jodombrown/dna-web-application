@@ -80,3 +80,6 @@ export * from "./PinnedStrip";
 export * from "./DaySeparator";
 export * from "./BlockedMessageLine";
 export * from "./SearchResultRow";
+// Handoff 45-D (admin Settings): Tabs, at compile v1790885781186000, which the Settings prototype
+// loads and the tree had not carried. Record: docs/strand-ports/v1790885781186000.md section 8.
+export * from "./Tabs";
