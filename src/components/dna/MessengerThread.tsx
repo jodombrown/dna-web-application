@@ -78,6 +78,7 @@ import {
   settingsSet,
   subscribeThread,
   threadC,
+  threadRename,
   unpinMessage,
   unreact,
   type MessageView,
@@ -1018,7 +1019,7 @@ export function MessengerThread({ member, threadId }: { member: Member; threadId
                   (draft.quote.kind === "voice"
                     ? "Voice note"
                     : draft.quote.kind === "media"
-                      ? "Image"
+                      ? (draft.quote.media_word ?? "Media")
                       : ""),
               }
             : null
@@ -1105,7 +1106,9 @@ export function MessengerThread({ member, threadId }: { member: Member; threadId
   const strip = pinned ? (
     <PinnedStrip
       from={pinned.own ? "You" : firstName(pinned.author_name)}
-      text={pinned.body ?? (pinned.kind === "voice" ? "Voice note" : "Media")}
+      text={
+        pinned.body ?? (pinned.kind === "voice" ? "Voice note" : (pinned.media_word ?? "Media"))
+      }
       onOpen={() => {
         setFocused(pinned.message_id ?? null);
         const el = log.current?.querySelector<HTMLElement>(
@@ -1148,7 +1151,7 @@ export function MessengerThread({ member, threadId }: { member: Member; threadId
               lineHeight: "var(--text-s-lh)",
             }}
           >
-            {r.body ?? (r.kind === "voice" ? "Voice note" : "Media")}
+            {r.body ?? (r.kind === "voice" ? "Voice note" : (r.media_word ?? "Media"))}
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-2)" }}>
             <div
@@ -1248,7 +1251,7 @@ export function MessengerThread({ member, threadId }: { member: Member; threadId
             }}
           >
             <b style={{ fontWeight: 500 }}>{r.author_name}: </b>
-            {r.body ?? (r.kind === "voice" ? "Voice note" : "Media")}
+            {r.body ?? (r.kind === "voice" ? "Voice note" : (r.media_word ?? "Media"))}
           </div>
           <Select
             label="Reason"
@@ -1515,6 +1518,9 @@ function ManageSheet({
     </div>
   );
   const name = thread.name ?? "";
+  const [rename, setRename] = useState(name);
+  const renameTo = rename.trim();
+  const renameOk = renameTo.length >= 1 && renameTo.length <= 80 && renameTo !== name;
   return (
     <Sheet
       open
@@ -1529,8 +1535,31 @@ function ManageSheet({
     >
       {sheetHead("Manage " + name, onClose)}
       <div style={SHEET_BODY} data-testid="manage-sheet">
-        {/* Rename: 41-A carries no rename wrapper for a group, so the extraction's Name field and
-            Rename act are not drawn; named in the closing report. */}
+        {thread.kind === "community_group" && (
+          <div
+            style={{ display: "flex", alignItems: "flex-end", gap: "var(--space-2)" }}
+            data-testid="rename"
+          >
+            <Input
+              label="Name"
+              value={rename}
+              onChange={(e) => setRename((e.target as HTMLInputElement).value)}
+              style={{ flex: 1, minWidth: 0 }}
+            />
+            <Button
+              variant="secondary"
+              disabled={busy || !renameOk}
+              onClick={() =>
+                void onAct(async () => {
+                  await threadRename(threadId, renameTo);
+                  await onChanged();
+                }, "Renamed.")
+              }
+            >
+              Rename
+            </Button>
+          </div>
+        )}
         <Switch
           style={{ display: "flex" }}
           label="History for new members. Off: a member who joins sees messages from then on."

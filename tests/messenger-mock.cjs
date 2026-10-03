@@ -549,6 +549,13 @@ function messengerFixture() {
       shared_space_others: false,
     },
   ];
+  // Handoff 41-D (held item 4): the projection names the last author, "a former member" for one
+  // who deleted their account; the mock member is Amara Osei.
+  const nameOf = (id) =>
+    id === UID
+      ? "Amara Osei"
+      : (Object.values(members).find((m) => m.id === id) || {}).name || null;
+  for (const t of threads) t.last_author_name = t.last_author_id ? nameOf(t.last_author_id) : null;
   return {
     ids,
     members,
@@ -949,6 +956,20 @@ async function handleMessenger({ p, method, url, req, json, db }) {
       r.state = "declined";
       r.decided_at = new Date().toISOString();
     }
+    return json(null, 204);
+  }
+  if (fn === "messenger_request_recover") {
+    const r = M.requests.find((x) => x.request_id === body.p_request);
+    if (!r) return refuse("not_your_request", "42501");
+    if (r.state !== "declined") return refuse("not_declined");
+    r.state = "pending";
+    r.decided_at = null;
+    return json(null, 204);
+  }
+  if (fn === "messenger_thread_rename") {
+    const t = thread();
+    if (!t || t.kind !== "community_group") return refuse("not_renamable");
+    t.name = String(body.p_name || "").trim();
     return json(null, 204);
   }
   if (fn === "messenger_request_block") {

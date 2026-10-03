@@ -11,7 +11,7 @@
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import type { Database, Json, Views } from "./database.types";
 import { getSupabase, type Supabase } from "./supabase";
-import { joinNames, nameList } from "./names";
+import { firstName, joinNames, nameList } from "./names";
 
 export type ThreadView = Views<"messenger_threads_view">;
 export type MessageView = Views<"messenger_messages_view">;
@@ -298,6 +298,9 @@ export const requestAccept = (request: string) =>
   callId(sb().rpc("messenger_request_accept", { p_request: request }));
 export const requestDecline = (request: string) =>
   call(sb().rpc("messenger_request_decline", { p_request: request }));
+/** Returns a declined request to pending (1341); the sender is not told (157). */
+export const requestRecover = (request: string) =>
+  call(sb().rpc("messenger_request_recover", { p_request: request }));
 export const requestBlock = (request: string) =>
   call(sb().rpc("messenger_request_block", { p_request: request }));
 export const createGroup = (name: string, memberIds: string[]) =>
@@ -324,6 +327,12 @@ export const spaceThreadSync = (space: string) =>
   callId(sb().rpc("messenger_space_thread_sync", { p_space: space }));
 export const eventThreadOpen = (event: string) =>
   callId(sb().rpc("messenger_event_thread_open", { p_event: event }));
+/** An eligible attendee joins the host's event thread (1384); returns the thread. */
+export const eventThreadJoin = (event: string) =>
+  callId(sb().rpc("messenger_event_thread_join", { p_event: event }));
+/** Whether the event thread exists and the viewer is in it or may join it (1384). */
+export const eventThreadAvailable = async (event: string): Promise<boolean> =>
+  (await call(sb().rpc("messenger_event_thread_available", { p_event: event }))) === true;
 export const openOneToOne = (other: string) =>
   callId(sb().rpc("messenger_open_one_to_one", { p_other: other }));
 export const report = (message: string, reason: string, note: string | null) =>
@@ -348,8 +357,9 @@ export const settingsSet = (patch: {
 };
 export const diaDismiss = (key: string) => call(sb().rpc("messenger_dia_dismiss", { p_key: key }));
 
-/** Renames a group: 41-A carries no rename wrapper, so this names what is missing (closing report). */
-export const RENAME_UNAVAILABLE = "Renaming is not available yet.";
+/** The lead or a co-lead renames a group (1387); 1 to 80 characters after trimming. */
+export const threadRename = (thread: string, name: string) =>
+  call(sb().rpc("messenger_thread_rename", { p_thread: thread, p_name: name }));
 
 // ---------------------------------------------------------------------------------------------------
 // Cursors, debounced to one write per two seconds per thread (1351; the trigger keeps a write that
@@ -616,14 +626,11 @@ export function localNextDayStart(day: string): string | null {
 }
 
 /** The row's last line (extraction 1.3): `You: …`, `{first name}: …` in a group, `Nobody has written yet`, `Voice note`, `Image` / `Video` as the projection words it, `This message was deleted`. */
-export function lastLineOf(t: ThreadView, me: string, authorFirst: string | null): string {
+export function lastLineOf(t: ThreadView, me: string): string {
   if (!t.last_seq) return "Nobody has written yet";
-  const who =
-    t.last_author_id === me
-      ? "You: "
-      : t.kind !== "one_to_one" && authorFirst
-        ? authorFirst + ": "
-        : "";
+  const authorFirst =
+    t.last_author_id !== me && t.kind !== "one_to_one" ? firstName(t.last_author_name) : "";
+  const who = t.last_author_id === me ? "You: " : authorFirst ? authorFirst + ": " : "";
   if (t.last_line === "") return who + "This message was deleted";
   if (t.last_kind === "voice") return who + "Voice note";
   if (t.last_kind === "media") return who + (t.last_line || "Media");

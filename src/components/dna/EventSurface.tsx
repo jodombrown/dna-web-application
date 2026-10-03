@@ -48,8 +48,13 @@ import {
 } from "@/lib/event-page";
 import { setSubscription } from "@/lib/discovery";
 import { deliverImageUrl } from "@/lib/media";
-import { eventThreadOpen, inviteAccept, openOneToOne, refusalOf } from "@/lib/messenger";
-import { getSupabase } from "@/lib/supabase";
+import {
+  eventThreadAvailable,
+  eventThreadJoin,
+  eventThreadOpen,
+  openOneToOne,
+  refusalOf,
+} from "@/lib/messenger";
 import { useBackToOrigin } from "@/lib/origin";
 import { PaneShareContext } from "@/lib/pane-share";
 import { useTier } from "@/lib/tier";
@@ -157,39 +162,22 @@ export function EventSurface({
   });
   const page = pageQ.data ?? null;
   const hostId = page?.host?.id ?? null;
-  // Brief 14 (SPEC 41-14 Part C item 4; 1334): the event thread. The host opens it through
-  // messenger_event_thread_open; an attendee who is going joins it through
-  // messenger_thread_invite_accept, which needs the thread's id, and the id is readable only once
-  // the member is in the thread (threads_member_select), so an attendee's Message resolves what
-  // they can read and otherwise reports the refusal line (closing report). Message host opens the
-  // pair's thread through messenger_open_one_to_one.
+  // Brief 14 (SPEC 41-14 Part C item 4; 1334, 1384): the event thread. The host opens it through
+  // messenger_event_thread_open. Anyone else asks messenger_event_thread_available, which answers
+  // true once the host has opened the thread and the viewer is in it or may join it (a going
+  // registrant or an accepted named party, never a removed member), and Message joins through
+  // messenger_event_thread_join, which answers the thread's id. Eligibility is the server's alone.
+  // Message host opens the pair's thread through messenger_open_one_to_one.
   const eventThread = useQuery({
     queryKey: ["messenger", "event-thread", member.id, id],
-    queryFn: async () => {
-      const sb = getSupabase();
-      if (!sb) return null;
-      const { data } = await sb
-        .from("threads")
-        .select("id")
-        .eq("kind", "event_thread")
-        .eq("anchor_kind", "event")
-        .eq("anchor_id", id)
-        .maybeSingle();
-      return data?.id ?? null;
-    },
+    queryFn: () => eventThreadAvailable(id),
     enabled: !!page && !page.viewer.is_host,
   });
   const messageEvent = () =>
     void (async () => {
       try {
-        let thread: string | null;
-        if (page?.viewer.is_host) thread = await eventThreadOpen(id);
-        else {
-          thread = eventThread.data ?? null;
-          if (!thread) throw refusalOf({ message: "not_a_member" });
-          await inviteAccept(thread);
-        }
-        if (thread) await navigate({ to: "/messages/$thread", params: { thread } });
+        const thread = page?.viewer.is_host ? await eventThreadOpen(id) : await eventThreadJoin(id);
+        await navigate({ to: "/messages/$thread", params: { thread } });
       } catch (e) {
         setToast(refusalOf(e).line);
         window.setTimeout(() => setToast(null), 2600);
@@ -648,8 +636,8 @@ export function EventSurface({
           </Facts>
 
           {!bar && rsvpEl}
-          {/* Brief 14 (1334): the event thread, for the host and for a member who is going. */}
-          {!ev.cancelled && (page.viewer.is_host || (going && !!eventThread.data)) && (
+          {/* Brief 14 (1334, 1384): the event thread, for the host and for whoever may join it. */}
+          {!ev.cancelled && (page.viewer.is_host || eventThread.data === true) && (
             <div data-event-message>
               <Button c="convene" size="sm" onClick={messageEvent} data-testid="event-message">
                 Message

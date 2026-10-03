@@ -21,6 +21,9 @@
 // third; here the 403 is the thread's other member asking for an object no message carries to them
 // yet, which messenger_media_access refuses the same way.
 //
+// Handoff 41-D (1396) adds a .mov made by the runner's ffmpeg, uploaded, served and removed the same
+// way; with no ffmpeg on the runner its two checks report UNPROVEN with that reason (228).
+//
 // Every check is named in CHECKS and emitted exactly once, in order, so the arm's count is fixed
 // (ruling 317): a check the flow never reached is emitted UNPROVEN, and a run without the account
 // secrets or without the binding emits every check UNPROVEN with the one reason, which is what a
@@ -53,7 +56,56 @@ const CHECKS = [
   "DELETE of a row no delete-for-everyone has marked is refused with 409 (1343, F4)",
   "messenger_delete marks both rows and DELETE removes each object, answering removed (1343, F4)",
   "after the delete each GET answers 404 (F4)",
+  "an H.264 .mov made by ffmpeg uploads through the route as video/quicktime with its dimensions (1396)",
+  "the .mov is served as video/quicktime with its full length, and once a delete-for-everyone marks it DELETE removes it (1396, 1343)",
 ];
+
+/**
+ * Handoff 41-D (1396): a one-second 320x240 H.264 QuickTime file made by the runner's ffmpeg, the
+ * container an iPhone or a desktop screen recording writes (ftyp brand 'qt  '). Null when ffmpeg is
+ * not on the runner or cannot encode H.264, and the two .mov checks then report UNPROVEN with that
+ * reason (228); the bytes are never stubbed.
+ */
+function movBytes() {
+  const { spawnSync } = require("child_process");
+  const os = require("os");
+  const file = path.join(os.tmpdir(), "messenger-media-" + crypto.randomUUID() + ".mov");
+  const r = spawnSync(
+    "ffmpeg",
+    [
+      "-hide_banner",
+      "-loglevel",
+      "error",
+      "-f",
+      "lavfi",
+      "-i",
+      "testsrc=size=320x240:rate=10",
+      "-t",
+      "1",
+      "-c:v",
+      "libx264",
+      "-pix_fmt",
+      "yuv420p",
+      "-f",
+      "mov",
+      file,
+    ],
+    { encoding: "utf8" },
+  );
+  if (r.error || r.status !== 0) {
+    return {
+      bytes: null,
+      why: r.error
+        ? "ffmpeg is not on the runner (" + String(r.error.code || r.error.message) + ")"
+        : "ffmpeg could not encode an H.264 .mov: " + String(r.stderr || "").slice(0, 160),
+    };
+  }
+  try {
+    return { bytes: fs.readFileSync(file), why: null };
+  } finally {
+    fs.rmSync(file, { force: true });
+  }
+}
 
 /** A 1 KB JPEG: SOI, APP0 JFIF, padding, EOI. The route sniffs the head; R2 stores the bytes. */
 function jpegBytes() {
@@ -425,6 +477,69 @@ async function runMessengerMedia(browserType, bname) {
       goneJpeg.status() === 404 && !!goneWebm && goneWebm.status() === 404,
       `jpeg ${await describe(goneJpeg)}; webm ${goneWebm ? await describe(goneWebm) : "-"}`,
     );
+
+    // 14, 15. The .mov (handoff 41-D, 1396): uploaded, served back whole, then marked and removed.
+    const mov = movBytes();
+    if (!mov.bytes) {
+      unproven(`${tag} | ${CHECKS[13]}`, mov.why);
+      unproven(`${tag} | ${CHECKS[14]}`, mov.why);
+      emitted.add(CHECKS[13]);
+      emitted.add(CHECKS[14]);
+    } else {
+      const movClient = crypto.randomUUID();
+      const upMov = await media(
+        owner.token,
+        "POST",
+        `/api/messages/media?thread=${thread}&client_id=${movClient}&w=320&h=240`,
+        { headers: { "content-type": "video/quicktime" }, data: mov.bytes },
+      );
+      const movBody = await upMov.json().catch(() => null);
+      const movId = movBody && movBody.media_id;
+      check(
+        CHECKS[13],
+        upMov.status() === 200 &&
+          !!movId &&
+          movBody.mime === "video/quicktime" &&
+          movBody.width === 320 &&
+          movBody.height === 240 &&
+          movBody.byte_size === mov.bytes.length,
+        `${mov.bytes.length} bytes; ${await describe(upMov)}`,
+      );
+      const gotMov = movId ? await media(owner.token, "GET", `/api/messages/media/${movId}`) : null;
+      const movBack = gotMov ? await gotMov.body().catch(() => Buffer.alloc(0)) : Buffer.alloc(0);
+      const sentMov = movId
+        ? await rpc(owner.token, "messenger_send", {
+            p_thread: thread,
+            p_client_id: movClient,
+            p_body: null,
+            p_kind: "media",
+            p_reply_to: null,
+            p_media: movId,
+          })
+        : { status: 0, body: null, text: "no .mov id" };
+      const movMessage = sentMov.status === 200 && sentMov.body ? sentMov.body.id : null;
+      const delMovMsg = movMessage
+        ? await rpc(owner.token, "messenger_delete", { p_message: movMessage })
+        : { status: 0, body: null, text: "no .mov message" };
+      const rmMov = movId
+        ? await media(owner.token, "DELETE", `/api/messages/media/${movId}`)
+        : null;
+      const rmMovBody = rmMov ? await rmMov.json().catch(() => null) : null;
+      check(
+        CHECKS[14],
+        !!gotMov &&
+          gotMov.status() === 200 &&
+          (gotMov.headers()["content-type"] || "").startsWith("video/quicktime") &&
+          movBack.length === mov.bytes.length &&
+          Buffer.compare(movBack, mov.bytes) === 0 &&
+          delMovMsg.status === 200 &&
+          !!rmMov &&
+          rmMov.status() === 200 &&
+          !!rmMovBody &&
+          rmMovBody.removed >= 1,
+        `get ${gotMov ? await describe(gotMov) : "-"}; send ${sentMov.status}; messenger_delete ${delMovMsg.status}; DELETE ${rmMov ? rmMov.status() : "-"} ${JSON.stringify(rmMovBody)}`,
+      );
+    }
   } catch (e) {
     record(`${tag} flow`, false, String(e).slice(0, 600));
     skipRest("the flow threw before this check ran");

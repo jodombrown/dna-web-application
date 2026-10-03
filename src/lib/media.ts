@@ -192,6 +192,7 @@ export type MessageMediaMime =
   | "image/webp"
   | "video/mp4"
   | "video/webm"
+  | "video/quicktime"
   | "audio/webm"
   | "audio/mp4";
 
@@ -201,6 +202,7 @@ const MESSAGE_MEDIA_MIMES: readonly string[] = [
   "image/webp",
   "video/mp4",
   "video/webm",
+  "video/quicktime",
   "audio/webm",
   "audio/mp4",
 ];
