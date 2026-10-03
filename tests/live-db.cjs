@@ -4193,10 +4193,13 @@ async function runLiveDbArms({ record, skip }) {
     // admin persona as the third member, through the public wrappers a client calls; each is its
     // own rolled-back transaction (269).
     // ------------------------------------------------------------------------------------------
+    // The probe reads pg_attribute and never information_schema, which lists only the columns the
+    // connecting role holds a privilege on; live_arms holds none on the views, so on c4795b8 the
+    // probe read false with all six migrations applied and every 41-D arm reported UNPROVEN.
     const msgdPresent = async () => {
       await actAsSelf(client);
       const present = await client.query(
-        "select (to_regprocedure('public.messenger_event_thread_join(uuid)') is not null and to_regprocedure('public.messenger_request_recover(uuid)') is not null and to_regprocedure('public.messenger_thread_rename(uuid, text)') is not null and to_regprocedure('private.messenger_media_word(uuid)') is not null and exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'messenger_threads_view' and column_name = 'last_author_name') and exists (select 1 from pg_constraint where conname = 'media_mime_check' and pg_get_constraintdef(oid) like '%video/quicktime%') and pg_get_functiondef('private.message_requests_broadcast()'::regprocedure) like '%tg_op%') as ok",
+        "select (to_regprocedure('public.messenger_event_thread_join(uuid)') is not null and to_regprocedure('public.messenger_request_recover(uuid)') is not null and to_regprocedure('public.messenger_thread_rename(uuid, text)') is not null and to_regprocedure('private.messenger_media_word(uuid)') is not null and exists (select 1 from pg_attribute where attrelid = 'public.messenger_threads_view'::regclass and attname = 'last_author_name' and not attisdropped) and exists (select 1 from pg_constraint where conname = 'media_mime_check' and pg_get_constraintdef(oid) like '%video/quicktime%') and pg_get_functiondef('private.message_requests_broadcast()'::regprocedure) like '%tg_op%') as ok",
       );
       return !!present.rows[0] && present.rows[0].ok === true;
     };
@@ -4873,14 +4876,22 @@ async function runLiveDbArms({ record, skip }) {
         };
         const toRecipient = await inbox(member.id);
         const toSender = await inbox(owner.id);
-        const same = (a, b) => Array.isArray(a) && a.join(",") === b.join(",");
+        // The accept writes the request row more than once, so the arm counts the states that carry
+        // the ruling rather than the rows: the recipient sees the decline and both pendings (the
+        // insert and the recovery); the sender sees one pending (the insert), never a decline, and the
+        // accept as the positive control.
+        const count = (a, state) => (Array.isArray(a) ? a.filter((x) => x === state).length : -1);
         record(
           names.msgdBroadcast,
           declined.ok &&
             recovered.ok &&
             accepted.ok &&
-            same(toRecipient, ["accepted", "declined", "pending", "pending"]) &&
-            same(toSender, ["pending", "accepted"]),
+            count(toRecipient, "declined") === 1 &&
+            count(toRecipient, "pending") === 2 &&
+            count(toRecipient, "accepted") >= 1 &&
+            count(toSender, "declined") === 0 &&
+            count(toSender, "pending") === 1 &&
+            count(toSender, "accepted") >= 1,
           "decline " +
             fmt(declined) +
             "; recover " +
