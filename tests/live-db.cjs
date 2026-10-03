@@ -341,6 +341,16 @@ async function runLiveDbArms({ record, skip }) {
       "Brief 12 12B (arm B-b; 1362 to 1364): Admitted, Invites, Story-led, Onboarding Started and drop-off, partner and DNA system sources and the four company lines answer null with not_connected",
     overviewCache:
       "Brief 12 12B (SPEC Part D item 4): DIA's note cache reads null before a write, answers the statements after it, and refuses a non-array with 22023",
+    settings:
+      "Brief 12 Settings (handoff 45-D arm 1; 1392): vocabularies() returns the appearances, the seven grains, the two comparisons and the reporting zones, every zone one pg_timezone_names knows, and a zone row with an unknown identifier is refused with 22023",
+    settingsPersonal:
+      "Brief 12 Settings (handoff 45-D arm 2; 1265, 1382): a staff member at aal2 reads and changes only their own row; at aal1, with no role, and as anon every read and write is refused with 42501",
+    settingsOrg:
+      "Brief 12 Settings (handoff 45-D arm 3; 1391): any staff role at aal2 reads the company settings; only admin writes; each change writes exactly one admin_actions row with its before and after, and a no-change write writes none",
+    settingsLogs:
+      "Brief 12 Settings (handoff 45-D arm 4; 1178): the read log and the change history each write one admin_reads row naming themselves, and the read log's newest entry is that read, labelled Settings, Your read log",
+    settingsSessions:
+      "Brief 12 Settings (handoff 45-D arm 4): the sessions read carries no IP address and marks as current exactly the session the JWT's session_id names",
   };
   // G143: a block that opens with a presence probe carries every arm it holds in `names`, under one key
   // prefix, so a probe that fails reports each of them UNPROVEN and the job's total does not fall with
@@ -4594,6 +4604,327 @@ async function runLiveDbArms({ record, skip }) {
             fmt(bad) +
             "; direct select " +
             fmt(direct),
+        );
+      });
+    }
+
+    // Brief 12 Settings (handoff 45-D Part A; 20261003120000). The vocabularies, the staff member's
+    // own row, the company's row with its admin_actions trail, the two logged reads and the sessions
+    // read. One presence probe for the block, so before the apply every arm reports UNPROVEN (G143,
+    // 228). Each arm is its own rolled-back transaction; the admin_actions trail is read only as a
+    // count through private.admin_org_actions_count (382), as the read log is through
+    // private.admin_reads_count.
+    // ------------------------------------------------------------------------------------------
+    const settingsPresent = async () => {
+      await actAsSelf(client);
+      const present = await client.query(
+        "select to_regprocedure('public.admin_staff_settings_read()') is not null as ok",
+      );
+      return !!present.rows[0] && present.rows[0].ok === true;
+    };
+    /** actAs, with the session_id claim Supabase Auth writes into every access token. */
+    const actWithSession = async (uid, aal, sessionId) => {
+      await client.query("set local role authenticated");
+      const c = { sub: uid, role: "authenticated", aud: "authenticated", aal };
+      if (sessionId) c.session_id = sessionId;
+      await client.query("select set_config('request.jwt.claims', $1, true)", [JSON.stringify(c)]);
+    };
+    const orgCount = async (setting) => {
+      await actAsSelf(client);
+      const r = await client.query("select private.admin_org_actions_count($1) as n", [setting]);
+      return r.rows[0].n;
+    };
+    if (!(await settingsPresent())) {
+      for (const n of armsOf("settings"))
+        skip(n, "20261003120000_b12s_admin_settings.sql is not on the project yet");
+    } else {
+      // 1. The vocabularies and the zone guard.
+      await inTransaction(client, async () => {
+        await actAs(client, member.id, "aal1");
+        const v = await attempt(client, "select public.vocabularies() as v");
+        const voc = v.ok ? v.rows[0].v : {};
+        const values = (k) => (Array.isArray(voc[k]) ? voc[k].map((r) => r.value) : []);
+        const zones = Array.isArray(voc.reporting_zones) ? voc.reporting_zones : [];
+        await actAsSelf(client);
+        const known = await client.query(
+          "select count(*)::int as n from pg_catalog.pg_timezone_names where name = any($1::text[])",
+          [zones.map((z) => z.value)],
+        );
+        const bad = await attempt(
+          client,
+          "insert into public.reporting_zones (value, name, city, abbreviation, position) values ('Mars/Olympus_Mons', 'Mars time', 'Olympus Mons', 'MT', 32000)",
+        );
+        record(
+          names.settings,
+          v.ok &&
+            values("admin_appearances").join(",") === "system,light,dark" &&
+            values("overview_grains").join(",") === "now,hour,day,week,month,quarter,year" &&
+            values("overview_comparisons").join(",") === "previous,last_year" &&
+            zones.length >= 7 &&
+            zones.every((z) => z.name && z.city && z.abbreviation) &&
+            known.rows[0].n === zones.length &&
+            !bad.ok &&
+            bad.code === "22023",
+          [
+            "appearances " + values("admin_appearances").join(","),
+            "grains " + values("overview_grains").join(","),
+            "comparisons " + values("overview_comparisons").join(","),
+            "zones " + zones.map((z) => z.value).join(","),
+            "known " + known.rows[0].n,
+            "unknown zone " + fmt(bad),
+          ].join("; "),
+        );
+      });
+
+      // 2. The staff member's own row: read, change, and nobody else's; refusals otherwise.
+      await inTransaction(client, async () => {
+        const adminId = await adminMember();
+        if (!adminId || adminId === member.id) {
+          skip(names.settingsPersonal, adminId ? "the admin persona is member-test" : "no admin");
+          return;
+        }
+        await actAs(client, adminId, "aal2");
+        const granted = await attempt(
+          client,
+          "select public.admin_grant_role($1::uuid, 'analyst', 'live arm: Settings, a second staff member') as id",
+          [member.id],
+        );
+        // The analyst's row first, so the admin's change below can be shown not to reach it.
+        await actAs(client, member.id, "aal2");
+        const otherBefore = await attempt(client, "select public.admin_staff_settings_read() as j");
+        await actAs(client, adminId, "aal2");
+        const read = await attempt(client, "select public.admin_staff_settings_read() as j");
+        const saved = await attempt(
+          client,
+          "select public.admin_staff_settings_save($1::jsonb) as j",
+          [
+            JSON.stringify({
+              appearance: "dark",
+              reading_zone: "Africa/Lagos",
+              default_grain: "month",
+            }),
+          ],
+        );
+        const back = await attempt(client, "select public.admin_staff_settings_read() as j");
+        const badZone = await attempt(
+          client,
+          "select public.admin_staff_settings_save($1::jsonb) as j",
+          [JSON.stringify({ reading_zone: "Mars/Olympus_Mons" })],
+        );
+        await actAs(client, member.id, "aal2");
+        const otherAfter = await attempt(client, "select public.admin_staff_settings_read() as j");
+        await actAs(client, adminId, "aal1");
+        const aal1 = await attempt(client, "select public.admin_staff_settings_read() as j");
+        await actAs(client, adminId, "aal1");
+        const aal1Save = await attempt(
+          client,
+          'select public.admin_staff_settings_save(\'{"appearance":"light"}\'::jsonb) as j',
+        );
+        // member-test with no role: the grant above is revoked again inside this transaction.
+        await actAs(client, adminId, "aal2");
+        const revoked = await attempt(
+          client,
+          "select public.admin_revoke_role($1::uuid, 'analyst', 'live arm: back to no role') as id",
+          [member.id],
+        );
+        await actAs(client, member.id, "aal2");
+        const noRole = await attempt(client, "select public.admin_staff_settings_read() as j");
+        await client.query("set local role anon");
+        await client.query("select set_config('request.jwt.claims', '', true)");
+        const anon = await attempt(client, "select public.admin_staff_settings_read() as j");
+        await actAs(client, adminId, "aal2");
+        const table = await attempt(client, "select count(*) from public.admin_staff_settings");
+        const j = (r) => (r.ok && r.rows[0] ? r.rows[0].j : null);
+        const refused = (r) => !r.ok && r.code === "42501";
+        record(
+          names.settingsPersonal,
+          granted.ok &&
+            !!j(read) &&
+            j(saved) &&
+            j(saved).appearance === "dark" &&
+            j(saved).reading_zone === "Africa/Lagos" &&
+            j(saved).default_grain === "month" &&
+            j(back) &&
+            j(back).appearance === "dark" &&
+            !badZone.ok &&
+            badZone.code === "22023" &&
+            JSON.stringify(j(otherBefore)) === JSON.stringify(j(otherAfter)) &&
+            refused(aal1) &&
+            refused(aal1Save) &&
+            revoked.ok &&
+            refused(noRole) &&
+            refused(anon) &&
+            refused(table),
+          [
+            "admin read " + JSON.stringify(j(read)),
+            "saved " + JSON.stringify(j(saved)),
+            "unknown zone " + fmt(badZone),
+            "other staff before " +
+              JSON.stringify(j(otherBefore)) +
+              " after " +
+              JSON.stringify(j(otherAfter)),
+            "aal1 read " + fmt(aal1) + " save " + fmt(aal1Save),
+            "no role " + fmt(noRole),
+            "anon " + fmt(anon),
+            "direct select " + fmt(table),
+          ].join("; "),
+        );
+      });
+
+      // 3. The company's row: every staff role reads; admin alone writes; one admin_actions row per
+      // change with its before and after; none for a write that changes nothing.
+      await inTransaction(client, async () => {
+        const adminId = await adminMember();
+        if (!adminId || adminId === member.id) {
+          skip(names.settingsOrg, adminId ? "the admin persona is member-test" : "no admin");
+          return;
+        }
+        await actAs(client, adminId, "aal2");
+        const before = await attempt(client, "select public.admin_org_settings_read() as j");
+        const granted = await attempt(
+          client,
+          "select public.admin_grant_role($1::uuid, 'analyst', 'live arm: Settings, an analyst reads') as id",
+          [member.id],
+        );
+        await actAs(client, member.id, "aal2");
+        const analystRead = await attempt(client, "select public.admin_org_settings_read() as j");
+        const analystWrite = await attempt(
+          client,
+          "select public.admin_org_settings_save('{\"dia_note\":false}'::jsonb) as j",
+        );
+        const b = before.ok ? before.rows[0].j : null;
+        const target = b && b.reporting_zone === "Africa/Accra" ? "Africa/Nairobi" : "Africa/Accra";
+        const z0 = await orgCount("reporting_zone");
+        const d0 = await orgCount("dia_note");
+        await actAs(client, adminId, "aal2");
+        const changed = await attempt(
+          client,
+          "select public.admin_org_settings_save($1::jsonb) as j",
+          [JSON.stringify({ reporting_zone: target })],
+        );
+        const z1 = await orgCount("reporting_zone");
+        await actAs(client, adminId, "aal2");
+        const same = await attempt(
+          client,
+          "select public.admin_org_settings_save($1::jsonb) as j",
+          [JSON.stringify({ reporting_zone: target, dia_note: b ? b.dia_note : true })],
+        );
+        const z2 = await orgCount("reporting_zone");
+        const d2 = await orgCount("dia_note");
+        // The row the change wrote, read through the change history as the admin.
+        await actAs(client, adminId, "aal2");
+        const hist = await attempt(client, "select public.admin_change_history(null, 5) as j");
+        const top = hist.ok && hist.rows[0].j ? hist.rows[0].j.entries[0] : null;
+        record(
+          names.settingsOrg,
+          before.ok &&
+            granted.ok &&
+            analystRead.ok &&
+            !analystWrite.ok &&
+            analystWrite.code === "42501" &&
+            changed.ok &&
+            changed.rows[0].j.reporting_zone === target &&
+            z1 === z0 + 1 &&
+            same.ok &&
+            z2 === z1 &&
+            d2 === d0 &&
+            !!top &&
+            top.setting === "reporting_zone" &&
+            top.before === (b && b.reporting_zone) &&
+            top.after === target &&
+            typeof top.by === "string",
+          [
+            "before " + JSON.stringify(b),
+            "analyst read " + fmt(analystRead) + " write " + fmt(analystWrite),
+            "change to " +
+              target +
+              " " +
+              fmt(changed) +
+              ", reporting_zone rows " +
+              z0 +
+              " -> " +
+              z1,
+            "no-change write " +
+              fmt(same) +
+              ", rows " +
+              z1 +
+              " -> " +
+              z2 +
+              ", dia_note " +
+              d0 +
+              " -> " +
+              d2,
+            "history top " + JSON.stringify(top),
+          ].join("; "),
+        );
+      });
+
+      // 4a. The two logged reads.
+      await inTransaction(client, async () => {
+        const adminId = await adminMember();
+        if (!adminId) {
+          skip(names.settingsLogs, "no admin");
+          return;
+        }
+        await actAsSelf(client);
+        const l0 = await readsCount(adminId, "admin_read_log");
+        const h0 = await readsCount(adminId, "admin_change_history");
+        await actAs(client, adminId, "aal2");
+        const log = await attempt(client, "select public.admin_read_log(null, 3) as j");
+        await actAs(client, adminId, "aal2");
+        const hist = await attempt(client, "select public.admin_change_history(null, 3) as j");
+        await actAsSelf(client);
+        const l1 = await readsCount(adminId, "admin_read_log");
+        const h1 = await readsCount(adminId, "admin_change_history");
+        const newest = log.ok && log.rows[0].j ? log.rows[0].j.entries[0] : null;
+        record(
+          names.settingsLogs,
+          log.ok &&
+            hist.ok &&
+            l1 === l0 + 1 &&
+            h1 === h0 + 1 &&
+            !!newest &&
+            newest.projection === "admin_read_log" &&
+            newest.page === "Settings" &&
+            newest.block === "Your read log",
+          "read log +" +
+            (l1 - l0) +
+            ", history +" +
+            (h1 - h0) +
+            "; newest " +
+            JSON.stringify(newest),
+        );
+      });
+
+      // 4b. The sessions read: no IP, and current is the JWT's session_id.
+      await inTransaction(client, async () => {
+        const adminId = await adminMember();
+        if (!adminId) {
+          skip(names.settingsSessions, "no admin");
+          return;
+        }
+        await actWithSession(adminId, "aal2", null);
+        const plain = await attempt(client, "select public.admin_my_sessions() as j");
+        const rows = plain.ok && Array.isArray(plain.rows[0].j) ? plain.rows[0].j : [];
+        if (!rows.length) {
+          skip(names.settingsSessions, "the admin persona has no active session to mark");
+          return;
+        }
+        const pick = rows[rows.length - 1].id;
+        await actWithSession(adminId, "aal2", pick);
+        const marked = await attempt(client, "select public.admin_my_sessions() as j");
+        const mrows = marked.ok && Array.isArray(marked.rows[0].j) ? marked.rows[0].j : [];
+        const keys = new Set(mrows.flatMap((r) => Object.keys(r)));
+        const text = JSON.stringify(mrows);
+        record(
+          names.settingsSessions,
+          rows.every((r) => r.current === false) &&
+            mrows.filter((r) => r.current).length === 1 &&
+            mrows.find((r) => r.current).id === pick &&
+            !keys.has("ip") &&
+            !/\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b/.test(text) &&
+            [...keys].every((k) => ["id", "user_agent", "last_active_at", "current"].includes(k)),
+          "rows " + mrows.length + "; keys " + [...keys].sort().join(",") + "; current " + pick,
         );
       });
     }

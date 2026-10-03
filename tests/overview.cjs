@@ -54,14 +54,36 @@ const SESSION = {
   user: USER,
 };
 
-/** The window the fixtures describe: this week so far, Monday 00:00 UTC to now, against last week. */
-function windowFor(grain, compare) {
+/** The zone's offset from UTC at a moment, in minutes, read from the runtime. */
+function offsetMinutes(at, tz) {
+  const p = {};
+  for (const x of new Intl.DateTimeFormat("en-US", {
+    timeZone: tz,
+    hourCycle: "h23",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).formatToParts(at))
+    p[x.type] = x.value;
+  const local = Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour, +p.minute);
+  return Math.round((local - Math.floor(at.getTime() / 60000) * 60000) / 60000);
+}
+
+/**
+ * The window the fixtures describe: this week so far, Monday 00:00 in the zone the call names (the
+ * company reporting zone, handoff 45-D), to now, against last week; at Year, from 1 January.
+ */
+function windowFor(grain, compare, tz = "UTC") {
   const now = new Date();
-  const start = new Date(now);
-  start.setUTCHours(0, 0, 0, 0);
-  const dow = (start.getUTCDay() + 6) % 7;
-  start.setUTCDate(start.getUTCDate() - dow);
-  if (grain === "year") start.setUTCMonth(0, 1);
+  const off = offsetMinutes(now, tz);
+  const local = new Date(now.getTime() + off * 60000);
+  local.setUTCHours(0, 0, 0, 0);
+  const dow = (local.getUTCDay() + 6) % 7;
+  local.setUTCDate(local.getUTCDate() - dow);
+  if (grain === "year") local.setUTCMonth(0, 1);
+  const start = new Date(local.getTime() - offsetMinutes(local, tz) * 60000);
   const elapsed = now.getTime() - start.getTime();
   const cmpStart = new Date(start.getTime() - (grain === "year" ? 366 : 7) * 86400000);
   const first = new Date(start.getTime() - 40 * 86400000);
@@ -75,7 +97,7 @@ function windowFor(grain, compare) {
   return {
     grain,
     compare,
-    tz: "UTC",
+    tz,
     now: now.toISOString(),
     period: { start: start.toISOString(), end: now.toISOString() },
     comparison: hasCmp
@@ -89,9 +111,9 @@ function windowFor(grain, compare) {
   };
 }
 
-/** The five projections' answers for a grain and comparison: the extraction's placeholder figures. */
-function fixtures(grain, compare) {
-  const w = windowFor(grain, compare);
+/** The five projections' answers for a grain, comparison and zone: the extraction's placeholder figures. */
+function fixtures(grain, compare, tz) {
+  const w = windowFor(grain, compare, tz);
   const { series, hasCmp } = w;
   const cmp = (v) => (hasCmp ? v : null);
   const base = {
@@ -257,6 +279,107 @@ const DIA = [
   },
 ];
 
+/** The vocabularies the admin reads (1177, 1392), as public.vocabularies() serves them. */
+const VOCAB = {
+  platform_role_kinds: [
+    { value: "admin", label: "Admin" },
+    { value: "editor", label: "Editor" },
+    { value: "analyst", label: "Analyst" },
+  ],
+  admin_appearances: [
+    { value: "system", label: "System" },
+    { value: "light", label: "Light" },
+    { value: "dark", label: "Dark" },
+  ],
+  overview_grains: [
+    { value: "now", label: "Now" },
+    { value: "hour", label: "Hour" },
+    { value: "day", label: "Day" },
+    { value: "week", label: "Week" },
+    { value: "month", label: "Month" },
+    { value: "quarter", label: "Quarter" },
+    { value: "year", label: "Year" },
+  ],
+  overview_comparisons: [
+    { value: "previous", label: "Previous period" },
+    { value: "last_year", label: "Same period last year" },
+  ],
+  reporting_zones: [
+    {
+      value: "America/Los_Angeles",
+      name: "Pacific time",
+      city: "Los Angeles",
+      abbreviation: "PST",
+    },
+    { value: "America/New_York", name: "Eastern time", city: "New York", abbreviation: "EST" },
+    { value: "Africa/Accra", name: "Greenwich time", city: "Accra", abbreviation: "GMT" },
+    { value: "Europe/London", name: "UK time", city: "London", abbreviation: "GMT" },
+    { value: "Africa/Lagos", name: "West Africa time", city: "Lagos", abbreviation: "WAT" },
+    {
+      value: "Africa/Johannesburg",
+      name: "South Africa time",
+      city: "Johannesburg",
+      abbreviation: "SAST",
+    },
+    { value: "Africa/Nairobi", name: "East Africa time", city: "Nairobi", abbreviation: "EAT" },
+  ],
+};
+
+/**
+ * The Settings rows a mocked account holds, made once per page from `state`: `state.staff` and
+ * `state.org` override the columns' defaults, the company zone defaulting to Africa/Accra so the
+ * Overview's arms read GMT whatever the runner's zone.
+ */
+function settingsOf(state) {
+  if (!state.settingsRows)
+    state.settingsRows = {
+      staff: {
+        appearance: "system",
+        reading_zone: null,
+        default_grain: "week",
+        default_compare: "previous",
+        ...(state.staff || {}),
+      },
+      org: { reporting_zone: "Africa/Accra", dia_note: true, ...(state.org || {}) },
+      history: [
+        {
+          id: 2,
+          at: new Date(Date.now() - 3 * 86400000).toISOString(),
+          setting: "dia_note",
+          before: false,
+          after: true,
+          by: "Jaûne Odombrown",
+        },
+      ],
+      reads: [
+        {
+          id: 1,
+          at: new Date(Date.now() - 3600000).toISOString(),
+          projection: "admin_overview_levers",
+          page: "Overview",
+          block: "The levers",
+        },
+      ],
+      sessions: [
+        {
+          id: "s-current",
+          user_agent:
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36",
+          last_active_at: new Date().toISOString(),
+          current: true,
+        },
+        {
+          id: "s-phone",
+          user_agent:
+            "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1",
+          last_active_at: new Date(Date.now() - 2 * 3600000).toISOString(),
+          current: false,
+        },
+      ],
+    };
+  return state.settingsRows;
+}
+
 /**
  * The backend, at the network layer. `state.fail` names a projection that answers 500; `state.calls`
  * records every projection call with its arguments.
@@ -299,16 +422,62 @@ async function handle(route, state) {
   if (p === "/auth/v1/logout") return json({}, 204);
   if (p === "/auth/v1/factors") return json([]);
   if (p === "/rest/v1/rpc/admin_session_state")
-    return json({ holds_role: true, aal: "aal2", roles: ["admin", "editor"] });
+    return json({ holds_role: true, aal: "aal2", roles: state.roles || ["admin", "editor"] });
   if (p === "/rest/v1/rpc/claim_guest_registrations") return json({ claimed: 0 });
-  if (p === "/rest/v1/rpc/vocabularies")
-    return json({
-      platform_role_kinds: [
-        { value: "admin", label: "Admin" },
-        { value: "editor", label: "Editor" },
-        { value: "analyst", label: "Analyst" },
-      ],
-    });
+  if (p === "/rest/v1/rpc/vocabularies") return json(VOCAB);
+  // Handoff 45-D: the Settings reads and writes, against `state.staff` and `state.org`.
+  // `state.failNext` names a write that answers 500 once; `state.writes` records every write.
+  const settings = settingsOf(state);
+  if (
+    p.startsWith("/rest/v1/rpc/admin_") &&
+    /_settings_|_read_log|_change_history|_my_sessions/.test(p)
+  ) {
+    const fn = p.slice("/rest/v1/rpc/".length);
+    const body = req.postDataJSON() || {};
+    (state.settingsCalls = state.settingsCalls || []).push(fn);
+    if (state.failNext === fn) {
+      state.failNext = null;
+      return json({ code: "XX000", message: "forced" }, 500);
+    }
+    if (fn === "admin_staff_settings_read") return json(settings.staff);
+    if (fn === "admin_org_settings_read") return json(settings.org);
+    if (fn === "admin_staff_settings_save") {
+      (state.writes = state.writes || []).push({ fn, patch: body.p_patch });
+      Object.assign(settings.staff, body.p_patch || {});
+      return json(settings.staff);
+    }
+    if (fn === "admin_org_settings_save") {
+      (state.writes = state.writes || []).push({ fn, patch: body.p_patch });
+      if (!(state.roles || ["admin"]).includes("admin"))
+        return json({ code: "42501", message: "admin at aal2 required" }, 403);
+      for (const [k, v] of Object.entries(body.p_patch || {}))
+        if (settings.org[k] !== v) {
+          settings.history.unshift({
+            id: settings.history.length + 100,
+            at: new Date().toISOString(),
+            setting: k,
+            before: settings.org[k],
+            after: v,
+            by: "Jaûne Odombrown",
+          });
+          settings.org[k] = v;
+        }
+      return json(settings.org);
+    }
+    if (fn === "admin_read_log") {
+      settings.reads.unshift({
+        id: settings.reads.length + 1,
+        at: new Date().toISOString(),
+        projection: "admin_read_log",
+        page: "Settings",
+        block: "Your read log",
+      });
+      return json({ entries: state.emptyLogs ? [] : settings.reads, next: null });
+    }
+    if (fn === "admin_change_history")
+      return json({ entries: state.emptyLogs ? [] : settings.history, next: null });
+    if (fn === "admin_my_sessions") return json(settings.sessions);
+  }
   if (p === "/rest/v1/members") return json({ handle: "founder", name: "Jaûne Odombrown" });
   if (p.startsWith("/rest/v1/rpc/admin_overview_")) {
     const fn = p.slice("/rest/v1/rpc/".length);
@@ -317,7 +486,7 @@ async function handle(route, state) {
     if (state.fail === fn) return json({ code: "XX000", message: "forced" }, 500);
     const grain = body.p_grain || state.grain || "week";
     const compare = body.p_compare || state.compare || "previous";
-    const fx = fixtures(grain, compare)[fn];
+    const fx = fixtures(grain, compare, body.p_tz || "UTC")[fn];
     await new Promise((r) => setTimeout(r, 60));
     return fx ? json(fx) : json({ code: "42883", message: "unknown" }, 404);
   }
@@ -412,7 +581,7 @@ async function runAdminOverview(browserType, bname, [w, h], theme) {
       win.slice(0, 160),
     );
     record(
-      `${tag} | the definition line names the version and the refresh in the viewer's zone`,
+      `${tag} | the definition line names the version and the refresh in the company zone`,
       /Mobilization Definition v1\. Last refreshed .+, \d\d:\d\d (UTC|GMT)\./.test(win),
       win.slice(-120),
     );
@@ -527,7 +696,7 @@ async function runAdminOverview(browserType, bname, [w, h], theme) {
     );
     record(
       `${tag} | DIA was asked with the grain, comparison and zone`,
-      state.dia.length >= 1 && state.dia[0].grain === "week" && state.dia[0].tz === "UTC",
+      state.dia.length >= 1 && state.dia[0].grain === "week" && state.dia[0].tz === "Africa/Accra",
       JSON.stringify(state.dia[0]),
     );
     // A block link scrolls the page column, not the window.
@@ -711,4 +880,12 @@ async function runAdminDrawerFocus(browserType, bname, [w, h], theme) {
   }
 }
 
-module.exports = { runAdminOverview, runAdminOverviewError, runAdminDrawerFocus, openOverview };
+module.exports = {
+  runAdminOverview,
+  runAdminOverviewError,
+  runAdminDrawerFocus,
+  openOverview,
+  mockAdmin,
+  text,
+  VOCAB,
+};

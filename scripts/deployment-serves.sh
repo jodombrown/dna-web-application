@@ -33,10 +33,12 @@ serves() {
 
 echo "Confirming $BASE serves every path the suites open"
 
-# Handoff 40-B section 6: the admin host serves four paths and nothing of the member app's.
+# Handoff 40-B section 6: the admin host serves these paths and nothing of the member app's;
+# handoff 45-D adds /settings, which the Settings arms open.
 if [ "${APP:-member}" = "admin" ]; then
   serves /sign-in /tmp/admin-sign-in.html
   serves /
+  serves /settings
   serves /strand/logo.png
   serves /favicon.ico /tmp/admin-favicon.ico
   serves /robots.txt /tmp/admin-robots.txt

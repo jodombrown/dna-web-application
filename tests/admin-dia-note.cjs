@@ -9,13 +9,17 @@
 //            reported (ADMIN_BASE), and refuses https://example.pages.dev. Without ADMIN_BASE the
 //            arm is unproven (228) and the script exits 1.
 //
-// ARMS=prompt or ARMS=origin runs one.
+//   off      (handoff 45-D Part C, 1391) the Organization settings are read, as the caller, before
+//            the cache, the projections and the Anthropic API, and anything but dia_note true
+//            returns no statements before any of them is called.
+//
+// ARMS=prompt, ARMS=origin or ARMS=off runs one.
 // Usage: ADMIN_BASE=https://<id>.dna-admin-1oz.pages.dev node tests/admin-dia-note.cjs
 const fs = require("fs");
 const path = require("path");
 
 const FILE = path.join(__dirname, "..", "supabase/functions/admin-dia-note/index.ts");
-const ARMS = new Set((process.env.ARMS || "prompt,origin").split(",").map((a) => a.trim()));
+const ARMS = new Set((process.env.ARMS || "prompt,origin,off").split(",").map((a) => a.trim()));
 const ADMIN_BASE = (process.env.ADMIN_BASE || "").replace(/\/$/, "");
 
 /** BLOCKS at c859d54, the merge of #90, byte for byte. */
@@ -87,6 +91,28 @@ if (ARMS.has("origin")) {
         !re.test("https://x.dna-admin-1oz.pages.dev.example.com"),
     );
   }
+}
+
+if (ARMS.has("off")) {
+  const body = src.slice(src.indexOf("Deno.serve("));
+  const at = (needle) => body.indexOf(needle);
+  const read = at('sb.rpc("admin_org_settings_read")');
+  const firstOther = Math.min(
+    ...['sb.rpc("admin_dia_note_read"', 'sb.rpc("admin_overview_window"', "client.messages.create("]
+      .map(at)
+      .filter((i) => i >= 0),
+  );
+  record(
+    "off | the Organization settings are read before the cache, the projections and DIA (1391)",
+    read > 0 && read < firstOther,
+    `settings at ${read}, first other call at ${firstOther}`,
+  );
+  const gate = body.slice(read, firstOther);
+  record(
+    "off | anything but dia_note true returns no statements before them",
+    /dia_note !== true/.test(gate) && /return json\(\s*\{ statements: \[\] \}/.test(gate),
+    gate.replace(/\s+/g, " ").slice(0, 200),
+  );
 }
 
 console.log(`admin-dia-note: ${failed} failed, ${unproven} unproven`);

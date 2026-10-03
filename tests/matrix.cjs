@@ -2553,8 +2553,9 @@ async function drive(fn, ...args) {
 // a total (rulings 228 and 317).
 // ---------------------------------------------------------------------------
 const EXPECTED_PATH = path.join(__dirname, "expected-counts.json");
-/** Handoff 40-B: the arms tests/auth.cjs runs against the admin host, swept by the admin run alone; handoff 45-B adds tests/overview.cjs's three and 45-C tests/theme.cjs's admin theme. */
-const ADMIN_ARM = /-admin (signed-out|accounts|overview|overview error|drawer focus|theme)$/;
+/** Handoff 40-B: the arms tests/auth.cjs runs against the admin host, swept by the admin run alone; handoff 45-B adds tests/overview.cjs's three, 45-C tests/theme.cjs's admin theme, and 45-D tests/settings.cjs's four. */
+const ADMIN_ARM =
+  /-admin (signed-out|accounts|overview|overview error|drawer focus|theme|settings admin|settings analyst|zone|dia off|appearance)$/;
 
 function loadExpected() {
   try {
@@ -6682,6 +6683,21 @@ if (require.main === module)
             [1280, 800],
           ])
             for (const theme of ["light", "dark"]) await drive(runAdminTheme, bt, bname, vp, theme);
+          // Handoff 45-D (Brief 12, admin Settings): arms 5 to 8.
+          const {
+            runAdminSettings,
+            runAdminOverviewZone,
+            runAdminDiaOff,
+            runAdminAppearance,
+          } = require("./settings.cjs");
+          await drive(runAdminSettings, bt, bname, [390, 844], "dark", "admin");
+          await drive(runAdminSettings, bt, bname, [820, 1180], "light", "analyst");
+          await drive(runAdminSettings, bt, bname, [1280, 800], "light", "admin");
+          await drive(runAdminSettings, bt, bname, [1280, 800], "dark", "analyst");
+          await drive(runAdminOverviewZone, bt, bname, [1280, 800], "light");
+          await drive(runAdminDiaOff, bt, bname, [390, 844], "light");
+          await drive(runAdminAppearance, bt, bname, [390, 844]);
+          await drive(runAdminAppearance, bt, bname, [1280, 800]);
         }
         // Handoff 45-C arm 3: the member app's theme on a dark device with no stored choice.
         if (process.env.SPECIAL.includes("theme")) {
