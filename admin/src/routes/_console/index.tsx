@@ -103,7 +103,11 @@ const BLOCK_WORD: Record<Block, string> = {
 };
 
 function Overview() {
-  const { settings, reloadSettings } = useConsole();
+  const { settings, reloadSettings, overview } = useConsole();
+  // A role the projections refuse never reads one (45-E item 4). The gate sends it to Settings, but
+  // the router's location moves before its matches, so this page can be rendered for a moment on
+  // the way there; it renders nothing, and reads nothing, for that moment.
+  if (!overview) return null;
   if (settings.status === "ready")
     return (
       <OverviewPage

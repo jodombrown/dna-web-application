@@ -25,9 +25,20 @@
 //                      the first load the copy is kept, and on the next load the attribute is dark
 //                      before <body> is parsed, so the first paint is dark (1393).
 //
+// Handoff 45-E (1410, 1462, 1464): arm 5 also reads that the admin and the analyst open on the
+// Overview with its row first in the navigation, as before.
+//   admin staff role   at 390 dark (touch) and 1280 light (pointer), an account whose only role is
+//                      moderator: it signs in at aal2 and lands on Settings with the shell full,
+//                      no Overview row in the navigation, Personal editable and nothing sent to an
+//                      Overview projection; opening / directly replaces it with /settings, so the
+//                      history gains no entry; Organization reads only, Change the company zone
+//                      disabled. The role is granted as 45-D's analyst is, by the answer the mocked
+//                      admin_session_state gives: no seeded account reaches aal2 in a run, since
+//                      the arms hold no TOTP secret (40-B's accounts arm stops at aal1).
+//
 // Usage: ADMIN_BASE=https://<id>.dna-admin-1oz.pages.dev SPECIAL=admin node tests/matrix.cjs
 const M = require("./matrix.cjs");
-const { openOverview, text } = require("./overview.cjs");
+const { openOverview, mockAdmin, text } = require("./overview.cjs");
 
 const { launch, record, noOverflow, hydrated } = M;
 const ADMIN_BASE = (process.env.ADMIN_BASE || "").replace(/\/$/, "");
@@ -106,6 +117,12 @@ async function runAdminSettings(browserType, bname, [w, h], theme, role) {
       .locator((w <= 1024 ? "dialog[open]" : "[data-console-shell]") + " li > button")
       .allInnerTexts();
     const last = (navRows[navRows.length - 1] || "").split("\n")[0].trim();
+    record(
+      `${tag} | the ${role} opens on the Overview with its row first (45-E)`,
+      (navRows[0] || "").split("\n")[0].trim() === "Overview" &&
+        new URL(page.url()).pathname.replace(/\/$/, "") === "",
+      `${(navRows[0] || "").split("\n")[0]} at ${page.url()}`,
+    );
     record(
       `${tag} | Settings is the last navigation row and always available (1410)`,
       last === "Settings" && !/Not yet/i.test(navRows[navRows.length - 1] || ""),
@@ -513,4 +530,142 @@ async function runAdminAppearance(browserType, bname, [w, h]) {
   }
 }
 
-module.exports = { runAdminSettings, runAdminOverviewZone, runAdminDiaOff, runAdminAppearance };
+/** Handoff 45-E: a role without the Overview opens on Settings (1410, 1462, 1464). */
+async function runAdminStaffRole(browserType, bname, [w, h], theme, role = "moderator") {
+  const tag = `${bname}-${w}x${h}-${theme}-admin staff role`;
+  M.armStart(tag);
+  if (!ADMIN_BASE) {
+    M.unproven(tag, "ADMIN_BASE is not set, so there is no admin deployment to read");
+    return;
+  }
+  const { browser, page } = await context(browserType, [w, h], theme);
+  const errors = [];
+  page.on("pageerror", (e) => errors.push(String(e)));
+  const state = {
+    calls: [],
+    dia: [],
+    fail: null,
+    diaEmpty: true,
+    roles: [role],
+    org: { reporting_zone: "America/Los_Angeles" },
+  };
+  const path = () => new URL(page.url()).pathname.replace(/\/$/, "");
+  try {
+    await mockAdmin(page, state);
+    await page.goto(ADMIN_BASE + "/sign-in", { waitUntil: "networkidle" });
+    await hydrated(page);
+    await page.fill('input[type="email"]', "staff@test.invalid");
+    await page.fill('input[type="password"]', "x");
+    await page.click('button[type="submit"]');
+    await page.waitForSelector('[data-testid="admin-settings"]', { timeout: 20000 });
+    await page.waitForFunction(
+      () => !document.querySelector('[data-testid="settings-loading"]'),
+      null,
+      { timeout: 20000 },
+    );
+    record(
+      `${tag} | a ${role} at aal2 lands on Settings with the shell full`,
+      path() === "/settings" &&
+        (await text(page, "h1")) === "Settings" &&
+        (await page.getAttribute('[data-testid="admin-shell"]', "data-access")) === "full",
+      page.url(),
+    );
+    if (w <= 1024) {
+      await page.click('button[aria-label="Open navigation"]');
+      await page.waitForSelector("dialog[open]", { timeout: 10000 });
+    }
+    const navRows = (
+      await page
+        .locator((w <= 1024 ? "dialog[open]" : "[data-console-shell]") + " li > button")
+        .allInnerTexts()
+    ).map((r) => r.split("\n")[0].trim());
+    record(
+      `${tag} | no Overview row, and Settings is the last row (1464)`,
+      navRows.length > 1 &&
+        !navRows.includes("Overview") &&
+        navRows[navRows.length - 1] === "Settings",
+      navRows.join(","),
+    );
+    if (w <= 1024) {
+      await page.keyboard.press("Escape");
+      await page
+        .waitForFunction(() => !document.querySelector("dialog[open]"), null, { timeout: 5000 })
+        .catch(() => undefined);
+    }
+
+    // Personal is editable: a choice saves.
+    await page.click(
+      '[role="radiogroup"][aria-label="Appearance"] [role="radio"]:has-text("Dark")',
+    );
+    const saved = await page
+      .waitForFunction(
+        () =>
+          document.documentElement.getAttribute("data-theme") === "dark" &&
+          !!document.querySelector('[data-testid="settings-appearance"]'),
+        null,
+        { timeout: 10000 },
+      )
+      .then(() => true)
+      .catch(() => false);
+    record(
+      `${tag} | Personal is editable: Dark saves to the account`,
+      saved &&
+        (state.writes || []).some(
+          (x) => x.fn === "admin_staff_settings_save" && x.patch && x.patch.appearance === "dark",
+        ),
+      JSON.stringify(state.writes || []).slice(0, 200),
+    );
+    await page.waitForTimeout(800);
+    record(
+      `${tag} | nothing is sent to an Overview projection and no window preview shows`,
+      state.calls.length === 0 &&
+        (await page.locator('[data-testid="settings-window-preview"]').count()) === 0,
+      state.calls.map((c) => c.fn).join(","),
+    );
+    await noOverflow(page, `${tag} | Personal`);
+
+    // Organization reads only.
+    await page.click('[role="tab"]:has-text("Organization")');
+    await page.waitForSelector('[data-testid="settings-org"]', { timeout: 10000 });
+    const org = await text(page, '[data-testid="settings-org"]');
+    const changeBtn = page.locator('button:has-text("Change the company zone")');
+    record(
+      `${tag} | Organization reads only, Change the company zone disabled (1412)`,
+      org.startsWith("An admin changes these. You can read them.") &&
+        (await changeBtn.count()) === 1 &&
+        !(await changeBtn.isEnabled()) &&
+        !(await page.locator('[data-testid="settings-dia"] [role="switch"]').isEnabled()),
+      org.slice(0, 120),
+    );
+    await noOverflow(page, `${tag} | Organization`);
+
+    // Opening / directly is replaced with /settings: the history gains only the goto's entry.
+    const before = await page.evaluate(() => history.length);
+    await page.goto(ADMIN_BASE + "/", { waitUntil: "networkidle" });
+    await page.waitForSelector('[data-testid="admin-settings"]', { timeout: 20000 });
+    const after = await page.evaluate(() => history.length);
+    record(
+      `${tag} | opening / directly is sent to /settings with replace`,
+      path() === "/settings" && after === before + 1,
+      `${page.url()} history ${before} to ${after}`,
+    );
+    record(
+      `${tag} | the Overview never mounts`,
+      (await page.locator('[data-testid="admin-overview"]').count()) === 0 &&
+        state.calls.length === 0,
+    );
+    record(`${tag} | no page errors`, errors.length === 0, errors.join(" | ").slice(0, 200));
+  } catch (e) {
+    record(`${tag} flow`, false, String(e).slice(0, 200));
+  } finally {
+    await browser.close().catch(() => undefined);
+  }
+}
+
+module.exports = {
+  runAdminSettings,
+  runAdminOverviewZone,
+  runAdminDiaOff,
+  runAdminAppearance,
+  runAdminStaffRole,
+};
