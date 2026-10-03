@@ -4538,6 +4538,11 @@ async function runLiveDbArms({ record, skip }) {
       });
 
       // DIA's cache (SPEC Part D item 4): null, then the statements written, then a refusal.
+      // Keyed on its own zone (handoff 45-C): the cache key carries the zone string, and
+      // Etc/GMT+12 is the zone of no inhabited place, so no device reports it and no viewer's
+      // Overview ever writes under it. A founder visit caches under their own zone and cannot make
+      // the miss read a note; the arm's own write is rolled back with the transaction.
+      const ARM_TZ = "Etc/GMT+12";
       await inTransaction(client, async () => {
         const adminId = await adminMember();
         if (!adminId) {
@@ -4547,22 +4552,24 @@ async function runLiveDbArms({ record, skip }) {
         await actAs(client, adminId, "aal2");
         const miss = await attempt(
           client,
-          "select public.admin_dia_note_read('week', 'previous', 'America/Los_Angeles') as j",
+          "select public.admin_dia_note_read('week', 'previous', $1) as j",
+          [ARM_TZ],
         );
         const statements = [{ text: "Mobilized members rose this period.", block: "Mobilization" }];
         const wrote = await attempt(
           client,
-          "select public.admin_dia_note_write('week', 'previous', 'America/Los_Angeles', $1::jsonb)",
-          [JSON.stringify(statements)],
+          "select public.admin_dia_note_write('week', 'previous', $1, $2::jsonb)",
+          [ARM_TZ, JSON.stringify(statements)],
         );
         const hit = await attempt(
           client,
-          "select public.admin_dia_note_read('week', 'previous', 'America/Los_Angeles') as j",
+          "select public.admin_dia_note_read('week', 'previous', $1) as j",
+          [ARM_TZ],
         );
         const bad = await attempt(
           client,
-          "select public.admin_dia_note_write('week', 'previous', 'America/Los_Angeles', $1::jsonb)",
-          [JSON.stringify({ x: 1 })],
+          "select public.admin_dia_note_write('week', 'previous', $1, $2::jsonb)",
+          [ARM_TZ, JSON.stringify({ x: 1 })],
         );
         const direct = await attempt(client, "select count(*) from public.admin_dia_notes");
         record(

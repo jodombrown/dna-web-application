@@ -711,4 +711,4 @@ async function runAdminDrawerFocus(browserType, bname, [w, h], theme) {
   }
 }
 
-module.exports = { runAdminOverview, runAdminOverviewError, runAdminDrawerFocus };
+module.exports = { runAdminOverview, runAdminOverviewError, runAdminDrawerFocus, openOverview };
