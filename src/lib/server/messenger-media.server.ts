@@ -15,13 +15,14 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL } from "../supabase";
 
-/** The seven mimes a Messenger media row may carry (the media_mime_check of 20261002150000). */
+/** The eight mimes a Messenger media row may carry (media_mime_check, 20261003130400, 1396). */
 export const MESSAGE_MEDIA_MIMES = [
   "image/jpeg",
   "image/png",
   "image/webp",
   "video/mp4",
   "video/webm",
+  "video/quicktime",
   "audio/webm",
   "audio/mp4",
 ] as const;
@@ -191,6 +192,7 @@ export function sniff(bytes: Uint8Array, declared: string): MessageMediaMime | n
     return declared === "image/webp" ? "image/webp" : null;
   if (ascii(bytes, 4, 8) === "ftyp") {
     if (declared === "video/mp4") return "video/mp4";
+    if (declared === "video/quicktime") return "video/quicktime";
     if (declared === "audio/mp4") return "audio/mp4";
     return null;
   }

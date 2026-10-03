@@ -43,6 +43,7 @@ import {
   readTo,
   refusalOf,
   requestAccept,
+  requestRecover,
   requestBlock,
   requestDecline,
   rowKind,
@@ -191,14 +192,12 @@ function ThreadRowView({
 }) {
   const mode = useMode();
   const src = useAvatarUrl(t.avatar_path, 44);
-  const authorFirst =
-    t.last_author_id && t.last_author_id !== me.id ? firstName(lastAuthorName(t)) : null;
   return (
     <ThreadRow
       name={t.name ?? ""}
       kind={rowKind(t.kind)}
       src={src}
-      lastLine={lastLineOf(t, me.id, authorFirst)}
+      lastLine={lastLineOf(t, me.id)}
       time={timeWords(t.last_activity_at ?? t.created_at)}
       unread={!!t.unread}
       muted={!!t.muted}
@@ -212,11 +211,6 @@ function ThreadRowView({
       items={items}
     />
   );
-}
-
-/** The last author's name where the projection carries it: a one_to_one's other member. A group's last author is not in the row, so the line reads without a name there (closing report). */
-function lastAuthorName(t: ThreadView): string {
-  return t.kind === "one_to_one" ? (t.name ?? "") : "";
 }
 
 function RequestCardView({
@@ -420,18 +414,8 @@ export function MessengerSurface({
         await requestBlock(id);
         say("Blocked. " + first + " cannot message you.");
       } else {
-        // Recover: 41-A carries no wrapper that returns a declined request to pending; what it
-        // carries is "a declined request may be accepted later" (file 6, section B), so Recover is
-        // that accept and opens the thread. The extraction's `Back in Requests.` toast has no write
-        // behind it; named in the closing report.
-        const thread = await requestAccept(id);
-        await qc.invalidateQueries({ queryKey: REQUESTS_KEY(member.id) });
-        if (thread) {
-          await refreshRow(thread);
-          say("Accepted. You can reply now.");
-          openThread(thread);
-        }
-        return;
+        await requestRecover(id);
+        say("Back in Requests.");
       }
       await qc.invalidateQueries({ queryKey: REQUESTS_KEY(member.id) });
       await qc.invalidateQueries({ queryKey: SIGNALS_KEY(member.id) });
