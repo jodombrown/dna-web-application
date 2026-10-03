@@ -29,9 +29,10 @@ export const ADMIN_COPY = {
 } as const;
 
 /**
- * The console's eight destinations in brief order, with the one line each shows (12B extraction §1,
- * shell; R2 §1). Only the Overview is available; the seven others read "Not yet" until their consoles
- * exist. Rendered by ConsoleShell at the console root and nowhere else.
+ * The console's destinations in brief order, with the one line each shows (12B extraction §1,
+ * shell; R2 §1). The Overview is available and the seven consoles after it read "Not yet" until they
+ * exist. Settings is the last row and always available (1410; extraction 45-12S §1a row 7) until
+ * Strand gives ConsoleShell a foot slot. Rendered by ConsoleShell and nowhere else.
  */
 export const CONSOLE_DESTINATIONS: {
   id: string;
@@ -82,7 +83,156 @@ export const CONSOLE_DESTINATIONS: {
     line: "Health: failed deploys, errors, Edge Function failures and email bounces.",
     available: false,
   },
+  {
+    id: "settings",
+    label: "Settings",
+    line: "How the admin works for you, and the choices every staff member shares.",
+    available: true,
+  },
 ];
 
 /** Ruling 1311: the roles that open the Overview. Every other role sees the shell's refusal. */
 export const OVERVIEW_ROLES = ["admin", "analyst"] as const;
+
+/**
+ * Settings (handoff 45-D; EXTRACTION-45-12S §1 and §2, verbatim, with the build fixes of §5: the
+ * re-enrol hint is "Six digits." and toasts T1 and T2 are gone). Templates take their variable parts
+ * as arguments; every zone, grain and comparison word is read from the vocabularies (1392).
+ */
+export const SETTINGS_COPY = {
+  title: "Settings",
+  line: "How the admin works for you, and the choices every staff member shares.",
+  tabPersonal: "Personal",
+  tabOrg: "Organization",
+  loading: "Loading settings",
+  saving: "Saving",
+  saved: "Saved",
+  retry: "Retry",
+
+  personalLine: "Only you change these. They are kept on your account and hold on every device.",
+  appearance: "Appearance",
+  appearanceLine: "System follows each device. Your choice applies the moment you make it.",
+  appearanceSystem: (device: "light" | "dark") =>
+    `This device is set to ${device}, so the admin is ${device} here.`,
+  appearanceFixed: (theme: string) => `The admin is ${theme} on every device you sign in on.`,
+  appearanceFailed: "Not kept on your account yet. It still applies on this device.",
+
+  zone: "Reading time zone",
+  zoneCompanyLine: (companyLong: string) =>
+    `You read in the company reporting zone, ${companyLong}. You may choose your own zone instead.`,
+  zoneOwnLine: (ownShort: string, companyLong: string) =>
+    `You read in your own zone, ${ownShort}. The company reports in ${companyLong}.`,
+  zoneModeCompany: "Company zone",
+  zoneModeOwn: "My own zone",
+  yourZone: "Your zone",
+  yourZoneHint:
+    "Times on every page read in this zone. Days and weeks stay with the company reporting zone.",
+  zoneModeFailedOwn: "Not saved. You still read in your own zone.",
+  zoneModeFailedCompany: "Not saved. You still read in the company zone.",
+  yourZoneFailed: (prevShort: string) => `Not saved. You still read in ${prevShort}.`,
+  windowLabel: "On the Overview, the window line reads",
+  ownZoneSentence: (ownShort: string, companyShort: string) =>
+    `Times are in your own zone, ${ownShort}. Days and weeks follow the company reporting zone, ${companyShort}.`,
+
+  opensTo: "The Overview opens to",
+  opensToLine:
+    "The grain and comparison the Overview shows when you open it. You can still switch on the page.",
+  grain: "Time grain",
+  grainGroup: "Default time grain",
+  compare: "Compare with",
+  compareGroup: "Default comparison",
+  grainFailed: (prevGrain: string) => `Not saved. The Overview still opens to ${prevGrain}.`,
+  compareFailed: "Not saved. The earlier comparison still holds.",
+
+  security: "Sign-in security",
+  twoFactor: "Two-factor sign-in",
+  twoFactorLine: "Required for every staff account. It cannot be turned off.",
+  reenrolLine: "Moving to a new phone or authenticator? Re-enrol. We ask for a current code first.",
+  reenrolButton: "Re-enrol your authenticator",
+  sessions: "Active sessions",
+  sessionDevice: "Device",
+  sessionLast: "Last activity",
+  thisDevice: (device: string) => `${device}, this device`,
+  activeNow: "Active now",
+  timesIn: (zoneShort: string) => `Times in ${zoneShort}.`,
+  sessionsCaption: "Your active sessions by device and last activity",
+  signOutLine: "Lost a device, or not sure? Sign out everywhere, including here.",
+  signOutButton: "Sign out everywhere",
+
+  readLog: "Your read log",
+  readLogLine:
+    "What you have read in the admin and when, newest first. Opening this log is itself logged.",
+  today: "Today",
+  readLogFoot: (zoneShort: string) => `Every entry is a page or a block. Times in ${zoneShort}.`,
+  readLogEmpty: "Nothing read yet. Pages and blocks you open in the admin appear here by day.",
+
+  readOnly: "An admin changes these. You can read them.",
+  adminLine: "Shared by every staff member. Each change is recorded in the history below.",
+  companyZone: "Company reporting zone",
+  companyZoneLine:
+    "The zone every staff member's Overview counts its days and weeks in, so the weekly review reads the same way every time.",
+  changeZone: "Change the company zone",
+  companyZoneFailed: (prevShort: string) =>
+    `Not saved. The company zone is still ${prevShort} for everyone.`,
+  dia: "DIA's note on the Overview",
+  diaLine: "Applies to every staff member. Off removes the note block from everyone's Overview.",
+  diaSwitch: "Show DIA's note on the Overview",
+  diaFailed: (prevOn: boolean) =>
+    `Not saved. DIA's note is still ${prevOn ? "on" : "off"} for everyone.`,
+  on: "On",
+  off: "Off",
+  policies: "Fixed policies",
+  policiesLine: "Set for the company. Nobody changes these here.",
+  policyTwoFactor: "Two-factor sign-in is required",
+  policyTwoFactorLine: "For every staff account.",
+  policyLogged: "Every read of the admin is logged",
+  policyLoggedLine: "Each staff member can see their own in Personal, Your read log.",
+  history: "Change history",
+  historyLine:
+    "Every Organization change, newest first, with who made it and the value before and after. Opening this history is itself logged.",
+  historyWhen: "When",
+  historySetting: "Setting",
+  historyBefore: "Before",
+  historyAfter: "After",
+  historyBy: "By",
+  historyFoot: (zoneShort: string) => `Newest first. Times in ${zoneShort}.`,
+  historyCaption: "Organization change history, newest first",
+  historyEmpty:
+    "No Organization setting has changed yet. When one does, it appears here with its before and after.",
+
+  zoneSheet: "Change the company reporting zone",
+  newZone: "New company zone",
+  zoneWillMove: (newShort: string) =>
+    `Every staff member's Overview will move to ${newShort} days and weeks, starting from the next refresh.`,
+  zoneIsCurrent: "This is the company zone now. Choose another zone to change it.",
+  zoneSheetLine:
+    "Staff who read in their own zone keep their times. The change is recorded in the history with its before and after.",
+  keepZone: (currentName: string) => `Keep ${currentName}`,
+  changeTo: (newShort: string) => `Change to ${newShort}`,
+  changeTheZone: "Change the zone",
+
+  signOutSheet: "Sign out everywhere?",
+  signOutBody: (device: string) =>
+    `Every session ends, including this one on ${device}. You will sign in again with your password and your authenticator.`,
+  staySignedIn: "Stay signed in",
+  signedOutTitle: "You are signed out everywhere",
+  signedOutLine:
+    "Every session has ended, including this one. Sign in again with your password and your authenticator.",
+  signInAgain: "Sign in again",
+
+  reenrolSheet: "Re-enrol your authenticator",
+  reenrolStep1:
+    "First, enter the code your current authenticator shows. This keeps anyone else from moving your sign-in.",
+  currentCode: "Current code",
+  sixDigits: "Six digits.",
+  codeMismatch: "That code did not match. Try the code showing now.",
+  cancel: "Cancel",
+  continue: "Continue",
+  reenrolStep2:
+    "Add DNA Admin to your new authenticator, then enter the code it shows. Your old entry stops working when you finish.",
+  enrolmentPlaceholder: "The enrolment code appears here",
+  newCode: "Code from the new entry",
+  finish: "Finish re-enrolling",
+  reenrolled: "Your authenticator is re-enrolled. The old entry no longer works.",
+  dismiss: "Dismiss",
+} as const;
