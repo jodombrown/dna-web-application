@@ -27,7 +27,10 @@ const COMPARES = new Set(["previous", "last_year"]);
 /** The blocks a statement may name, as the page labels them for DiaNote's link. */
 const BLOCKS = ["Mobilization", "By corridor", "Source", "The levers", "The network", "Controls"];
 
-const ADMIN_PREVIEW = /^https:\/\/[a-z0-9-]+\.dna-admin\.pages\.dev$/i;
+// The deploy-admin job uploads to the Pages project `dna-admin`, and Pages served that project at
+// the subdomain `dna-admin-1oz` because `dna-admin.pages.dev` was taken: a preview deployment's own
+// origin is `https://<id>.dna-admin-1oz.pages.dev` (handoff 45-C item 3, ruling 1379).
+const ADMIN_PREVIEW = /^https:\/\/[a-z0-9-]+\.dna-admin-1oz\.pages\.dev$/i;
 
 function allowedOrigin(origin: string | null): string | null {
   if (!origin) return null;
@@ -81,6 +84,8 @@ Rules, all binding:
 - Never use a number, a digit, a count, a percentage, a fraction, or a number in words (no "two", "half", "a dozen", "a third"). Say "rose", "fell", "held steady", "most of", "the rise", never how many or how much.
 - Each statement is one or two plain sentences, under two hundred characters, in sentence case, with no exclamation mark, no em dash and no emoji.
 - Each statement names the block it rests on in the block field: Mobilization, By corridor, Source, The levers, The network, or Controls.
+- Direction, Depth and Source are part of the Mobilization block. A statement about direction, depth or source names Mobilization.
+- The network block describes all joined members as of now, not the period. A statement about it never calls them new, recent or joiners in the period.
 - A source or lever marked not_connected is not data; you may say that it is not yet connected, and nothing more about it.
 - When the comparison is null, say once, resting on Controls, that there is no comparison period for this grain and the notes describe the period on its own.
 - When the period holds no acts, say so once, resting on Mobilization, and say nothing that the figures do not support.
