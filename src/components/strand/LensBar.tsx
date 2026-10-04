@@ -39,8 +39,10 @@
 //   body    = n · seat(widest)   under width="fill"     — every seat is equal, so each holds the widest
 //   body    = Σ seat(wᵢ)         under width="content"  — every seat is exactly its own label
 // 981 writes the condition in rather than the answer: a packing where seats share takes the widest
-// branch, and the test is extended, never assumed. Every caller here passes `fill`, which is what
-// ruling 952's equal seats are, so `n · seat(widest)` is the price this app pays today.
+// branch, and the test is extended, never assumed. Since Fix PR 08 (1465) every in-page bar is the
+// lens seat's, `labels="always"` under `content`, which never measures; the header's `compact` bar
+// passes `fill`. Under `content` a word reserves its 700 width (`[data-lens-word]`), so selection is
+// still not a layout input (952).
 // The probe measures the label and nothing else; the seat's own padding, border and glyph are added
 // by `seat()` above, so one arithmetic change cannot pass silently through the probe's markup.
 // A measurement of zero is not a measurement (item 16): the bar keeps the rendering it has and
@@ -153,8 +155,9 @@ export type LensBarProps<Id extends string = string> = {
   /**
    * The packing this bar renders, and therefore the one its fit test prices (ruling 981, item 24).
    * `fill` stretches the track and divides it into equal seats, which is ruling 952's distribution
-   * and what every caller in this app renders. `content` lets each seat hug its own label; it is the
-   * compile's default and is named here so the default can never change a page silently.
+   * and what the header's compact bar renders. `content` lets each seat hug its own label; it is the
+   * compile's default, every in-page bar renders it since Fix PR 08 (1465), and it is named here so
+   * the default can never change a page silently.
    */
   width?: "content" | "fill" | undefined;
   /** Renders each seat's glyph beside its word in labels mode (item 51). Priced by the fit test. */
@@ -363,7 +366,7 @@ export function LensBar<Id extends string = string>({
               cursor: dis ? "default" : "pointer",
               // Ruling 952 (G48) and item 46: every seat takes the same share, so selection is not
               // a layout input. Equal flex is what `fill` means; under `content` each seat hugs its
-              // own label, which is the compile's own default and no caller here passes it.
+              // own label at its 700 width, which every in-page bar renders since Fix PR 08 (1465).
               flex: stretch ? "1 1 0" : undefined,
               // Item 54a, rulings 905 and 498: the floor is 44 in every mode, `compact` included.
               // It was `--target-min` (24) in the header slot and unset in labels mode.
@@ -394,7 +397,7 @@ export function LensBar<Id extends string = string>({
             }}
           >
             {ico && l.icon && <Icon name={l.icon} size={ICON} style={on ? { color: hue } : {}} />}
-            {txt && <span>{l.label}</span>}
+            {txt && <span data-lens-word={l.label}>{l.label}</span>}
           </button>
         );
       })}
@@ -416,7 +419,13 @@ export function LensBar<Id extends string = string>({
       }}
     >
       <style>
-        {".strand-lens [role=tab]:focus-visible{outline:2px solid var(--focus);outline-offset:2px}"}
+        {".strand-lens [role=tab]:focus-visible{outline:2px solid var(--focus);outline-offset:2px}" +
+          // Fix PR 08 (952 under 1465): a word reserves its active (700) width in every state, so
+          // under `content` selection is not a layout input either. Not in textContent, and the
+          // tab's aria-label is its accessible name.
+          ".strand-lens [data-lens-word]{display:inline-flex;flex-direction:column}" +
+          ".strand-lens [data-lens-word]::after{content:attr(data-lens-word);font-weight:700;" +
+          "height:0;overflow:hidden;visibility:hidden;pointer-events:none;user-select:none}"}
       </style>
       {canSwitch && (
         // Item 54b: the probe sits inside a 0×0 `overflow: hidden` box — clipped for overflow, so it

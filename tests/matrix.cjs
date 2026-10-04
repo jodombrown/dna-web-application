@@ -5079,16 +5079,40 @@ async function runShell(browserType, bname, [w, h]) {
           .filter((t) => t.scrollWidth > t.clientWidth + 1)
           .map((t) => t.getAttribute("data-lens") + ":" + t.scrollWidth + ">" + t.clientWidth),
         barOverflow: bar.scrollWidth > bar.clientWidth + 1,
+        // Fix PR 08 (1465): the row the bar sits in. Below expanded it may be wider than the column,
+        // as Convene's always could, when it is the seat's own sideways strip and the active lens is
+        // in its view.
+        seat: (() => {
+          const seat = bar.closest("[data-lens-seat]");
+          const on = bar.querySelector('[role="tab"][aria-selected="true"]');
+          if (!seat || !on) return null;
+          const cs = getComputedStyle(seat);
+          const r = seat.getBoundingClientRect();
+          const a = on.getBoundingClientRect();
+          return {
+            sw: seat.scrollWidth,
+            cw: seat.clientWidth,
+            strip: cs.overflowX === "auto" || cs.overflowX === "scroll",
+            activeIn: a.left >= r.left - 0.5 && a.right <= r.right + 0.5,
+          };
+        })(),
         // What the bar measured: its probe's labels, as active and as inactive tabs.
         probe: Array.from(
           (bar.parentElement && bar.parentElement.querySelectorAll("[data-probe]")) || [],
         ).map((e) => e.getAttribute("data-probe")[0] + Math.round(e.getBoundingClientRect().width)),
       };
     });
+    // Fix PR 08 amends this check under 1465: the track itself still never scrolls, and a row wider
+    // than the column is allowed on the Feed and Connect as it already was on Convene, as the lens
+    // seat's sideways strip with the active lens in view. Everything else in it stands.
     record(
       tag +
         " lens bar: with fonts settled, no tab's label exceeds its box and the track does not scroll",
-      !!lensFit && lensFit.overflowing.length === 0 && !lensFit.barOverflow,
+      !!lensFit &&
+        lensFit.overflowing.length === 0 &&
+        !lensFit.barOverflow &&
+        !!lensFit.seat &&
+        (lensFit.seat.sw <= lensFit.seat.cw + 1 || (lensFit.seat.strip && lensFit.seat.activeIn)),
       JSON.stringify(lensFit),
     );
     // Ruling 916: kept for the closing summary, so a green run states the mode it read.
@@ -5113,11 +5137,13 @@ async function runShell(browserType, bname, [w, h]) {
         const t = bar.getBoundingClientRect();
         return {
           track: { x: +t.x.toFixed(2), w: +t.width.toFixed(2) },
+          // Fix PR 08: in the track's own coordinates, because the seat's sideways strip scrolls
+          // the active lens into view, which moves the whole track and is not a redistribution.
           seats: Array.from(bar.querySelectorAll('[role="tab"]')).map((el) => {
             const r = el.getBoundingClientRect();
             return {
               id: el.getAttribute("data-lens"),
-              x: +r.x.toFixed(2),
+              x: +(r.x - t.x).toFixed(2),
               w: +r.width.toFixed(2),
               on: el.getAttribute("aria-selected") === "true",
             };
@@ -5134,10 +5160,7 @@ async function runShell(browserType, bname, [w, h]) {
       // The track itself must not have moved either, or the comparison is measuring the column and
       // not the distribution. Reported in the detail so a failure says which of the two it was.
       const trackSame =
-        !!seatsBefore &&
-        !!seatsAfter &&
-        Math.abs(seatsBefore.track.x - seatsAfter.track.x) < 0.5 &&
-        Math.abs(seatsBefore.track.w - seatsAfter.track.w) < 0.5;
+        !!seatsBefore && !!seatsAfter && Math.abs(seatsBefore.track.w - seatsAfter.track.w) < 0.5;
       const moved = [];
       if (seatsBefore && seatsAfter)
         for (const b of seatsBefore.seats) {
@@ -5425,6 +5448,156 @@ async function runShell(browserType, bname, [w, h]) {
     await page.locator('section[role="dialog"][aria-label="Compose"]').waitFor({ timeout: 10000 });
     record(tag + " c keypress opens the one composer from the shell", true);
     await page.keyboard.press("Escape");
+  } catch (e) {
+    record(tag + " flow", false, String(e).slice(0, 300));
+    await shot(page, `${tag}-ERROR`).catch(() => {});
+  }
+  record(
+    tag + " no page errors",
+    errors.length === 0,
+    errors.slice(0, 3).join(" | ").slice(0, 300),
+  );
+  await browser.close();
+}
+
+/**
+ * Fix PR 08 (handoff 51): the lens seat on the three lens surfaces, one arm per viewport.
+ *
+ * Ruling 1466 (W71): the in-page bar's top edge, read on the Feed, Connect and Convene, is one value
+ * below expanded. At expanded Connect's and Convene's are one value and the Feed's is read and
+ * printed but not compared: its bar follows the composer and the greeting, which the other two
+ * surfaces do not have (the measured values and that exception are in Fix PR 08's report, for a
+ * ruling). Every reading is printed as a `SEAT` line on every run, passing or failing (916, 930).
+ *
+ * Ruling 1468 (W74), at 390 only: past 72px a lens change from the header's bar leaves the bar in
+ * the header and the shell's scroller at or below the docking point, the seat's bottom edge, on all
+ * three surfaces; with the bar in the page a lens change leaves the scroll where it was.
+ */
+const SEAT_SURFACES = [
+  { id: "feed", path: "/feed", label: "Lens", root: "[data-feed]" },
+  { id: "connect", path: "/connect", label: "Connect lens", root: '[data-testid="connect"]' },
+  { id: "convene", path: "/convene", label: "Convene lens", root: "[data-discovery]" },
+];
+
+async function runLensSeat(browserType, bname, [w, h]) {
+  const tag = `${bname}-${w}x${h}-lens-seat`;
+  armStart(tag);
+  const tier = tierOf(tag);
+  const browser = await launch(browserType);
+  const ctx = await browser.newContext({
+    viewport: { width: w, height: h },
+    hasTouch: w <= 1024,
+    isMobile: w < 1024,
+    deviceScaleFactor: 1,
+  });
+  const page = await ctx.newPage();
+  const db = makeMockDb();
+  seedPosts(db, 8);
+  // Required here rather than at the top: discovery.cjs requires this module.
+  require("./discovery.cjs").__seedDiscovery(db);
+  await mockSupabase(page, db);
+  const errors = [];
+  page.on("pageerror", (e) => errors.push(String(e)));
+  const open = async (s) => {
+    await page.goto(BASE + s.path, { waitUntil: "networkidle" });
+    await page.locator(s.root).first().waitFor({ timeout: 20000 });
+    await page
+      .locator(`${s.root} [data-lens-seat] [role="tablist"], [data-layout-top] [role="tablist"]`)
+      .first()
+      .waitFor({ timeout: 20000 });
+    await page.evaluate(async () => {
+      if (document.fonts && document.fonts.ready) await document.fonts.ready;
+    });
+    await page.waitForTimeout(300);
+  };
+  const barTop = (label) =>
+    page.evaluate((label) => {
+      const bar = [...document.querySelectorAll(`[role="tablist"][aria-label="${label}"]`)].find(
+        (b) => !b.closest("[data-app-header]"),
+      );
+      return bar ? +bar.getBoundingClientRect().top.toFixed(2) : null;
+    }, label);
+  try {
+    await signIn(page);
+    const tops = {};
+    for (const s of SEAT_SURFACES) {
+      await open(s);
+      tops[s.id] = await barTop(s.label);
+    }
+    console.log(
+      `SEAT ${tag} tier=${tier} feed=${tops.feed} connect=${tops.connect} convene=${tops.convene}`,
+    );
+    const same = (a, b) => a !== null && b !== null && Math.abs(a - b) < 0.5;
+    record(
+      tier === "expanded"
+        ? tag +
+            " lens bar top edge: Connect and Convene equal; the Feed's follows its composer and greeting (1466)"
+        : tag + " lens bar top edge: equal on Feed, Connect and Convene (1466)",
+      tier === "expanded"
+        ? same(tops.connect, tops.convene) && tops.feed !== null
+        : same(tops.feed, tops.connect) && same(tops.connect, tops.convene),
+      JSON.stringify(tops),
+    );
+    if (w === 390) {
+      const scroller = () =>
+        page.evaluate(() => {
+          const sc = document.querySelector('[data-scroller="feed"]');
+          const seat = document.querySelector('[data-lens-seat="flow"]');
+          if (!sc || !seat) return null;
+          const dock =
+            seat.getBoundingClientRect().bottom - sc.getBoundingClientRect().top + sc.scrollTop;
+          return {
+            top: Math.round(sc.scrollTop),
+            dock: Math.round(dock),
+            header: !!document.querySelector('[data-app-header] [role="tablist"]'),
+            hidden: getComputedStyle(seat).visibility === "hidden",
+          };
+        });
+      const setTop = (y) =>
+        page.evaluate((v) => {
+          const sc = document.querySelector('[data-scroller="feed"]');
+          sc.scrollTop = v;
+          sc.dispatchEvent(new Event("scroll"));
+        }, y);
+      for (const s of SEAT_SURFACES) {
+        await open(s);
+        // The bar in the page: a lens change leaves the scroll where it was. 8, so the tab is wholly
+        // in the scroller's view and the click's own scroll-into-view has nothing to move.
+        await setTop(8);
+        await page.waitForTimeout(250);
+        const inPage = await page
+          .locator(`${s.root} [data-lens-seat] [role="tab"][aria-selected="false"]`)
+          .first();
+        await inPage.click();
+        await page.waitForTimeout(600);
+        const stay = await scroller();
+        record(
+          tag +
+            ` ${s.id}: with the bar in the page a lens change leaves the scroll where it was (1468)`,
+          !!stay && Math.abs(stay.top - 8) <= 1 && !stay.header,
+          JSON.stringify(stay),
+        );
+        // The bar in the header: past 72px, a lens change from the header's bar.
+        await setTop(400);
+        await page
+          .locator('[data-app-header] [role="tablist"] [role="tab"]')
+          .first()
+          .waitFor({ timeout: 10000 });
+        const before = await scroller();
+        await page
+          .locator('[data-app-header] [role="tablist"] [role="tab"][aria-selected="false"]')
+          .first()
+          .click();
+        await page.waitForTimeout(800);
+        const after = await scroller();
+        record(
+          tag +
+            ` ${s.id}: past 72px a lens change keeps the bar in the header and the scroller at or below the docking point (1468)`,
+          !!after && after.header && after.hidden && after.top > 72 && after.top >= after.dock - 1,
+          JSON.stringify({ before, after }),
+        );
+      }
+    }
   } catch (e) {
     record(tag + " flow", false, String(e).slice(0, 300));
     await shot(page, `${tag}-ERROR`).catch(() => {});
@@ -6652,8 +6825,10 @@ if (require.main === module)
         }
         if (process.env.SPECIAL.includes("silence")) await drive(runSilence, bt, bname);
         if (process.env.SPECIAL.includes("shell"))
-          for (const vp of process.env.ONLY ? [JSON.parse(process.env.ONLY)] : VIEWPORTS)
+          for (const vp of process.env.ONLY ? [JSON.parse(process.env.ONLY)] : VIEWPORTS) {
             await drive(runShell, bt, bname, vp);
+            await drive(runLensSeat, bt, bname, vp);
+          }
         // Ruling 344: the width arm, every viewport.
         if (process.env.SPECIAL.includes("width"))
           for (const vp of process.env.ONLY ? [JSON.parse(process.env.ONLY)] : VIEWPORTS)
@@ -6812,10 +6987,10 @@ if (require.main === module)
         }
         // Ruling 1235 (handoff 37-F item 3): the macOS WebKit gate, pages.yml's `webkit-macos` job.
         // Small by design, because macOS minutes bill at a multiple of Linux: the nine sheet arms
-        // (1236's stepped method is the point of the gate), the member event page and its blocks at
+        // (1236's stepped method is the point of the gate) and the sheet-focus arm (1484), the member event page and its blocks at
         // the two representative cells with its flows (the arm G5 hit on run 419 among them), the
         // composer as the publish flow at compact and its guards at expanded (the bottom sheet and
-        // the drawer), and sign-in's layout at both cells with its flows at compact. Twenty arms.
+        // the drawer), and sign-in's layout at both cells with its flows at compact. Twenty-one arms.
         if (process.env.SPECIAL.includes("gate")) {
           const { runSheets } = require("./sheet.cjs");
           const { runEvent, runEventBlocks, runEventFlows } = require("./event.cjs");
@@ -6936,6 +7111,7 @@ if (require.main === module)
         for (const theme of only ? [process.env.THEME || "light"] : THEMES)
           await drive(runViewport, bt, bname, vp, theme);
         await drive(runShell, bt, bname, vp);
+        await drive(runLensSeat, bt, bname, vp);
         await drive(runWidth, bt, bname, vp);
       }
       if (only) {

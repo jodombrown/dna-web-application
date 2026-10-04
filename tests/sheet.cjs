@@ -143,9 +143,10 @@ function methodOf(engine) {
  *  when the arm's own gate throws before it can hand its session back. */
 const opened = [];
 
-async function context(browserType, [w, h], theme, db, tag) {
+async function context(browserType, [w, h], theme, db, tag, plain = false) {
   const browser = await launch(browserType);
-  const method = methodOf(tag.split("-")[0]);
+  // `plain`: an arm that reads no frames (1484's focus arm) records no video and holds no clock.
+  const method = plain ? "plain" : methodOf(tag.split("-")[0]);
   // On the video method the video is the measurement (37-B's revised Stage 1), recorded at the
   // viewport's own size up to VIDEO_MAX_W and at half size past it. The stepped method screenshots
   // at device scale 1, so its readings are CSS pixels and its scale is 1.
@@ -1053,6 +1054,64 @@ async function runSheetShare(bt, bname, [w, h], theme) {
   );
 }
 
+/**
+ * Ruling 1484 (W82, Fix PR 08): a sheet's title takes focus with no ring. Notifications at 390,
+ * opened by a tap: the heading is the active element and its computed outline is none or of no
+ * width. Then Tab: the control it reaches draws its ring, so the fix is the heading's alone.
+ */
+async function runSheetFocus(bt, bname, [w, h], theme) {
+  const tag = `${bname}-${w}x${h}-${theme}-sheet-focus`;
+  await arm(
+    tag,
+    async () => {
+      const db = makeMockDb();
+      seedPosts(db, 3);
+      const s = await context(bt, [w, h], theme, db, tag, true);
+      await signIn(s.page);
+      return s;
+    },
+    async (s) => {
+      const { page } = s;
+      const ring = () =>
+        page.evaluate(() => {
+          const el = document.activeElement;
+          if (!el || el === document.body) return null;
+          const cs = getComputedStyle(el);
+          return {
+            heading: el.hasAttribute("data-sheet-heading"),
+            tag: el.tagName.toLowerCase(),
+            label: (el.getAttribute("aria-label") || el.textContent || "").trim().slice(0, 40),
+            style: cs.outlineStyle,
+            width: parseFloat(cs.outlineWidth) || 0,
+          };
+        });
+      await page.locator('[data-testid="bell"]').tap();
+      await page
+        .locator('[role="dialog"][aria-label="Notifications"] [data-sheet-heading]')
+        .waitFor({ timeout: 10000 });
+      await page.waitForFunction(
+        () => !!document.activeElement && document.activeElement.hasAttribute("data-sheet-heading"),
+        null,
+        { timeout: 10000 },
+      );
+      const title = await ring();
+      record(
+        tag + " the notifications title takes focus on a tap and draws no ring (1484)",
+        !!title && title.heading && (title.style === "none" || title.width === 0),
+        JSON.stringify(title),
+      );
+      await page.keyboard.press("Tab");
+      await page.waitForTimeout(150);
+      const next = await ring();
+      record(
+        tag + " Tab from the title reaches a control that draws its ring (1484)",
+        !!next && !next.heading && next.style !== "none" && next.width > 0,
+        JSON.stringify(next),
+      );
+    },
+  );
+}
+
 /** Every sheet arm on its cells, in one call per engine, each driven through `M.drive` so a lost web
  *  process retries that arm alone (1237). `only` narrows to one viewport. */
 async function runSheets(bt, bname, only = null) {
@@ -1063,6 +1122,7 @@ async function runSheets(bt, bname, only = null) {
     if (on(vp)) await M.drive(runSheetFilters, bt, bname, vp, theme);
   for (const [vp, theme] of BOTTOM_CELLS)
     if (on(vp)) await M.drive(runSheetShare, bt, bname, vp, theme);
+  if (on([390, 844])) await M.drive(runSheetFocus, bt, bname, [390, 844], "light");
 }
 
 module.exports = {
@@ -1070,6 +1130,7 @@ module.exports = {
   runSheetComposer,
   runSheetFilters,
   runSheetShare,
+  runSheetFocus,
   DRAWER_CELLS,
   BOTTOM_CELLS,
 };

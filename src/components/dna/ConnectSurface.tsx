@@ -24,11 +24,11 @@ import { Avatar } from "@/components/strand/Avatar";
 import { Button } from "@/components/strand/Button";
 import { Chip } from "@/components/strand/Chip";
 import { CardFade } from "@/components/dna/CardFade";
+import { LensSeat } from "@/components/dna/LensSeat";
 import { EmptyState } from "@/components/strand/EmptyState";
 import { Icon } from "@/components/strand/Icon";
 import { IconButton } from "@/components/strand/IconButton";
 import { Input } from "@/components/strand/Input";
-import { LensBar } from "@/components/strand/LensBar";
 import {
   MemberCard,
   MemberCardSkeleton,
@@ -44,6 +44,7 @@ import { toastStyle } from "@/components/dna/FeedSurface";
 import { IntroSheet } from "@/components/dna/IntroSheet";
 import { LoadError } from "@/components/dna/LoadError";
 import type { Member } from "@/lib/auth";
+import { setHeaderLens } from "@/lib/header-lens-store";
 import { useShellScroll } from "@/lib/shell-scroll";
 import {
   CONNECT_LENSES,
@@ -202,10 +203,10 @@ export function ConnectSurface({ member, search }: { member: Member; search: Con
   const expanded = tier === "expanded";
   // Ruling 590 edit B: 405's latched collapse was dead on Connect, because FeedSurface passes
   // `collapsed` to LensBar and this surface passed nothing, so the scope line never left. Connect's
-  // bar is sticky at top 0 at every tier with no greeting above it, so the first reported scroll is
-  // the signal. `scrollerRef` is the shell's own scroller (ruling 104), which CardFade needs too:
+  // bar has no greeting above it, so the first reported scroll is the signal, which the lens seat
+  // passes (1466). `scrollerRef` is the shell's own scroller (ruling 104), which CardFade needs:
   // the column scrolls, not the document, and a scroll event on an element never reaches window.
-  const { scrollerRef, scrolled } = useShellScroll();
+  const { scrollerRef } = useShellScroll();
   const navigate = useNavigate();
   const qc = useQueryClient();
   const lens: ConnectLens = search.lens ?? "members";
@@ -273,6 +274,18 @@ export function ConnectSurface({ member, search }: { member: Member; search: Con
     setColumnPad("inset");
     return () => setColumnPad(null);
   }, []);
+
+  // Ruling 1467 (W73): the header's lens slot, registered exactly as the Feed registers it and
+  // cleared on unmount. Below expanded, past 72px of the shell's scroller, the header takes this
+  // bar in its icon form (947); at expanded the shell reads no header lens.
+  useEffect(() => {
+    setHeaderLens({
+      lenses: CONNECT_LENSES,
+      value: lens,
+      onChange: (id: string) => setLens(id as ConnectLens),
+    });
+  }, [lens, setLens]);
+  useEffect(() => () => setHeaderLens(null), []);
 
   // Reads. Every list is the projection's answer; nothing is filtered here.
   const options = useQuery({
@@ -414,7 +427,9 @@ export function ConnectSurface({ member, search }: { member: Member; search: Con
     return (
       <CardFade
         key={c.id}
-        stickySelector="[data-testid='lens-bar-wrap']"
+        // Below expanded the header holds the bar past 72px (1467), so the header is the edge, as
+        // on the Feed; at expanded the seat is sticky in the column.
+        stickySelector={expanded ? "[data-testid='connect'] [data-lens-seat]" : "[data-app-header]"}
         stickyBottom={0}
         scroller={scrollerRef.current}
       >
@@ -870,35 +885,20 @@ export function ConnectSurface({ member, search }: { member: Member; search: Con
         color: "var(--ink)",
       }}
     >
-      <div
-        data-testid="lens-bar-wrap"
-        style={{
-          position: "sticky",
-          top: 0,
-          zIndex: 3,
-          // Ruling 590: the column's ground, so cards pass under an opaque bar, and the track's
-          // own --bg-sunken reads against it.
-          background: "var(--bg)",
-          padding: expanded ? "24px 0 8px" : "8px 0",
-          marginBottom: -8,
-        }}
-      >
-        {/* Ruling 981 (items 24 and 57): `fill` is the packing this track renders under 952's
-            equal seats, and it is named here so the compile's `content` default changes nothing
-            silently. `icons` keeps the glyph beside the word in labels mode. */}
-        <LensBar
-          lenses={CONNECT_LENSES}
-          value={lens}
-          onChange={setLens}
-          scope={scopeOf}
-          c="connect"
-          label="Connect lens"
-          labels={expanded}
-          width="fill"
-          icons
-          collapsed={scrolled}
-        />
-      </div>
+      {/* Ruling 1466: the bar's spacing and position are the lens seat's, as on the Feed and
+          Convene, so its top edge is theirs; the 8px this wrapper carried is gone with it. 1465:
+          icon and word on every lens. Below expanded the seat is in flow and the header takes the
+          bar past 72px (1467); at expanded it is sticky at the column's top on the column's
+          ground, so cards pass under an opaque bar and the track's --bg-sunken reads against it
+          (590). */}
+      <LensSeat
+        lenses={CONNECT_LENSES}
+        value={lens}
+        onChange={setLens}
+        scope={scopeOf}
+        c="connect"
+        label="Connect lens"
+      />
       {body}
 
       <IntroSheet
