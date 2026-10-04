@@ -2554,9 +2554,9 @@ async function drive(fn, ...args) {
 // a total (rulings 228 and 317).
 // ---------------------------------------------------------------------------
 const EXPECTED_PATH = path.join(__dirname, "expected-counts.json");
-/** Handoff 40-B: the arms tests/auth.cjs runs against the admin host, swept by the admin run alone; handoff 45-B adds tests/overview.cjs's three, 45-C tests/theme.cjs's admin theme, and 45-D tests/settings.cjs's four. */
+/** Handoff 40-B: the arms tests/auth.cjs runs against the admin host, swept by the admin run alone; handoff 45-B adds tests/overview.cjs's three, 45-C tests/theme.cjs's admin theme, and 45-D tests/settings.cjs's four, and 45-E its staff role arm. */
 const ADMIN_ARM =
-  /-admin (signed-out|accounts|overview|overview error|drawer focus|theme|settings admin|settings analyst|zone|dia off|appearance)$/;
+  /-admin (signed-out|accounts|overview|overview error|drawer focus|theme|settings admin|settings analyst|zone|dia off|appearance|staff role)$/;
 
 function loadExpected() {
   try {
@@ -6872,6 +6872,7 @@ if (require.main === module)
             runAdminOverviewZone,
             runAdminDiaOff,
             runAdminAppearance,
+            runAdminStaffRole,
           } = require("./settings.cjs");
           await drive(runAdminSettings, bt, bname, [390, 844], "dark", "admin");
           await drive(runAdminSettings, bt, bname, [820, 1180], "light", "analyst");
@@ -6881,6 +6882,9 @@ if (require.main === module)
           await drive(runAdminDiaOff, bt, bname, [390, 844], "light");
           await drive(runAdminAppearance, bt, bname, [390, 844]);
           await drive(runAdminAppearance, bt, bname, [1280, 800]);
+          // Handoff 45-E: a role without the Overview opens on Settings (1462, 1464).
+          await drive(runAdminStaffRole, bt, bname, [390, 844], "dark");
+          await drive(runAdminStaffRole, bt, bname, [1280, 800], "light");
         }
         // Handoff 45-C arm 3: the member app's theme on a dark device with no stored choice.
         if (process.env.SPECIAL.includes("theme")) {

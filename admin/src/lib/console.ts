@@ -15,6 +15,8 @@ export type SettingsRead =
 export type ConsoleContext = {
   roles: string[];
   isAdmin: boolean;
+  /** The roles hold admin or analyst (1311): the Overview and its projections answer this account. */
+  overview: boolean;
   /** The staff member's display name, the one the bar shows. */
   name: string;
   settings: SettingsRead;

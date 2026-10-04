@@ -11,9 +11,6 @@ export const ADMIN_COPY = {
   refusalLine: "This account does not have access to the DNA admin console.",
   /** The word beside the mark in ConsoleShell's bar, and the Failure screen's heading. */
   shellHeading: "Admin",
-  /** ConsoleShell access none (12B extraction §2, shell): the one sentence under the bar. */
-  noRole:
-    "Your role does not include the Overview. Sign out and ask the founder for a role that does.",
   menuTitle: "Console",
   enrolHeading: "Set up two-step sign-in",
   enrolInstruction:
@@ -91,7 +88,10 @@ export const CONSOLE_DESTINATIONS: {
   },
 ];
 
-/** Ruling 1311: the roles that open the Overview. Every other role sees the shell's refusal. */
+/**
+ * Ruling 1311: the roles that open the Overview. Every other live role reaches the shell without the
+ * Overview row and opens on Settings (1462, 1464).
+ */
 export const OVERVIEW_ROLES = ["admin", "analyst"] as const;
 
 /**

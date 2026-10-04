@@ -223,7 +223,7 @@ function Status({
 
 function Settings() {
   const ctx = useConsole();
-  const { settings, vocab, isAdmin } = ctx;
+  const { settings, vocab, isAdmin, overview } = ctx;
   const tier = useTier();
   const mode = useMode();
   const touch = mode === "touch";
@@ -449,12 +449,12 @@ function Settings() {
 
   // The window line preview (row 21): the window projection for the default grain and comparison
   // in the company zone, written with clock times in the reading zone (1411). A role the Overview
-  // refuses, or a read that fails, shows no preview.
+  // refuses is never sent to the projection (45-E item 4), and a read that fails shows no preview.
   const [preview, setPreview] = useState<WindowRead | null>(null);
   const defGrain = staff?.default_grain ?? null;
   const defCompare = staff?.default_compare ?? null;
   useEffect(() => {
-    if (tab !== "personal" || !defGrain || !defCompare || !companyZone) return;
+    if (!overview || tab !== "personal" || !defGrain || !defCompare || !companyZone) return;
     const sb = getSupabase();
     if (!sb) return;
     let live = true;
@@ -470,7 +470,7 @@ function Settings() {
     return () => {
       live = false;
     };
-  }, [tab, defGrain, defCompare, companyZone]);
+  }, [overview, tab, defGrain, defCompare, companyZone]);
 
   // ---------------------------------------------------------------------------------------------
   // Render.

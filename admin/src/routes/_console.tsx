@@ -7,9 +7,7 @@
 //
 // Handoff 45-B Part C item 1: the chrome at aal2 is Strand's ConsoleShell (compile
 // v1790885781186000, 1309), which replaced the empty Shell of 40-B. The gate is unchanged above it:
-// ConsoleShell is the chrome at aal2 and nothing more. `access` is full when the roles hold admin
-// or analyst (1311) and none otherwise, in which case the shell keeps its bar and shows the one
-// sentence and never the page. The staff name is the member's own, read the way the member app's
+// ConsoleShell is the chrome at aal2 and nothing more. The staff name is the member's own, read the way the member app's
 // shell reads it (useAuth's members row), and the role is the first live role's label from the
 // platform_role_kinds vocabulary, never a label map in code.
 //
@@ -19,6 +17,11 @@
 // is the account's (1393). Settings is the last navigation row (1410), and the page that is current
 // follows the route. Sign out everywhere ends with the extraction's signed-out screen, which this
 // gate renders after the session has gone, in place of the redirect to the sign-in.
+//
+// Handoff 45-E (1410, 1462, 1464): every live staff role reaches the shell with `access` full, so
+// Settings is always available. The Overview row is shown only when the roles hold admin or analyst
+// (1311), the projections' own gate, and a role without it that lands on the root is sent to
+// Settings with replace, so Back never returns to a page it cannot see.
 import { Outlet, createFileRoute, useLocation, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/strand/Button";
@@ -56,6 +59,8 @@ function Console() {
   const token = session?.access_token ?? null;
   const pathname = useLocation({ select: (l) => l.pathname });
   const current = pathname.replace(/\/+$/, "") === "/settings" ? "settings" : "overview";
+  const roles = useMemo(() => (read.status === "ready" ? read.state.roles : []), [read]);
+  const overview = roles.some((r) => (OVERVIEW_ROLES as readonly string[]).includes(r));
 
   useEffect(() => {
     if (ready && !session && !signedOutEverywhere) void navigate({ to: "/sign-in", replace: true });
@@ -133,6 +138,17 @@ function Console() {
     };
   }, [atShell, settingsRun]);
 
+  // A role without the Overview opens on Settings (1464).
+  const toSettings = atShell && !overview && current === "overview";
+  useEffect(() => {
+    if (toSettings) void navigate({ to: "/settings", replace: true });
+  }, [toSettings, navigate]);
+  const destinations = useMemo(
+    () =>
+      overview ? CONSOLE_DESTINATIONS : CONSOLE_DESTINATIONS.filter((d) => d.id !== "overview"),
+    [overview],
+  );
+
   const roleLabels = useMemo<Record<string, string>>(
     () =>
       vocab && Array.isArray(vocab.platform_role_kinds)
@@ -140,12 +156,12 @@ function Console() {
         : {},
     [vocab],
   );
-  const roles = useMemo(() => (read.status === "ready" ? read.state.roles : []), [read]);
   const name = member?.name ?? "";
   const context = useMemo<ConsoleContext>(
     () => ({
       roles,
       isAdmin: roles.includes("admin"),
+      overview,
       name,
       settings,
       vocab,
@@ -164,7 +180,7 @@ function Console() {
         }
       },
     }),
-    [roles, name, settings, vocab],
+    [roles, overview, name, settings, vocab],
   );
 
   // Extraction §2d S2: the signed-out screen, after every session has ended, this one included.
@@ -225,20 +241,17 @@ function Console() {
     ) : (
       <Enrolment onVerified={() => void reread()} />
     );
-  const access = state.roles.some((r) => (OVERVIEW_ROLES as readonly string[]).includes(r))
-    ? "full"
-    : "none";
+  if (toSettings) return null;
   const firstRole = state.roles[0];
   const role = firstRole ? (roleLabels[firstRole] ?? firstRole) : undefined;
   return (
-    <div data-testid="admin-shell" data-access={access} style={{ height: "100dvh" }}>
+    <div data-testid="admin-shell" data-access="full" style={{ height: "100dvh" }}>
       <ConsoleShell
         staff={{ name: member?.name ?? "", role }}
-        destinations={CONSOLE_DESTINATIONS}
+        destinations={destinations}
         current={current}
         word={ADMIN_COPY.shellHeading}
-        access={access}
-        noRoleText={ADMIN_COPY.noRole}
+        access="full"
         menuTitle={ADMIN_COPY.menuTitle}
         onNavigate={(id) => {
           if (id === "overview") void navigate({ to: "/" });
