@@ -116,9 +116,15 @@ async function tap(page, selector) {
 }
 
 async function lensTab(page, label) {
-  // Icon-only below expanded: match the folded accessible name, "{label}: {scope}".
+  // Match the folded accessible name, "{label}: {scope}". Since Fix PR 08 (1467) Connect's bar
+  // docks in the header past 72px below expanded, and the in-page bar keeps its space hidden, so
+  // the tab is whichever of the two is visible.
   return page
-    .locator(`[role="tablist"][aria-label="Connect lens"] [role="tab"][aria-label^="${label}:"]`)
+    .locator(
+      `[role="tablist"][aria-label="Connect lens"] [role="tab"][aria-label^="${label}:"], ` +
+        `[data-app-header] [role="tablist"] [role="tab"][aria-label^="${label}:"]`,
+    )
+    .filter({ visible: true })
     .first();
 }
 
@@ -169,11 +175,13 @@ async function runConnect(browserType, bname, vp, theme) {
       const tr = document
         .querySelector('[role="tablist"][aria-label="Connect lens"]')
         .getBoundingClientRect();
-      const wrap = document.querySelector('[data-testid="lens-bar-wrap"]').getBoundingClientRect();
+      // Fix PR 08 (1466): the lens seat replaced Connect's own wrapper. Below expanded the seat has
+      // no padding of its own, so the ground is read in the column's top padding just above it.
+      const seatEl = document.querySelector('[data-testid="connect"] [data-lens-seat]');
+      const wrap = seatEl.getBoundingClientRect();
       return {
         column: getComputedStyle(col).backgroundColor,
-        wrap: getComputedStyle(document.querySelector('[data-testid="lens-bar-wrap"]'))
-          .backgroundColor,
+        wrap: getComputedStyle(seatEl).backgroundColor,
         track: getComputedStyle(
           document.querySelector('[role="tablist"][aria-label="Connect lens"]'),
         ).backgroundColor,
@@ -183,7 +191,7 @@ async function runConnect(browserType, bname, vp, theme) {
           trackX: Math.round(tr.left + tr.width / 2),
           trackY: Math.round(tr.top + tr.height / 2),
           groundX: Math.round(tr.left + tr.width / 2),
-          groundY: Math.round(wrap.top + 2),
+          groundY: Math.round(exp ? wrap.top + 2 : wrap.top - 4),
         },
       };
     }, expanded);
@@ -261,7 +269,11 @@ async function runConnect(browserType, bname, vp, theme) {
     // reaches window, so registered against window this repainted only on mount and on resize.
     await setTop(0);
     await page.waitForTimeout(200);
-    const fade = await fadeProbe(page, "[data-testid='lens-bar-wrap']");
+    // Below expanded the header holds the bar past 72px (1467), so it is the edge, as on the Feed.
+    const fade = await fadeProbe(
+      page,
+      expanded ? "[data-testid='connect'] [data-lens-seat]" : "[data-app-header]",
+    );
     record(
       tag +
         ": no member card is invisible while any part of it is below the lens bar, none fades" +

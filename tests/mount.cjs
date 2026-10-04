@@ -1524,7 +1524,8 @@ async function runMountAuth(bt, bname, [w, h], theme, route) {
 }
 
 /** Item 5's first row, read on the live view: the header's LensBar is AppHeader's only where a
- *  surface registers one, so the shell routes that register none show none once scrolled. */
+ *  surface registers one, so the shell routes that register none show none once scrolled, and
+ *  Connect, which registers since Fix PR 08 (1467), shows its own. */
 async function runMountShell(bt, bname, [w, h], theme) {
   const tag = `${bname}-${w}x${h}-${theme}-mount-shell`;
   const expanded = w > 1024;
@@ -1553,12 +1554,16 @@ async function runMountShell(bt, bname, [w, h], theme) {
         const n = await page.locator('[data-app-header] [role="tablist"]').count();
         const st = await shellScrolled(page);
         // At expanded the header never takes a lens (AppShell's own guard), so the check says so.
+        // Connect registers its bar since Fix PR 08 (1467), so below expanded the header holds it.
+        const docks = path === "/connect" && !expanded;
         record(
           tag +
             (expanded
               ? ` ${path}: the shell scrolled, the header holds no LensBar at expanded`
-              : ` ${path}: the shell scrolled, the header holds no LensBar (no surface registers one)`),
-          n === 0 && st.scrolled,
+              : docks
+                ? ` ${path}: the shell scrolled, the header holds Connect's LensBar (1467)`
+                : ` ${path}: the shell scrolled, the header holds no LensBar (no surface registers one)`),
+          n === (docks ? 1 : 0) && st.scrolled,
           `${n} bar(s); ${st.detail}`,
         );
       }
