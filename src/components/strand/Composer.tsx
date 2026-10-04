@@ -51,6 +51,7 @@ import {
 import { PostCardRouter } from "@/components/dna/PostCardRouter";
 import type { PostView } from "@/lib/post-view";
 import { domainOf } from "@/lib/post-view";
+import { useKeyboardHeight } from "@/hooks/use-keyboard-height";
 import { AudienceSelect, AUDIENCE_LABEL, type Audience } from "./AudienceSelect";
 import { Avatar } from "./Avatar";
 import { Button } from "./Button";
@@ -194,30 +195,6 @@ export type ComposerProps = {
   /** Correction 7 (ruling 53): verbs that cannot be chosen here, each with its reason in words. */
   disabledVerbs?: Partial<Record<ComposerVerb, string>> | undefined;
 };
-
-/** Software keyboard height on touch devices, from visualViewport. 0 when no keyboard or API. */
-function useKeyboardHeight(active: boolean): number {
-  const [kb, setKb] = useState(0);
-  useEffect(() => {
-    const vv = typeof window !== "undefined" ? window.visualViewport : null;
-    if (!active || !vv) {
-      setKb(0);
-      return;
-    }
-    const f = () => {
-      const h = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
-      setKb(h > 80 ? h : 0);
-    };
-    f();
-    vv.addEventListener("resize", f);
-    vv.addEventListener("scroll", f);
-    return () => {
-      vv.removeEventListener("resize", f);
-      vv.removeEventListener("scroll", f);
-    };
-  }, [active]);
-  return kb;
-}
 
 // Ruling 400: no Connect line; the composer carries no Connect verb.
 const DIA_LINE: Record<ComposerVerb, string> = {

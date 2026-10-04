@@ -412,8 +412,9 @@ export function MessageComposer({
               border: "1px solid " + (focus ? "var(--ink)" : "transparent"),
               background: focus ? "var(--surface)" : "var(--bg-sunken)",
               fontFamily: "var(--font-sans)",
-              fontSize: "var(--text-s)",
-              lineHeight: "var(--text-s-lh)",
+              // Ruling 1456: no editable field under 16px on touch, or iOS WebKit zooms on focus.
+              fontSize: "var(--text-m)",
+              lineHeight: "var(--text-m-lh)",
               color: "var(--ink)",
               resize: "none",
               overflowY: "auto",

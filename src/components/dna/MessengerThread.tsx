@@ -18,6 +18,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type ReactNode,
 } from "react";
 import { Avatar } from "@/components/strand/Avatar";
@@ -42,6 +43,7 @@ import { Toast } from "@/components/strand/Toast";
 import { VoicePlayer } from "@/components/strand/VoicePlayer";
 import { toastStyle } from "@/components/dna/FeedSurface";
 import { MessengerPaneContext } from "@/components/dna/MessengerSurface";
+import { useKeyboardViewport } from "@/hooks/use-keyboard-height";
 import type { Member } from "@/lib/auth";
 import { loadNetwork } from "@/lib/connect";
 import type { Json } from "@/lib/database.types";
@@ -291,6 +293,22 @@ export function MessengerThread({ member, threadId }: { member: Member; threadId
     () => [...others.map((o) => o.name), member.name, ...nameList(thread?.member_names)],
     [others, member.name, thread?.member_names],
   );
+
+  // Ruling 1457: while the keyboard is up the route's frame is the visible area, so the composer
+  // sits on the keyboard and the thread's own bar holds the top; it returns to the shell's height
+  // when the keyboard closes. The measurement is the app's one (src/hooks/use-keyboard-height.ts).
+  const keyboard = useKeyboardViewport(!inPane);
+  const keyboardFrame: CSSProperties | null =
+    keyboard.height > 0
+      ? {
+          position: "fixed",
+          top: keyboard.offsetTop,
+          left: 0,
+          right: 0,
+          height: keyboard.viewportHeight,
+          zIndex: "calc(var(--z-sticky) + 1)" as unknown as number,
+        }
+      : null;
 
   // 1368: below expanded the thread route has no dock and fills the height.
   useEffect(() => {
@@ -1414,7 +1432,7 @@ export function MessengerThread({ member, threadId }: { member: Member; threadId
         avatar={mark}
         subtitle={subtitle || undefined}
         control={control}
-        style={{ flex: 1, minHeight: 0, height: "100%" }}
+        style={{ flex: 1, minHeight: 0, height: "100%", ...keyboardFrame }}
       >
         <div
           data-messenger-thread
@@ -1433,7 +1451,8 @@ export function MessengerThread({ member, threadId }: { member: Member; threadId
             <div
               style={{
                 flex: "none",
-                paddingBottom: "env(safe-area-inset-bottom)",
+                // On the keyboard there is no home indicator under the composer to clear.
+                paddingBottom: keyboardFrame ? 0 : "env(safe-area-inset-bottom)",
                 background: "var(--bg)",
               }}
             >

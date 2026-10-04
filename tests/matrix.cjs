@@ -4,7 +4,7 @@
 // layer, so the real client code paths run against a deterministic backend. Backend behaviour
 // (RLS, the feed view) is verified separately in SQL against the live project.
 // Usage: BASE=https://b2-shell-feed.dna-web-application.pages.dev WEBKIT=1 node tests/matrix.cjs
-// Env: ONLY='[390,844]' runs one viewport; SPECIAL=publish,guards,keyboard,silence,shell,width,targeted,profile,connect,event,discovery,vocab,block,auth,onboarding,mount,sheet,gate,admin,media,messenger,theme runs flows only.
+// Env: ONLY='[390,844]' runs one viewport; SPECIAL=publish,guards,keyboard,fields,silence,shell,width,targeted,profile,connect,event,discovery,vocab,block,auth,onboarding,mount,sheet,gate,admin,media,messenger,theme runs flows only.
 // Ruling 1237: an arm that loses its web process is run again once, alone, in a fresh browser, by
 // `drive()` below; CRASH_PROBE=<arm tag> is the harness probe that proves it (off by default).
 // Brief 3 profile flows live in tests/profile.cjs and Brief 4 Connect flows in tests/connect.cjs; both share this mock.
@@ -292,14 +292,15 @@ const VOCAB = {
     { value: "family_kids", label: "Family and kids", schema_org: ["ChildrensEvent"] },
   ],
   // Handoff 32-B (1093, 1105): the five lenses and the lanes as 20260924100000 leaves them, with
-  // handoff 34-A's Filling up (20260926170000) and its Browse withdrawn again (20260926170400, 1172).
+  // handoff 34-A's Filling up (20260926170000) and its Browse withdrawn again (20260926170400, 1172),
+  // and All's scope line as 20261003140000 sets it (1451).
   convene_lenses: [
     {
       value: "all",
       name: "All",
       short: "All",
       icon: "circle-dot",
-      scope: "Everything happening, as lanes.",
+      scope: "Every event open to you.",
     },
     {
       value: "follow",
@@ -6321,7 +6322,8 @@ async function runSilence(browserType, bname) {
   await browser.close();
 }
 
-// iOS keyboard surrogate: shrink visualViewport and check data-kb and Publish placement.
+// iOS keyboard surrogate: shrink visualViewport and check data-kb and Publish placement, then a
+// pinch-zoom on a thread, which must not read as a keyboard.
 async function runKeyboard(browserType, bname) {
   const tag = `${bname}-390x844-keyboard`;
   armStart(tag);
@@ -6351,6 +6353,13 @@ async function runKeyboard(browserType, bname) {
       fake.height = window.innerHeight - kb;
       target.dispatchEvent(new Event("resize"));
     };
+    // Pinch-zoom: the visual viewport shrinks by the scale and pans, with no keyboard at all.
+    window.__setZoom = (scale, offsetTop) => {
+      fake.scale = scale;
+      fake.height = window.innerHeight / scale;
+      fake.offsetTop = offsetTop;
+      target.dispatchEvent(new Event("resize"));
+    };
   });
   const db = makeMockDb();
   await mockSupabase(page, db);
@@ -6378,6 +6387,177 @@ async function runKeyboard(browserType, bname) {
     await page.evaluate(() => window.__setKeyboard(0));
     await page.waitForTimeout(100);
     record(tag + " restores on keyboard dismiss", (await dialog.getAttribute("data-kb")) === null);
+
+    // Chat on #97: a pinch-zoom is not a keyboard. On a thread with no field focused, zoom to 2
+    // and back: the thread's frame never goes fixed (1457's keyboard frame) and AppShell's
+    // keyboard-close reset never moves a window that was scrolled before the zoom.
+    await page.goto(BASE + "/messages", { waitUntil: "networkidle" });
+    await page.locator("[data-thread-row] [data-thread-open]").first().click();
+    await page.waitForSelector('[data-testid="message-field"]', { timeout: 15000 });
+    await page.waitForTimeout(300);
+    const before = await page.evaluate(() => {
+      if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+      document.documentElement.style.overflow = "auto";
+      document.body.style.minHeight = "3000px";
+      window.scrollTo(0, 40);
+      return { x: window.scrollX, y: window.scrollY };
+    });
+    const framePosition = () =>
+      page.evaluate(() => {
+        const t = document.querySelector("[data-messenger-thread]");
+        const frame = t && t.closest("section");
+        return frame ? getComputedStyle(frame).position : "no frame";
+      });
+    await page.evaluate(() => window.__setZoom(2, 200));
+    await page.waitForTimeout(150);
+    const zoomed = await framePosition();
+    await page.evaluate(() => window.__setZoom(1, 0));
+    await page.waitForTimeout(150);
+    const after = await page.evaluate(() => ({ x: window.scrollX, y: window.scrollY }));
+    record(
+      tag + " pinch-zoom on a thread is not a keyboard: no fixed frame, window scroll unchanged",
+      before.y === 40 &&
+        zoomed !== "fixed" &&
+        zoomed !== "no frame" &&
+        after.x === before.x &&
+        after.y === before.y,
+      `frame at scale 2: ${zoomed}; window before ${JSON.stringify(before)}, after ${JSON.stringify(after)}`,
+    );
+  } catch (e) {
+    record(tag + " flow", false, String(e).slice(0, 300));
+  }
+  await browser.close();
+}
+
+// Ruling 1460 (1456's guard): no editable field renders its text under 16px on a touch width, or
+// iOS WebKit zooms the page on focus and does not zoom back. Every matrix width under 1024 (1460
+// named 390 and 768; 768 is not a matrix width, so this is the superset), on the five places a
+// member types: the Feed composer, /messages, a thread, Connect's Filters sheet and the profile
+// editor. The computed size is read off every visible input, textarea and contenteditable, the
+// types that take no text excluded. The iOS keyboard itself is proved on a phone (358), not here.
+const FIELD_WIDTHS = VIEWPORTS.filter(([w]) => w < 1024);
+const NO_TEXT_TYPES = ["checkbox", "radio", "file", "range", "hidden", "submit", "button", "color"];
+
+/** Every visible editable field in `scope`: what it is and the text size it renders. */
+async function fieldSizes(page, scope) {
+  return page.evaluate(
+    ({ scope, skip }) => {
+      const root = scope ? document.querySelector(scope) : document;
+      if (!root) return null;
+      const els = root.querySelectorAll('input, textarea, [contenteditable="true"]');
+      const out = [];
+      for (const el of els) {
+        if (
+          el.tagName === "INPUT" &&
+          skip.includes((el.getAttribute("type") || "text").toLowerCase())
+        )
+          continue;
+        const cs = getComputedStyle(el);
+        if (!el.getClientRects().length || cs.visibility === "hidden" || cs.display === "none")
+          continue;
+        const name =
+          el.getAttribute("aria-label") ||
+          el.getAttribute("placeholder") ||
+          el.getAttribute("name") ||
+          el.getAttribute("data-testid") ||
+          el.id ||
+          "";
+        const type =
+          el.tagName === "INPUT" ? "[type=" + (el.getAttribute("type") || "text") + "]" : "";
+        out.push({
+          el: el.tagName.toLowerCase() + type + (name ? ' "' + name + '"' : ""),
+          px: parseFloat(cs.fontSize),
+        });
+      }
+      return out;
+    },
+    { scope, skip: NO_TEXT_TYPES },
+  );
+}
+
+async function runFields(browserType, bname, [w, h]) {
+  const tag = `${bname}-${w}x${h}-fields`;
+  armStart(tag);
+  const browser = await launch(browserType);
+  const ctx = await browser.newContext({
+    viewport: { width: w, height: h },
+    hasTouch: true,
+    isMobile: true,
+  });
+  const page = await ctx.newPage();
+  const db = makeMockDb();
+  seedPosts(db, 2);
+  // The profile editor is the owner's (tests/profile.cjs's runOwner).
+  Object.assign(db.profile, { mode: "owner" });
+  await mockSupabase(page, db);
+  const press = (sel) =>
+    page
+      .locator(sel)
+      .first()
+      .evaluate((el) => el.click());
+  // One check per route, each on its own: a route that cannot be reached fails by name and the
+  // routes after it still report. `needsField` is false for Connect's Filters, which holds selects.
+  const route = async (where, needsField, reach, scope) => {
+    let detail;
+    let ok = false;
+    try {
+      await reach();
+      const fields = await fieldSizes(page, scope);
+      const small = (fields || []).filter((f) => !(f.px >= 16));
+      ok = !!fields && small.length === 0 && (!needsField || fields.length > 0);
+      detail = !fields
+        ? "the scope " + scope + " did not render"
+        : small.length
+          ? small.map((f) => `${where} at ${w}x${h}: ${f.el} renders ${f.px}px`).join("; ")
+          : fields.length
+            ? fields.map((f) => `${f.el} ${f.px}px`).join("; ")
+            : "no editable field rendered";
+    } catch (e) {
+      detail = `${where} at ${w}x${h} was not reached: ` + String(e).slice(0, 240);
+    }
+    record(`${tag} ${where}: no editable field under 16px (1456, 1460)`, ok, detail);
+  };
+  try {
+    await signIn(page);
+    await route(
+      "Feed composer",
+      true,
+      async () => {
+        await press('[data-testid="compose"]');
+        await page.waitForSelector(COMPOSE_SEL);
+        await page.waitForTimeout(500);
+      },
+      COMPOSE_SEL,
+    );
+    await route("/messages", true, async () => {
+      await page.goto(BASE + "/messages", { waitUntil: "networkidle" });
+      await page.waitForSelector('[data-testid="thread-list"] [data-thread-row]', {
+        timeout: 15000,
+      });
+      await page.waitForTimeout(300);
+    });
+    await route("a thread", true, async () => {
+      await page.locator("[data-thread-row] [data-thread-open]").first().click();
+      await page.waitForURL(/\/messages\/[^/?#]+/, { timeout: 15000 });
+      await page.waitForSelector('[data-testid="message-field"]', { timeout: 15000 });
+      await page.waitForTimeout(300);
+    });
+    await route("Connect Members, Filters open", false, async () => {
+      await page.goto(BASE + "/connect", { waitUntil: "networkidle" });
+      await page.waitForSelector('[data-testid="connect"]', { timeout: 20000 });
+      await press('[data-testid="open-filters"]');
+      await page.waitForSelector('[role="dialog"][aria-label="Filters"]', { timeout: 15000 });
+      await page.waitForTimeout(400);
+    });
+    await route("the profile editor", true, async () => {
+      await page.goto(BASE + "/m/thandiwe-dube", { waitUntil: "networkidle" });
+      await page.waitForSelector('[data-testid="profile"]:not([data-view="loading"])', {
+        timeout: 20000,
+      });
+      await press('[data-testid="edit-profile"]');
+      await page.waitForSelector('[data-testid="profile"][data-edit="1"]', { timeout: 15000 });
+      await page.waitForTimeout(500);
+    });
   } catch (e) {
     record(tag + " flow", false, String(e).slice(0, 300));
   }
@@ -6461,6 +6641,9 @@ if (require.main === module)
           await drive(runPublishGuards, bt, bname, [1280, 800], "dark");
         }
         if (process.env.SPECIAL.includes("keyboard")) await drive(runKeyboard, bt, bname);
+        if (process.env.SPECIAL.includes("fields"))
+          for (const vp of only ? [only].filter(([w]) => w < 1024) : FIELD_WIDTHS)
+            await drive(runFields, bt, bname, vp);
         if (process.env.SPECIAL.includes("convene")) {
           await drive(runConvene, bt, bname, [390, 844], "light");
           await drive(runConvene, bt, bname, [1280, 800], "dark");
@@ -6764,6 +6947,7 @@ if (require.main === module)
       await drive(runPublishGuards, bt, bname, [1280, 800], "dark");
       await drive(runSilence, bt, bname);
       await drive(runKeyboard, bt, bname);
+      for (const vp of FIELD_WIDTHS) await drive(runFields, bt, bname, vp);
       // Convene Pass 1 (P1-SPEC section 6): the composer's Convene mode and the card.
       await drive(runConvene, bt, bname, [390, 844], "light");
       await drive(runConvene, bt, bname, [1280, 800], "dark");

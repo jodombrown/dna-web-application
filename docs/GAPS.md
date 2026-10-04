@@ -7996,3 +7996,37 @@ is assigned by this entry (ruling 638).**
 a `comment on function`, so the catalogue still reads "the mime must be one of the seven" from
 `20261002150000`. Owed: the comment restated with the eight in the next migration that touches the
 function.
+
+---
+
+## Unnumbered, from Fix PR 07 (handoff 44), for Lane A to number under ruling 760
+
+### The Fix PR number read from this register collides with a merged Fix PR 06
+
+**Severity: low. Opened 3 October 2026 during handoff 44's gate.**
+
+Handoff 44 takes the next Fix PR number from the highest "Fix PR NN" this register cites, which was 05,
+so 06. `docs/audit/FIX-PR-06.md`, merged in #46 on 18 September, is already Fix PR 06 (rulings 588 to
+590), and the register never cites it. This PR took 07. Owed: one source for the Fix PR sequence, either
+an entry here for every Fix PR or the handoff reading `docs/audit/` as well.
+
+### `src/components/ui/input.tsx` and `textarea.tsx` render at 14px from 768 up, and stay in the tree
+
+**Severity: low. Opened 3 October 2026 during Fix PR 07 item 1 (ruling 1456).**
+
+The shadcn `Input` carries `text-base md:text-sm`, which is 14px from 768 to 1023, a touch width.
+Nothing renders it today; its one importer is `src/components/ui/sidebar.tsx`, which nothing imports.
+Under rulings 70 and 72 no surface may use it, but if one did, 1456 would be broken on an iPad, and the
+matrix's `fields` arm would only catch it on a route that arm visits. Owed: removing the unused
+shadcn parts, as their own change.
+
+### No arm reproduces W60's masthead loop; the proof is the founder's phone (358)
+
+**Severity: moderate. Opened 3 October 2026 during Fix PR 07 item 3.**
+
+On the mock, at 390 in Chromium with scroll anchoring turned off, `main` at `1238947` does not loop: the
+range left after condensing never drops under 96px, which is above `RELEASE_PX`. Fix PR 07's guard is
+therefore proved locally only for profiles that can hold the condensed state (it condenses once and
+holds) and for ranges it refuses (it stays expanded). The loop it prevents was seen on a real profile
+in Safari. Owed: an arm on WebKit with a seeded short profile whose range after condensing is under
+24px, which fails on `1238947` and passes on the fix.
