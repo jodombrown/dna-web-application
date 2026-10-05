@@ -5496,8 +5496,17 @@ async function runLensSeat(browserType, bname, [w, h]) {
   // Required here rather than at the top: discovery.cjs requires this module.
   require("./discovery.cjs").__seedDiscovery(db);
   await mockSupabase(page, db);
+  // Ruling 357: the arm navigates between three surfaces, and WebKit reports a mocked REST fetch the
+  // navigation cancels as an access-control error; that is the sandbox's, never the app's, and is
+  // read as every other suite reads it (tests/mount.cjs, tests/discovery.cjs).
+  const cancelled = new RegExp(
+    `(?:^|[\\s/])${SB.replace(/\./g, "\\.")}\\S*\\s+due to access control checks\\.?$`,
+  );
   const errors = [];
-  page.on("pageerror", (e) => errors.push(String(e)));
+  page.on("pageerror", (e) => {
+    const text = String(e);
+    if (!cancelled.test(text)) errors.push(text);
+  });
   const open = async (s) => {
     await page.goto(BASE + s.path, { waitUntil: "networkidle" });
     await page.locator(s.root).first().waitFor({ timeout: 20000 });
