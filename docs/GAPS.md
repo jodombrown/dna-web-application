@@ -8055,12 +8055,14 @@ the Feed's and Connect's are in the column and now sit at its start edge, where 
 spanned it. Nothing rules where a `content` bar sits in a column. Owed: a ruling on the bar's inline
 position at medium and expanded on the Feed and Connect, and the lens seat carrying it.
 
-**Ruled by 1502 on 4 October 2026, not yet closed.** At medium and expanded the Feed's and Connect's
-bars span their column with equal seats (`fill`, 952), icon and word kept (1465). The build stopped
-at the addendum's item 6.3: under `fill` every seat takes the widest seat's width ("My Network", 130),
-so the Feed's five seats need 666 against its 616 column at 744, 820 and 1024; they fit at 1280
-(column 760). Connect's four need 534 and fit at every width (616, and 712 at 1280). Owed: a ruling
-on the Feed at medium, then 1502 built on both surfaces.
+**Closed by rulings 1502 and 1504 on 5 October 2026, in Fix PR 08's addendum (#98).** At medium and
+expanded the Feed's and Connect's bars are justified across their column: each seat starts at its own
+word's width (glyph and word, 1465) and the column's remaining width is shared equally, so the track
+spans the column. 1502 first read as `fill`, which priced the Feed's five seats at 666 against its 616
+column at 744, 820 and 1024; 1504 ruled the justified packing, which prices the sum. The sums read
+are 506.69 for the Feed and 479.82 for Connect, against columns of 616 at medium and 760 and 712 at
+1280, so every bar fits; where a sum exceeds its column the bar falls back to the sideways strip and
+never drops a label. Discovery's lens row is unchanged (1170).
 
 ### Two live checks on Convene's seeded Filling up events are red on `main`
 

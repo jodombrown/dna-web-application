@@ -1,8 +1,12 @@
 // The lens bar's one seat (ruling 1466, W71; Fix PR 08). Feed, Connect and Convene each wrapped
 // their own bar, and Connect's wrapper added 8px of top padding, so its bar sat lower than the other
 // two. The seat owns the bar's spacing and position on every lens surface, and the bar's packing
-// with it: icon and word on every lens at every tier, each seat sized to its own word (1465, W72,
-// the props Discovery already passed under 723 and 1145).
+// with it: icon and word on every lens at every tier (1465, W72). At medium and expanded the bar is
+// justified (1502 as 1504 reads it): each seat starts at its own word's width and the column's
+// remaining width is shared equally, so the track spans the column; where the words do not fit,
+// LensBar renders the sideways strip instead and this seat scrolls it, never dropping a label. That
+// is the default for every surface that takes this seat; only Discovery's lens row (`LensSeatRow`,
+// 1170) keeps its `min-content` bar. At compact the bar is the strip, each seat its own word.
 //
 // Where the seat puts the bar, by tier:
 //   - Below expanded, `flow`: in the shell's scroller at the top of the column, so the column's own
@@ -50,9 +54,10 @@ export type LensSeatBarProps<Id extends string> = {
 };
 
 /**
- * The bar as every seat renders it: labels always, icons beside them, each seat its own word's width
- * (`content`, 1145). `strip` is the compact row's `max-content` root, wider than the column and
- * scrolled sideways by the seat; `row` is Discovery's lens row, `min-content` and centred (1170).
+ * The bar as every seat renders it: labels always, icons beside them. `column` is justified across
+ * its column (`justify`, 1502, 1504), the seat's default at medium and expanded; `strip` is the
+ * compact row's `max-content` root, each seat its own word (`content`, 1145), wider than the column
+ * and scrolled sideways by the seat; `row` is Discovery's lens row, `min-content` and centred (1170).
  */
 export function LensSeatBar<Id extends string>({
   lenses,
@@ -79,7 +84,7 @@ export function LensSeatBar<Id extends string>({
       c={c}
       label={label ?? "Lens"}
       labels="always"
-      width="content"
+      width={shape === "column" ? "justify" : "content"}
       icons
       collapsed={collapsed}
       style={style}
@@ -117,10 +122,11 @@ export function LensSeat<Id extends string>({
   };
 
   // 1465 item 2: the active lens in the sideways row's view, on mount and on every lens change, and
-  // again once the document's fonts settle, because the seats' widths are the words' own.
+  // again once the document's fonts settle, because the seats' widths are the words' own. Every tier:
+  // at medium and expanded the row scrolls only when the justified bar has fallen back to the strip.
   useIsoLayoutEffect(() => {
     const row = own.current;
-    if (!row || expanded) return;
+    if (!row) return;
     const reveal = () => {
       if (row.scrollWidth <= row.clientWidth + 1) return;
       const tab = row.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]');
@@ -157,6 +163,10 @@ export function LensSeat<Id extends string>({
         top: pinTop,
         zIndex: 5,
         background: "var(--bg)",
+        // 1504: the strip a justified bar falls back to scrolls here; otherwise nothing overflows.
+        overflowX: "auto",
+        overflowY: "hidden",
+        scrollbarWidth: "none",
         ...(follows === "greeting"
           ? // Ruling 589: the 12 above the bar is the greeting's clearance, painted by the shadow.
             { padding: "12px 0", margin: "-12px 0", boxShadow: "0 -12px 0 0 var(--bg)" }

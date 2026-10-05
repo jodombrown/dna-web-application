@@ -5472,6 +5472,11 @@ async function runShell(browserType, bname, [w, h]) {
  * the header and the shell's scroller at or below the docking point, the seat's bottom edge, on all
  * three surfaces; with the bar in the page a lens change leaves the scroll where it was.
  *
+ * Rulings 1502 and 1504, at medium and expanded: the Feed's and Connect's bar is justified across
+ * its column, read from the seats themselves (track equal to the column, no seat under its word, the
+ * same spare in every seat), with a `JUSTIFY` line naming the sum against the column; Convene's lens
+ * row is exempt and its bar stays narrower than the row.
+ *
  * Ruling 1503, at 820 and 1280 on Convene: a lens change made 400px past the lanes' top returns the
  * column to the lanes' top, and one made at the lanes' top moves nothing. The lanes' top is read as
  * Discovery reads it, the column's first block after the header row, and printed as a `LANES` line.
@@ -5531,10 +5536,99 @@ async function runLensSeat(browserType, bname, [w, h]) {
     }, label);
   try {
     await signIn(page);
+    // Rulings 1502 and 1504, at medium and expanded: the Feed's and Connect's bar is justified across
+    // its column. Each seat's natural width is its own content (glyph, gap, word with its 700
+    // reservation) plus padding and border, floored at the 44 seat; the spare is what it was grown
+    // by. Convene's lens row is exempt and its bar stays narrower than the row (1170).
+    const justified = (s) =>
+      page.evaluate(
+        ({ root, label }) => {
+          const bar = document.querySelector(
+            `${root} [data-lens-seat] [role="tablist"][aria-label="${label}"]`,
+          );
+          if (!bar) return null;
+          const seat = bar.closest("[data-lens-seat]");
+          const cs = getComputedStyle(seat);
+          const column =
+            seat.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+          const tabs = [...bar.querySelectorAll('[role="tab"]')].map((t) => {
+            const ts = getComputedStyle(t);
+            const kids = [...t.children];
+            const inner =
+              kids.reduce((a, k) => a + k.getBoundingClientRect().width, 0) +
+              (parseFloat(ts.columnGap) || 0) * Math.max(0, kids.length - 1);
+            const natural = Math.max(
+              44,
+              inner +
+                parseFloat(ts.paddingLeft) +
+                parseFloat(ts.paddingRight) +
+                parseFloat(ts.borderLeftWidth) +
+                parseFloat(ts.borderRightWidth),
+            );
+            const w = t.getBoundingClientRect().width;
+            return {
+              id: t.getAttribute("data-lens"),
+              w: +w.toFixed(2),
+              natural: +natural.toFixed(2),
+              spare: +(w - natural).toFixed(2),
+            };
+          });
+          const n = tabs.length;
+          return {
+            column: +column.toFixed(2),
+            track: +bar.getBoundingClientRect().width.toFixed(2),
+            sum: +(8 + 2 * (n - 1) + tabs.reduce((a, t) => a + t.natural, 0)).toFixed(2),
+            spread: bar.getAttribute("data-lensbar-spread"),
+            tabs,
+          };
+        },
+        { root: s.root, label: s.label },
+      );
     const tops = {};
     for (const s of SEAT_SURFACES) {
       await open(s);
       tops[s.id] = await barTop(s.label);
+      if (tier === "compact") continue;
+      if (s.id === "convene") {
+        const ex = await page.evaluate(() => {
+          const bar = document.querySelector(
+            '[data-layout-top] [role="tablist"][aria-label="Convene lens"]',
+          );
+          const row = bar && bar.closest("[data-layout-top]");
+          return bar && row
+            ? {
+                bar: +bar.getBoundingClientRect().width.toFixed(2),
+                row: +row.getBoundingClientRect().width.toFixed(2),
+              }
+            : null;
+        });
+        record(
+          tag + " convene: the lens row is exempt, its bar narrower than the row (1502, 1170)",
+          !!ex && ex.bar < ex.row - 1,
+          JSON.stringify(ex),
+        );
+        continue;
+      }
+      const j = await justified(s);
+      console.log(
+        `JUSTIFY ${tag} ${s.id} sum=${j && j.sum} column=${j && j.column} track=${j && j.track} spread=${j && j.spread}`,
+      );
+      const spares = j ? j.tabs.map((t) => t.spare) : [];
+      record(
+        tag + ` ${s.id}: the track spans its column's content width within 1px (1502, 1504)`,
+        !!j && Math.abs(j.track - j.column) <= 1,
+        JSON.stringify(j),
+      );
+      record(
+        tag + ` ${s.id}: every seat is at least its own word's width (1465, 1504)`,
+        !!j && j.tabs.every((t) => t.w >= t.natural - 0.5),
+        JSON.stringify(j),
+      );
+      record(
+        tag + ` ${s.id}: the spare width per seat is equal within 0.5px (1504)`,
+        !!j && spares.length > 1 && Math.max(...spares) - Math.min(...spares) <= 0.5,
+        JSON.stringify(j),
+      );
     }
     console.log(
       `SEAT ${tag} tier=${tier} feed=${tops.feed} connect=${tops.connect} convene=${tops.convene}`,

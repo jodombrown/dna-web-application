@@ -38,11 +38,17 @@
 //   need    = 2(TRACK_PAD + TRACK_BORDER) + GAP(n−1) + body
 //   body    = n · seat(widest)   under width="fill"     — every seat is equal, so each holds the widest
 //   body    = Σ seat(wᵢ)         under width="content"  — every seat is exactly its own label
+//   body    = Σ seat(wᵢ)         under width="justify"  — every seat starts at its own label
 // 981 writes the condition in rather than the answer: a packing where seats share takes the widest
-// branch, and the test is extended, never assumed. Since Fix PR 08 (1465) every in-page bar is the
-// lens seat's, `labels="always"` under `content`, which never measures; the header's `compact` bar
-// passes `fill`. Under `content` a word reserves its 700 width (`[data-lens-word]`), so selection is
-// still not a layout input (952).
+// branch, and the test is extended, never assumed. Ruling 1504 extends it with `justify` (1502's
+// "evenly distributed"): each seat starts at its own word's width and the column's remaining width
+// is shared equally across the seats, so the track spans the column. It prices the sum against the
+// column the bar sits in (its parent's content box), and where the sum exceeds it the bar renders as
+// the sideways strip, `content` at `max-content` for its host to scroll; it never drops a label
+// (1465), so `justify` never switches to icon-first. The lens seat renders `justify` at medium and
+// expanded and `content` in the compact strip and Discovery's lens row; the header's `compact` bar
+// passes `fill`. A word reserves its 700 width (`[data-lens-word]`), so under `content` and
+// `justify` selection is still not a layout input (952).
 // The probe measures the label and nothing else; the seat's own padding, border and glyph are added
 // by `seat()` above, so one arithmetic change cannot pass silently through the probe's markup.
 // A measurement of zero is not a measurement (item 16): the bar keeps the rendering it has and
@@ -156,10 +162,11 @@ export type LensBarProps<Id extends string = string> = {
    * The packing this bar renders, and therefore the one its fit test prices (ruling 981, item 24).
    * `fill` stretches the track and divides it into equal seats, which is ruling 952's distribution
    * and what the header's compact bar renders. `content` lets each seat hug its own label; it is the
-   * compile's default, every in-page bar renders it since Fix PR 08 (1465), and it is named here so
-   * the default can never change a page silently.
+   * compile's default and is named here so the default can never change a page silently. `justify`
+   * (1504) starts each seat at its own label and shares the column's remaining width equally, or
+   * falls back to `content` as a strip its host scrolls when the labels do not fit.
    */
-  width?: "content" | "fill" | undefined;
+  width?: "content" | "fill" | "justify" | undefined;
   /** Renders each seat's glyph beside its word in labels mode (item 51). Priced by the fit test. */
   icons?: boolean | undefined;
   /** Host signal: the member scrolled down; the descriptor collapses, latched. */
@@ -196,6 +203,8 @@ export function LensBar<Id extends string = string>({
   // The compile's own initial state: the bar assumes it fits and corrects on its first measurement,
   // so a zero measurement under the guard below keeps labels rather than latching icon-first.
   const [fit, setFit] = useState(true);
+  // 1504: whether the labels fit the column under `justify`; when they do not, the strip.
+  const [spread, setSpread] = useState(true);
   const [hov, setHov] = useState<string | null>(null);
   // Item 53 (ruling 62): `title` is a pointer affordance — it never opens on touch and it duplicates
   // the accessible name — so it renders for pointer only. `aria-label` is unconditional. Strand's
@@ -203,7 +212,10 @@ export function LensBar<Id extends string = string>({
   // exactly that, so there is no second input-mode hook and no render-prop component.
   const pointer = useMode() === "pointer";
   // `compact` forces icon-first, so it never measures (item 50).
-  const canSwitch = !compact && !labels && lenses.length > 0 && lenses.every((l) => !!l.icon);
+  const justify = width === "justify" && !compact && lenses.length > 0;
+  const canSwitch =
+    !compact && !labels && !justify && lenses.length > 0 && lenses.every((l) => !!l.icon);
+  const measures = canSwitch || justify;
   const key =
     lenses.map((l) => l.label).join("\u0001") +
     "\u0002" +
@@ -213,8 +225,9 @@ export function LensBar<Id extends string = string>({
     "\u0002" +
     (trailing ? "t" : "");
   useLayoutEffect(() => {
-    if (!canSwitch) {
+    if (!measures) {
       setFit(true);
+      setSpread(true);
       return;
     }
     let alive = true;
@@ -238,9 +251,15 @@ export function LensBar<Id extends string = string>({
         per.push(w);
         raw = Math.max(raw, w);
       }
-      // 25 §4: the column less the trailing seat and its gap, when there is one.
-      const col =
-        wrap.current.clientWidth - (trail.current ? trail.current.offsetWidth + TRAIL_GAP : 0);
+      // 25 §4: the column less the trailing seat and its gap, when there is one. Under `justify`
+      // the column is the host's content box, because the strip's root is wider than the column.
+      const host = justify ? wrap.current.parentElement : null;
+      const hostCs = host ? getComputedStyle(host) : null;
+      const col = host
+        ? host.clientWidth -
+          (parseFloat(hostCs?.paddingLeft ?? "0") || 0) -
+          (parseFloat(hostCs?.paddingRight ?? "0") || 0)
+        : wrap.current.clientWidth - (trail.current ? trail.current.offsetWidth + TRAIL_GAP : 0);
       const box = wrap.current.offsetWidth;
       // Screen px per layout px; both terms are border-box, so exactly 1 unscaled (item 17).
       const scale = box > 0 ? wrap.current.getBoundingClientRect().width / box : 1;
@@ -261,7 +280,9 @@ export function LensBar<Id extends string = string>({
         width === "fill"
           ? n * seatW(widest)
           : per.reduce((a, r) => a + seatW(Math.ceil(r / scale)), 0);
-      setFit(TRACK + GAP * (n - 1) + body <= col);
+      const fits = TRACK + GAP * (n - 1) + body <= col;
+      if (justify) setSpread(fits);
+      else setFit(fits);
     };
     measure();
     raf = requestAnimationFrame(measure);
@@ -270,6 +291,7 @@ export function LensBar<Id extends string = string>({
       const ro = new ResizeObserver(measure);
       ro.observe(wrap.current);
       if (trail.current) ro.observe(trail.current);
+      if (justify && wrap.current.parentElement) ro.observe(wrap.current.parentElement);
       cleanups.push(() => ro.disconnect());
     }
     const fonts = typeof document !== "undefined" ? document.fonts : undefined;
@@ -284,9 +306,10 @@ export function LensBar<Id extends string = string>({
       if (tid) clearTimeout(tid);
       cleanups.forEach((f) => f());
     };
-  }, [canSwitch, key]);
+  }, [measures, justify, key]);
   const iconFirst = !!compact || (canSwitch && !fit);
-  const stretch = width === "fill" || !!compact;
+  const justified = justify && spread;
+  const stretch = width === "fill" || !!compact || justified;
   // One value for the whole bar, so every seat's flex base is floored by the same padding (973).
   // `flex-basis: 0` under `box-sizing: border-box` cannot take a border box below its own padding,
   // so a padding that varies by seat divides the track unequally even when the flex does not.
@@ -310,6 +333,7 @@ export function LensBar<Id extends string = string>({
       aria-label={label}
       data-lensbar={iconFirst ? "icon-first" : "labels"}
       data-lensbar-width={width}
+      data-lensbar-spread={justify ? (spread ? "1" : "0") : undefined}
       style={{
         position: "relative",
         display: "flex",
@@ -367,7 +391,9 @@ export function LensBar<Id extends string = string>({
               // Ruling 952 (G48) and item 46: every seat takes the same share, so selection is not
               // a layout input. Equal flex is what `fill` means; under `content` each seat hugs its
               // own label at its 700 width, which every in-page bar renders since Fix PR 08 (1465).
-              flex: stretch ? "1 1 0" : undefined,
+              // 1504: under `justify` each seat's base is its own word (`auto`) and the free width is
+              // grown into equally, so the spare per seat is one value.
+              flex: stretch ? (justified ? "1 1 auto" : "1 1 0") : undefined,
               // Item 54a, rulings 905 and 498: the floor is 44 in every mode, `compact` included.
               // It was `--target-min` (24) in the header slot and unset in labels mode.
               minWidth: SEAT,
@@ -416,6 +442,8 @@ export function LensBar<Id extends string = string>({
         maxWidth: "100%",
         minWidth: 0,
         ...style,
+        // 1504: the labels do not fit the column, so the bar is the strip its host scrolls.
+        ...(justify && !spread ? { width: "max-content", maxWidth: "none" } : null),
       }}
     >
       <style>
@@ -427,7 +455,7 @@ export function LensBar<Id extends string = string>({
           ".strand-lens [data-lens-word]::after{content:attr(data-lens-word);font-weight:700;" +
           "height:0;overflow:hidden;visibility:hidden;pointer-events:none;user-select:none}"}
       </style>
-      {canSwitch && (
+      {measures && (
         // Item 54b: the probe sits inside a 0×0 `overflow: hidden` box — clipped for overflow, so it
         // adds nothing to the scrollable width of the container it measures, still laid out, still
         // read through getBoundingClientRect, which is the box's own laid-out width on every engine.
