@@ -13,10 +13,10 @@ import { Ghosts } from "@/components/dna/Ghosts";
 import { PostCardRouter } from "@/components/dna/PostCardRouter";
 import { Button } from "@/components/strand/Button";
 import { CardFade } from "@/components/dna/CardFade";
+import { LensSeat } from "@/components/dna/LensSeat";
 import { EmptyState } from "@/components/strand/EmptyState";
 import { Icon } from "@/components/strand/Icon";
 import { IconButton } from "@/components/strand/IconButton";
-import { LensBar } from "@/components/strand/LensBar";
 import { Toast } from "@/components/strand/Toast";
 import type { ComposerVerb } from "@/components/strand/cmeta";
 import type { Member } from "@/lib/auth";
@@ -220,7 +220,8 @@ export function FeedSurface({ member, view }: { member: Member; view: FeedView }
   // Lens selection is a history entry (?lens=). Selecting from the pinned bar or the header slot
   // never moves the bar: on expanded the column scrolls so the first item of the new list sits
   // exactly beneath the pinned block, offset by the block's measured height (ruling 109); on compact
-  // and medium the scroller is set just below the hidden in-flow bar so the header stays in lens mode.
+  // and medium the lens seat sets the scroller to the docking point so the header stays in lens
+  // mode (1468, `holdLensDock`, the one function all three lens surfaces use).
   const anchorRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const setLens = (id: LensId) => {
@@ -242,29 +243,18 @@ export function FeedSurface({ member, view }: { member: Member; view: FeedView }
     });
   }, [view.kind, lens, navigate]);
   useEffect(() => () => setHeaderLens(null), []);
-  const placeRef = useRef<{ lens: LensId; stuck: boolean; scrolled: boolean }>({
-    lens,
-    stuck,
-    scrolled,
-  });
+  const placeRef = useRef<{ lens: LensId; stuck: boolean }>({ lens, stuck });
   placeRef.current.stuck = stuck;
-  placeRef.current.scrolled = scrolled;
   useIsoLayoutEffect(() => {
     if (placeRef.current.lens === lens) return;
     placeRef.current.lens = lens;
     const a = anchorRef.current;
     const sc = scrollerRef.current;
-    if (!a || !sc) return;
-    if (expandedTier) {
-      const list = listRef.current;
-      if (placeRef.current.stuck && list) {
-        // The block's extent is measured live: control wrapper plus the LensBar wrapper as pinned.
-        const blockBottom = a.getBoundingClientRect().bottom - sc.getBoundingClientRect().top;
-        sc.scrollTop = Math.max(0, Math.round(list.offsetTop - blockBottom));
-      }
-    } else if (placeRef.current.scrolled) {
-      sc.scrollTop = a.offsetTop + a.offsetHeight;
-    }
+    const list = listRef.current;
+    if (!a || !sc || !list || !expandedTier || !placeRef.current.stuck) return;
+    // The block's extent is measured live: control wrapper plus the lens seat as pinned.
+    const blockBottom = a.getBoundingClientRect().bottom - sc.getBoundingClientRect().top;
+    sc.scrollTop = Math.max(0, Math.round(list.offsetTop - blockBottom));
   }, [lens, expandedTier, scrollerRef]);
 
   // Read more expands in place: a pushState to /posts/:id carrying fromFeed, scroll untouched.
@@ -544,44 +534,21 @@ export function FeedSurface({ member, view }: { member: Member; view: FeedView }
               </div>
             </>
           )}
-          <div
-            ref={anchorRef}
-            data-lens-anchor
-            data-stuck={expandedTier ? (stuck ? "1" : "0") : undefined}
-            style={
-              expandedTier
-                ? {
-                    position: "sticky",
-                    top: stuck ? 80 : 0,
-                    zIndex: 5,
-                    background: "var(--bg)",
-                    padding: "12px 0",
-                    margin: "-12px 0",
-                    boxShadow: "0 -12px 0 0 var(--bg)",
-                  }
-                : {
-                    visibility: scrolled ? "hidden" : "visible",
-                    // Tall enough that "just below the bar" is past the 72px header swap.
-                    minHeight: 64,
-                  }
-            }
-          >
-            {/* Ruling 981 (change-list items 24 and 57): the packing is named, never inferred, so
-                the compile's `content` default cannot change this page silently. This bar has
-                stretched its track and divided it into equal seats since ruling 952, which is
-                `fill`, and `fill` is what its fit test therefore prices. `icons` keeps the glyph
-                beside the word in labels mode, which is what this bar has drawn since Brief 2. */}
-            <LensBar
-              lenses={LENSES}
-              value={lens}
-              onChange={setLens}
-              scope={scope}
-              labels={expandedTier}
-              width="fill"
-              icons
-              collapsed={expandedTier ? stuck : scrolled}
-            />
-          </div>
+          {/* Ruling 1466: the bar's spacing and position are the lens seat's, as on Connect and
+              Convene; 1465: icon and word on every lens, each seat its own word's width, in a row
+              that scrolls sideways at compact. At expanded the seat follows the greeting and pins
+              under the composer once the greeting has left (109, 589). */}
+          <LensSeat
+            seatRef={anchorRef}
+            follows="greeting"
+            pinTop={stuck ? 80 : 0}
+            stuck={expandedTier ? stuck : undefined}
+            lenses={LENSES}
+            value={lens}
+            onChange={setLens}
+            scope={scope}
+            collapsed={expandedTier ? stuck : scrolled}
+          />
           <div
             ref={listRef}
             style={{

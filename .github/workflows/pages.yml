@@ -722,9 +722,9 @@ jobs:
   # check (ruling 61) stays the exit criterion. It reads the same deployment at its own URL (1141),
   # the same way `live` and `matrix` do, and it runs only WebKit on the four surfaces 1235 names,
   # through the `gate` token in tests/matrix.cjs: the nine sheet arms, read by 1236's stepped
-  # method; the member event page, its blocks and its flows at 390 light and 1280 dark; the composer
+  # method, and the sheet-focus arm (1484, Fix PR 08); the member event page, its blocks and its flows at 390 light and 1280 dark; the composer
   # as its publish flow at 390 light and its guards at 1280 dark; sign-in's layout at both cells and
-  # its flows at 390 light. Twenty arms, because macOS minutes bill at a multiple of Linux and 1238
+  # its flows at 390 light. Twenty-one arms, because macOS minutes bill at a multiple of Linux and 1238
   # made the repository private, so every minute is paid. No apt, no core dumps and no gdb: those
   # are the Linux job's, and the scripts this job calls run under macOS's bash 3.2 as written.
   webkit-macos:

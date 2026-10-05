@@ -37,6 +37,20 @@ export function useShellScroll(): ShellScroll {
 
 export const ShellScrollProvider = Ctx.Provider;
 
+/**
+ * Ruling 1468 (W74): a lens change never moves the bar. Called on a lens change while the header
+ * holds the bar (below expanded, past SCROLL_SWAP_PX): the shell's scroller is set to the docking
+ * point, the in-page seat's bottom edge, so the new lens's content starts just under the bar and
+ * never above that point, and the header keeps the bar. While the bar is in the page nothing calls
+ * this and the scroll stays where it is. The shell's scroller only: the window is 1457's.
+ */
+export function holdLensDock(scroller: HTMLElement | null, seat: HTMLElement | null) {
+  if (!scroller || !seat) return;
+  const point =
+    seat.getBoundingClientRect().bottom - scroller.getBoundingClientRect().top + scroller.scrollTop;
+  scroller.scrollTop = Math.max(SCROLL_SWAP_PX + 1, Math.round(point));
+}
+
 /** Wire a scroller: returns the state and the onScroll handler to attach to it. Idempotent under
  *  repeated events; the idle timer restarts on every event and clears `moving` 2.5s after the last. */
 export function useScrollState(scrollerRef: RefObject<HTMLElement | null>) {

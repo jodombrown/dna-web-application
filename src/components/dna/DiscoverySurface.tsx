@@ -70,7 +70,8 @@ import {
 import { Icon } from "@/components/strand/Icon";
 import { IconButton } from "@/components/strand/IconButton";
 import { Input } from "@/components/strand/Input";
-import { LensBar, type Lens } from "@/components/strand/LensBar";
+import type { Lens } from "@/components/strand/LensBar";
+import { LensSeat, LensSeatBar, LensSeatRow } from "@/components/dna/LensSeat";
 import type { MenuProps } from "@/components/strand/Menu";
 import { Pane } from "@/components/strand/Pane";
 import { PostCard } from "@/components/strand/PostCard";
@@ -418,7 +419,7 @@ export function DiscoverySurface({
   const expanded = tier === "expanded";
   const paneOpen = expanded && !!paneId;
   const openLane = useLocation({ select: (l) => l.state.discoveryLane });
-  const { scrolled, scrollerRef } = useShellScroll();
+  const { scrollerRef } = useShellScroll();
   const { shareUrl, copyUrl, toast: shareToast } = useShare();
   const [toast, setToast] = useState<string | null>(null);
   const [browseOpen, setBrowseOpen] = useState(false);
@@ -851,49 +852,48 @@ export function DiscoverySurface({
     </div>
   ) : null;
 
-  const lensBar = (inContent: boolean) =>
-    lenses.length ? (
-      <LensBar
-        lenses={lenses}
-        value={lens}
-        onChange={setLens}
-        scope={lensScope}
-        c="convene"
-        label="Convene lens"
-        // Item 7 and B9-SPEC's tiers: labels always and icons at every tier, and each seat sized to
-        // its own word at every tier, never stretched across the row (1145). At compact the bar's
-        // root is `max-content` in a row that scrolls sideways (B9-SPEC's compact line): nothing is
-        // squeezed and the page does not pan. At medium and expanded its row is the shell's lens
-        // row, `[data-layout-top]`, and the root is `min-content`, which is the track's own width
-        // because no seat wraps, capped at the row and centred in it by its inline margins. The
-        // scope line is the root's own and wraps to that width, so it stays under the bar's start
-        // edge and never widens the root past the track to pull the bar off centre.
-        width="content"
-        labels="always"
-        icons
-        collapsed={inContent ? scrolled : undefined}
-        style={
-          compact
-            ? { width: "max-content", maxWidth: "none" }
-            : { width: "min-content", marginInline: "auto" }
-        }
-      />
-    ) : null;
+  // Rulings 1465 and 1466: the bar's packing and its seat are the lens seat's, shared with the Feed
+  // and Connect (src/components/dna/LensSeat.tsx). Labels always and icons at every tier, and each
+  // seat sized to its own word, never stretched across the row (item 7, 1145). At compact the seat
+  // is the in-content row that scrolls sideways (B9-SPEC's compact line): nothing is squeezed and
+  // the page does not pan. At medium and expanded the bar is in the shell's lens row,
+  // `[data-layout-top]`, `min-content`, which is the track's own width because no seat wraps,
+  // capped at the row and centred in it. The scope line is the root's own and wraps to that width,
+  // so it stays under the bar's start edge and never widens the root past the track to pull the bar
+  // off centre.
+  const seatBar = {
+    lenses,
+    value: lens,
+    onChange: setLens,
+    scope: lensScope,
+    c: "convene" as const,
+    label: "Convene lens",
+  };
   // The search (1124) in each tier's place: full width under the lens bar at compact, and in the lens
   // row beside the bar at medium and expanded (`LensRow`).
   const searchField = <SearchField q={lists.q} onApply={applySearch} />;
 
   // The shell's `lanes` mode, the rails and the header lens, each set while mounted and cleared on
-  // unmount (rail-store.ts, header-lens-store.ts). The key is the lens, so the pane opening over the
-  // lanes keeps their scroll and a lens change resets it. There is no right column (item 7).
+  // unmount (rail-store.ts, header-lens-store.ts). The key names the surface and never the lens
+  // (ruling 1468, W74): a lens change is not a surface change, so the shell does not reset the
+  // scroll on it. With the bar in the header the seat holds the docking point; with the bar in the
+  // page or the lens row the scroll stays where it is. The pane opening over the lanes keeps the key
+  // too, so the lanes stay where the member left them (688). There is no right column (item 7).
   const lensKey = lenses.map((l) => l.id + l.label).join("|");
   const railShut = paneOpen || railCollapsed;
   useEffect(() => {
     setShellLayout({
       mode: "lanes",
       rail: railShut ? "collapsed" : "open",
-      key: lens,
-      top: compact ? null : <LensRow bar={lensBar(false)} field={searchField} />,
+      key: "discovery",
+      top: compact ? null : (
+        <LensSeatRow>
+          <LensRow
+            bar={lenses.length ? <LensSeatBar {...seatBar} shape="row" /> : null}
+            field={searchField}
+          />
+        </LensSeatRow>
+      ),
     });
     // The row reads the lens set, the lens, its scope and the search; listing those is enough.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1721,6 +1721,69 @@ export function DiscoverySurface({
         />
       </div>
     ) : null;
+  // Ruling 1503: at medium and expanded the bar is in the shell's lens row and never docks, so a lens
+  // change made while the column is scrolled past the lanes' top returns the lanes to their top; at
+  // or above it nothing moves. The top is measured, never assumed 0: the column's first block after
+  // the header row, whichever the new lens renders (its lanes, its list or the empty column). The
+  // column's position is read in render, before the new lens commits, because the ghosts it shows
+  // while it loads are shorter than the lanes and the column clamps to them; the target is held
+  // until the lens's own content has rendered, then set. Compact is the seat's (`holdLensDock`,
+  // 1468), and the pane opening over the lanes is not a lens change (688).
+  const LANES_TOP =
+    '[data-discovery] > :is([data-lanes], [data-lens-list], [data-empty-column], [aria-label="Loading Convene"])';
+  const lensWas = useRef(lens);
+  const scrollWas = useRef(0);
+  const laneTarget = useRef<number | null>(null);
+  if (lensWas.current !== lens && scrollerRef.current)
+    scrollWas.current = scrollerRef.current.scrollTop;
+  useLayoutEffect(() => {
+    if (lensWas.current === lens) return;
+    lensWas.current = lens;
+    laneTarget.current = null;
+    if (compact) return;
+    const column = scrollerRef.current;
+    const first = column?.querySelector<HTMLElement>(LANES_TOP);
+    if (!column || !first) return;
+    const top = Math.round(
+      first.getBoundingClientRect().top - column.getBoundingClientRect().top + column.scrollTop,
+    );
+    laneTarget.current = Math.min(scrollWas.current, top);
+    column.scrollTop = laneTarget.current;
+  });
+  // The lens's content arrives in steps, so the target is set again as the column grows until it
+  // holds, for at most two seconds and never once the member has scrolled the column themselves.
+  const laneSettle = useRef<(() => void) | null>(null);
+  useLayoutEffect(() => {
+    const column = scrollerRef.current;
+    const target = laneTarget.current;
+    if (target === null || !column) return;
+    const first = column.querySelector<HTMLElement>(LANES_TOP);
+    if (!first || first.getAttribute("aria-label") === "Loading Convene") return;
+    laneTarget.current = null;
+    laneSettle.current?.();
+    const settle = () => {
+      column.scrollTop = target;
+      return Math.abs(column.scrollTop - target) < 1;
+    };
+    const root = first.parentElement;
+    if (settle() || !root) return;
+    const ro = new ResizeObserver(() => {
+      if (settle()) stop();
+    });
+    const events = ["wheel", "touchstart", "keydown", "pointerdown"] as const;
+    const timer = window.setTimeout(() => stop(), 2000);
+    function stop() {
+      ro.disconnect();
+      window.clearTimeout(timer);
+      events.forEach((e) => column?.removeEventListener(e, stop));
+      laneSettle.current = null;
+    }
+    events.forEach((e) => column.addEventListener(e, stop, { passive: true }));
+    ro.observe(root);
+    laneSettle.current = stop;
+  });
+  useEffect(() => () => laneSettle.current?.(), []);
+
   // 688: the lanes stay where the member left them. With the pane bounded the feed column cannot
   // scroll (its offset clamps to 0) and the list column scrolls instead. So the card at the list
   // column's top is kept, with its distance from that top, and when the pane closes the feed column
@@ -1809,11 +1872,7 @@ export function DiscoverySurface({
       )}
     </>
   );
-  const laneStyle = (
-    <style>
-      {".dna-lane::-webkit-scrollbar,[data-lens-anchor]::-webkit-scrollbar{display:none}"}
-    </style>
-  );
+  const laneStyle = <style>{".dna-lane::-webkit-scrollbar{display:none}"}</style>;
   // Medium and expanded: the homes line and the applied chips. With the pane open the row moves
   // into the list column, so rail, list and pane start level (B9-SPEC Revision 2's pane line).
   const headerRow =
@@ -1910,20 +1969,7 @@ export function DiscoverySurface({
       {laneStyle}
       {compact ? (
         <>
-          <div
-            data-lens-anchor
-            // B9-SPEC's compact line: the lens bar's row scrolls sideways at compact; the page never does.
-            style={{
-              visibility: scrolled ? "hidden" : "visible",
-              minHeight: 64,
-              overflowX: "auto",
-              overflowY: "hidden",
-              scrollbarWidth: "none",
-              minWidth: 0,
-            }}
-          >
-            {lensBar(true)}
-          </div>
+          {lenses.length ? <LensSeat {...seatBar} /> : null}
           {/* B9-SPEC's compact line (1124): the search field full width under the lens bar. */}
           {searchField}
           <div

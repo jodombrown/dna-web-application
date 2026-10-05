@@ -127,7 +127,11 @@ export function AppShell({
   // Feed and /posts/:id are one surface (ruling 105): expanding a card in place keeps the column's
   // position, and a lens change keeps the same pathname, so neither resets. A surface in a named
   // layout carries its own key (handoff 31-B): Discovery's pane opening over its lanes changes the
-  // pathname and keeps the key, so the lanes stay where the member left them (688).
+  // pathname and keeps the key, so the lanes stay where the member left them (688). The key names
+  // the surface, never its lens (ruling 1468, W74): a lens change is not a surface change, so it
+  // never reaches this reset, and where the bar is held in the header the seat keeps it there
+  // (`holdLensDock`, src/components/dna/LensSeat.tsx). The other reader of the key is
+  // `clearShellLayout` in src/lib/rail-store.ts, which the Messenger's two keys alone call.
   const pathname = useLocation({ select: (l) => l.pathname });
   const surface = feedView ? "feed" : layout ? "layout:" + layout.key : pathname;
   const onMessages = pathname === "/messages" || pathname.startsWith("/messages/");
@@ -249,8 +253,8 @@ export function AppShell({
   };
 
   // Rulings 107 and 947: below expanded, past 72px of the shell's scroller, the header takes the
-  // lens bar of whichever surface registered one (src/lib/header-lens-store.ts). The Feed and
-  // Discovery register; every other surface keeps the composer entry.
+  // lens bar of whichever surface registered one (src/lib/header-lens-store.ts). The Feed, Connect
+  // (1467) and Discovery register; every other surface keeps the composer entry.
   const headerLens = !expanded && scrolled ? registeredLens : null;
   const bottomPad = compact
     ? "calc(112px + env(safe-area-inset-bottom))"
@@ -409,10 +413,12 @@ export function AppShell({
             {/* Ruling 946: the lens bar is its own full-width row above the columns. It precedes
                 main in the DOM, as the bar precedes the list on every lens surface, and it takes
                 the first child slot the other grids leave empty, so main is the second child of
-                the root in every grid and the route beneath it is never remounted by a switch. */}
+                the root in every grid and the route beneath it is never remounted by a switch.
+                The space above the bar is the lens seat's own (1466, LensSeatRow); the row keeps
+                only its 16 above the columns. */}
             <div
               data-layout-top
-              style={{ gridColumn: "1 / -1", gridRow: 1, minWidth: 0, padding: "24px 0 16px" }}
+              style={{ gridColumn: "1 / -1", gridRow: 1, minWidth: 0, padding: "0 0 16px" }}
             >
               {layout.top}
             </div>

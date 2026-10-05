@@ -173,6 +173,14 @@ export function Sheet({
       const target = explicit ?? heading ?? safe ?? p;
       if (target === heading && heading && !heading.hasAttribute("tabindex"))
         heading.setAttribute("tabindex", "-1");
+      // Ruling 1484 (W82): the heading takes focus so the first thing read is the content, and it
+      // draws no ring. It is `tabindex="-1"`, so Tab never reaches it, and WebKit matches
+      // strand.css's global `:focus-visible` on a script focus that follows a tap, which ringed the
+      // notifications title on iPhone Safari. Inline, so it outranks that rule here and nowhere
+      // else: every control keeps its ring under keyboard focus. A heading a caller made tabbable
+      // keeps its ring too.
+      if (target === heading && heading && heading.getAttribute("tabindex") === "-1")
+        heading.style.outline = "none";
       target.focus?.({ preventScroll: true });
     });
     return () => cancelAnimationFrame(id);

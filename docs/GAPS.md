@@ -8030,3 +8030,49 @@ therefore proved locally only for profiles that can hold the condensed state (it
 holds) and for ranges it refuses (it stays expanded). The loop it prevents was seen on a real profile
 in Safari. Owed: an arm on WebKit with a seeded short profile whose range after condensing is under
 24px, which fails on `1238947` and passes on the fix.
+
+---
+
+## Unnumbered, from Fix PR 08 (handoff 51), for Lane A to number under ruling 760
+
+### The header's lens bar is named "Lens" on every surface
+
+**Severity: low. Opened 4 October 2026 during Fix PR 08 item 3 (ruling 1467).**
+
+`AppHeader` renders the registered bar with no `label`, so `LensBar`'s default names its tablist
+"Lens" whether it holds the Feed's, Connect's or Convene's lenses; the in-page bars are "Lens",
+"Connect lens" and "Convene lens". `HeaderLensBar` (`src/components/strand/AppHeader.tsx`) carries no
+label field, and `src/lib/header-lens-store.ts` has nothing to pass. Connect now registers too, so a
+screen reader hears "Lens" for three different lens sets once the bar docks. Owed: a `label` on
+`HeaderLensBar`, passed by each registering surface and rendered by `AppHeader`.
+
+### The Feed's and Connect's bars sit at the start of the column at medium and expanded
+
+**Severity: low. Opened 4 October 2026 during Fix PR 08 item 2 (ruling 1465).**
+
+Under `width="content"` the bar hugs its words. Discovery's bar is centred in its lens row by 1170;
+the Feed's and Connect's are in the column and now sit at its start edge, where under `fill` they
+spanned it. Nothing rules where a `content` bar sits in a column. Owed: a ruling on the bar's inline
+position at medium and expanded on the Feed and Connect, and the lens seat carrying it.
+
+**Closed by rulings 1502 and 1504 on 5 October 2026, in Fix PR 08's addendum (#98).** At medium and
+expanded the Feed's and Connect's bars are justified across their column: each seat starts at its own
+word's width (glyph and word, 1465) and the column's remaining width is shared equally, so the track
+spans the column. 1502 first read as `fill`, which priced the Feed's five seats at 666 against its 616
+column at 744, 820 and 1024; 1504 ruled the justified packing, which prices the sum. The sums read
+are 506.69 for the Feed and 479.82 for Connect, against columns of 616 at medium and 760 and 712 at
+1280, so every bar fits; where a sum exceeds its column the bar falls back to the sideways strip and
+never drops a label. Discovery's lens row is unchanged (1170).
+
+### Two live checks on Convene's seeded Filling up events are red on `main`
+
+**Severity: moderate. Opened 4 October 2026 during Fix PR 08, which touches no SQL.**
+
+`tests/live-checks.cjs` fails the same two checks on `main` at `8fc0526` (run 511) and on this branch
+(run 512), word for word: "Handoff 34-A addendum (1173): a search whose matches sit one to a lane
+returns the lane" reads `no title for the seeded event lanes not read filling absent`, and
+"Handoff 34-A (1157, 1165): Filling up carries both seeded events, and event_going_names gives each
+three first names" reads `names [null,null]` for both seeded events. The `live` job is red on every
+branch for it, which hides any new live failure behind a known one. Not diagnosed here. Owed: the
+cause read on the canonical project (the seeded events' titles and their going registrations as
+`live_arms` sees them), then the seed or the arm put right.
