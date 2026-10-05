@@ -8054,3 +8054,16 @@ Under `width="content"` the bar hugs its words. Discovery's bar is centred in it
 the Feed's and Connect's are in the column and now sit at its start edge, where under `fill` they
 spanned it. Nothing rules where a `content` bar sits in a column. Owed: a ruling on the bar's inline
 position at medium and expanded on the Feed and Connect, and the lens seat carrying it.
+
+### Two live checks on Convene's seeded Filling up events are red on `main`
+
+**Severity: moderate. Opened 4 October 2026 during Fix PR 08, which touches no SQL.**
+
+`tests/live-checks.cjs` fails the same two checks on `main` at `8fc0526` (run 511) and on this branch
+(run 512), word for word: "Handoff 34-A addendum (1173): a search whose matches sit one to a lane
+returns the lane" reads `no title for the seeded event lanes not read filling absent`, and
+"Handoff 34-A (1157, 1165): Filling up carries both seeded events, and event_going_names gives each
+three first names" reads `names [null,null]` for both seeded events. The `live` job is red on every
+branch for it, which hides any new live failure behind a known one. Not diagnosed here. Owed: the
+cause read on the canonical project (the seeded events' titles and their going registrations as
+`live_arms` sees them), then the seed or the arm put right.
