@@ -8055,6 +8055,13 @@ the Feed's and Connect's are in the column and now sit at its start edge, where 
 spanned it. Nothing rules where a `content` bar sits in a column. Owed: a ruling on the bar's inline
 position at medium and expanded on the Feed and Connect, and the lens seat carrying it.
 
+**Ruled by 1502 on 4 October 2026, not yet closed.** At medium and expanded the Feed's and Connect's
+bars span their column with equal seats (`fill`, 952), icon and word kept (1465). The build stopped
+at the addendum's item 6.3: under `fill` every seat takes the widest seat's width ("My Network", 130),
+so the Feed's five seats need 666 against its 616 column at 744, 820 and 1024; they fit at 1280
+(column 760). Connect's four need 534 and fit at every width (616, and 712 at 1280). Owed: a ruling
+on the Feed at medium, then 1502 built on both surfaces.
+
 ### Two live checks on Convene's seeded Filling up events are red on `main`
 
 **Severity: moderate. Opened 4 October 2026 during Fix PR 08, which touches no SQL.**

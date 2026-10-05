@@ -1721,6 +1721,69 @@ export function DiscoverySurface({
         />
       </div>
     ) : null;
+  // Ruling 1503: at medium and expanded the bar is in the shell's lens row and never docks, so a lens
+  // change made while the column is scrolled past the lanes' top returns the lanes to their top; at
+  // or above it nothing moves. The top is measured, never assumed 0: the column's first block after
+  // the header row, whichever the new lens renders (its lanes, its list or the empty column). The
+  // column's position is read in render, before the new lens commits, because the ghosts it shows
+  // while it loads are shorter than the lanes and the column clamps to them; the target is held
+  // until the lens's own content has rendered, then set. Compact is the seat's (`holdLensDock`,
+  // 1468), and the pane opening over the lanes is not a lens change (688).
+  const LANES_TOP =
+    '[data-discovery] > :is([data-lanes], [data-lens-list], [data-empty-column], [aria-label="Loading Convene"])';
+  const lensWas = useRef(lens);
+  const scrollWas = useRef(0);
+  const laneTarget = useRef<number | null>(null);
+  if (lensWas.current !== lens && scrollerRef.current)
+    scrollWas.current = scrollerRef.current.scrollTop;
+  useLayoutEffect(() => {
+    if (lensWas.current === lens) return;
+    lensWas.current = lens;
+    laneTarget.current = null;
+    if (compact) return;
+    const column = scrollerRef.current;
+    const first = column?.querySelector<HTMLElement>(LANES_TOP);
+    if (!column || !first) return;
+    const top = Math.round(
+      first.getBoundingClientRect().top - column.getBoundingClientRect().top + column.scrollTop,
+    );
+    laneTarget.current = Math.min(scrollWas.current, top);
+    column.scrollTop = laneTarget.current;
+  });
+  // The lens's content arrives in steps, so the target is set again as the column grows until it
+  // holds, for at most two seconds and never once the member has scrolled the column themselves.
+  const laneSettle = useRef<(() => void) | null>(null);
+  useLayoutEffect(() => {
+    const column = scrollerRef.current;
+    const target = laneTarget.current;
+    if (target === null || !column) return;
+    const first = column.querySelector<HTMLElement>(LANES_TOP);
+    if (!first || first.getAttribute("aria-label") === "Loading Convene") return;
+    laneTarget.current = null;
+    laneSettle.current?.();
+    const settle = () => {
+      column.scrollTop = target;
+      return Math.abs(column.scrollTop - target) < 1;
+    };
+    const root = first.parentElement;
+    if (settle() || !root) return;
+    const ro = new ResizeObserver(() => {
+      if (settle()) stop();
+    });
+    const events = ["wheel", "touchstart", "keydown", "pointerdown"] as const;
+    const timer = window.setTimeout(() => stop(), 2000);
+    function stop() {
+      ro.disconnect();
+      window.clearTimeout(timer);
+      events.forEach((e) => column?.removeEventListener(e, stop));
+      laneSettle.current = null;
+    }
+    events.forEach((e) => column.addEventListener(e, stop, { passive: true }));
+    ro.observe(root);
+    laneSettle.current = stop;
+  });
+  useEffect(() => () => laneSettle.current?.(), []);
+
   // 688: the lanes stay where the member left them. With the pane bounded the feed column cannot
   // scroll (its offset clamps to 0) and the list column scrolls instead. So the card at the list
   // column's top is kept, with its distance from that top, and when the pane closes the feed column

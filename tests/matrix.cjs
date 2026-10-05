@@ -5463,15 +5463,18 @@ async function runShell(browserType, bname, [w, h]) {
 /**
  * Fix PR 08 (handoff 51): the lens seat on the three lens surfaces, one arm per viewport.
  *
- * Ruling 1466 (W71): the in-page bar's top edge, read on the Feed, Connect and Convene, is one value
- * below expanded. At expanded Connect's and Convene's are one value and the Feed's is read and
- * printed but not compared: its bar follows the composer and the greeting, which the other two
- * surfaces do not have (the measured values and that exception are in Fix PR 08's report, for a
- * ruling). Every reading is printed as a `SEAT` line on every run, passing or failing (916, 930).
+ * Ruling 1466 (W71) as 1501 rules it: the in-page bar's top edge, read on the Feed, Connect and
+ * Convene, is one value below expanded. At expanded Connect's and Convene's are one value and the
+ * Feed's is read and printed but not compared: its bar follows the composer and the greeting (1501).
+ * Every reading is printed as a `SEAT` line on every run, passing or failing (916, 930).
  *
  * Ruling 1468 (W74), at 390 only: past 72px a lens change from the header's bar leaves the bar in
  * the header and the shell's scroller at or below the docking point, the seat's bottom edge, on all
  * three surfaces; with the bar in the page a lens change leaves the scroll where it was.
+ *
+ * Ruling 1503, at 820 and 1280 on Convene: a lens change made 400px past the lanes' top returns the
+ * column to the lanes' top, and one made at the lanes' top moves nothing. The lanes' top is read as
+ * Discovery reads it, the column's first block after the header row, and printed as a `LANES` line.
  */
 const SEAT_SURFACES = [
   { id: "feed", path: "/feed", label: "Lens", root: "[data-feed]" },
@@ -5540,13 +5543,74 @@ async function runLensSeat(browserType, bname, [w, h]) {
     record(
       tier === "expanded"
         ? tag +
-            " lens bar top edge: Connect and Convene equal; the Feed's follows its composer and greeting (1466)"
+            " lens bar top edge: Connect and Convene equal; the Feed's follows its composer and greeting (1466, 1501)"
         : tag + " lens bar top edge: equal on Feed, Connect and Convene (1466)",
       tier === "expanded"
         ? same(tops.connect, tops.convene) && tops.feed !== null
         : same(tops.feed, tops.connect) && same(tops.connect, tops.convene),
       JSON.stringify(tops),
     );
+    if (w === 820 || w === 1280) {
+      // Ruling 1503: the lanes' top, measured as DiscoverySurface measures it.
+      const lanes = () =>
+        page.evaluate(() => {
+          const sc = document.querySelector('[data-scroller="feed"]');
+          const first =
+            sc &&
+            sc.querySelector(
+              '[data-discovery] > :is([data-lanes], [data-lens-list], [data-empty-column], [aria-label="Loading Convene"])',
+            );
+          if (!sc || !first) return null;
+          return {
+            scroll: Math.round(sc.scrollTop),
+            top: Math.round(
+              first.getBoundingClientRect().top - sc.getBoundingClientRect().top + sc.scrollTop,
+            ),
+            max: Math.round(sc.scrollHeight - sc.clientHeight),
+          };
+        });
+      const setTop = (y) =>
+        page.evaluate((v) => {
+          const sc = document.querySelector('[data-scroller="feed"]');
+          sc.scrollTop = v;
+          sc.dispatchEvent(new Event("scroll"));
+        }, y);
+      const lensTo = async () => {
+        await page
+          .locator('[data-layout-top] [role="tablist"] [role="tab"][aria-selected="false"]')
+          .first()
+          .click();
+        await page.waitForTimeout(900);
+      };
+      await open(SEAT_SURFACES[2]);
+      const at = await lanes();
+      console.log(`LANES ${tag} top=${at ? at.top : null} max=${at ? at.max : null}`);
+      await setTop((at ? at.top : 0) + 400);
+      await page.waitForTimeout(250);
+      const past = await lanes();
+      await lensTo();
+      const back = await lanes();
+      record(
+        tag + " convene: a lens change 400px past the lanes' top returns to the lanes' top (1503)",
+        // The column cannot scroll past its own end, so where the new lens is shorter than the lanes'
+        // top plus the column (Communities at 820 on the mock), the top it can reach is its end.
+        !!past &&
+          !!back &&
+          past.scroll > past.top &&
+          Math.abs(back.scroll - Math.min(back.top, back.max)) <= 1,
+        JSON.stringify({ past, back }),
+      );
+      await setTop(back ? back.top : 0);
+      await page.waitForTimeout(250);
+      const still = await lanes();
+      await lensTo();
+      const after = await lanes();
+      record(
+        tag + " convene: a lens change at the lanes' top moves nothing (1503)",
+        !!still && !!after && Math.abs(after.scroll - still.scroll) <= 1,
+        JSON.stringify({ still, after }),
+      );
+    }
     if (w === 390) {
       const scroller = () =>
         page.evaluate(() => {
