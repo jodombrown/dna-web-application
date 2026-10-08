@@ -2711,11 +2711,15 @@ export type Database = {
           c_category: Database["public"]["Enums"]["c_category"];
           created_at: string;
           id: string;
-          kind: Database["public"]["Enums"]["notification_kind"];
+          group_key: string | null;
+          grouped_actor_ids: string[];
+          kind: string;
           object_id: string | null;
           object_kind: Database["public"]["Enums"]["anchor_kind"] | null;
           read_at: string | null;
           recipient_member_id: string;
+          seen_at: string | null;
+          updated_at: string;
         };
         Insert: {
           actor_id?: string | null;
@@ -2723,11 +2727,15 @@ export type Database = {
           c_category?: Database["public"]["Enums"]["c_category"];
           created_at?: string;
           id?: string;
-          kind: Database["public"]["Enums"]["notification_kind"];
+          group_key?: string | null;
+          grouped_actor_ids?: string[];
+          kind: string;
           object_id?: string | null;
           object_kind?: Database["public"]["Enums"]["anchor_kind"] | null;
           read_at?: string | null;
           recipient_member_id: string;
+          seen_at?: string | null;
+          updated_at?: string;
         };
         Update: {
           actor_id?: string | null;
@@ -2735,11 +2743,15 @@ export type Database = {
           c_category?: Database["public"]["Enums"]["c_category"];
           created_at?: string;
           id?: string;
-          kind?: Database["public"]["Enums"]["notification_kind"];
+          group_key?: string | null;
+          grouped_actor_ids?: string[];
+          kind?: string;
           object_id?: string | null;
           object_kind?: Database["public"]["Enums"]["anchor_kind"] | null;
           read_at?: string | null;
           recipient_member_id?: string;
+          seen_at?: string | null;
+          updated_at?: string;
         };
         Relationships: [];
       };
@@ -4076,6 +4088,7 @@ export type Database = {
         Returns: Json;
       };
       connect_filter_options: { Args: never; Returns: Json };
+      connect_requests_pending: { Args: never; Returns: boolean };
       connect_where: { Args: never; Returns: Json };
       connection_request_intros: {
         Args: { p_ids: string[] };
@@ -4286,6 +4299,7 @@ export type Database = {
         Args: { p_request: string };
         Returns: undefined;
       };
+      mark_surface_seen: { Args: { p_surface: string }; Returns: undefined };
       messenger_request_recover: {
         Args: { p_request: string };
         Returns: undefined;
@@ -4450,6 +4464,9 @@ export type Database = {
         Args: { p_message: string; p_reaction: string };
         Returns: undefined;
       };
+      notifications_dot: { Args: never; Returns: boolean };
+      notifications_mark_all_read: { Args: never; Returns: undefined };
+      notifications_mark_seen: { Args: never; Returns: undefined };
       note_lane_act: {
         Args: { p_act: string; p_lane: string };
         Returns: undefined;
@@ -4525,6 +4542,14 @@ export type Database = {
         Args: { p_message: string; p_recipient: string };
         Returns: string;
       };
+      set_notification_preference: {
+        Args: {
+          p_c: Database["public"]["Enums"]["c_category"];
+          p_channel: string;
+          p_mode: string;
+        };
+        Returns: undefined;
+      };
       set_follow: {
         Args: { p_on: boolean; p_target: string };
         Returns: undefined;
@@ -4544,7 +4569,9 @@ export type Database = {
         | "opportunity"
         | "connection_request"
         | "story"
-        | "event_party";
+        | "event_party"
+        | "thread"
+        | "message_request";
       audience: "everyone" | "connections" | "anchored";
       c_category: "connect" | "convene" | "collaborate" | "contribute" | "convey" | "system";
       contribute_instrument: "time" | "skills" | "in_kind";
@@ -4569,13 +4596,6 @@ export type Database = {
       message_kind: "text" | "voice" | "media" | "system";
       message_report_state: "open" | "reviewed" | "dismissed";
       message_request_state: "pending" | "accepted" | "declined" | "blocked";
-      notification_kind:
-        | "connection_accepted"
-        | "attestation_received"
-        | "space_role_approved"
-        | "event_reminder"
-        | "role_invitation"
-        | "role_accepted";
       post_status: "draft" | "published";
       profile_section:
         | "about"
@@ -4738,6 +4758,8 @@ export const Constants = {
         "connection_request",
         "story",
         "event_party",
+        "thread",
+        "message_request",
       ],
       audience: ["everyone", "connections", "anchored"],
       c_category: ["connect", "convene", "collaborate", "contribute", "convey", "system"],
@@ -4768,14 +4790,6 @@ export const Constants = {
       message_kind: ["text", "voice", "media", "system"],
       message_report_state: ["open", "reviewed", "dismissed"],
       message_request_state: ["pending", "accepted", "declined", "blocked"],
-      notification_kind: [
-        "connection_accepted",
-        "attestation_received",
-        "space_role_approved",
-        "event_reminder",
-        "role_invitation",
-        "role_accepted",
-      ],
       post_status: ["draft", "published"],
       profile_section: [
         "about",

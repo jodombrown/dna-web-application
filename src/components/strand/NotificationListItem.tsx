@@ -1,67 +1,28 @@
-// Design pass 01, B17 (rulings 462, 480, 490), with ruling 547's registry. Two changes on the
-// B2-Shell-Feed row:
+// Design pass 01, B17 (rulings 462, 480, 490), on handoff 55-A's vocabulary (1318). Two changes on
+// the B2-Shell-Feed row:
 // 1. Every row names its destination in words, so the member can read where the tap goes before
-//    taking it (490). DESTINATION is the closed map; the row is a link in behaviour and the
-//    destination line is part of its accessible name.
+//    taking it (490). The words are the kind's `destination` in public.notification_kinds, passed in
+//    by the caller; the row is a link in behaviour and the destination line is part of its
+//    accessible name.
 // 2. The unread dot carries a hidden "Unread" label in a --target-min hit area (480). The dot is
 //    still 8px; what grew is the box around it, which is inside a row that is itself the target.
+//
+// No kind map lives here (1318, N4). The kind's C (ruling 66) and its destination come from the
+// vocabulary row through `c` and `destination`; whether a kind renders is the row's `renders` and
+// `hasSentence` below together. What stays is the per-kind sentence in `parts()`: that is the Strand
+// row part, the words a row of each kind reads, and a kind with no sentence here does not render.
 import { useState, type CSSProperties, type ReactNode } from "react";
 import { Button } from "./Button";
 import { CBadge } from "./CBadge";
 import type { C } from "./cmeta";
 
-/**
- * The registry (rulings 462, 490, 547): the notification kinds this app renders, each with the
- * engine whose C glyph marks the row (ruling 66) and the destination its line names in words.
- *
- * Ruling 547: a kind is in the registry only while its destination has a surface. G19's three
- * destination-less kinds are not here — `attestation_received`, `space_role_approved` and
- * `event_reminder` name the contribution, the Space and the event, and none of those objects has a
- * route yet, because Convene is Brief 6 and Collaborate and Contribute follow it. They are
- * suppressed rather than exempted: an exemption list would be a second place where this contract
- * lives and it would outlive the reason it was written. Their ruling 490 words are not reinvented
- * when they come back; they are recorded in docs/GAPS.md under G19.
- *
- * Grounded-or-empty applies directly: a row whose kind is not in this registry cannot go anywhere,
- * so it does not render and it does not raise the bell's dot (src/lib/notifications.ts).
- *
- * This object is the only source for both maps below, so a kind can never carry a glyph without a
- * destination; tests/notifications.cjs is the check that says so in the harness.
- */
-export const NOTIFICATION_REGISTRY = {
-  connection_accepted: { c: "connect", destination: "Opens their profile" },
-  connection_request: { c: "connect", destination: "Opens My Network, Requests" },
-  // Brief 10 (rulings 736, 1027; Strand correction 15): the named party's invitation to hold a
-  // role on an event. Its destination is the event page, where the same row renders at the top
-  // with its Respond act (B10-SPEC 3.1). `role_accepted` is not here: Strand has no kind for it
-  // yet, so an accepted row stops rendering until the kind lands (1027).
-  role_invitation: { c: "convene", destination: "Opens the event" },
-} as const satisfies Record<string, { c: C; destination: string }>;
-
-export type NotificationKind = keyof typeof NOTIFICATION_REGISTRY;
-
-/** Whether a `notifications.kind` value from the database is one this app renders (ruling 547). */
-export function isRenderedKind(kind: string): kind is NotificationKind {
-  return Object.prototype.hasOwnProperty.call(NOTIFICATION_REGISTRY, kind);
-}
-
-/** Which engine wrote the row: its C glyph marks the row (ruling 66). Derived from the registry. */
-export const KIND_C: Record<NotificationKind, C> = Object.fromEntries(
-  Object.entries(NOTIFICATION_REGISTRY).map(([kind, row]) => [kind, row.c]),
-) as Record<NotificationKind, C>;
-
-/** Ruling 490: a notification row names its destination in words. Derived from the registry. */
-export const DESTINATION: Record<NotificationKind, string> = Object.fromEntries(
-  Object.entries(NOTIFICATION_REGISTRY).map(([kind, row]) => [kind, row.destination]),
-) as Record<NotificationKind, string>;
-
 type Part = string | [string, 1];
 
 function parts(row: {
-  kind: NotificationKind;
+  kind: string;
   actor?: string | undefined;
-  /** The object's name and its qualifier. The Connect kinds name neither; the kinds ruling 547
-   *  suppressed read them when their surface ships and they rejoin the registry. */
+  /** The object's name and its qualifier. The Connect kinds name neither; a kind that reads them
+   *  gains its sentence here when its row part ships (G242). */
   object?: string | undefined;
   detail?: string | undefined;
   /** Strand correction 15 (736): the caller's sentence, verbatim, where a kind takes one. */
@@ -85,8 +46,22 @@ function parts(row: {
   }
 }
 
+/**
+ * Whether the row part has a sentence for a kind (handoff 55-A). A kind renders only where its
+ * vocabulary row says `renders` and this is true, so a kind the database renders before its Strand
+ * part ships reads nothing rather than a blank line.
+ */
+export function hasSentence(kind: string): boolean {
+  return parts({ kind }).some((p) => (Array.isArray(p) ? true : p !== ""));
+}
+
 export type NotificationListItemProps = {
-  kind: NotificationKind;
+  kind: string;
+  /** The engine whose glyph marks the row (ruling 66), from the kind's vocabulary row or, for a
+   *  context-derived kind, the row's own C (1325). Absent, no glyph renders (194). */
+  c?: C | undefined;
+  /** The kind's destination in words (490), from its vocabulary row. Absent, no line renders. */
+  destination?: string | undefined;
   actor?: string | undefined;
   object?: string | undefined;
   detail?: string | undefined;
@@ -100,9 +75,11 @@ export type NotificationListItemProps = {
   style?: CSSProperties | undefined;
 };
 
-/** One notification row (ruling 82). kind is the closed set; the C glyph marks which engine wrote the row (ruling 66). Unread: dot and 500 weight. */
+/** One notification row (ruling 82). The C glyph marks which engine wrote the row (ruling 66). Unread: dot and 500 weight. */
 export function NotificationListItem({
   kind,
+  c,
+  destination,
   actor,
   object,
   detail,
@@ -142,7 +119,7 @@ export function NotificationListItem({
   };
   const body = (
     <>
-      <CBadge c={KIND_C[kind] || "connect"} size={32} />
+      {c && <CBadge c={c} size={32} />}
       <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 2 }}>
         <span
           style={{
@@ -165,13 +142,9 @@ export function NotificationListItem({
           }}
         >
           {/* Ruling 490: the destination, in words, before the tap. */}
-          <span data-destination-line>{DESTINATION[kind]}</span>
-          {time && (
-            <>
-              <span aria-hidden="true">·</span>
-              <span>{time}</span>
-            </>
-          )}
+          {destination && <span data-destination-line>{destination}</span>}
+          {time && destination && <span aria-hidden="true">·</span>}
+          {time && <span>{time}</span>}
         </span>
       </span>
       {unread && (
@@ -214,7 +187,7 @@ export function NotificationListItem({
       <div
         data-kind={kind}
         data-unread={unread ? "1" : undefined}
-        data-destination={DESTINATION[kind]}
+        data-destination={destination}
         onMouseEnter={() => setHover(true)}
         onMouseLeave={() => setHover(false)}
         style={{ ...rowStyle, cursor: "default", alignItems: "center" }}
@@ -260,7 +233,7 @@ export function NotificationListItem({
       onMouseLeave={() => setHover(false)}
       data-kind={kind}
       data-unread={unread ? "1" : undefined}
-      data-destination={DESTINATION[kind]}
+      data-destination={destination}
       style={rowStyle}
     >
       {body}

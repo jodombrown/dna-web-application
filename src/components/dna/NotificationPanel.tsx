@@ -1,5 +1,6 @@
-// The bell and its list (ruling 82, SPEC section 6). Dot only when a real unread row the list would
-// render exists (ruling 547). The
+// The bell and its list (ruling 82, SPEC section 6). The dot is notifications_dot(): an unseen row
+// of a kind the vocabulary renders (1318, 1322), and opening the list marks every row seen, which
+// clears it; each row keeps its unread weight until it is opened (1521). The
 // list has no route: pointer keeps the 380 popover under the bell; touch gets the standard Sheet at
 // 80 percent, not the full-screen inset B2 built (B17 item 3, ruling 492), so it carries the same
 // focus trap and restore as every other sheet (480). Every row is a link that names its destination
@@ -11,13 +12,11 @@ import { useEffect, useState, type ReactNode } from "react";
 import { EmptyState } from "@/components/strand/EmptyState";
 import { IconButton } from "@/components/strand/IconButton";
 import { NotificationBell } from "@/components/strand/NotificationBell";
-import {
-  NotificationListItem,
-  type NotificationKind,
-} from "@/components/strand/NotificationListItem";
+import { NotificationListItem } from "@/components/strand/NotificationListItem";
 import { Sheet } from "@/components/strand/Sheet";
 import type { Member } from "@/lib/auth";
-import { hasUnread, loadNotifications, markRead } from "@/lib/notifications";
+import { loadNotifications, markRead, markSeen, notificationsDot } from "@/lib/notifications";
+import { loadVocabularies } from "@/lib/vocabularies";
 import type { Tier } from "@/lib/tier";
 import { timeLabel } from "@/lib/when";
 import { POPOVER_STYLE } from "./AppShell";
@@ -56,22 +55,32 @@ export function NotificationPanel({
   }, [open]);
   const unread = useQuery({
     queryKey: ["unread", member.id],
-    queryFn: () => hasUnread(member.id),
+    queryFn: notificationsDot,
     refetchInterval: 60_000,
   });
+  // 1318, 194: the kind vocabulary is what the list renders by. While it has not loaded, or when it
+  // fails, the list is empty and the bell shows no dot, so the dot never points at an empty list.
+  const vocab = useQuery({ queryKey: ["vocabularies"], queryFn: loadVocabularies });
+  const kindsLoaded = (vocab.data?.notification_kinds?.length ?? 0) > 0;
+  // 1322, 1521: opening the list marks the member's rows seen and the dot is read again.
+  useEffect(() => {
+    if (!open) return;
+    void markSeen()
+      .catch(() => undefined)
+      .then(() => qc.invalidateQueries({ queryKey: ["unread", member.id] }));
+  }, [open, qc, member.id]);
   const list = useQuery({
     queryKey: ["notifications", member.id],
     queryFn: () => loadNotifications(member.id),
     enabled: open,
   });
   /**
-   * Ruling 462: a row marks read on open and then goes where its line says it goes. Ruling 547
-   * leaves the registry holding only the kinds that have somewhere to go — connection_accepted opens
-   * the other member's profile, connection_request opens My Network's Requests — so every row this
-   * list renders has a destination and this function has no silent branch. The three kinds whose
-   * object has no route yet are suppressed upstream in loadNotifications and never reach here
-   * (Convene is Brief 6, Collaborate and Contribute follow). Grounded-or-empty applies to a route as
-   * much as to a count.
+   * Ruling 462: a row marks read on open and then goes where its line says it goes. The vocabulary
+   * renders only the kinds that have somewhere to go (1318) — connection_accepted opens the other
+   * member's profile, connection_request opens My Network, whose first section is Requests (1482),
+   * role_invitation opens the event — so every row this list renders has a destination. A kind
+   * whose object has no route keeps renders false and never reaches here. Grounded-or-empty applies
+   * to a route as much as to a count.
    */
   const go = (n: {
     kind: string;
@@ -139,7 +148,9 @@ export function NotificationPanel({
         list.data.map((n) => (
           <NotificationListItem
             key={n.id}
-            kind={n.kind as NotificationKind}
+            kind={n.kind}
+            c={n.c}
+            destination={n.destination}
             actor={n.actor}
             object={n.object}
             detail={n.detail}
@@ -176,7 +187,11 @@ export function NotificationPanel({
   );
   return (
     <>
-      <NotificationBell unread={unread.data === true} active={open} onClick={toggle} />
+      <NotificationBell
+        unread={unread.data === true && kindsLoaded}
+        active={open}
+        onClick={toggle}
+      />
       {/* Pointer keeps B2's 380 popover under the bell. Touch takes the standard Sheet at 80
           percent, not the full-screen inset B2 built (B17 item 3, rulings 492, 480). */}
       {pointer ? (

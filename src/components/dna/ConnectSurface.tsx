@@ -69,6 +69,7 @@ import {
   type FilterKey,
   type FilterOptions,
 } from "@/lib/connect";
+import { connectPendingKey, markMyNetworkSeen } from "@/lib/notifications";
 import { setColumnPad, setLeftRail, setRightRail } from "@/lib/rail-store";
 import { openOneToOne, refusalOf } from "@/lib/messenger";
 import { useMode, useTier, useWide } from "@/lib/tier";
@@ -286,6 +287,14 @@ export function ConnectSurface({ member, search }: { member: Member; search: Con
     });
   }, [lens, setLens]);
   useEffect(() => () => setHeaderLens(null), []);
+
+  // 1481, 1522: opening My Network clears Connect's for-you dot until a newer request arrives.
+  useEffect(() => {
+    if (lens !== "network") return;
+    void markMyNetworkSeen()
+      .catch(() => undefined)
+      .then(() => qc.invalidateQueries({ queryKey: connectPendingKey(member.id) }));
+  }, [lens, qc, member.id]);
 
   // Reads. Every list is the projection's answer; nothing is filtered here.
   const options = useQuery({

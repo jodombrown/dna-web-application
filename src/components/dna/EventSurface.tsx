@@ -345,6 +345,9 @@ export function EventSurface({
   const where = placeWord(ev.mode, page.place);
   const invited = page.invitations.filter((i) => i.status === "invited");
   const topic = vocab.data?.convene_families?.find((f) => f.value === ev.family)?.label ?? null;
+  // 1318: the invitation notice's glyph and destination line are its kind's vocabulary row.
+  const invitationKind =
+    vocab.data?.notification_kinds?.find((k) => k.value === "role_invitation") ?? null;
   // Revision 4 (1185): below expanded the RSVP is a bar at the scroller's foot; in the pane it stays
   // in flow after the facts. A past event has nothing to answer, so its line stays in flow.
   const bar = tier !== "expanded" && !ev.past;
@@ -456,6 +459,8 @@ export function EventSurface({
           >
             <NotificationListItem
               kind="role_invitation"
+              c={invitationKind?.c ?? undefined}
+              destination={invitationKind?.destination ?? undefined}
               actor={hostName}
               detail={inv.verb}
               unread

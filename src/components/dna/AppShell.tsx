@@ -4,7 +4,7 @@
 // expanded canvas as three independent scroll containers (ruling 104). Matches B2-Shell-Feed-v3
 // SPEC.md sections 1 and 2. The document never scrolls inside the shell: every tier scrolls its own
 // Feed column, and the 72px header swap plus the 2.5s floating composer entry read that scroller.
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation, useNavigate, useRouter } from "@tanstack/react-router";
 import {
   useCallback,
@@ -18,7 +18,7 @@ import {
 import { AppHeader, MessagesControl } from "@/components/strand/AppHeader";
 import { Button } from "@/components/strand/Button";
 import { Icon } from "@/components/strand/Icon";
-import { PulseDock } from "@/components/strand/PulseDock";
+import { PulseDock, type PulseState } from "@/components/strand/PulseDock";
 import { Switch } from "@/components/strand/Switch";
 import type { C } from "@/components/strand/cmeta";
 import { LeftRail, RightRail } from "@/components/dna/Rails";
@@ -28,6 +28,7 @@ import type { Member } from "@/lib/auth";
 import { openComposer, useComposerState } from "@/lib/composer-store";
 import type { FeedView } from "@/lib/feed-view";
 import { useHeaderLens } from "@/lib/header-lens-store";
+import { connectPendingKey, connectRequestsPending } from "@/lib/notifications";
 import { settingsSet } from "@/lib/messenger";
 import { SETTINGS_KEY, useMessagingSettings, useMessengerInbox } from "@/lib/messenger-inbox";
 import { useColumnPad, useLeftRail, useRightRail, useShellLayout } from "@/lib/rail-store";
@@ -102,6 +103,16 @@ export function AppShell({
   const inbox = useMessengerInbox(member);
   const qc = useQueryClient();
   const messaging = useMessagingSettings(member);
+  // 1481, 1522: Connect's slot carries the for-you dot while a request arrived after the member last
+  // opened My Network. One read on the bell's interval feeds the header's row and the dock alike;
+  // nothing else in either is a state, so the dot is all they carry.
+  const connectPending = useQuery({
+    queryKey: connectPendingKey(member.id),
+    queryFn: connectRequestsPending,
+    refetchInterval: 60_000,
+  });
+  const cStates: Partial<Record<C, PulseState>> | undefined =
+    connectPending.data === true ? { connect: "for-you" } : undefined;
   const registeredLens = useHeaderLens();
   const scrollerRef = useRef<HTMLElement | null>(null);
   // A stable ref callback: an inline one is detached (null) during every commit and re-attached
@@ -301,6 +312,7 @@ export function AppShell({
           onAvatar={() => setAccount((v) => !v)}
           avatarActive={account}
           cActive={active}
+          cStates={cStates}
           onSelectC={go}
           onIntentC={warm}
           lensBar={headerLens}
@@ -613,6 +625,7 @@ export function AppShell({
           <PulseDock
             fixed
             active={active ?? undefined}
+            states={cStates}
             onSelect={go}
             // Longhands, not the shorthand: the shorthand used to wipe the dock's own safe-area
             // bottom padding on the medium tier (ruling 344).

@@ -1,13 +1,21 @@
-// The minimum notification system (ruling 82): real rows only, recipient-scoped by RLS. Reads the
-// member's rows, resolves the names the row copy needs under the caller's RLS, and marks one read.
-// Nothing here sends anything. No engine writes rows yet, so the empty list is the launch state.
-import { isRenderedKind } from "@/components/strand/NotificationListItem";
+// The notification read path (ruling 82, handoff 55-A): real rows only, recipient-scoped by RLS.
+// Reads the member's rows, resolves the names the row copy needs under the caller's RLS, marks one
+// read, marks the panel's rows seen, and asks the two dots. Nothing here sends or writes a row: rows
+// are written by private.notify inside each engine's own write function (1319), which today are
+// Connect's send_introduction and respond_to_request, Convene's invite_event_party and
+// respond_to_event_role, and Messenger's request and thread invitation paths. Which kinds render, and
+// each kind's C and destination, are the notification_kinds vocabulary's (1318).
+import { hasSentence } from "@/components/strand/NotificationListItem";
+import { C_ORDER, type C } from "@/components/strand/cmeta";
 import type { Tables } from "./database.types";
 import { getSupabase } from "./supabase";
-import { loadVocabularies } from "./vocabularies";
+import { loadVocabularies, type NotificationKindRow } from "./vocabularies";
 import { whenLabel } from "./when";
 
 export type NotificationRow = Tables<"notifications">;
+
+const isC = (v: unknown): v is C =>
+  typeof v === "string" && (C_ORDER as readonly string[]).includes(v);
 
 /** A row plus the words its copy needs: "{actor} accepted your connection request.", "{object} starts {detail}." */
 export type NotificationView = NotificationRow & {
@@ -18,23 +26,42 @@ export type NotificationView = NotificationRow & {
   detail?: string | undefined;
   /** Brief 10 (1027): the event an `event_party` row belongs to, so the row can open its page. */
   eventId?: string | undefined;
+  /** The engine whose glyph marks the row (66): the kind's C, or the row's own for a context kind. */
+  c?: C | undefined;
+  /** The kind's destination in words (490), from its vocabulary row. */
+  destination?: string | undefined;
 };
+
+/**
+ * The kinds the panel renders (1318): a vocabulary row that says `renders` and a sentence in the row
+ * part. Keyed by kind for the lookup only; the set is the vocabulary's, never a list kept here.
+ */
+function renderedKinds(rows: NotificationKindRow[] | undefined): Map<string, NotificationKindRow> {
+  return new Map(
+    (rows ?? [])
+      .filter((k) => k.renders && !!k.destination && hasSentence(k.value))
+      .map((k) => [k.value, k]),
+  );
+}
 
 export async function loadNotifications(memberId: string, limit = 50): Promise<NotificationView[]> {
   const sb = getSupabase();
   if (!sb) return [];
+  // 1318: the vocabulary decides what renders. A vocabulary that fails to load leaves the panel
+  // empty (194), never a literal list of kinds standing in for it.
+  const vocab = await loadVocabularies().catch(() => null);
+  const kinds = renderedKinds(vocab?.notification_kinds);
+  if (kinds.size === 0) return [];
   const { data } = await sb
     .from("notifications")
     .select("*")
     .eq("recipient_member_id", memberId)
+    .in("kind", [...kinds.keys()])
     .order("created_at", { ascending: false })
     .limit(limit);
-  // Ruling 547: a kind whose destination has no surface is suppressed from the registry, and
-  // grounded-or-empty then applies to the row itself: it cannot go anywhere, so it does not render.
-  // Filtered here rather than in the query because the registry is the client's contract and a kind
-  // it holds need not yet exist in the database's own enum; sending one to `in` would be an error
-  // rather than an empty result. The name resolution below sees only the rows that survive.
-  const rows = (data ?? []).filter((r) => isRenderedKind(r.kind));
+  // The query already narrows to the rendered kinds; the same test runs on the answer, so a row of
+  // any other kind cannot reach the name resolution below whatever the read returned.
+  const rows = (data ?? []).filter((r) => kinds.has(r.kind));
   if (rows.length === 0) return [];
 
   const ids = (kind: NotificationRow["object_kind"]) =>
@@ -50,7 +77,7 @@ export async function loadNotifications(memberId: string, limit = 50): Promise<N
   // under its policy, and its event's title; the verb comes from the event_roles vocabulary (1018),
   // never from a literal here (ruling 194: a read that fails leaves the row's verb absent).
   const partyIds = ids("event_party");
-  const [spaces, events, opps, actors, roles, parties, vocab] = await Promise.all([
+  const [spaces, events, opps, actors, roles, parties] = await Promise.all([
     spaceIds.length
       ? sb.from("spaces").select("id,title").in("id", spaceIds)
       : Promise.resolve({ data: [] as { id: string; title: string }[] }),
@@ -73,7 +100,6 @@ export async function loadNotifications(memberId: string, limit = 50): Promise<N
     partyIds.length
       ? sb.from("event_parties").select("id,event_id,role").in("id", partyIds)
       : Promise.resolve({ data: [] as { id: string; event_id: string; role: string }[] }),
-    partyIds.length ? loadVocabularies().catch(() => null) : Promise.resolve(null),
   ]);
   const party = new Map((parties.data ?? []).map((p) => [p.id, p]));
   const partyEventIds = [...new Set((parties.data ?? []).map((p) => p.event_id))].filter(
@@ -118,8 +144,12 @@ export async function loadNotifications(memberId: string, limit = 50): Promise<N
     } else if (r.kind === "role_invitation" && partyRow) {
       detail = roleVerb.get(partyRow.role);
     }
+    const kindRow = kinds.get(r.kind);
+    const c = kindRow?.c_from_object ? r.c_category : kindRow?.c;
     return {
       ...r,
+      c: isC(c) ? c : undefined,
+      destination: kindRow?.destination ?? undefined,
       actor: actor || "A member",
       actorHandle:
         r.actor_kind === "member" ? (actorHandle.get(r.actor_id ?? "") ?? undefined) : undefined,
@@ -131,25 +161,45 @@ export async function loadNotifications(memberId: string, limit = 50): Promise<N
 }
 
 /**
- * Whether at least one unread row the panel would render exists. Existence only: the bell shows a
- * dot, never a numeral. Ruling 547: a suppressed kind does not raise the dot either, or the bell
- * would send a member to a list with nothing in it. The kind comes back with the row and is
- * filtered here, for the same reason loadNotifications does not filter in the query.
+ * Whether the bell shows its dot (82, 1322): notifications_dot() answers from the database, where an
+ * unseen row of a kind that renders, from a member the caller does not block either way, raises it.
+ * Existence only, never a count. A failed read is no dot.
  */
-export async function hasUnread(memberId: string, limit = 50): Promise<boolean> {
+export async function notificationsDot(): Promise<boolean> {
   const sb = getSupabase();
   if (!sb) return false;
-  const { data } = await sb
-    .from("notifications")
-    .select("id,kind")
-    .eq("recipient_member_id", memberId)
-    .is("read_at", null)
-    // Newest first, like the list, so the dot and the list read the same window: the kind cannot be
-    // filtered in the query (see above), and an unordered page of 50 could hold only suppressed rows
-    // while the list's own newest 50 holds one that renders.
-    .order("created_at", { ascending: false })
-    .limit(limit);
-  return (data ?? []).some((r) => isRenderedKind(r.kind));
+  const { data, error } = await sb.rpc("notifications_dot");
+  return !error && data === true;
+}
+
+/** Opening the panel marks the member's rows seen, which clears the dot; each row keeps its weight. */
+export async function markSeen(): Promise<void> {
+  const sb = getSupabase();
+  if (!sb) return;
+  const { error } = await sb.rpc("notifications_mark_seen");
+  if (error) throw error;
+}
+
+/**
+ * Whether Connect's slot carries its for-you dot (1481, 1522): a pending request to the member that
+ * arrived after they last opened My Network. Existence only. A failed read is no dot.
+ */
+export async function connectRequestsPending(): Promise<boolean> {
+  const sb = getSupabase();
+  if (!sb) return false;
+  const { data, error } = await sb.rpc("connect_requests_pending");
+  return !error && data === true;
+}
+
+/** The one query key the shell's Connect dot and My Network's mark share (1522). */
+export const connectPendingKey = (memberId: string) => ["connect-pending", memberId] as const;
+
+/** My Network was opened: the for-you dot clears until a newer request arrives (1522). */
+export async function markMyNetworkSeen(): Promise<void> {
+  const sb = getSupabase();
+  if (!sb) return;
+  const { error } = await sb.rpc("mark_surface_seen", { p_surface: "my_network" });
+  if (error) throw error;
 }
 
 export async function markRead(id: string): Promise<void> {
