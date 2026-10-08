@@ -48,7 +48,7 @@ import type { Member } from "@/lib/auth";
 import { loadNetwork } from "@/lib/connect";
 import type { Json } from "@/lib/database.types";
 import { unfurl } from "@/lib/dia";
-import { messageMediaUrl, uploadMessageMedia } from "@/lib/media";
+import { MESSAGE_MEDIA_MAX_BYTES, messageMediaUrl, uploadMessageMedia } from "@/lib/media";
 import {
   clockLabel,
   dayKey,
@@ -136,7 +136,8 @@ type Draft = {
   preview: { url: string; domain: string; title: string | null; image: string | null } | null;
   previewRemoved: string | null;
   notice: boolean;
-  uploadError: string | null;
+  /** H56-MOV item 2: which refusal the attached file met; each is its own state, read on the thread root. */
+  refusal: "bad_media" | "too_large" | null;
   failed: { clientId: string } | null;
   mentioned: ComposerMention[];
 };
@@ -150,10 +151,15 @@ const EMPTY_DRAFT: Draft = {
   preview: null,
   previewRemoved: null,
   notice: false,
-  uploadError: null,
+  refusal: null,
   failed: null,
   mentioned: [],
 };
+
+/** A video's pixel size, read from the composer's attached <video> (H56-MOV). */
+type VideoSize = { width: number; height: number };
+/** How long a send waits for the attached element's metadata before it goes without a size. */
+const VIDEO_MEASURE_MS = 15_000;
 
 const URL_IN_TEXT = /(https?:\/\/[^\s<>"']+|\b[a-z0-9-]+\.[a-z]{2,}(?:\/\S*)?)/i;
 
@@ -182,8 +188,20 @@ function LinkPreview({ preview }: { preview: Json }) {
 function MessageMedia({ mediaId }: { mediaId: string }) {
   const media = useMessageMedia(mediaId);
   if (!media) return <span aria-busy="true" style={{ display: "block", minHeight: 44 }} />;
-  const video = media.mime.startsWith("video/");
-  return <MediaBlock kind={video ? "video" : "image"} src={media.url} alt="" />;
+  // Ruling 1574 (amending 1570, G250): a video plays in the browser's own player; an image keeps
+  // MediaBlock. The player's copy and controls are 41-E's; this adds no string of its own.
+  if (media.mime.startsWith("video/"))
+    return (
+      <video
+        src={media.url}
+        controls
+        preload="metadata"
+        playsInline
+        data-message-video
+        style={{ display: "block", width: "100%", borderRadius: "var(--radius-m)" }}
+      />
+    );
+  return <MediaBlock kind="image" src={media.url} alt="" />;
 }
 
 function VoiceNote({ mediaId, own }: { mediaId: string; own: boolean }) {
@@ -489,6 +507,45 @@ export function MessengerThread({ member, threadId }: { member: Member; threadId
   const recorder = useRecorder();
   const imageInput = useRef<HTMLInputElement>(null);
   const videoInput = useRef<HTMLInputElement>(null);
+  // H56-MOV: an attached video is measured by a <video> attached to the document, rendered with the
+  // composer below, and never by a detached element. Nobody has observed what a detached element
+  // returned in Safari; that it returns no size where an attached one does is the hypothesis the
+  // founder's Safari walk (Done Means 2) tests. The measurement for the draft's object URL settles
+  // once, on loadedmetadata or error, and a send waits on it.
+  const measured = useRef<{
+    url: string;
+    done: Promise<VideoSize | null>;
+    settle: (size: VideoSize | null) => void;
+  } | null>(null);
+  const measure = (url: string) => {
+    let settle: (size: VideoSize | null) => void = () => undefined;
+    const done = new Promise<VideoSize | null>((resolve) => {
+      settle = resolve;
+    });
+    measured.current = { url, done, settle };
+  };
+  const onMeasured = (url: string, video: HTMLVideoElement | null) => {
+    const m = measured.current;
+    if (!m || m.url !== url) return;
+    m.settle(
+      video && video.videoWidth > 0 && video.videoHeight > 0
+        ? { width: video.videoWidth, height: video.videoHeight }
+        : null,
+    );
+  };
+  const videoSize = async (media: { file: File; url: string }): Promise<Partial<VideoSize>> => {
+    const m = measured.current;
+    if (media.file.size > MESSAGE_MEDIA_MAX_BYTES || !m || m.url !== media.url) return {};
+    let timer = 0;
+    const size = await Promise.race([
+      m.done,
+      new Promise<null>((resolve) => {
+        timer = window.setTimeout(() => resolve(null), VIDEO_MEASURE_MS);
+      }),
+    ]);
+    window.clearTimeout(timer);
+    return size ?? {};
+  };
   const [picker, setPicker] = useState<string | null>(null);
   const [expandedBlocked, setExpandedBlocked] = useState<Record<string, boolean>>({});
   const [sheet, setSheet] = useState<
@@ -555,14 +612,16 @@ export function MessengerThread({ member, threadId }: { member: Member; threadId
     if (!file) return;
     const ok = kind === "image" ? file.type.startsWith("image/") : file.type.startsWith("video/");
     if (!ok) {
-      patch({ uploadError: REFUSAL_LINES.bad_media });
+      patch({ refusal: "bad_media" });
       return;
     }
     if (draft.media) URL.revokeObjectURL(draft.media.url);
+    const url = URL.createObjectURL(file);
+    if (kind === "video") measure(url);
     patch({
-      media: { kind, file, url: URL.createObjectURL(file) },
+      media: { kind, file, url },
       voice: null,
-      uploadError: null,
+      refusal: null,
       notice: settings.data?.media_notice_seen_at === null,
     });
   };
@@ -614,13 +673,18 @@ export function MessengerThread({ member, threadId }: { member: Member; threadId
       let mediaId: string | null = null;
       let kind: "text" | "media" | "voice" = "text";
       if (draft.media) {
-        const up = await uploadMessageMedia(threadId, clientId, draft.media.file, {
-          kind: draft.media.kind,
-        });
+        const up = await uploadMessageMedia(
+          threadId,
+          clientId,
+          draft.media.file,
+          draft.media.kind === "video"
+            ? { kind: "video", ...(await videoSize(draft.media)) }
+            : { kind: "image" },
+        );
         if (!up.ok) {
           if (up.reason === "rate_limited") setLimitedUntil(Date.now() + LIMITED_MS);
           else if (up.reason === "bad_media" || up.reason === "too_large")
-            patch({ uploadError: REFUSAL_LINES[up.reason] });
+            patch({ refusal: up.reason });
           else patch({ failed: { clientId } });
           return;
         }
@@ -1023,6 +1087,31 @@ export function MessengerThread({ member, threadId }: { member: Member; threadId
           e.target.value = "";
         }}
       />
+      {draft.media?.kind === "video" && (
+        // H56-MOV: the measuring element. Attached, so the engine loads its metadata as it would
+        // for a player on the page; invisible, inert and out of flow, so it shifts nothing.
+        <video
+          key={draft.media.url}
+          src={draft.media.url}
+          data-testid="video-measure"
+          aria-hidden="true"
+          tabIndex={-1}
+          muted
+          playsInline
+          preload="metadata"
+          onLoadedMetadata={(e) => onMeasured(e.currentTarget.src, e.currentTarget)}
+          onError={(e) => onMeasured(e.currentTarget.src, null)}
+          style={{
+            position: "fixed",
+            left: 0,
+            top: 0,
+            width: 1,
+            height: 1,
+            opacity: 0,
+            pointerEvents: "none",
+          }}
+        />
+      )}
       <MessageComposer
         value={draft.text}
         onChange={onText}
@@ -1082,8 +1171,8 @@ export function MessengerThread({ member, threadId }: { member: Member; threadId
         }
         notice={draft.notice}
         onNoticeOk={noticeOk}
-        error={draft.uploadError}
-        onErrorOk={() => patch({ uploadError: null })}
+        error={draft.refusal ? REFUSAL_LINES[draft.refusal] : null}
+        onErrorOk={() => patch({ refusal: null })}
         failed={!!draft.failed}
         onRetry={() => void sendNow()}
         limited={limited}
@@ -1363,6 +1452,7 @@ export function MessengerThread({ member, threadId }: { member: Member; threadId
       <div
         data-messenger-thread
         data-thread={threadId}
+        data-upload-refusal={draft.refusal ?? undefined}
         style={{
           display: "flex",
           flexDirection: "column",
@@ -1437,6 +1527,7 @@ export function MessengerThread({ member, threadId }: { member: Member; threadId
         <div
           data-messenger-thread
           data-thread={threadId}
+          data-upload-refusal={draft.refusal ?? undefined}
           style={{
             display: "flex",
             flexDirection: "column",

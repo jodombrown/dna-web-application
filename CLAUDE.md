@@ -150,7 +150,10 @@ under 225, and the statements about to run are that file's. Then write. Then ver
 recorded `supabase_migrations.schema_migrations` row and compare it against the file's own bytes,
 which is the md5 comparison `tests/migration-drift.cjs` makes, so a write whose read-back does not
 match the file is named as drift the moment it lands rather than at the next run of the arm. 553's
-refusal of `apply_migration` is unchanged and its reason is unchanged. Every paste carries its own
+refusal of `apply_migration` is unchanged and its reason is unchanged. `execute_sql` refuses any
+statement containing destructive DDL (`drop column`, `drop type`, `drop trigger`, a `delete`), even
+inside a quoted string (1528); a migration that contains one reaches the canonical project by the
+founder's SQL Editor paste of a file Chat generates from the committed bytes. Every paste carries its own
 `supabase_migrations.schema_migrations` rows in the same transaction as the DDL, so the project never
 records the statements without recording the version that explains them. `apply_migration` mints its own
 version rather than honouring the file's: applying `20260913220000` through it recorded the statements
@@ -198,8 +201,8 @@ crash no retry proved exits 1. `CRASH_PROBE=<arm tag>` is the harness probe that
 by default and never set by a workflow.
 
 The WebKit result that gates a merge is `pages.yml`'s `webkit-macos` job (ruling 1235): Playwright's
-WebKit on a macOS runner, the Mac port, which lacks G5's compositor, running `SPECIAL=gate`'s twenty
-arms (the sheets, the event page, the composer, sign-in) at the deployment's own URL. The Linux
+WebKit on a macOS runner, the Mac port, which lacks G5's compositor, running `SPECIAL=gate`'s twenty-two
+arms (the sheets, the event page, the composer, sign-in, and the Messenger composer's `.mov` under 1550) at the deployment's own URL. The Linux
 `matrix (webkit)` job keeps running in full, and a crash there alone does not block a merge, because
 G5 is a Linux WPE compositor defect that Safari does not run (1234). This repository has no branch
 protection to encode that; Chat reads it here under 1114, and the founder's device check (61) stays

@@ -7257,7 +7257,9 @@ if (require.main === module)
         // (1236's stepped method is the point of the gate) and the sheet-focus arm (1484), the member event page and its blocks at
         // the two representative cells with its flows (the arm G5 hit on run 419 among them), the
         // composer as the publish flow at compact and its guards at expanded (the bottom sheet and
-        // the drawer), and sign-in's layout at both cells with its flows at compact. Twenty-one arms.
+        // the drawer), sign-in's layout at both cells with its flows at compact, and (ruling 1550) the
+        // .mov through the composer's own video input, because Linux WebKit's <video> cannot read the
+        // fixture at all (run 523) and the Mac port is the only engine here that might. Twenty-two arms.
         if (process.env.SPECIAL.includes("gate")) {
           const { runSheets } = require("./sheet.cjs");
           const { runEvent, runEventBlocks, runEventFlows } = require("./event.cjs");
@@ -7280,6 +7282,8 @@ if (require.main === module)
           }
           if (!only || (only[0] === 1280 && only[1] === 800))
             await drive(runPublishGuards, bt, bname, [1280, 800], "dark");
+          const { runMessengerComposerVideo } = require("./messenger-composer-video.cjs");
+          await drive(runMessengerComposerVideo, bt, bname);
         }
         // Brief 4B (rulings 230 to 236, 240): sign-in's additions, the two reset routes and the
         // signed-in change-password path. The layout pass runs everywhere; the state flows run on
@@ -7339,6 +7343,9 @@ if (require.main === module)
         if (process.env.SPECIAL.includes("media")) {
           const { runMessengerMedia } = require("./messenger-media.cjs");
           await drive(runMessengerMedia, bt, bname);
+          // Handoff 56-MOV item 3 (G224): a .mov through the composer's own file input.
+          const { runMessengerComposerVideo } = require("./messenger-composer-video.cjs");
+          await drive(runMessengerComposerVideo, bt, bname);
           // Handoff 41-C item 5: the surfaces on the deployment with the same two accounts.
           const { runMessengerLive } = require("./messenger.cjs");
           await drive(runMessengerLive, bt, bname);
@@ -7517,6 +7524,10 @@ if (require.main === module)
       // deployment, once per engine, with the two seeded accounts (tests/messenger-media.cjs).
       const { runMessengerMedia } = require("./messenger-media.cjs");
       await drive(runMessengerMedia, bt, bname);
+      // Handoff 56-MOV item 3 (G224): a .mov through the thread's own video input, sent and rendered,
+      // and one over the byte ceiling refused as too_large (tests/messenger-composer-video.cjs).
+      const { runMessengerComposerVideo } = require("./messenger-composer-video.cjs");
+      await drive(runMessengerComposerVideo, bt, bname);
       // Handoff 41-C item 5 (SPEC 41-14 "Arms"): the Messenger's surfaces, the responsive matrix and
       // the flows on the mock, then the deployment with the two seeded accounts (tests/messenger.cjs).
       const msg = require("./messenger.cjs");

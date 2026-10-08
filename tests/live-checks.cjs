@@ -1576,8 +1576,9 @@ async function get(url, headers = {}) {
     const h = (name) => feedRes.headers.get(name) || "";
     const csp = h("content-security-policy");
     record(
-      "ruling 438: /feed carries a Content-Security-Policy with default-src 'self' and a nonce, never 'unsafe-inline' for scripts",
+      "ruling 438: /feed carries a Content-Security-Policy with default-src 'self' and a nonce, never 'unsafe-inline' for scripts, and media-src 'self' blob: (1569)",
       /default-src 'self'/.test(csp) &&
+        /media-src 'self' blob:(;|$)/.test(csp) &&
         /script-src 'self' 'nonce-[A-Za-z0-9+/=_-]+'/.test(csp) &&
         !/script-src[^;]*'unsafe-inline'/.test(csp) &&
         /frame-ancestors 'none'/.test(csp),

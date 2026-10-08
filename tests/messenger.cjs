@@ -1357,4 +1357,5 @@ module.exports = {
   LAYOUT_CHECKS,
   FLOW_CHECKS,
   LIVE_CHECKS,
+  liveSignIn,
 };

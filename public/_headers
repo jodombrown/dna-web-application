@@ -3,8 +3,9 @@
 # Content-Security-Policy carries a per-response nonce for TanStack Start's inline scripts; this
 # static copy carries no nonce because nothing served from here runs an inline script. Nitro
 # appends its own asset cache rules below at build time (dist/_headers).
+# Ruling 1569 (amending 438): media-src 'self' blob:, so <video> and <audio> play object URLs (G223).
 /*
-  Content-Security-Policy: default-src 'self'; connect-src 'self' https://dgspjevjoblujcoljvkn.supabase.co wss://dgspjevjoblujcoljvkn.supabase.co; img-src 'self' data: blob: https: https://dgspjevjoblujcoljvkn.supabase.co; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'
+  Content-Security-Policy: default-src 'self'; connect-src 'self' https://dgspjevjoblujcoljvkn.supabase.co wss://dgspjevjoblujcoljvkn.supabase.co; img-src 'self' data: blob: https: https://dgspjevjoblujcoljvkn.supabase.co; media-src 'self' blob:; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'
   X-Frame-Options: DENY
   Referrer-Policy: strict-origin-when-cross-origin
   Strict-Transport-Security: max-age=31536000; includeSubDomains

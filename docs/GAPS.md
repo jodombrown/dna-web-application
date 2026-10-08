@@ -8318,6 +8318,42 @@ Faststart layout was ruled out on 5 October (edge logs show no `messenger_media_
 Pacific). `bad_media` and `too_large` share one on-screen line. Owner: the Code queue, item (b); copy
 to 41-E (1409).
 
+**Amended 8 October 2026 by handoff 56-MOV (PR #100): the cause is the Content-Security-Policy, not
+the detached element. Open.** Nobody observed what the detached element returned in Safari; that
+claim was the hypothesis Done Means 2 was to test (1551). Run 523 (`b1821f4`, deployment
+`2d317cab`) asked each engine for the fixture's size through a detached and an attached `<video>`,
+on the deployed app:
+
+- Linux WebKit: `{"canPlayType":"maybe","detached":{"event":"error","code":4,"message":""},"attached":{"event":"error","code":4,"message":""}}`
+- Chromium: `{"canPlayType":"","detached":{"event":"error","code":4,"message":"MEDIA_ELEMENT_ERROR: Media load rejected by URL safety check"},"attached":{"event":"error","code":4,"message":"MEDIA_ELEMENT_ERROR: Media load rejected by URL safety check"}}`
+
+Chromium's line is a policy refusal, not a codec one: locally, with no page policy, the same engine
+answers `DEMUXER_ERROR_NO_SUPPORTED_STREAMS`. The policy in `src/lib/csp.ts` (and its static copy in
+`public/_headers`) has no `media-src`, so media falls back to `default-src 'self'`, and a `blob:`
+object URL is not `'self'`. Every `<video>` and `<audio>` given an object URL on the deployed app is
+refused before it loads, in every engine, attached or detached, whatever the file; `img-src` admits
+`blob:`, which is why the composer's draft thumbnail (an `<img>`, `MediaBlock kind="video"`) showed
+the recording. The same policy refuses voice-note playback, which `useAudio` in
+`src/lib/messenger-media.ts` runs through `new Audio(objectURL)`; `messenger-live`'s voice check
+asserts the player renders, not that it plays. `fetchMessageMedia` in `src/lib/media.ts` hands every
+received object to its element as a `blob:` URL (the route needs the bearer, which an element's own
+request cannot carry), so voice notes and received videos were refused by the same policy, not only
+the composer's attachment.
+
+PR #100 moves the measurement to an attached element owned by `MessengerThread.tsx`, removes
+`measureVideo`, and gives `too_large` its own state, but did not change the policy or the refusal,
+under the handoff's stop clause: an attached element also returned no size. Owed, as a ruling,
+because it changes ruling 438's header: `media-src 'self' blob:` in both `src/lib/csp.ts` and
+`public/_headers` (since given as ruling 1569, below). Linux WebKit's empty message cannot by itself
+separate the policy from a GStreamer decoder gap; the policy is the cause Chromium names and the one
+that reaches Safari.
+
+**Amended again 8 October 2026: the policy is changed under ruling 1569.** PR #100 adds
+`media-src 'self' blob:` to `src/lib/csp.ts` and `public/_headers`, every other directive unchanged,
+and the live arm that reads `/feed`'s policy asserts it. What the run on PR #100's final head reads for
+the fixture in each engine is the evidence this entry closes on; Safari's is Done Means 2's walk. A
+received video still cannot play once the policy allows it: G250.
+
 ---
 
 ## G224. S54-4: `tests/messenger-media.cjs` cannot catch a client-side refusal
@@ -8327,6 +8363,19 @@ handoff 55-A under ruling 760. The number is assigned by this entry (ruling 638)
 
 The arm posts `.mov` bytes straight to the route, so CI never exercises the client path G223 breaks;
 that path's proof is a named check on the deployed URL in Safari. With G223.
+
+**Amended 8 October 2026 by handoff 56-MOV (PR #100): the arm exists; its send is unproven in every
+engine CI runs. Open.** `tests/messenger-composer-video.cjs` attaches
+`tests/fixtures/composer-video.mov` (8,997 bytes, 320x124 H.264 Main QuickTime) through the thread's
+own video input on the deployment, sends it, and asserts the upload's integer `w` and `h` and the
+message in the log; a second check attaches a file one byte over the ceiling and asserts the
+`too_large` state with nothing sent to the route. It prints what the engine's detached and attached
+`<video>` return before it attaches anything. On run 523 the too_large check passed on both engines
+and the two send checks were UNPROVEN on both, with G223's two lines as the reason (228). Ruling
+1550 puts the arm in the macOS WebKit gate (twenty-two arms) so the Mac port reads it too.
+`messenger-media`'s ffmpeg-made `.mov` checks are also UNPROVEN on every runner (`ffmpeg is not on
+the runner (ENOENT)`), so no CI arm today proves a `.mov` upload. The arm proves the composer's path,
+never Safari. It closes when the send checks pass on a deployment whose policy admits `blob:` media.
 
 ---
 
@@ -8593,3 +8642,54 @@ that library's own signatures. The header names are read as `svix-*` with the St
 `webhook-*` names accepted as the same three. Confidence in the algorithm is high and in the header
 names moderate. Owed at registration (G240): the documentation page read, and the alternate names
 dropped if Resend sends only one set.
+
+---
+
+## G249. The Convene picker check reads the when line whether or not its wait succeeded
+
+**Severity: low. Opened 8 October 2026 by Session 55's close, recorded by handoff 56-MOV. The number
+is assigned by this entry (ruling 638).**
+
+`webkit-1280x800-dark-convene the picker completes the moment and Publish returns` failed once on
+run 521 attempt 1 and passed on the re-run. In `tests/matrix.cjs`, after `when_time` is filled, the
+check waits up to 5 s for `[data-convene="when-line"]` to show `19:30`, swallows that wait's timeout
+with `.catch(() => {})`, then reads the line and `pub().isDisabled()` once, so a slow effect fails
+the record with no word of the wait having timed out, and Publish's state is read with no wait of its
+own. The earlier sighting, WebKit at 390 on run 401 (handoff 37-B), is recorded only in the comment
+above the wait. Owed: a wait whose timeout is the check's failure, and a wait on Publish's state.
+Recorded only; not fixed here.
+
+---
+
+## G250. A received Messenger video renders as an image and cannot play
+
+**Severity: moderate. Opened 8 October 2026 by ruling 1570, during handoff 56-MOV. The number is
+assigned by this entry (ruling 638).**
+
+`MessageMedia` in `src/components/dna/MessengerThread.tsx` (line 186 at `2d86f21`, line 192 at PR
+#100's head) renders a video message through `MediaBlock kind="video"`, which draws an `<img>` whose
+`src` is the object URL, with a play glyph over it. No `<video>` is mounted for a message, so a video
+message cannot play even once ruling 1569's `media-src 'self' blob:` lets one load (G223). Not fixed
+in PR #100 (1570). Owner: the walkthrough lane; the player's copy and controls to 41-E.
+
+Observed on run 526 (`0d6e050`, macOS WebKit, deployment `611e6ba3`), cause unproven: once the arm had
+sent the fixture and its message rendered (an `<img>` whose `src` is the `.mov`'s object URL), a fresh
+load of the thread left `[data-testid="message-field"]` not visible for 15 s and a page screenshot
+timed out at 5 s. WebKit decodes video in an `<img>`, so the element this entry names may stall the
+page rather than only fail to play; the founder's Safari walk on the thread after a send is the check.
+The arm now runs its too_large check before it sends, so it no longer reloads a thread holding a
+video message.
+
+**Closed by PR #100 under ruling 1574 (amending 1570).** A received message whose media is a video
+now renders through a `<video>` with the browser's own controls, `preload="metadata"` and
+`playsInline`, on an object URL of the bytes `fetchMessageMedia` fetched with the bearer, revoked when
+the element goes; an image keeps `MediaBlock`, which is unchanged, and no member-facing string is
+added (the player's copy and controls stay with 41-E). Building it found a second reason a video never
+reached a player: `useMessageMedia` read the mime by `fetch()`ing the object URL back, which
+`connect-src` does not admit, so the type could come back empty and every medium drew as an image.
+`fetchMessageMedia` now answers the Blob, the mime is the Blob's own type, the hook caches the bytes
+once per id for the tab and gives each element its own object URL, revoked on unmount. Whether a
+fresh load of a thread holding the sent video still stalls WebKit is what the composer-video arm's
+third check reads, on the Linux matrix and the macOS gate: the field visible within 15 s, and the
+message carrying a `<video>` on an object URL with controls and no `blob:` `<img>`. That reading is
+on PR #100's final head, not in this entry, because this entry rides in the commit the run tests.

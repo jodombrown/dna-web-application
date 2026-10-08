@@ -1,26 +1,17 @@
 // Brief 14 (SPEC 41-14 Part B "Media"; 41-B): the thread's media on the client. A message's bytes
 // come through GET /api/messages/media/{id} with the bearer, so an <img>, <video> or <audio> cannot
-// load them by URL; `useMessageMedia` fetches once per id for the tab and hands back an object URL
-// and the mime the blob carries, which is how the bubble knows an image from a video (the
-// projection carries the media id alone). `useAudio` is the clock behind VoicePlayer. `useRecorder`
-// is the voice note: MediaRecorder on the microphone, WebM Opus where the engine has it and MP4 AAC
-// on Safari, the duration from the recorder's own clock. Nothing here is stored anywhere.
+// load them by URL; `useMessageMedia` fetches once per id for the tab and hands each element its own
+// object URL of those bytes, revoked when the element goes, and the mime the blob carries, which is
+// how the bubble knows an image from a video (the projection carries the media id alone; 1574).
+// `useAudio` is the clock behind VoicePlayer. `useRecorder` is the voice note: MediaRecorder on the
+// microphone, WebM Opus where the engine has it and MP4 AAC on Safari, the duration from the
+// recorder's own clock. Nothing here is stored anywhere.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { deliverImageUrl, fetchMessageMedia } from "./media";
 
 export type LoadedMedia = { url: string; mime: string };
 
-const cache = new Map<string, Promise<LoadedMedia | null>>();
-
-async function load(mediaId: string): Promise<LoadedMedia | null> {
-  const url = await fetchMessageMedia(mediaId);
-  if (!url) return null;
-  // The object URL's blob type is what the route answered as Content-Type.
-  const blob = await fetch(url)
-    .then((r) => r.blob())
-    .catch(() => null);
-  return { url, mime: blob?.type ?? "" };
-}
+const cache = new Map<string, Promise<Blob | null>>();
 
 export function useMessageMedia(mediaId: string | null | undefined): LoadedMedia | null {
   const [state, setState] = useState<LoadedMedia | null>(null);
@@ -30,18 +21,26 @@ export function useMessageMedia(mediaId: string | null | undefined): LoadedMedia
       return;
     }
     let active = true;
+    let url: string | null = null;
     let p = cache.get(mediaId);
     if (!p) {
-      p = load(mediaId);
+      p = fetchMessageMedia(mediaId);
       cache.set(mediaId, p);
     }
-    void p.then((m) => {
+    void p.then((blob) => {
       if (!active) return;
-      if (!m) cache.delete(mediaId);
-      setState(m);
+      if (!blob) {
+        cache.delete(mediaId);
+        setState(null);
+        return;
+      }
+      // The blob's type is what the route answered as Content-Type.
+      url = URL.createObjectURL(blob);
+      setState({ url, mime: blob.type });
     });
     return () => {
       active = false;
+      if (url) URL.revokeObjectURL(url);
     };
   }, [mediaId]);
   return state;

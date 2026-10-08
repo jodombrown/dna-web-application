@@ -53,6 +53,11 @@ export function contentSecurityPolicy(nonce: string | undefined): string {
     // holds the Mapbox token; the browser makes no Mapbox request, so api.mapbox.com is not allowed.
     `connect-src 'self' ${SUPABASE} ${SUPABASE_WS}`,
     `img-src 'self' data: blob: https: ${SUPABASE}`,
+    // Ruling 1569 (amending 438): media plays from object URLs. Messenger hands every <video> and
+    // <audio> a blob: URL of bytes it fetched with the bearer (fetchMessageMedia) or the member
+    // attached (the composer's measuring element), and without this line media fell back to
+    // default-src 'self' and every one of them was refused before it loaded (G223, run 523).
+    "media-src 'self' blob:",
     script,
     "style-src 'self' 'unsafe-inline'",
     "font-src 'self'",
