@@ -345,7 +345,7 @@ const VOCAB = {
     { value: "network", name: "Connected to your network" },
   ],
   // Handoff 37-A (1186): the kinds of host-written block, as 20260928120000 seeds them.
-  // Brief 14 (41-A, 1331, 1348, 1349, 1370): the four Messenger vocabularies (tests/messenger-mock.cjs).
+  // Brief 14 (41-A, 1331, 1348, 1349; 41-E, 1403): the four Messenger vocabularies (tests/messenger-mock.cjs).
   ...require("./messenger-mock.cjs").VOCAB_KEYS,
   event_block_kinds: [
     { value: "link", label: "Links" },
@@ -7463,7 +7463,8 @@ if (require.main === module)
         // composer as the publish flow at compact and its guards at expanded (the bottom sheet and
         // the drawer), sign-in's layout at both cells with its flows at compact, and (ruling 1550) the
         // .mov through the composer's own video input, because Linux WebKit's <video> cannot read the
-        // fixture at all (run 523) and the Mac port is the only engine here that might. Twenty-two arms.
+        // fixture at all (run 523) and the Mac port is the only engine here that might; and (56-41E) the
+        // reactions arm at both cells. Twenty-four arms.
         if (process.env.SPECIAL.includes("gate")) {
           const { runSheets } = require("./sheet.cjs");
           const { runEvent, runEventBlocks, runEventFlows } = require("./event.cjs");
@@ -7488,6 +7489,12 @@ if (require.main === module)
             await drive(runPublishGuards, bt, bname, [1280, 800], "dark");
           const { runMessengerComposerVideo } = require("./messenger-composer-video.cjs");
           await drive(runMessengerComposerVideo, bt, bname);
+          // Handoff 56-41E item 3: the reactions arm at both cells, because the drawn glyphs, the
+          // picker's Sheet and the portrait player differ on Safari. Twenty-four arms.
+          const { runMessengerReactions } = require("./messenger.cjs");
+          for (const [vp, theme] of cells)
+            if (!only || (vp[0] === only[0] && vp[1] === only[1]))
+              await drive(runMessengerReactions, bt, bname, vp, theme);
         }
         // Brief 4B (rulings 230 to 236, 240): sign-in's additions, the two reset routes and the
         // signed-in change-password path. The layout pass runs everywhere; the state flows run on
@@ -7563,8 +7570,11 @@ if (require.main === module)
               for (const theme of process.env.THEME ? [process.env.THEME] : THEMES)
                 await drive(m.runMessengerLayout, bt, bname, vp, theme);
           for (const [vp, theme] of m.FLOW_CELLS)
-            if (!only || (vp[0] === only[0] && vp[1] === only[1]))
+            if (!only || (vp[0] === only[0] && vp[1] === only[1])) {
               await drive(m.runMessengerFlows, bt, bname, vp, theme);
+              // Handoff 56-41E item 3: SPEC-41-E's second pass on the same two cells.
+              await drive(m.runMessengerReactions, bt, bname, vp, theme);
+            }
         }
         if (process.env.SPECIAL.includes("auth")) {
           const { runAuthLayout, runAuthFlows } = require("./auth.cjs");

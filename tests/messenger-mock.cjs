@@ -18,6 +18,9 @@ const ids = {
   book: "11111111-1111-4111-8111-111111111007",
   esi: "11111111-1111-4111-8111-111111111008",
 };
+/** The media id of the portrait video in Nana's thread; the reactions arm serves its bytes itself. */
+const VIDEO_MEDIA = "33333333-3333-4333-8333-333333333001";
+
 const members = {
   kofi: {
     id: "22222222-2222-4222-8222-222222222001",
@@ -105,6 +108,9 @@ function msg(threadId, seq, author, body, created, extra = {}) {
     mentions: null,
     created_at: created,
     edited_at: null,
+    media_word: null,
+    media_width: null,
+    media_height: null,
     ...extra,
   };
 }
@@ -365,7 +371,10 @@ function messengerFixture() {
     ),
     msg(ids.kofi, 2, UID, "That is the one from the supper?", at(3, 9, 20), {
       tick: 3,
-      reactions: [{ reaction: "agree", names: ["Kofi Boateng"], others: false, own: false }],
+      // 41-E (1577): the character; the mock keeps the quick eight's base forms as the seed writes them.
+      reactions: [
+        { reaction: "\u{1F44D}\uFE0F", names: ["Kofi Boateng"], others: false, own: false },
+      ],
     }),
     msg(ids.kofi, 3, UID, "Well done. Send the route plan when you have it.", at(3, 11, 10), {
       tick: 3,
@@ -425,7 +434,7 @@ function messengerFixture() {
       // others so the arm reads the one joiner's "and others" shape (handoff 41-C, ruled in Chat).
       reactions: [
         {
-          reaction: "thanks",
+          reaction: "\u{1F64F}",
           names: ["Ama Darko", "Kofi Boateng", "Nana Adjei"],
           others: true,
           own: false,
@@ -445,6 +454,16 @@ function messengerFixture() {
     [ids.nana]: [
       msg(ids.nana, 1, members.nana.id, "Lunch next week?", at(1, 20, 11), {
         author_name: members.nana.name,
+      }),
+      // 41-E (1593): a received portrait video, its dimensions on the row; the bytes come from the
+      // arm's own route on /api/messages/media/{id}.
+      msg(ids.nana, 2, members.nana.id, null, at(1, 20, 15), {
+        author_name: members.nana.name,
+        kind: "media",
+        media_id: VIDEO_MEDIA,
+        media_word: "Video",
+        media_width: 124,
+        media_height: 320,
       }),
     ],
     [ids.event]: [
@@ -568,8 +587,11 @@ function messengerFixture() {
       receipts_chosen_at: new Date(now - 30 * DAY).toISOString(),
       link_previews_enabled: false,
       media_notice_seen_at: new Date(now - 30 * DAY).toISOString(),
+      reaction_skin_tone: null,
       updated_at: new Date(now - 30 * DAY).toISOString(),
     },
+    /** 41-E (1405): the member's recent emoji, newest first, as messenger_recent_reactions answers. */
+    recent: [],
     signals: [
       {
         signal_key: "request:55555555-5555-4555-8555-555555555001",
@@ -614,12 +636,16 @@ const VOCAB_KEYS = {
     { value: "impersonation", label: "Impersonation" },
     { value: "other", label: "Something else" },
   ],
-  message_reaction_kinds: [
-    { value: "agree", label: "Agree" },
-    { value: "thanks", label: "Thanks" },
-    { value: "noted", label: "Noted" },
-    { value: "well_done", label: "Well done" },
-    { value: "sorry_to_hear", label: "Sorry to hear" },
+  // 41-E (1403, 1577): the quick eight, the character as the seed writes it and E9's name.
+  message_reaction_quick: [
+    { value: "\u{1F44D}\uFE0F", label: "Thumbs up" },
+    { value: "\u2764\uFE0F", label: "Heart" },
+    { value: "\u{1F64F}", label: "Folded hands" },
+    { value: "\u{1F44F}", label: "Clapping" },
+    { value: "\u{1F389}", label: "Party" },
+    { value: "\u{1F602}", label: "Laughing" },
+    { value: "\u{1F62E}", label: "Surprised" },
+    { value: "\u{1F622}", label: "Crying" },
   ],
 };
 
@@ -642,7 +668,10 @@ async function handleMessenger({ p, method, url, req, json, db }) {
     if (M.fail === "threads")
       return json({ code: "PGRST", message: "forced", details: null, hint: null }, 500);
     const id = eq(url, "thread_id");
-    let rows = M.threads.filter((t) => !id || t.thread_id === id);
+    // 41-E (1592): every row carries invited_names and invited_others, empty where the fixture names none.
+    let rows = M.threads
+      .filter((t) => !id || t.thread_id === id)
+      .map((t) => ({ invited_names: [], invited_others: false, ...t }));
     rows = rows.slice().sort((a, b) => {
       const pa = a.pinned_at ? 1 : 0;
       const pb = b.pinned_at ? 1 : 0;
@@ -682,10 +711,13 @@ async function handleMessenger({ p, method, url, req, json, db }) {
     const th = M.threads.find((x) => x.thread_id === t);
     if (!th) return json([]);
     const names = th.member_names || [];
+    const invitedNames = th.invited_names || [];
     const all = Object.values(M.members).filter((m) => names.includes(m.name));
+    const invited = Object.values(M.members).filter((m) => invitedNames.includes(m.name));
     return json([
       { member_id: UID, role: th.role, state: "active" },
       ...all.map((m) => ({ member_id: m.id, role: "member", state: "active" })),
+      ...invited.map((m) => ({ member_id: m.id, role: "member", state: "invited" })),
     ]);
   }
   // Only the thread's member-name read (MessengerThread: select id,name, id in (...)). Every other
@@ -728,9 +760,13 @@ async function handleMessenger({ p, method, url, req, json, db }) {
     if (body.p_link_previews !== undefined && body.p_link_previews !== null)
       M.settings.link_previews_enabled = body.p_link_previews;
     if (body.p_media_notice_seen) M.settings.media_notice_seen_at = new Date().toISOString();
+    // 41-E (1576): null leaves it, 'none' clears it, a modifier sets it.
+    if (body.p_skin_tone !== undefined && body.p_skin_tone !== null)
+      M.settings.reaction_skin_tone = body.p_skin_tone === "none" ? null : body.p_skin_tone;
     M.firstOpen = false;
     return json(M.settings);
   }
+  if (fn === "messenger_recent_reactions") return json(M.recent.slice(0, 24));
   if (fn === "messenger_dia_signals") return json(M.signals);
   if (fn === "messenger_dia_dismiss") {
     M.signals = M.signals.filter((s) => s.signal_key !== body.p_key);
@@ -742,6 +778,8 @@ async function handleMessenger({ p, method, url, req, json, db }) {
     for (const [tid, list] of Object.entries(M.messages)) {
       if (body.p_thread && body.p_thread !== tid) continue;
       for (const m of list) {
+        // 41-E (1591): a system row is never a hit.
+        if (m.kind === "system") continue;
         if (m.deleted || !m.body || !m.body.toLowerCase().includes(q)) continue;
         if (body.p_member && m.author_id !== body.p_member) continue;
         if (body.p_before && !(m.created_at < body.p_before)) continue;
@@ -841,16 +879,23 @@ async function handleMessenger({ p, method, url, req, json, db }) {
     return json({ message_id: body.p_message, storage_path: null });
   }
   if (fn === "messenger_react" || fn === "messenger_unreact") {
+    // 41-E (1590, 1577): one row per member, the character as sent; a face refuses a modifier.
     const m = find(body.p_message);
+    const reaction = String(body.p_reaction || "");
+    const base = reaction.replace(/[\u{1F3FB}-\u{1F3FF}]/gu, "").replace(/\uFE0F/g, "");
+    const hands = ["\u{1F44D}", "\u{1F64F}", "\u{1F44F}"];
+    if (
+      fn === "messenger_react" &&
+      /[\u{1F3FB}-\u{1F3FF}]/u.test(reaction) &&
+      !hands.includes(base)
+    )
+      return refuse("bad_reaction", "22023");
     if (m) {
       m.reactions = (m.reactions || []).filter((r) => !r.own);
-      if (fn === "messenger_react")
-        m.reactions.push({
-          reaction: body.p_reaction,
-          names: ["Amara Osei"],
-          others: false,
-          own: true,
-        });
+      if (fn === "messenger_react") {
+        m.reactions.push({ reaction, names: ["Amara Osei"], others: false, own: true });
+        M.recent = [reaction, ...M.recent.filter((x) => x !== reaction)].slice(0, 24);
+      }
     }
     return json(null, 204);
   }
@@ -967,10 +1012,65 @@ async function handleMessenger({ p, method, url, req, json, db }) {
     return json(null, 204);
   }
   if (fn === "messenger_thread_rename") {
+    if (M.fail && M.fail.startsWith("rename:")) return refuse(M.fail.slice(7));
     const t = thread();
     if (!t || t.kind !== "community_group") return refuse("not_renamable");
     t.name = String(body.p_name || "").trim();
+    // 41-E (1591): the system row, a fixed event word, never a name.
+    const list = M.messages[t.thread_id] || (M.messages[t.thread_id] = []);
+    const seq = list.reduce((a, x) => Math.max(a, x.seq), 0) + 1;
+    list.push(
+      msg(t.thread_id, seq, UID, "renamed", new Date().toISOString(), {
+        kind: "system",
+        tick: null,
+      }),
+    );
     return json(null, 204);
+  }
+  if (fn === "messenger_thread_create_group") {
+    // 41-E (1580, 1581): a refusal the arm asked for, else the thread with its picked invited.
+    if (M.fail && M.fail.startsWith("create:")) return refuse(M.fail.slice(7));
+    const id = randomUUID();
+    const picked = Array.isArray(body.p_member_ids) ? body.p_member_ids : [];
+    // The picked come from Connect's network fixture (tests/matrix.cjs, loaded by now) as well as
+    // the Messenger's own members.
+    const known = [...Object.values(M.members), ...require("./matrix.cjs").CONNECT_MEMBERS];
+    const names = picked.map((x) => known.find((m) => m.id === x)?.name).filter(Boolean);
+    M.threads.unshift({
+      thread_id: id,
+      kind: "community_group",
+      name: String(body.p_name || "").trim(),
+      headline: null,
+      avatar_path: null,
+      other_member_id: null,
+      member_names: [],
+      others: false,
+      last_line: null,
+      last_kind: null,
+      last_author_id: null,
+      last_author_name: null,
+      last_seq: null,
+      last_activity_at: new Date().toISOString(),
+      unread: false,
+      muted: false,
+      archived: false,
+      pinned: false,
+      pinned_at: null,
+      invited: false,
+      role: "lead",
+      state: "active",
+      read_seq: 0,
+      delivered_seq: 0,
+      anchor_kind: null,
+      anchor_id: null,
+      parent_thread_id: null,
+      history_visible_to_new: false,
+      created_at: new Date().toISOString(),
+      invited_names: names.slice(0, 3),
+      invited_others: names.length > 3,
+    });
+    M.messages[id] = [];
+    return json(id);
   }
   if (fn === "messenger_request_block") {
     M.requests = M.requests.filter((x) => x.request_id !== body.p_request);
@@ -993,4 +1093,4 @@ async function handleMessenger({ p, method, url, req, json, db }) {
   return json(null, 204);
 }
 
-module.exports = { messengerFixture, handleMessenger, VOCAB_KEYS, UID, ids, members };
+module.exports = { messengerFixture, handleMessenger, VOCAB_KEYS, UID, ids, members, VIDEO_MEDIA };

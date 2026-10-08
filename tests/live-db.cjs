@@ -338,6 +338,18 @@ async function runLiveDbArms({ record, skip }) {
       "Brief 14 41-A (1331, 1348, 1349, 1370): vocabularies() carries the seven thread kinds, three mute durations, six report reasons and five reaction words",
     messengerGrants:
       "Brief 14 41-A (1116): no client role holds insert, update or delete on any table 41-A created, and every one of them has a catalogue row",
+    messengerEmojiOne:
+      "Brief 14 41-E (1577, 1590): a member's reaction is one row that a second glyph replaces, the projection lists it once with own true, unreact removes it, and one of the five words is refused with bad_reaction",
+    messengerEmojiTone:
+      "Brief 14 41-E (1576, 1577): a modifier is stored on a hand, with and without the base's variation selector, and refused on a face with bad_reaction",
+    messengerSkinTone:
+      "Brief 14 41-E (1576, 1405): messenger_settings_set(p_skin_tone) stores a modifier, 'none' clears it, another character is refused, and messenger_recent_reactions answers the member's distinct emoji newest first",
+    messengerCreateWords:
+      "Brief 14 41-E (1581): messenger_thread_create_group raises bad_name, no_members, group_full, bad_member (self, an unknown id, a blocked member) and not_your_connection, each by the wrapper",
+    messengerCreateInvited:
+      "Brief 14 41-E (1580, 1592): a group's picked connection is in state invited with the creator its active lead, invited_names carries their name and member_names none, and the invited member's row reads invited",
+    messengerRenameSystem:
+      "Brief 14 41-E (1591): a rename writes one system row with body renamed and the renamer as author on the next seq, search does not return it, the list's last line skips it, and a pin of it is refused with bad_kind",
     r2mediaRecord:
       "Brief 14 41-B (1346, 1374): messenger_media_record writes a Messenger row for each test account, bucket r2:message-media, kind message, optimized for an image and not for audio",
     r2mediaMime:
@@ -3198,6 +3210,44 @@ async function runLiveDbArms({ record, skip }) {
       if (!acc.ok) return { ok: false, step: "accept", r: acc };
       return { ok: true, thread: acc.rows[0].t, request: req.rows[0] };
     };
+    /**
+     * 41-E (1581): a group takes the creator's connections only, so an arm that creates one connects
+     * its members first, through the canonical path: `a` introduces themselves to `b` and `b`
+     * accepts, or the other way round when the first direction is refused (a non-onboarded sender
+     * may still be introduced to). Answers ok, or the refusal to name in a skip.
+     */
+    const connect = async (a, b) => {
+      const note = "Live arms connection. Rolled back by the same run.";
+      for (const [from, to] of [
+        [a, b],
+        [b, a],
+      ]) {
+        await actAs(client, from);
+        const intro = await attempt(client, "select public.send_introduction($1, $2) as id", [
+          to,
+          note,
+        ]);
+        if (!intro.ok) continue;
+        await actAs(client, to);
+        const acc = await attempt(client, "select public.respond_to_request($1, true)", [from]);
+        return acc.ok ? { ok: true } : { ok: false, why: "accept " + fmt(acc) };
+      }
+      await actAsSelf(client);
+      const already = await attempt(
+        client,
+        "select private.is_connected($1::uuid, $2::uuid) as ok",
+        [a, b],
+      );
+      if (already.ok && already.rows[0].ok === true) return { ok: true };
+      return { ok: false, why: "send_introduction refused in both directions" };
+    };
+    const emojiPresent = async () => {
+      await actAsSelf(client);
+      const r = await client.query(
+        "select to_regclass('public.message_reaction_emoji') is not null as ok",
+      );
+      return !!r.rows[0] && r.rows[0].ok === true;
+    };
     if (!(await messengerPresent())) {
       for (const n of armsOf("messenger"))
         skip(
@@ -3205,6 +3255,7 @@ async function runLiveDbArms({ record, skip }) {
           "the 41-A migrations (20261002130000 to 20261002130800) are not on the project yet",
         );
     } else {
+      const withEmoji = await emojiPresent();
       // 1. The request and the accept (1330, 1341).
       await inTransaction(client, async () => {
         const pair = await openPair();
@@ -3357,6 +3408,13 @@ async function runLiveDbArms({ record, skip }) {
         if (!thirdId) {
           skip(names.messengerHistory, "live_arms_admin_member() answered no third member");
           return;
+        }
+        for (const other of [member.id, thirdId]) {
+          const c = await connect(owner.id, other);
+          if (!c.ok) {
+            skip(names.messengerHistory, "could not connect the group's members (1581): " + c.why);
+            return;
+          }
         }
         await actAs(client, owner.id);
         const group = await attempt(
@@ -3546,6 +3604,13 @@ async function runLiveDbArms({ record, skip }) {
           skip(names.messengerSearch, "live_arms_admin_member() answered no third member");
           return;
         }
+        for (const other of [member.id, thirdId]) {
+          const c = await connect(owner.id, other);
+          if (!c.ok) {
+            skip(names.messengerSearch, "could not connect the group's members (1581): " + c.why);
+            return;
+          }
+        }
         await actAs(client, owner.id);
         const group = await attempt(
           client,
@@ -3694,14 +3759,31 @@ async function runLiveDbArms({ record, skip }) {
         const j = v.ok ? v.rows[0].v : null;
         const len = (k) => (j && Array.isArray(j[k]) ? j[k].length : -1);
         const values = (k) => (j && Array.isArray(j[k]) ? j[k].map((x) => x.value) : []);
+        // 41-E (1398, 1403): once 20261008150700 is on the project the five words are gone and the
+        // quick eight stand in their place, in 1403's order.
+        const QUICK = [
+          "\u{1F44D}\uFE0F",
+          "\u2764\uFE0F",
+          "\u{1F64F}",
+          "\u{1F44F}",
+          "\u{1F389}",
+          "\u{1F602}",
+          "\u{1F62E}",
+          "\u{1F622}",
+        ];
+        const reactionsOk = withEmoji
+          ? j &&
+            !("message_reaction_kinds" in j) &&
+            JSON.stringify(values("message_reaction_quick")) === JSON.stringify(QUICK)
+          : len("message_reaction_kinds") === 5 &&
+            JSON.stringify(values("message_reaction_kinds")) ===
+              JSON.stringify(["agree", "thanks", "noted", "well_done", "sorry_to_hear"]);
         record(
           names.messengerVocab,
           len("thread_kinds") === 7 &&
             len("message_mute_durations") === 3 &&
             len("message_report_reasons") === 6 &&
-            len("message_reaction_kinds") === 5 &&
-            JSON.stringify(values("message_reaction_kinds")) ===
-              JSON.stringify(["agree", "thanks", "noted", "well_done", "sorry_to_hear"]),
+            reactionsOk,
           v.ok
             ? "thread_kinds " +
                 len("thread_kinds") +
@@ -3710,7 +3792,9 @@ async function runLiveDbArms({ record, skip }) {
                 ", reasons " +
                 len("message_report_reasons") +
                 ", reactions " +
-                values("message_reaction_kinds").join(" ")
+                (withEmoji
+                  ? values("message_reaction_quick").join(" ")
+                  : values("message_reaction_kinds").join(" "))
             : fmt(v),
         );
       });
@@ -3732,7 +3816,8 @@ async function runLiveDbArms({ record, skip }) {
           "thread_kinds",
           "message_mute_durations",
           "message_report_reasons",
-          "message_reaction_kinds",
+          // 41-E: message_reaction_emoji replaces message_reaction_kinds (20261008150000, 20261008150700).
+          withEmoji ? "message_reaction_emoji" : "message_reaction_kinds",
         ];
         const grants = await attempt(
           client,
@@ -3753,6 +3838,410 @@ async function runLiveDbArms({ record, skip }) {
             (rows.ok ? rows.rows[0].n + "/" + made.length : fmt(rows)),
         );
       });
+
+      // ----------------------------------------------------------------------------------------
+      // Handoff 56-41E (rulings 1576, 1577, 1580, 1581, 1590 to 1592): emoji reactions, the skin
+      // tone, Start a group's words and its invited members, the rename's system line. Unproven
+      // as a whole until Chat applies 20261008150000 to 20261008150700 (228).
+      // ----------------------------------------------------------------------------------------
+      const E = ["messengerEmoji", "messengerSkin", "messengerCreate", "messengerRename"];
+      if (!withEmoji) {
+        for (const prefix of E)
+          for (const n of armsOf(prefix))
+            skip(n, "20261008150000 to 20261008150700 are not on the project yet");
+      } else {
+        const HANDS = "\u{1F64F}";
+        const THUMB = "\u{1F44D}\uFE0F";
+        const MEDIUM = "\u{1F3FD}";
+        const MEDIUM_DARK = "\u{1F3FE}";
+        const react = (message, emoji) =>
+          attempt(client, "select public.messenger_react($1::uuid, $2)", [message, emoji]);
+        const rowsOf = (message, uid) =>
+          attempt(
+            client,
+            "select reaction from public.message_reactions where message_id = $1::uuid and member_id = $2::uuid order by reaction",
+            [message, uid],
+          );
+
+        // 14. One reaction per member (1577, 1590).
+        await inTransaction(client, async () => {
+          const pair = await openPair();
+          if (!pair.ok) {
+            record(names.messengerEmojiOne, false, pair.step + " " + fmt(pair.r));
+            return;
+          }
+          await actAs(client, owner.id);
+          const sent = await send(pair.thread, uuid(), "React to this");
+          if (!sent.ok) {
+            record(names.messengerEmojiOne, false, "send " + fmt(sent));
+            return;
+          }
+          const mid = sent.rows[0].id;
+          await actAs(client, member.id);
+          const r1 = await react(mid, HANDS);
+          const r2 = await react(mid, THUMB);
+          const rows = await rowsOf(mid, member.id);
+          const view = await attempt(
+            client,
+            "select reactions from public.messenger_messages_view where message_id = $1::uuid",
+            [mid],
+          );
+          const list = view.ok && view.rows[0] ? view.rows[0].reactions : null;
+          const word = await react(mid, "agree");
+          const un = await attempt(client, "select public.messenger_unreact($1::uuid, $2)", [
+            mid,
+            THUMB,
+          ]);
+          const after = await rowsOf(mid, member.id);
+          record(
+            names.messengerEmojiOne,
+            r1.ok &&
+              r2.ok &&
+              rows.ok &&
+              rows.rows.length === 1 &&
+              rows.rows[0].reaction === THUMB &&
+              Array.isArray(list) &&
+              list.length === 1 &&
+              list[0].reaction === THUMB &&
+              list[0].own === true &&
+              !word.ok &&
+              /bad_reaction/.test(word.message || "") &&
+              un.ok &&
+              after.ok &&
+              after.rows.length === 0,
+            "rows " +
+              (rows.ok ? JSON.stringify(rows.rows) : fmt(rows)) +
+              "; view " +
+              JSON.stringify(list) +
+              "; word " +
+              fmt(word) +
+              "; after unreact " +
+              (after.ok ? after.rows.length : fmt(after)),
+          );
+        });
+
+        // 15. The modifier (1576, 1577).
+        await inTransaction(client, async () => {
+          const pair = await openPair();
+          if (!pair.ok) {
+            record(names.messengerEmojiTone, false, pair.step + " " + fmt(pair.r));
+            return;
+          }
+          await actAs(client, owner.id);
+          const sent = await send(pair.thread, uuid(), "A hand and a face");
+          if (!sent.ok) {
+            record(names.messengerEmojiTone, false, "send " + fmt(sent));
+            return;
+          }
+          const mid = sent.rows[0].id;
+          await actAs(client, member.id);
+          const hand = await react(mid, HANDS + MEDIUM_DARK);
+          const stored = await rowsOf(mid, member.id);
+          // The thumb's base carries U+FE0F in the seed; its toned form does not (1F44D 1F3FE).
+          const thumb = await react(mid, "\u{1F44D}" + MEDIUM_DARK);
+          const storedThumb = await rowsOf(mid, member.id);
+          const face = await react(mid, "\u{1F602}" + MEDIUM_DARK);
+          const two = await react(mid, HANDS + MEDIUM_DARK + MEDIUM);
+          record(
+            names.messengerEmojiTone,
+            hand.ok &&
+              stored.ok &&
+              stored.rows.length === 1 &&
+              stored.rows[0].reaction === HANDS + MEDIUM_DARK &&
+              thumb.ok &&
+              storedThumb.ok &&
+              storedThumb.rows[0].reaction === "\u{1F44D}" + MEDIUM_DARK &&
+              !face.ok &&
+              /bad_reaction/.test(face.message || "") &&
+              !two.ok &&
+              /bad_reaction/.test(two.message || ""),
+            "hand " +
+              (stored.ok ? JSON.stringify(stored.rows) : fmt(stored)) +
+              "; thumb " +
+              (storedThumb.ok ? JSON.stringify(storedThumb.rows) : fmt(storedThumb)) +
+              "; face " +
+              fmt(face) +
+              "; two modifiers " +
+              fmt(two),
+          );
+        });
+
+        // 16. The skin tone setting and the recent emoji (1576, 1405).
+        await inTransaction(client, async () => {
+          await actAs(client, member.id);
+          const set = await attempt(
+            client,
+            "select reaction_skin_tone from public.messenger_settings_set(null, null, null, $1)",
+            [MEDIUM],
+          );
+          const kept = await attempt(
+            client,
+            "select reaction_skin_tone from public.messenger_settings_set(null, null, null, null)",
+          );
+          const cleared = await attempt(
+            client,
+            "select reaction_skin_tone from public.messenger_settings_set(null, null, null, 'none')",
+          );
+          const bad = await attempt(
+            client,
+            "select reaction_skin_tone from public.messenger_settings_set(null, null, null, 'x')",
+          );
+          const read = await attempt(
+            client,
+            "select reaction_skin_tone from public.messenger_settings()",
+          );
+          const pair = await openPair();
+          let recent = { ok: false, message: pair.ok ? "" : pair.step + " " + fmt(pair.r) };
+          if (pair.ok) {
+            await actAs(client, owner.id);
+            const a = await send(pair.thread, uuid(), "First");
+            const b = await send(pair.thread, uuid(), "Second");
+            if (a.ok && b.ok) {
+              await actAs(client, member.id);
+              await react(a.rows[0].id, HANDS);
+              await react(b.rows[0].id, THUMB);
+              recent = await attempt(client, "select public.messenger_recent_reactions() as r");
+            }
+          }
+          const list = recent.ok && recent.rows[0] ? recent.rows[0].r : null;
+          record(
+            names.messengerSkinTone,
+            set.ok &&
+              set.rows[0].reaction_skin_tone === MEDIUM &&
+              kept.ok &&
+              kept.rows[0].reaction_skin_tone === MEDIUM &&
+              cleared.ok &&
+              cleared.rows[0].reaction_skin_tone === null &&
+              !bad.ok &&
+              /bad_skin_tone/.test(bad.message || "") &&
+              read.ok &&
+              read.rows[0].reaction_skin_tone === null &&
+              Array.isArray(list) &&
+              JSON.stringify(list) === JSON.stringify([THUMB, HANDS]),
+            "set " +
+              (set.ok ? JSON.stringify(set.rows[0]) : fmt(set)) +
+              "; null keeps " +
+              (kept.ok ? JSON.stringify(kept.rows[0]) : fmt(kept)) +
+              "; none clears " +
+              (cleared.ok ? JSON.stringify(cleared.rows[0]) : fmt(cleared)) +
+              "; x " +
+              fmt(bad) +
+              "; recent " +
+              (recent.ok ? JSON.stringify(list) : fmt(recent)),
+          );
+        });
+
+        // 17. The create words (1581), each by the wrapper.
+        await inTransaction(client, async () => {
+          const third = await attempt(client, "select public.live_arms_admin_member() as id");
+          const thirdId = third.ok && third.rows[0] ? third.rows[0].id : null;
+          await actAs(client, owner.id);
+          const create = (name, ids) =>
+            attempt(client, "select public.messenger_thread_create_group($1, $2::uuid[]) as t", [
+              name,
+              ids,
+            ]);
+          const wordOf = (r) =>
+            r.ok
+              ? "ok"
+              : String(r.message || "")
+                  .trim()
+                  .split(/\s/)[0];
+          const badName = wordOf(await create("   ", [member.id]));
+          const noMembersNull = wordOf(await create("Group", null));
+          const noMembersEmpty = wordOf(await create("Group", []));
+          const full = wordOf(
+            await create(
+              "Group",
+              Array.from({ length: 256 }, () => uuid()),
+            ),
+          );
+          const self = wordOf(await create("Group", [owner.id]));
+          const unknown = wordOf(await create("Group", [uuid()]));
+          // A stranger: the third member, with whom owner-test holds no connection in this transaction.
+          const stranger = thirdId ? wordOf(await create("Group", [thirdId])) : "no third member";
+          // A blocked connection is bad_member before not_your_connection: connect, then block.
+          const c = await connect(owner.id, member.id);
+          let blocked = "could not connect: " + (c.ok ? "" : c.why);
+          if (c.ok) {
+            await actAs(client, member.id);
+            const block = await attempt(
+              client,
+              "insert into public.member_blocks (blocker_id, blocked_id) values ($1::uuid, $2::uuid)",
+              [member.id, owner.id],
+            );
+            await actAs(client, owner.id);
+            blocked = block.ok ? wordOf(await create("Group", [member.id])) : "block " + fmt(block);
+          }
+          record(
+            names.messengerCreateWords,
+            badName === "bad_name" &&
+              noMembersNull === "no_members" &&
+              noMembersEmpty === "no_members" &&
+              full === "group_full" &&
+              self === "bad_member" &&
+              unknown === "bad_member" &&
+              stranger === "not_your_connection" &&
+              blocked === "bad_member",
+            JSON.stringify({
+              badName,
+              noMembersNull,
+              noMembersEmpty,
+              full,
+              self,
+              unknown,
+              stranger,
+              blocked,
+            }),
+          );
+        });
+
+        // 18. The invited members (1580, 1592).
+        await inTransaction(client, async () => {
+          const c = await connect(owner.id, member.id);
+          if (!c.ok) {
+            skip(names.messengerCreateInvited, "could not connect the pair (1581): " + c.why);
+            return;
+          }
+          await actAs(client, owner.id);
+          const group = await attempt(
+            client,
+            "select public.messenger_thread_create_group($1, array[$2::uuid]) as t",
+            ["Invited group", member.id],
+          );
+          if (!group.ok) {
+            record(names.messengerCreateInvited, false, "create " + fmt(group));
+            return;
+          }
+          const g = group.rows[0].t;
+          const asOwner = await attempt(
+            client,
+            "select invited_names, invited_others, member_names, others, role, state from public.messenger_threads_view where thread_id = $1::uuid",
+            [g],
+          );
+          await actAs(client, member.id);
+          const asMember = await attempt(
+            client,
+            "select invited, state from public.messenger_threads_view where thread_id = $1::uuid",
+            [g],
+          );
+          await actAsSelf(client);
+          const rows = await attempt(
+            client,
+            "select member_id, role, state from public.thread_members where thread_id = $1::uuid order by member_id",
+            [g],
+          );
+          const o = asOwner.ok ? asOwner.rows[0] : null;
+          const m = asMember.ok ? asMember.rows[0] : null;
+          record(
+            names.messengerCreateInvited,
+            !!o &&
+              JSON.stringify(o.invited_names) === JSON.stringify([member.name]) &&
+              o.invited_others === false &&
+              JSON.stringify(o.member_names) === JSON.stringify([]) &&
+              o.role === "lead" &&
+              o.state === "active" &&
+              !!m &&
+              m.invited === true &&
+              m.state === "invited" &&
+              rows.ok &&
+              rows.rows.length === 2 &&
+              rows.rows.every((r) =>
+                r.member_id === owner.id
+                  ? r.role === "lead" && r.state === "active"
+                  : r.member_id === member.id && r.state === "invited",
+              ),
+            "owner " +
+              (asOwner.ok ? JSON.stringify(o) : fmt(asOwner)) +
+              "; member " +
+              (asMember.ok ? JSON.stringify(m) : fmt(asMember)) +
+              "; rows " +
+              (rows.ok ? JSON.stringify(rows.rows) : fmt(rows)),
+          );
+        });
+
+        // 19. The rename's system line (1591).
+        await inTransaction(client, async () => {
+          const c = await connect(owner.id, member.id);
+          if (!c.ok) {
+            skip(names.messengerRenameSystem, "could not connect the pair (1581): " + c.why);
+            return;
+          }
+          await actAs(client, owner.id);
+          const group = await attempt(
+            client,
+            "select public.messenger_thread_create_group($1, array[$2::uuid]) as t",
+            ["Before the rename", member.id],
+          );
+          if (!group.ok) {
+            record(names.messengerRenameSystem, false, "create " + fmt(group));
+            return;
+          }
+          const g = group.rows[0].t;
+          await actAs(client, member.id);
+          await attempt(client, "select public.messenger_thread_invite_accept($1::uuid)", [g]);
+          await actAs(client, owner.id);
+          const hello = await send(g, uuid(), "Hello before the renamed word");
+          const renamed = await attempt(
+            client,
+            "select public.messenger_thread_rename($1::uuid, $2)",
+            [g, "After the rename"],
+          );
+          const log = await attempt(
+            client,
+            "select seq, kind, body, author_id, author_name from public.messenger_messages_view where thread_id = $1::uuid order by seq",
+            [g],
+          );
+          const search = await attempt(
+            client,
+            "select count(*)::int as n from public.messenger_search($1)",
+            ["renamed"],
+          );
+          const row = await attempt(
+            client,
+            "select name, last_seq, last_line, last_kind, unread from public.messenger_threads_view where thread_id = $1::uuid",
+            [g],
+          );
+          const sys = log.ok ? log.rows.find((r) => r.kind === "system") : null;
+          const pin = sys
+            ? await attempt(
+                client,
+                "select public.messenger_pin_message(m.id) from public.messages m where m.thread_id = $1::uuid and m.seq = $2::bigint",
+                [g, sys.seq],
+              )
+            : { ok: false, message: "no system row" };
+          record(
+            names.messengerRenameSystem,
+            hello.ok &&
+              renamed.ok &&
+              log.ok &&
+              log.rows.length === 2 &&
+              !!sys &&
+              Number(sys.seq) === 2 &&
+              sys.body === "renamed" &&
+              sys.author_id === owner.id &&
+              sys.author_name === owner.name &&
+              search.ok &&
+              search.rows[0].n === 0 &&
+              row.ok &&
+              row.rows[0].name === "After the rename" &&
+              Number(row.rows[0].last_seq) === 1 &&
+              row.rows[0].last_kind === "text" &&
+              !pin.ok &&
+              /bad_kind/.test(pin.message || ""),
+            "log " +
+              (log.ok
+                ? JSON.stringify(log.rows.map((r) => [Number(r.seq), r.kind, r.body]))
+                : fmt(log)) +
+              "; search " +
+              (search.ok ? search.rows[0].n : fmt(search)) +
+              "; row " +
+              (row.ok ? JSON.stringify(row.rows[0]) : fmt(row)) +
+              "; pin " +
+              fmt(pin),
+          );
+        });
+      }
     }
 
     // ------------------------------------------------------------------------------------------
