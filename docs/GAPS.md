@@ -8759,3 +8759,24 @@ none of the files `3259dbb` changed. The arm passed on `0d6e050` (run 526), and 
 
 Owed: a wait on each panel's rows before the read, whose timeout is the check's failure. Recorded
 only; not fixed here.
+
+---
+
+## G253. The onboarding flow arm timed out on /welcome on WebKit once, outside the diff it ran on
+
+**Severity: low. Opened 8 October 2026, observed by Fix PR 09 (handoff 57-FIX-09) on its enforcing
+run. The number is assigned by this entry (ruling 638).**
+
+Run 533 attempt 1, on `4ccd900` (PR #101's head), `matrix (webkit)`, job 113552642930, deployment
+`ccdef5d9`. Arm `webkit-390x844-light-onboarding-flows`: `flow arm, first pass, completed` failed with
+`TimeoutError: page.waitForSelector: Timeout 15000ms exceeded`. It was waiting for
+`[data-testid="onboarding-who"]` to be visible, and for the navigation to `/password` to finish, on
+`/welcome`. Ruling 292 then read 16 of 41 checks emitted. Not a crash: 0 behind G5. The same arm
+passed in Chromium on the same run.
+
+It is not #101's. That PR changes `LensBar`, `LensSeat` and `holdLensDock` in
+`src/lib/shell-scroll.tsx`. `/welcome` renders `WhoScreen` from `OnboardingSurface` outside the shell,
+and nothing on that path imports any of the three.
+
+Owed: the cause read, starting with whether the `/password` to `/welcome` navigation settles before
+the arm waits for the screen. Recorded only; not changed here.
