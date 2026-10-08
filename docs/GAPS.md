@@ -7999,20 +7999,24 @@ function.
 
 ---
 
-## Unnumbered, from Fix PR 07 (handoff 44), for Lane A to number under ruling 760
+## G201. The Fix PR number read from this register collides with a merged Fix PR 06
 
-### The Fix PR number read from this register collides with a merged Fix PR 06
-
-**Severity: low. Opened 3 October 2026 during handoff 44's gate.**
+**Severity: low. Opened 3 October 2026 during handoff 44's gate. Numbered by handoff 55-A under
+ruling 760; filed unnumbered by Fix PR 07 (handoff 44). The number is assigned by this entry (ruling
+638).**
 
 Handoff 44 takes the next Fix PR number from the highest "Fix PR NN" this register cites, which was 05,
 so 06. `docs/audit/FIX-PR-06.md`, merged in #46 on 18 September, is already Fix PR 06 (rulings 588 to
 590), and the register never cites it. This PR took 07. Owed: one source for the Fix PR sequence, either
 an entry here for every Fix PR or the handoff reading `docs/audit/` as well.
 
-### `src/components/ui/input.tsx` and `textarea.tsx` render at 14px from 768 up, and stay in the tree
+---
 
-**Severity: low. Opened 3 October 2026 during Fix PR 07 item 1 (ruling 1456).**
+## G202. `src/components/ui/input.tsx` and `textarea.tsx` render at 14px from 768 up, and stay in the tree
+
+**Severity: low. Opened 3 October 2026 during Fix PR 07 item 1 (ruling 1456). Numbered by handoff
+55-A under ruling 760; filed unnumbered by Fix PR 07 (handoff 44). The number is assigned by this
+entry (ruling 638).**
 
 The shadcn `Input` carries `text-base md:text-sm`, which is 14px from 768 to 1023, a touch width.
 Nothing renders it today; its one importer is `src/components/ui/sidebar.tsx`, which nothing imports.
@@ -8020,9 +8024,13 @@ Under rulings 70 and 72 no surface may use it, but if one did, 1456 would be bro
 matrix's `fields` arm would only catch it on a route that arm visits. Owed: removing the unused
 shadcn parts, as their own change.
 
-### No arm reproduces W60's masthead loop; the proof is the founder's phone (358)
+---
 
-**Severity: moderate. Opened 3 October 2026 during Fix PR 07 item 3.**
+## G203. No arm reproduces W60's masthead loop; the proof is the founder's phone (358)
+
+**Severity: moderate. Opened 3 October 2026 during Fix PR 07 item 3. Numbered by handoff 55-A under
+ruling 760; filed unnumbered by Fix PR 07 (handoff 44). The number is assigned by this entry (ruling
+638).**
 
 On the mock, at 390 in Chromium with scroll anchoring turned off, `main` at `1238947` does not loop: the
 range left after condensing never drops under 96px, which is above `RELEASE_PX`. Fix PR 07's guard is
@@ -8033,11 +8041,11 @@ in Safari. Owed: an arm on WebKit with a seeded short profile whose range after 
 
 ---
 
-## Unnumbered, from Fix PR 08 (handoff 51), for Lane A to number under ruling 760
+## G204. The header's lens bar is named "Lens" on every surface
 
-### The header's lens bar is named "Lens" on every surface
-
-**Severity: low. Opened 4 October 2026 during Fix PR 08 item 3 (ruling 1467).**
+**Severity: low. Opened 4 October 2026 during Fix PR 08 item 3 (ruling 1467). Numbered by handoff
+55-A under ruling 760; filed unnumbered by Fix PR 08 (handoff 51). The number is assigned by this
+entry (ruling 638).**
 
 `AppHeader` renders the registered bar with no `label`, so `LensBar`'s default names its tablist
 "Lens" whether it holds the Feed's, Connect's or Convene's lenses; the in-page bars are "Lens",
@@ -8046,9 +8054,13 @@ label field, and `src/lib/header-lens-store.ts` has nothing to pass. Connect now
 screen reader hears "Lens" for three different lens sets once the bar docks. Owed: a `label` on
 `HeaderLensBar`, passed by each registering surface and rendered by `AppHeader`.
 
-### The Feed's and Connect's bars sit at the start of the column at medium and expanded
+---
 
-**Severity: low. Opened 4 October 2026 during Fix PR 08 item 2 (ruling 1465).**
+## G205. The Feed's and Connect's bars sit at the start of the column at medium and expanded — closed (#98, rulings 1502 and 1504)
+
+**Severity: low. Opened 4 October 2026 during Fix PR 08 item 2 (ruling 1465). Numbered by handoff
+55-A under ruling 760; filed unnumbered by Fix PR 08 (handoff 51). The number is assigned by this
+entry (ruling 638).**
 
 Under `width="content"` the bar hugs its words. Discovery's bar is centred in its lens row by 1170;
 the Feed's and Connect's are in the column and now sit at its start edge, where under `fill` they
@@ -8064,9 +8076,13 @@ are 506.69 for the Feed and 479.82 for Connect, against columns of 616 at medium
 1280, so every bar fits; where a sum exceeds its column the bar falls back to the sideways strip and
 never drops a label. Discovery's lens row is unchanged (1170).
 
-### Two live checks on Convene's seeded Filling up events are red on `main`
+---
 
-**Severity: moderate. Opened 4 October 2026 during Fix PR 08, which touches no SQL.**
+## G206. Two live checks on Convene's seeded Filling up events are red on `main` — closed (handoff 55-A, first commit)
+
+**Severity: moderate. Opened 4 October 2026 during Fix PR 08, which touches no SQL. Numbered by
+handoff 55-A under ruling 760; filed unnumbered by Fix PR 08 (handoff 51). The number is assigned by
+this entry (ruling 638).**
 
 `tests/live-checks.cjs` fails the same two checks on `main` at `8fc0526` (run 511) and on this branch
 (run 512), word for word: "Handoff 34-A addendum (1173): a search whose matches sit one to a lane
@@ -8076,3 +8092,504 @@ three first names" reads `names [null,null]` for both seeded events. The `live` 
 branch for it, which hides any new live failure behind a known one. Not diagnosed here. Owed: the
 cause read on the canonical project (the seeded events' titles and their going registrations as
 `live_arms` sees them), then the seed or the arm put right.
+
+**Closed by handoff 55-A's first commit (`1cad7b8`), recorded under its Session 54 label as G221.**
+The 1165 seed was replaced on 1 October; the arm now names the two events that carry the going
+registrations and reads them before it relies on them.
+
+---
+
+## G207. N1: `connection_request` is rendered by the client but absent from the enum and has no writer — closed (handoff 55-A)
+
+**Severity: moderate. Opened 1 October 2026 in Session 39's assessment (label N1; already noted under
+G19 since 13 September). Numbered by handoff 55-A under ruling 760. The number is assigned by this
+entry (ruling 638).**
+
+An incoming introduction raised nothing: the client carried the kind, its copy and its destination,
+the enum did not carry the kind, and no function wrote it.
+
+**Closed by handoff 55-A (rulings 461, 1318, 1319).** `connection_request` is a row of
+`public.notification_kinds` (`20261008120100`), and `public.send_introduction` calls
+`private.notify(p_recipient, 'connection_request', ...)` in its own transaction
+(`20261008120300`). Withdrawal and expiry retract the row (471); acceptance settles it; a decline
+retracts it and tells nobody (157). Proved by the live arm "send_introduction from owner-test leaves
+member-test one connection_request row, and withdrawing it leaves none".
+
+---
+
+## G208. N2: `role_accepted` is written but has no row part, so an accepted invitation disappears
+
+**Severity: low. Opened 1 October 2026 in Session 39's assessment (label N2). Numbered by handoff
+55-A under ruling 760. The number is assigned by this entry (ruling 638).**
+
+**Data side done by handoff 55-A (1519).** `public.respond_to_event_role` now settles the invitee's
+`role_invitation` row and writes `role_accepted` to the event's host through `private.notify`; the
+in-place kind rewrite on the invitee's own row is gone. The kind's row carries `renders = false`.
+Held: the Strand row part for `role_accepted` (752), then `renders = true`, on the Chat/Design queue.
+
+---
+
+## G209. N3: four writers inserted notifications directly, and the kind-to-C map lived in two places — closed (handoff 55-A)
+
+**Severity: moderate. Opened 1 October 2026 in Session 39's assessment (label N3). Numbered by
+handoff 55-A under ruling 760. The number is assigned by this entry (ruling 638).**
+
+**Closed by handoff 55-A (1319).** `private.notify` is the only function that inserts a row; its two
+siblings `private.notification_retract` and `private.notification_settle`, the member's
+`notifications_mark_seen` and `notifications_mark_all_read`, and the 180-day purge are the only other
+bodies that write the table. The trigger `on_connection_request_accepted` and
+`private.notify_connection_accepted` are dropped; `invite_event_party`, `respond_to_event_role` and
+`remove_event_party` call the writer and its siblings. The generated `c_category` CASE is dropped:
+the row's C is written by `notify` from the kind's vocabulary row. The live arm reads `pg_proc` and
+fails on any other writer.
+
+---
+
+## G210. N4: the kind vocabulary was a hardcoded client array — closed (handoff 55-A)
+
+**Severity: moderate. Opened 1 October 2026 in Session 39's assessment (label N4; related to G187).
+Numbered by handoff 55-A under ruling 760. The number is assigned by this entry (ruling 638).**
+
+**Closed by handoff 55-A (1318).** `public.notification_kinds` is the vocabulary, served by
+`vocabularies()` as `notification_kinds`; `NOTIFICATION_REGISTRY`, `KIND_C` and `DESTINATION` are gone
+from `NotificationListItem.tsx`. A row's C and destination line come from its kind's row, and a kind
+renders where its row says `renders` and the row part has a sentence. `tests/notifications.cjs` fails
+on any client array or object of kinds. G187's registry half goes with it; its other halves (ruling
+461's words, 490's line against the compiled rows) are unchanged.
+
+---
+
+## G211. N5: `attestation_received` was fixed to Contribute, where attestations are per context
+
+**Severity: moderate. Opened 1 October 2026 in Session 39's assessment (label N5). Numbered by
+handoff 55-A under ruling 760. The number is assigned by this entry (ruling 638).**
+
+**Writer side done by handoff 55-A (1325).** The kind's row carries `c_from_object = true` and no
+fixed C; `private.notify` resolves its C from the object's context through
+`private.notification_c_for` and refuses a context that names none. Open: attestations have no
+writer yet, so `notification_c_for` carries no attestation branch; the branch lands with the writer,
+and the kind keeps `renders = false` until then.
+
+---
+
+## G212. N6: `event_reminder` has a destination but no writer and no scheduler
+
+**Severity: moderate. Opened 1 October 2026 in Session 39's assessment (label N6). Numbered by
+handoff 55-A under ruling 760. The number is assigned by this entry (ruling 638).**
+
+The kind's row exists with "Opens the event" (G19's words) and `renders = false`. Its writer and
+scheduler are Brief 8's delivery layer.
+
+---
+
+## G213. N7: no preferences store and no control
+
+**Severity: moderate, high once email ships. Opened 1 October 2026 in Session 39's assessment (label
+N7). Numbered by handoff 55-A under ruling 760. The number is assigned by this entry (ruling 638).**
+
+**Data side done by handoff 55-A (1320).** `public.notification_preferences` holds a member's email
+mode per C, read by the member alone and written only through `public.set_notification_preference`;
+`private.notify` reads it when a kind carries copy. Held: the Settings control and the labels for
+channels and modes, Path 1 on the Chat/Design queue (1521).
+
+---
+
+## G214. N8: no out-of-app delivery, no outbox, no record of a send
+
+**Severity: moderate. Opened 1 October 2026 in Session 39's assessment (label N8). Numbered by
+handoff 55-A under ruling 760. The number is assigned by this entry (ruling 638).**
+
+**Data side done by handoff 55-A (1321).** `private.notification_outbox` records every mail
+`private.notify` enqueues; `notify-deliver` claims due rows under `for update skip locked` and marks a
+row sent only with Resend's id; `resend-webhook` suppresses an address on a hard bounce or a
+complaint; `dna_notify_deliver_minutely` wakes the function through `pg_net` with the vault token.
+Held: the first send, which waits for each kind's copy (1520, G240). Under 1520 nothing is enqueued.
+
+---
+
+## G215. N9: `notifications_actor_select` returned `read_at` to the actor — closed (handoff 55-A)
+
+**Severity: moderate; invite-boundary gate. Opened 1 October 2026 in Session 39's assessment (label
+N9). Numbered by handoff 55-A under ruling 760. The number is assigned by this entry (ruling 638).**
+
+**Closed by handoff 55-A (1323).** The policy is dropped in `20261008120200`; an actor reads none of
+the rows they cause. Proved by the live arm "the actor reads none of the rows they caused".
+
+---
+
+## G216. N10: rows from a blocked member still rendered with the name — closed (handoff 55-A)
+
+**Severity: low. Opened 1 October 2026 in Session 39's assessment (label N10). Numbered by handoff
+55-A under ruling 760. The number is assigned by this entry (ruling 638).**
+
+**Closed by handoff 55-A (1518, 139).** `notifications_recipient_select` carries
+`not (actor_kind = 'member' and private.is_blocked(recipient_member_id, actor_id))`, symmetric, as row
+policy; `notifications_dot` applies the same test; `private.notify` writes nothing across a block in
+either direction. Proved by the live arm "a recipient who blocks the actor reads no row from them".
+
+---
+
+## G217. N11: the dot cleared only row by row; no Mark all read
+
+**Severity: low. Opened 1 October 2026 in Session 39's assessment (label N11). Numbered by handoff
+55-A under ruling 760. The number is assigned by this entry (ruling 638).**
+
+**Data side done by handoff 55-A (1322, 1521).** Seen and read are two columns: opening the panel
+calls `notifications_mark_seen`, which clears the dot while each row keeps its unread weight, and
+`notifications_mark_all_read` exists for the caller's rows. Held: the panel's Mark all read control,
+Path 1 on the Chat/Design queue (1521).
+
+---
+
+## G218. N12: no retention; 485's purge was never built — closed (handoff 55-A)
+
+**Severity: low. Opened 1 October 2026 in Session 39's assessment (label N12). Numbered by handoff
+55-A under ruling 760. The number is assigned by this entry (ruling 638).**
+
+**Closed by handoff 55-A (1324).** `private.purge_read_notifications` deletes rows read more than 180
+days ago, never an unread row, and `dna_notifications_purge_daily` runs it at 04:05 UTC; outbox rows
+go by cascade. Proved by the live arm "the purge deletes a row read 200 days ago and leaves an unread
+row".
+
+---
+
+## G219. N13: no system-category kind; 272's password-changed mail has no in-app record
+
+**Severity: low. Opened 1 October 2026 in Session 39's assessment (label N13). Numbered by handoff
+55-A under ruling 760. The number is assigned by this entry (ruling 638).**
+
+Held by handoff 55-A: `account_security` has no `notification_kinds` row because its copy needs a
+ruling. The row, then a writer on the password and email change paths, land after it.
+
+---
+
+## G220. N14: `src/lib/notifications.ts` line 3 said no engine writes rows — closed (handoff 55-A)
+
+**Severity: low. Opened 1 October 2026 in Session 39's assessment (label N14). Numbered by handoff
+55-A under ruling 760. The number is assigned by this entry (ruling 638).**
+
+**Closed by handoff 55-A.** The header now says rows are written by `private.notify` inside each
+engine's own write function and names them.
+
+---
+
+## G221. S54-1: the `live` job is red on every branch from the two seeded Filling up checks — closed (handoff 55-A, first commit)
+
+**Severity: moderate. Opened 5 October 2026 in Session 54's consolidation (label S54-1; the same
+defect as G206). Numbered by handoff 55-A under ruling 760. The number is assigned by this entry
+(ruling 638).**
+
+The register names `tests/discovery.cjs`; the two checks live in `tests/live-db.cjs`, run by
+`tests/live-checks.cjs`. Cause, read on the canonical project in Session 55: the two events
+`SEEDED_FILLING` named (the 1165 seed, `bfcc66ba-…` and `01e7c23d-…`) no longer exist, because the
+canonical event set was replaced on 1 October 2026 at 07:49 and 08:11 PDT. The published future events
+with five or more going registrations are now `0a527cb8-79e3-4fae-97e0-4e12b5caff2e` (Johannesburg
+Returnee Supper) and `829b0fb7-72d5-4da5-bfe4-cc3ee9c14637` (Accra Diaspora Founders Breakfast), six
+each, both test accounts among them.
+
+**Closed by handoff 55-A's first commit (`1cad7b8`).** `SEEDED_FILLING` names the two events with a
+comment saying where they came from; a named check reads both as published, future and uncancelled
+before the two arms that depend on them, and a missing seed reports both arms unproven (228) with
+"seed missing" and the id, never failed. The expectations are unchanged. The proof is this PR's `live`
+job.
+
+---
+
+## G222. S54-2: nobody recorded who applied ledger row `20261003140000` — closed (handoff 55-A)
+
+**Severity: low. Opened 5 October 2026 in Session 54's consolidation (label S54-2). Numbered by
+handoff 55-A under ruling 760. The number is assigned by this entry (ruling 638).**
+
+**Closed by the record, read by Chat on 5 October 2026 at 15:03 PDT.** Ledger row `20261003140000`
+(1451, the All lens line) was applied by Session 44's Chat (Lane E) through `execute_sql`;
+`SESSION-44-CLOSE.md` line 60 says so. Its recorded statement's drift-form md5 is
+`2456cabe9441ae8f7c7353a838343d84`, equal to the committed file's. The one difference from its
+neighbours: its `created_by` is null where theirs read `chat-execute_sql`.
+
+---
+
+## G223. S54-3: Messenger's `.mov` refusal is client-side, before the route
+
+**Severity: moderate. Opened 5 October 2026 in Session 54's consolidation (label S54-3). Numbered by
+handoff 55-A under ruling 760. The number is assigned by this entry (ruling 638).**
+
+`measureVideo` in `src/lib/media.ts` gets no dimensions in macOS Safari from a detached `<video>`.
+Faststart layout was ruled out on 5 October (edge logs show no `messenger_media_record` at 14:27
+Pacific). `bad_media` and `too_large` share one on-screen line. Owner: the Code queue, item (b); copy
+to 41-E (1409).
+
+---
+
+## G224. S54-4: `tests/messenger-media.cjs` cannot catch a client-side refusal
+
+**Severity: low. Opened 5 October 2026 in Session 54's consolidation (label S54-4). Numbered by
+handoff 55-A under ruling 760. The number is assigned by this entry (ruling 638).**
+
+The arm posts `.mov` bytes straight to the route, so CI never exercises the client path G223 breaks;
+that path's proof is a named check on the deployed URL in Safari. With G223.
+
+---
+
+## G225. S54-5: #98's iPhone walk found four lens-bar defects
+
+**Severity: moderate. Opened 5 October 2026 in Session 54's consolidation (label S54-5). Numbered by
+handoff 55-A under ruling 760. The number is assigned by this entry (ruling 638).**
+
+Connect's lens bar lacks the more-to-scroll cue; the Feed's bar does not dock on scroll; a lens change
+while docked moves the Feed's and Convene's bars; the trailing corner is square (1515, 1517). Owner:
+Lane E, Session 57's first Fix PR.
+
+---
+
+## G226. S54-6: each Design project's records lagged Chat's ratifications
+
+**Severity: low. Opened 5 October 2026 in Session 54's consolidation (label S54-6). Numbered by
+handoff 55-A under ruling 760. The number is assigned by this entry (ruling 638).**
+
+Synced on 5 October. Pages stay correct only if every ratification is relayed to its project in the
+same session. Owner: protocol, Session 54's lessons.
+
+---
+
+## G227. S54-7: the bound compile is 53 bytes larger than Strand's export note, and three proofs are owed
+
+**Severity: low. Opened 5 October 2026 in Session 54's consolidation (label S54-7). Numbered by
+handoff 55-A under ruling 760. The number is assigned by this entry (ruling 638).**
+
+The app project's bound compile `v1790724894917128` is 53 bytes larger than Strand's export note
+states; 995's pre-copy byte count and hash were never taken for that bind; fifteen `Sheet` pages owe a
+proof under 755; `LinkRow` never reached Strand. Owner: Strand's next correction brief (1510 e).
+
+---
+
+## G228. S54-8: Strand's root bundle carries no compile id literal
+
+**Severity: low. Opened 5 October 2026 in Session 54's consolidation (label S54-8). Numbered by
+handoff 55-A under ruling 760. The number is assigned by this entry (ruling 638).**
+
+854 and 861 stand. Owner: standing.
+
+---
+
+## G229. S54-9: MemberCard's source comments in Strand still say "vouches" and flag ruled departures
+
+**Severity: low. Opened 5 October 2026 in Session 54's consolidation (label S54-9). Numbered by
+handoff 55-A under ruling 760. The number is assigned by this entry (ruling 638).**
+
+The departures are those ruled as 1487 to 1490 and 1500. Owner: Strand's next correction brief
+(1510 e).
+
+---
+
+## G230. S54-10: 44-W64 never reached Strand, and 44-NAV is unstarted
+
+**Severity: low. Opened 5 October 2026 in Session 54's consolidation (label S54-10). Numbered by
+handoff 55-A under ruling 760. The number is assigned by this entry (ruling 638).**
+
+44-W64 is the event time (1447 to 1450); 44-NAV is 1474 and 1476 to 1478. Owner: the Chat/Design queue
+(1510 f).
+
+---
+
+## G231. S54-11: the admin prototype's company-zone dialog opens on another zone
+
+**Severity: low. Opened 5 October 2026 in Session 54's consolidation (label S54-11). Numbered by
+handoff 55-A under ruling 760. The number is assigned by this entry (ruling 638).**
+
+1415 and the built app open it on the current zone with Confirm disabled. Owner: the next admin Design
+pass.
+
+---
+
+## G232. S54-12: Convene Pass 4's approval under 62 is not found in the register
+
+**Severity: low. Opened 5 October 2026 in Session 54's consolidation (label S54-12). Numbered by
+handoff 55-A under ruling 760. The number is assigned by this entry (ruling 638).**
+
+Brief 11 was built. Owner: Session 56, reading Session 17 to 22's records.
+
+---
+
+## G233. S54-13: `supabase/config.toml` is absent, so no function's JWT setting is readable from the tree
+
+**Severity: low. Opened 5 October 2026 in Session 54's consolidation (label S54-13; Session 47).
+Numbered by handoff 55-A under ruling 760. The number is assigned by this entry (ruling 638).**
+
+Handoff 55-A's two functions, `notify-deliver` and `resend-webhook`, deploy with `verify_jwt = false`;
+with no `config.toml` the setting travels in the `deploy_edge_function` call and each function's
+header comment records it, as `guest-rsvp`'s and `event-media`'s do. Owner: Lane A.
+
+---
+
+## G234. S54-14: BR-133 puts the EDLMS repo on the canonical project's one ledger
+
+**Severity: moderate. Opened 5 October 2026 at Session 54's close (label S54-14). Numbered by handoff
+55-A under ruling 760. The number is assigned by this entry (ruling 638).**
+
+Two repos writing migrations into one ledger breaks the single migration slot (759, 1506) and every
+ledger-head check against `main`'s newest migration file. Needs a ruling before the first EDLMS
+migration: one ledger owner, a schema boundary, or a separate project. Owner: Business Session 4
+raises it; the app track rules it.
+
+---
+
+## G235. S54-15: BR-126 moves membership to its own subdomain, and BR-092 to BR-096 need restating
+
+**Severity: low. Opened 5 October 2026 at Session 54's close (label S54-15). Numbered by handoff 55-A
+under ruling 760. The number is assigned by this entry (ruling 638).**
+
+The items BR-092 to BR-096 sent (reserved_link_words for membership and chapters, `/sign-in` returning
+to `/membership`, one Membership row in the account panel under 599) need restating against the tree.
+Owner: Session 56, a build check then a ruling.
+
+---
+
+## G236. S54-16: shared sign-in across the app, admin, lms and membership subdomains is unruled
+
+**Severity: moderate. Opened 5 October 2026 at Session 54's close (label S54-16). Numbered by handoff
+55-A under ruling 760. The number is assigned by this entry (ruling 638).**
+
+The Supabase redirect allowlist, session and cookie scope, and the magic link BR-120 names are unruled
+on the app side; 1291 put admin on its own subdomain and sign-in. Owner: Session 56 raises it for an
+app ruling.
+
+---
+
+## G237. S54-17: BR-123 and BR-127 are proposals to the app with no app ruling
+
+**Severity: low. Opened 5 October 2026 at Session 54's close (label S54-17). Numbered by handoff 55-A
+under ruling 760. The number is assigned by this entry (ruling 638).**
+
+BR-123 is program badges on the app profile, member opt-in; BR-127 is the no-score rule across the
+EDLMS. Owner: Session 56.
+
+---
+
+## G238. A `community_group` thread invitation writes no notification: its C is unruled
+
+**Severity: low. Opened 8 October 2026 during handoff 55-A (held item 2). The number is assigned by
+this entry (ruling 638).**
+
+`thread_invitation` takes its C from the thread's anchor (1325): an event thread is Convene, a Space
+thread Collaborate. A community group has no anchor, so `private.thread_invite` writes nothing for it.
+Owed: a ruling on a community group's C, then the writer's condition widened.
+
+---
+
+## G239. `reply` and `mention` have no notification kind
+
+**Severity: low. Opened 8 October 2026 during handoff 55-A (held item 3). The number is assigned by
+this entry (ruling 638).**
+
+Their rulings (1316, 1399) are not made, so neither has a `notification_kinds` row or a writer.
+`account_security` is held under G219.
+
+---
+
+## G240. No kind carries email copy, so nothing is sent; the Resend webhook is not registered
+
+**Severity: moderate. Opened 8 October 2026 during handoff 55-A (held item 4). The number is assigned
+by this entry (ruling 638).**
+
+Under 1520 every `notification_kinds` row is email off with `email_subject` and `email_line` null, so
+`private.notify` enqueues nothing and `notify-deliver` drains an empty queue. Owed with the copy
+ruling: each kind's subject and line, the first send, registering `resend-webhook` with Resend, and
+setting `RESEND_WEBHOOK_SECRET` (the function refuses every call until it is set).
+
+---
+
+## G241. A digest for a member with no zone is due at 08:00 UTC
+
+**Severity: low. Opened 8 October 2026 during handoff 55-A (held item 5). The number is assigned by
+this entry (ruling 638).**
+
+`private.notify` sets a digest's `due_at` to the next 08:00 in `members.local_tz`; a null zone, or one
+`pg_timezone_names` does not know, falls back to UTC until a ruling says otherwise.
+
+---
+
+## G242. `message_request` and `thread_invitation` have no Strand row part
+
+**Severity: low. Opened 8 October 2026 during handoff 55-A (held item 6). The number is assigned by
+this entry (ruling 638).**
+
+Both kinds are written (1315, 1339, 1325) with `renders = false` and no destination, because the row
+part has no sentence for either. Owed: the parts from Design, their destination words, then `renders`.
+`role_accepted`'s part is held under G208.
+
+---
+
+## G243. The admin console has no delivery-health projection
+
+**Severity: low. Opened 8 October 2026 during handoff 55-A (held item 7, ruling 1299). The number is
+assigned by this entry (ruling 638).**
+
+The outbox, the suppressions and the webhook ledger are catalogued as operated, with their console
+counterpart held. Owed in Brief 12's next revision: a projection over `private.notification_outbox`
+states and `private.email_suppressions`, words and never a rate (the no-score absolute).
+
+---
+
+## G244. `NOTIFICATION-CONTRACT.md` Revision 2 did not reach handoff 55-A's session
+
+**Severity: low. Opened 8 October 2026 during handoff 55-A. The number is assigned by this entry
+(ruling 638).**
+
+The handoff names the contract as attached and the instruction says to read it after the handoff; the
+uploads held the handoff twice and the Gap Register, and the tree holds no copy. The build follows the
+handoff, which says it is later and wins where the two differ. Owed: the contract committed under
+`docs/` or attached, and a read of it against this PR for any point the handoff does not restate.
+
+---
+
+## G245. No one-click unsubscribe endpoint exists, so a digest is never sent
+
+**Severity: moderate once copy ships. Opened 8 October 2026 during handoff 55-A. The number is
+assigned by this entry (ruling 638).**
+
+477 requires RFC 8058's `List-Unsubscribe` and `List-Unsubscribe-Post` on a digest, and the header
+must name an HTTPS endpoint that unsubscribes on one POST. None exists, so `notify-deliver` settles a
+digest row `skipped` with `no_one_click_unsubscribe` rather than send it without the pair;
+`sendMail` already takes headers. Owed: a ruling on what one click turns off (the C's email, or all
+digest mail), a signed per-member link, the endpoint, and the header on digests.
+
+---
+
+## G246. An outbox row claimed and never settled stays in `sending`
+
+**Severity: low. Opened 8 October 2026 during handoff 55-A. The number is assigned by this entry
+(ruling 638).**
+
+`notify_outbox_claim` marks rows `sending`; a function that dies before `notify_outbox_settle` leaves
+them there. The outbox carries no claim time, so nothing can tell such a row from one another run
+still holds, and re-queueing it on `due_at` alone would risk a second send. Owed: a `claimed_at`
+column and a reclaim after a window, before the first send.
+
+---
+
+## G247. Done Means' `rg "insert into (public\.)?notifications"` finds applied migrations as well as the writer
+
+**Severity: low. Opened 8 October 2026 during handoff 55-A. The number is assigned by this entry
+(ruling 638).**
+
+At this PR's head the search finds `20261008120300` (`private.notify`) and three lines in
+`20260908142054_b3_rulings_141_142_144.sql` and `20260921140100_p2_event_parties.sql`, the bodies this
+PR replaces. Ruling 466 forbids amending an applied migration, so those lines stay. What the outcome
+needs is enforced twice instead: the live arm reads `pg_proc` and fails on any writer but the six, and
+`tests/notifications.cjs` scans `src/` and `supabase/functions/`. Owed: Done Means worded against the
+live bodies, not the tree's history.
+
+---
+
+## G248. Resend's webhook documentation was unreachable from the session that wrote `resend-webhook`
+
+**Severity: low. Opened 8 October 2026 during handoff 55-A. The number is assigned by this entry
+(ruling 638).**
+
+The environment's network policy refuses `resend.com`. The verifier is built from Resend's own SDK
+(`resend` 6.32.1, `webhooks.verify`, through `standardwebhooks` 1.1.1: a `whsec_` base64 key,
+HMAC-SHA256 over `id.timestamp.body`, `v1,` signatures, five minutes' tolerance) and checked against
+that library's own signatures. The header names are read as `svix-*` with the Standard Webhooks
+`webhook-*` names accepted as the same three. Confidence in the algorithm is high and in the header
+names moderate. Owed at registration (G240): the documentation page read, and the alternate names
+dropped if Resend sends only one set.

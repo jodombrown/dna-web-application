@@ -352,6 +352,66 @@ const VOCAB = {
     { value: "programme", label: "Programme" },
     { value: "note", label: "Good to know" },
   ],
+  // Handoff 55-A (1318): the notification kinds as 20261008120100 seeds them, in position order.
+  notification_kinds: [
+    {
+      value: "connection_request",
+      c: "connect",
+      c_from_object: false,
+      destination: "Opens My Network, Requests",
+      renders: true,
+    },
+    {
+      value: "connection_accepted",
+      c: "connect",
+      c_from_object: false,
+      destination: "Opens their profile",
+      renders: true,
+    },
+    {
+      value: "role_invitation",
+      c: "convene",
+      c_from_object: false,
+      destination: "Opens the event",
+      renders: true,
+    },
+    {
+      value: "role_accepted",
+      c: "convene",
+      c_from_object: false,
+      destination: "Opens the event",
+      renders: false,
+    },
+    {
+      value: "event_reminder",
+      c: "convene",
+      c_from_object: false,
+      destination: "Opens the event",
+      renders: false,
+    },
+    {
+      value: "attestation_received",
+      c: null,
+      c_from_object: true,
+      destination: "Opens the contribution",
+      renders: false,
+    },
+    {
+      value: "space_role_approved",
+      c: "collaborate",
+      c_from_object: false,
+      destination: "Opens the Space",
+      renders: false,
+    },
+    {
+      value: "message_request",
+      c: "connect",
+      c_from_object: false,
+      destination: null,
+      renders: false,
+    },
+    { value: "thread_invitation", c: null, c_from_object: true, destination: null, renders: false },
+  ],
 };
 
 /** The projection's ten lanes, in convene_lanes order (1092, 1105; 1124 adds Filling up, 1172 withdraws Browse). */
@@ -770,6 +830,8 @@ function makeMockDb() {
     post_media: [],
     post_links: [],
     notifications: [],
+    // Handoff 55-A: members a read by id answers, keyed by id (see the members table below).
+    membersById: {},
     saves: [],
     reactions: [],
     drafts: new Map(),
@@ -890,6 +952,10 @@ function makeMockDb() {
     },
     // Brief 4: Connect's projection state and the writes the surface made.
     connect: {
+      // Handoff 55-A (1522): whether connect_requests_pending answers true, and the surfaces the
+      // member marked seen through mark_surface_seen.
+      pending: false,
+      surfaceSeen: [],
       overrides: {},
       dismissed: [],
       writes: [],
@@ -1895,6 +1961,28 @@ async function mockSupabase(page, db, opts = {}) {
       }
       return json(null, 204);
     }
+    // Handoff 55-A (1322, 1522): the two dots and the two marks, as the migrations answer them. The
+    // dot is an unseen row of a kind the vocabulary renders; opening the panel marks every row seen.
+    if (p === "/rest/v1/rpc/notifications_dot") {
+      const renders = new Set(
+        VOCAB.notification_kinds.filter((k) => k.renders).map((k) => k.value),
+      );
+      return json(db.notifications.some((n) => !n.seen_at && renders.has(n.kind)));
+    }
+    if (p === "/rest/v1/rpc/notifications_mark_seen") {
+      const at = new Date().toISOString();
+      db.notifications.forEach((n) => {
+        if (!n.seen_at) n.seen_at = at;
+      });
+      return json(null, 204);
+    }
+    if (p === "/rest/v1/rpc/connect_requests_pending") return json(db.connect.pending === true);
+    if (p === "/rest/v1/rpc/mark_surface_seen") {
+      const b = req.postDataJSON() || {};
+      db.connect.surfaceSeen.push(b.p_surface);
+      if (b.p_surface === "my_network") db.connect.pending = false;
+      return json(null, 204);
+    }
     if (p === "/rest/v1/rpc/vocabularies")
       return db.failVocab
         ? json(
@@ -2019,6 +2107,11 @@ async function mockSupabase(page, db, opts = {}) {
         return json(rows);
       }
       if (table === "members") {
+        // Handoff 55-A: an arm that names members by id seeds db.membersById, and a read of those
+        // ids answers their rows; every other read keeps the one fixed row.
+        const byId = inIds("id");
+        if (byId && db.membersById && byId.some((id) => db.membersById[id]))
+          return json(byId.map((id) => db.membersById[id]).filter(Boolean));
         const row = { handle: "amara-osei", name: "Amara Osei" };
         return single ? json(row) : json([row]);
       }
@@ -7140,6 +7233,13 @@ if (require.main === module)
             for (const theme of process.env.THEME ? [process.env.THEME] : THEMES)
               await drive(runConnect, bt, bname, vp, theme);
         }
+        // Handoff 55-A: the bell's dot and Connect's for-you dot, every viewport, both themes.
+        if (process.env.SPECIAL.includes("notify")) {
+          const { runNotifyDots } = require("./notify-dots.cjs");
+          for (const vp of process.env.ONLY ? [JSON.parse(process.env.ONLY)] : VIEWPORTS)
+            for (const theme of process.env.THEME ? [process.env.THEME] : THEMES)
+              await drive(runNotifyDots, bt, bname, vp, theme);
+        }
         // Handoff 32-A item 5: the mount arms, one cell per tier (tests/mount.cjs).
         if (process.env.SPECIAL.includes("mount")) {
           const { runMount, MOUNT_CELLS } = require("./mount.cjs");
@@ -7305,6 +7405,10 @@ if (require.main === module)
       const { runConnect } = require("./connect.cjs");
       for (const vp of VIEWPORTS)
         for (const theme of THEMES) await drive(runConnect, bt, bname, vp, theme);
+      // Handoff 55-A: the bell's dot and Connect's for-you dot, every viewport, both themes (61).
+      const { runNotifyDots } = require("./notify-dots.cjs");
+      for (const vp of VIEWPORTS)
+        for (const theme of THEMES) await drive(runNotifyDots, bt, bname, vp, theme);
       // Brief 10 (handoff 30-C item 13): the member's event page at every cell, its flows on the
       // two representative layouts.
       const {

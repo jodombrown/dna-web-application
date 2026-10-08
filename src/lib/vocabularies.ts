@@ -6,6 +6,7 @@
 // Named for the projection, not for a surface: Profile (Brief 3), the Composer (Brief 1) and the
 // Feed (Brief 2) all read this one path.
 import type { Stance } from "@/components/dna/StanceBlock";
+import type { C } from "@/components/strand/cmeta";
 import type { ConveneLensId, DiscoveryLaneId } from "./discovery";
 import { getSupabase, type Supabase } from "./supabase";
 
@@ -73,6 +74,24 @@ export type Vocabularies = {
    * and the standard abbreviation shown only where the runtime names the zone by a bare offset.
    */
   reporting_zones: { value: string; name: string; city: string; abbreviation: string }[];
+  /**
+   * Handoff 55-A (1318, 1325, 490): the notification kinds in position order. No component keeps a
+   * kind map; the row's C and its destination line come from here.
+   */
+  notification_kinds: NotificationKindRow[];
+};
+
+/**
+ * One notification kind (1318). `c` is null where the kind takes its C from the object's context
+ * (`c_from_object`, 1325), and the row's own `c_category` then names it. A kind renders only where
+ * `renders` holds and the row part has a sentence for it (src/components/strand/NotificationListItem).
+ */
+export type NotificationKindRow = {
+  value: string;
+  c: C | null;
+  c_from_object: boolean;
+  destination: string | null;
+  renders: boolean;
 };
 
 export async function loadVocabularies(): Promise<Vocabularies | null> {
