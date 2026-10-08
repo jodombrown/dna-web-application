@@ -7749,8 +7749,11 @@ if (require.main === module)
       const msg = require("./messenger.cjs");
       for (const vp of msg.LAYOUT_CELLS)
         for (const theme of THEMES) await drive(msg.runMessengerLayout, bt, bname, vp, theme);
-      for (const [vp, theme] of msg.FLOW_CELLS)
+      for (const [vp, theme] of msg.FLOW_CELLS) {
         await drive(msg.runMessengerFlows, bt, bname, vp, theme);
+        // Handoff 56-41E item 3: SPEC-41-E's second pass on the same two cells.
+        await drive(msg.runMessengerReactions, bt, bname, vp, theme);
+      }
       await drive(msg.runMessengerLive, bt, bname);
       // Handoff 45-C arm 3 (1377): the member app's theme on a dark device with no stored choice
       // renders as main did at c859d54, at one compact and one expanded width (tests/theme.cjs).

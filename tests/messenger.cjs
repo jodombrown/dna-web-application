@@ -962,7 +962,7 @@ const LIVE_CHECKS = [
   "a text send lands with one tick named Sent (1336)",
   "it turns to two ticks once member-test's client, open on the thread, acknowledges it (1336, 1351)",
   "member-test's Messages control carries the dot while the message is unread (82, 1344)",
-  "a reaction reads as the word and the name (1370)",
+  "a press on the quick bar's Folded hands writes the character and the pill reads the glyph name and you (1577, 1590)",
   "an edit reads edited (1343)",
   "a pin reads in the pinned strip (1371)",
   "Mark as unread lights the row (1344)",
@@ -1548,17 +1548,31 @@ async function runMessengerLive(browserType, bname) {
     }
     check(LIVE_CHECKS[3], second === "Delivered" || second === "Read", "tick " + second);
 
-    // 6. React.
+    // 6. React (41-E): the quick bar of eight, drawn from vocabularies().message_reaction_quick.
+    // Until 20261008150700 is on the project the vocabulary carries no quick key, the bar renders
+    // empty and messenger_react takes the five words, so the check is unproven, never a pass (228).
     await mine.hover();
     await mine.locator('[data-cluster] button:has-text("React")').click();
-    await page.locator('[data-picker] button:has-text("Noted")').click();
-    await page.waitForTimeout(1500);
-    const reacts = await mine.locator("[data-reaction]").allTextContents();
-    check(
-      LIVE_CHECKS[5],
-      reacts.some((t) => t.startsWith("Noted, ")),
-      reacts.join(","),
-    );
+    await page.waitForSelector("[data-picker]", { timeout: 10000 });
+    const quickCount = await page.locator("[data-picker] button[data-quick]").count();
+    if (quickCount === 0) {
+      skip(
+        LIVE_CHECKS[5],
+        "the quick bar is empty: 20261008150000 to 20261008150700 are not on the project yet",
+      );
+      await page.keyboard.press("Escape");
+    } else {
+      await page.locator('[data-picker] button[aria-label="Folded hands"]').click();
+      await page.waitForTimeout(1500);
+      const reacts = await mine
+        .locator("[data-reaction]")
+        .evaluateAll((els) => els.map((e) => e.getAttribute("aria-label")));
+      check(
+        LIVE_CHECKS[5],
+        quickCount === 8 && reacts.some((t) => t === "Folded hands, you"),
+        JSON.stringify({ quickCount, reacts }),
+      );
+    }
 
     // 7. Edit.
     await mine.hover();
