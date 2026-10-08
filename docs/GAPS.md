@@ -8780,3 +8780,59 @@ and nothing on that path imports any of the three.
 
 Owed: the cause read, starting with whether the `/password` to `/welcome` navigation settles before
 the arm waits for the screen. Recorded only; not changed here.
+
+---
+
+## G254. A received video has no poster frame
+
+**Severity: low. Opened 8 October 2026 by handoff 56-41E item 2.4, during the 41-E PR. The number is
+assigned by this entry (ruling 638).**
+
+SPEC-41-E section 3 draws the player with `poster` from the message's media, and nothing stores a
+poster frame anywhere: `media` carries the file's own key, mime, dimensions and bytes, and no
+derivation writes a still from a video (1374 transforms nothing on delivery). The player ships
+without `poster`, so before Play a received video shows the browser's own first frame once its
+metadata has loaded (`preload="metadata"`) and `--ink` until then. Held by the handoff ("Poster:
+held"), not built here. Owed: a decision on whether a still is derived at upload (a second object
+beside the file, written by the same route) or never, and a ruling before any surface stores one.
+
+---
+
+## G255. The emoji picker's group labels are Frimousse's English ones
+
+**Severity: low. Opened 8 October 2026 by handoff 56-41E item 4 (ruling 1584), during the 41-E PR.
+The number is assigned by this entry (ruling 638).**
+
+The full picker's groups read emojibase's English `messages.json` group names, capitalised as
+Frimousse capitalises them ("Smileys & emotion", "People & body", "Animals & nature", "Food &
+drink", "Travel & places", "Activities", "Objects", "Symbols", "Flags"), and the search matches the
+library's English labels and tags. Ruling 1584 lets them stand until localisation. The locale is
+fixed to `en` in `src/components/dna/ReactionPicker.tsx` and the self-hosted set under
+`public/emojibase/17.0.0/` holds only `en/`; a localised Messenger adds the locale's two files beside
+it and passes the member's locale to the picker. The ampersands and the capitalisation are the
+library's, not the copy rules' (sentence case, no ampersand in copy), which is part of what
+localisation settles.
+
+---
+
+## G256. The fixture behind B14-Messenger-v3 was not attached to handoff 56-41E
+
+**Severity: low. Opened 8 October 2026 during the 41-E PR. The number is assigned by this entry
+(ruling 638).**
+
+The page `messages/B14-Messenger-v3.dc.html` (`v1791487330148240`) reads its quick eight, their
+labels, the tone swatches and its recent list from `messages/b14-messenger-data-v3.js`
+(`v1791487334087470`, named in SPEC-41-E's stamps), which the handoff did not attach, and the build
+is bound to the page and the SPEC. Two values are therefore reconstructed rather than read:
+
+- E9's eight glyph names, seeded as `message_reaction_emoji.label` for the quick positions and
+  served through `message_reaction_quick`: Thumbs up, Heart, Folded hands, Clapping, Party,
+  Laughing, Surprised, Crying, in 1403's order and words.
+- the five tone swatches in `src/lib/emoji.ts` (`TONES[].hex`), drawn in the picker's tone row: one
+  hex per emoji modifier, the common picker values, with Not chosen on `--ink-4` as the SPEC says.
+
+If the fixture's labels or swatches differ, the labels change by one migration on the eight rows
+(a vocabulary, never a component) and the swatches by one constant. Also reconstructed, from
+Frimousse 0.4.0's own resolver rather than from the handoff's "emojibase ^16" (the package declares
+no dependency and fetches `emojibase-data@latest`): the self-hosted set is `17.0.0`, the version
+`@latest` resolved on 8 October 2026, recorded in `message_reaction_emoji.emojibase_version`.

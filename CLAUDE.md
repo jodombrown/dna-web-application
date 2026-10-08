@@ -88,6 +88,7 @@ Convene's lens set is five, All, Communities, For you, Curated and My network (1
 [absolute] `private.notify()` is the only writer of `public.notifications`, called inside the engine's own write function in the same transaction, never from a client or a trigger (1319); `private.notification_retract` and `private.notification_settle` are its siblings for a request withdrawn, declined or answered.
 [absolute] `public.notification_kinds` is the notification kind vocabulary, read through `vocabularies()`; no component keeps a kind map, and a row's C and destination words come from its kind's row (1318).
 [absolute] No reaction ever notifies (1316).
+The Messenger reads emoji data only from the app's own origin and never through a library cache (1351, 1577).
 [absolute] Company email addresses come from `src/lib/contact.ts` or its Deno mirror `supabase/functions/_shared/contact.ts`, never a literal in a surface, an edge function, a document or a test; the DNA Email Directory in Notion is the source of truth for every address and where it is published; `noreply@` is retired and nothing sends from it; the app subdomain is never an email domain; every outbound sender carries Reply-To `support@` through the module's sender pairings (ruling 387, which supersedes ruling 385 in full).
 
 ## Doctrine that affects code
@@ -201,8 +202,8 @@ crash no retry proved exits 1. `CRASH_PROBE=<arm tag>` is the harness probe that
 by default and never set by a workflow.
 
 The WebKit result that gates a merge is `pages.yml`'s `webkit-macos` job (ruling 1235): Playwright's
-WebKit on a macOS runner, the Mac port, which lacks G5's compositor, running `SPECIAL=gate`'s twenty-two
-arms (the sheets, the event page, the composer, sign-in, and the Messenger composer's `.mov` under 1550) at the deployment's own URL. The Linux
+WebKit on a macOS runner, the Mac port, which lacks G5's compositor, running `SPECIAL=gate`'s twenty-four
+arms (the sheets, the event page, the composer, sign-in, the Messenger composer's `.mov` under 1550, and the Messenger's reactions arm at both cells under 56-41E) at the deployment's own URL. The Linux
 `matrix (webkit)` job keeps running in full, and a crash there alone does not block a merge, because
 G5 is a Linux WPE compositor defect that Safari does not run (1234). This repository has no branch
 protection to encode that; Chat reads it here under 1114, and the founder's device check (61) stays
