@@ -69,6 +69,14 @@
 //                                   weeks start Monday in the caller's zone, time to first act reads
 //                                   a fixture member's days, what is not connected says so, and the
 //                                   cache reads null, then what was written.
+//   Handoff 55-A (1318, 1319,        the notification foundation: no function body but the writer,
+//   1322, 1323, 1324, 1481, 1518,     its two siblings, the two member marks and the purge writes
+//   1522)                            public.notifications; authenticated cannot execute
+//                                   private.notify; an actor reads none of the rows they cause; a
+//                                   recipient who blocks the actor reads none of theirs; an
+//                                   introduction leaves its recipient one connection_request row and
+//                                   a withdrawal none; the two dots answer booleans; vocabularies()
+//                                   serves notification_kinds; the purge leaves unread rows.
 //
 // Nothing here is secret: the connection string arrives from the runner and never from this file.
 const crypto = require("crypto");
@@ -381,6 +389,23 @@ async function runLiveDbArms({ record, skip }) {
       "Brief 12 Settings (handoff 45-D arm 4; 1178): the read log and the change history each write one admin_reads row naming themselves, and the read log's newest entry is that read, labelled Settings, Your read log",
     settingsSessions:
       "Brief 12 Settings (handoff 45-D arm 4): the sessions read carries no IP address and marks as current exactly the session the JWT's session_id names",
+    notif:
+      "Handoff 55-A (1319): no function body but private.notify, private.notification_retract, private.notification_settle, notifications_mark_seen, notifications_mark_all_read and private.purge_read_notifications (1324) writes public.notifications",
+    notifExecute: "Handoff 55-A (1319): authenticated cannot execute private.notify (42501)",
+    notifIntro:
+      "Handoff 55-A (461, 471, N1): send_introduction from owner-test leaves member-test one connection_request row, and withdrawing it leaves none",
+    notifActor:
+      "Handoff 55-A (1323, N9): the actor reads none of the rows they caused, while the recipient reads theirs",
+    notifBlock:
+      "Handoff 55-A (1518, N10): a recipient who blocks the actor reads no row from them, having read one before the block",
+    notifDots:
+      "Handoff 55-A (82, 1322, 1522): notifications_dot and connect_requests_pending answer booleans, true for the recipient of a fresh request, with no count",
+    notifSeen:
+      "Handoff 55-A (1322, 1522): notifications_mark_seen clears the dot while the row stays unread, and mark_surface_seen('my_network') clears the pending dot",
+    notifVocab:
+      "Handoff 55-A (1318): vocabularies() serves notification_kinds, connection_request among them with renders true and its destination in words",
+    notifPurge:
+      "Handoff 55-A (1324, N12): private.purge_read_notifications deletes a row read 200 days ago and leaves an unread row",
   };
   // G143: a block that opens with a presence probe carries every arm it holds in `names`, under one key
   // prefix, so a probe that fails reports each of them UNPROVEN and the job's total does not fall with
@@ -5697,6 +5722,249 @@ async function runLiveDbArms({ record, skip }) {
           "rows " + mrows.length + "; keys " + [...keys].sort().join(",") + "; current " + pick,
         );
       });
+    }
+    // ------------------------------------------------------------------------------------------
+    // Handoff 55-A (39-A): the notification foundation (20261008120000 to 20261008120500). One
+    // presence probe for the block, so before Chat's apply every arm reports UNPROVEN (G143, 228).
+    // Every arm is its own rolled-back transaction and acts as the two test accounts; the purge runs
+    // as live_arms, which File E grants execute on it, inside the transaction that rolls it back.
+    // ------------------------------------------------------------------------------------------
+    {
+      const nfmt = (r) => (r.ok ? "answered" : r.code + " " + r.message);
+      await actAsSelf(client);
+      const present = await client.query(
+        "select to_regprocedure('private.notify(uuid, text, public.anchor_kind, uuid, public.anchor_kind, uuid, text)') is not null and exists (select 1 from supabase_migrations.schema_migrations where version = '20261008120500') as ok",
+      );
+      if (!present.rows[0] || present.rows[0].ok !== true) {
+        for (const n of armsOf("notif"))
+          skip(
+            n,
+            "20261008120500 is not on the project yet (Chat applies 55-A's six migrations before its enforcing run)",
+          );
+      } else {
+        /** owner-test introduces themselves to member-test; null when the pair are not strangers. */
+        const introduce = async () => {
+          await actAs(client, owner.id);
+          const r = await attempt(client, "select public.send_introduction($1, $2) as id", [
+            member.id,
+            "Handoff 55-A live arm. Rolled back by the same run.",
+          ]);
+          return r.ok && r.rows[0] ? { ok: true, id: r.rows[0].id } : { ok: false, r };
+        };
+        const strangers =
+          "the two test accounts are not strangers (a request is pending, they are connected, or one blocks the other), so send_introduction refuses by design";
+        const countAs = async (uid, where, values) => {
+          await actAs(client, uid);
+          const r = await attempt(
+            client,
+            "select count(*)::int as n from public.notifications where " + where,
+            values,
+          );
+          return r.ok ? r.rows[0].n : null;
+        };
+
+        // 1. The one writer (1319). pg_proc is readable by every role.
+        await inTransaction(client, async () => {
+          const r = await attempt(
+            client,
+            "select p.oid::regprocedure::text as sig from pg_proc p where p.pronamespace in ('public'::regnamespace, 'private'::regnamespace) and p.prosrc ~* '(insert\\s+into|update|delete\\s+from)\\s+public\\.notifications\\M' order by 1",
+          );
+          const allowed = [
+            "private.notify(uuid,text,anchor_kind,uuid,anchor_kind,uuid,text)",
+            "private.notification_retract(uuid,text,anchor_kind,uuid)",
+            "private.notification_settle(uuid,text,anchor_kind,uuid)",
+            "notifications_mark_seen()",
+            "notifications_mark_all_read()",
+            "private.purge_read_notifications()",
+          ];
+          const sigs = r.ok ? r.rows.map((x) => x.sig) : [];
+          const extra = sigs.filter((x) => !allowed.includes(x));
+          record(
+            names.notif,
+            r.ok && extra.length === 0 && sigs.includes(allowed[0]),
+            r.ok ? "writers " + JSON.stringify(sigs) : nfmt(r),
+          );
+        });
+
+        // 2. authenticated cannot execute the writer.
+        await inTransaction(client, async () => {
+          await actAs(client, owner.id);
+          const r = await attempt(
+            client,
+            "select private.notify($1::uuid, 'connection_request', 'member', $2::uuid, 'connection_request', gen_random_uuid())",
+            [member.id, owner.id],
+          );
+          record(names.notifExecute, !r.ok && r.code === "42501", nfmt(r));
+        });
+
+        // 3. An introduction and its withdrawal; the actor's read; the two dots and the marks.
+        await inTransaction(client, async () => {
+          const intro = await introduce();
+          if (!intro.ok) {
+            const why = /not available/.test(intro.r.message || "") ? strangers : nfmt(intro.r);
+            for (const n of [names.notifIntro, names.notifActor, names.notifDots, names.notifSeen])
+              skip(n, why);
+            return;
+          }
+          const where = "kind = 'connection_request' and object_id = $1::uuid";
+          const memberReads = await countAs(member.id, where, [intro.id]);
+          const ownerReads = await countAs(owner.id, "object_id = $1::uuid", [intro.id]);
+          record(
+            names.notifActor,
+            memberReads === 1 && ownerReads === 0,
+            "recipient " + memberReads + ", actor " + ownerReads,
+          );
+
+          await actAs(client, member.id);
+          const dots = await attempt(
+            client,
+            "select public.notifications_dot() as d, public.connect_requests_pending() as p",
+          );
+          const d = dots.ok ? dots.rows[0] : {};
+          record(
+            names.notifDots,
+            dots.ok && d.d === true && d.p === true,
+            dots.ok
+              ? "dot " + JSON.stringify(d.d) + ", pending " + JSON.stringify(d.p)
+              : nfmt(dots),
+          );
+
+          const marked = await attempt(
+            client,
+            "select public.notifications_mark_seen(), public.mark_surface_seen('my_network')",
+          );
+          const after = await attempt(
+            client,
+            "select public.notifications_dot() as d, public.connect_requests_pending() as p, (select read_at is null from public.notifications where object_id = $1::uuid) as unread",
+            [intro.id],
+          );
+          const a = after.ok ? after.rows[0] : {};
+          record(
+            names.notifSeen,
+            marked.ok && after.ok && a.d === false && a.p === false && a.unread === true,
+            marked.ok ? (after.ok ? JSON.stringify(a) : nfmt(after)) : nfmt(marked),
+          );
+
+          await actAs(client, owner.id);
+          const withdrawn = await attempt(client, "select public.withdraw_request($1)", [
+            member.id,
+          ]);
+          const left = await countAs(member.id, where, [intro.id]);
+          record(
+            names.notifIntro,
+            memberReads === 1 && withdrawn.ok && left === 0,
+            "after the introduction " +
+              memberReads +
+              ", withdraw " +
+              nfmt(withdrawn) +
+              ", after " +
+              left,
+          );
+        });
+
+        // 4. A block, read as row policy (1518).
+        await inTransaction(client, async () => {
+          const intro = await introduce();
+          if (!intro.ok) {
+            skip(
+              names.notifBlock,
+              /not available/.test(intro.r.message || "") ? strangers : nfmt(intro.r),
+            );
+            return;
+          }
+          const before = await countAs(member.id, "actor_id = $1::uuid", [owner.id]);
+          await actAs(client, member.id);
+          const block = await attempt(
+            client,
+            "insert into public.member_blocks (blocker_id, blocked_id) values ($1::uuid, $2::uuid)",
+            [member.id, owner.id],
+          );
+          const afterBlock = await countAs(member.id, "actor_id = $1::uuid", [owner.id]);
+          record(
+            names.notifBlock,
+            before >= 1 && block.ok && afterBlock === 0,
+            "before " + before + ", block " + nfmt(block) + ", after " + afterBlock,
+          );
+        });
+
+        // 5. The vocabulary.
+        await inTransaction(client, async () => {
+          await actAs(client, owner.id);
+          const v = await attempt(
+            client,
+            "select public.vocabularies() -> 'notification_kinds' as k",
+          );
+          const kinds = v.ok && Array.isArray(v.rows[0].k) ? v.rows[0].k : [];
+          const req = kinds.find((k) => k.value === "connection_request");
+          record(
+            names.notifVocab,
+            !!req &&
+              req.renders === true &&
+              typeof req.destination === "string" &&
+              req.destination !== "",
+            v.ok ? JSON.stringify(kinds.map((k) => k.value + (k.renders ? "*" : ""))) : nfmt(v),
+          );
+        });
+
+        // 6. The purge (1324): accepting settles member-test's request row and writes owner-test's
+        //    unread connection_accepted row; the settled row is dated 200 days back by its own
+        //    recipient (the read_at grant), then the purge runs as live_arms.
+        await inTransaction(client, async () => {
+          const intro = await introduce();
+          if (!intro.ok) {
+            skip(
+              names.notifPurge,
+              /not available/.test(intro.r.message || "") ? strangers : nfmt(intro.r),
+            );
+            return;
+          }
+          await actAs(client, member.id);
+          const accepted = await attempt(client, "select public.respond_to_request($1, true)", [
+            owner.id,
+          ]);
+          const aged = await attempt(
+            client,
+            "update public.notifications set read_at = now() - interval '200 days' where kind = 'connection_request' and object_id = $1::uuid",
+            [intro.id],
+          );
+          const unreadBefore = await countAs(
+            owner.id,
+            "kind = 'connection_accepted' and object_id = $1::uuid and read_at is null",
+            [intro.id],
+          );
+          await actAsSelf(client);
+          const purged = await attempt(client, "select private.purge_read_notifications() as n");
+          const readLeft = await countAs(
+            member.id,
+            "kind = 'connection_request' and object_id = $1::uuid",
+            [intro.id],
+          );
+          const unreadLeft = await countAs(
+            owner.id,
+            "kind = 'connection_accepted' and object_id = $1::uuid and read_at is null",
+            [intro.id],
+          );
+          record(
+            names.notifPurge,
+            accepted.ok &&
+              aged.ok &&
+              purged.ok &&
+              unreadBefore === 1 &&
+              readLeft === 0 &&
+              unreadLeft === 1,
+            "accept " +
+              nfmt(accepted) +
+              ", purge " +
+              (purged.ok ? purged.rows[0].n + " row(s)" : nfmt(purged)) +
+              ", read row left " +
+              readLeft +
+              ", unread row " +
+              unreadBefore +
+              " then " +
+              unreadLeft,
+          );
+        });
+      }
     }
   } finally {
     await client.end().catch(() => {});
