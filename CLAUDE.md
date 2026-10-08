@@ -201,8 +201,8 @@ crash no retry proved exits 1. `CRASH_PROBE=<arm tag>` is the harness probe that
 by default and never set by a workflow.
 
 The WebKit result that gates a merge is `pages.yml`'s `webkit-macos` job (ruling 1235): Playwright's
-WebKit on a macOS runner, the Mac port, which lacks G5's compositor, running `SPECIAL=gate`'s twenty
-arms (the sheets, the event page, the composer, sign-in) at the deployment's own URL. The Linux
+WebKit on a macOS runner, the Mac port, which lacks G5's compositor, running `SPECIAL=gate`'s twenty-two
+arms (the sheets, the event page, the composer, sign-in, and the Messenger composer's `.mov` under 1550) at the deployment's own URL. The Linux
 `matrix (webkit)` job keeps running in full, and a crash there alone does not block a merge, because
 G5 is a Linux WPE compositor defect that Safari does not run (1234). This repository has no branch
 protection to encode that; Chat reads it here under 1114, and the founder's device check (61) stays
