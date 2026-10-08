@@ -1117,13 +1117,20 @@ async function runDiscovery(browserType, bname, [w, h], theme) {
         ).length,
         trailing: !!(t.parentElement && t.parentElement.querySelector("[data-lensbar-trailing]")),
         row: !!t.closest("[data-lensbar-row]"),
-        // B9-SPEC's compact line: at compact the row scrolls sideways inside its anchor, whole.
+        // B9-SPEC's compact line: at compact the row scrolls sideways, whole. Fix PR 09 (1515)
+        // moved the scroller from the anchor (the seat) to the track itself, so the row read is
+        // the track: it scrolls sideways, its scroll width reaches its last seat, and the anchor
+        // around it no longer scrolls.
         inRow: compact
           ? (() => {
               const a = t.closest("[data-lens-anchor]");
-              const cs = getComputedStyle(a);
+              const last = tabs[tabs.length - 1];
               return (
-                cs.overflowX === "auto" && a.scrollWidth >= t.getBoundingClientRect().width - 1
+                getComputedStyle(t).overflowX === "auto" &&
+                !!last &&
+                t.scrollWidth >= last.offsetLeft + last.offsetWidth - 1 &&
+                !!a &&
+                a.scrollLeft === 0
               );
             })()
           : true,

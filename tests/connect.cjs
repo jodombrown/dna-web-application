@@ -187,12 +187,18 @@ async function runConnect(browserType, bname, vp, theme) {
         ).backgroundColor,
         bg: rgb(cs.getPropertyValue("--bg").trim()),
         sunken: rgb(cs.getPropertyValue("--bg-sunken").trim()),
+        // Fix PR 09 (1515): the track is now its column's width and its centre lands on a seat's
+        // word, so the track is sampled where it is bare: its centre column, 2px into its 4px top
+        // padding, and the element painted there is read so a seat or a fade there would be named.
         at: {
           trackX: Math.round(tr.left + tr.width / 2),
-          trackY: Math.round(tr.top + tr.height / 2),
+          trackY: Math.round(tr.top + 2),
           groundX: Math.round(tr.left + tr.width / 2),
           groundY: Math.round(exp ? wrap.top + 2 : wrap.top - 4),
         },
+        bare:
+          document.elementFromPoint(Math.round(tr.left + tr.width / 2), Math.round(tr.top + 2)) ===
+          document.querySelector('[role="tablist"][aria-label="Connect lens"]'),
       };
     }, expanded);
     const painted = async (x, y) => {
@@ -228,6 +234,7 @@ async function runConnect(browserType, bname, vp, theme) {
       (ground.column === ground.bg || ground.column === "rgba(0, 0, 0, 0)") &&
         ground.wrap === ground.bg &&
         ground.track === ground.sunken &&
+        ground.bare &&
         near(groundPx, ground.bg) &&
         near(trackPx, ground.sunken) &&
         !near(groundPx, trackPx),
