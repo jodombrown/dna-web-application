@@ -210,6 +210,34 @@ async function runMessengerComposerVideo(browserType, bname) {
         await page.locator('[data-media-notice] button:has-text("OK")').click();
     };
 
+    // 4. Over the ceiling, first, on the thread before this run sends anything into it: the
+    // fixture's bytes, then zeros to one byte past it. First because run 526 (macOS WebKit) could not
+    // reload the thread once it held the sent video message: the field never became visible in 15 s
+    // and a screenshot timed out, which G250 records.
+    fs.copyFileSync(FIXTURE, big);
+    fs.truncateSync(big, MAX_BYTES + 1);
+    const before = posts.length;
+    await page.locator('input[type="file"][accept="video/*"]').setInputFiles(big);
+    await dismissNotice();
+    await page.click('[data-testid="send"]');
+    const overState = await page
+      .waitForSelector("[data-messenger-thread][data-upload-refusal]", { timeout: 15000 })
+      .then((el) => el.getAttribute("data-upload-refusal"))
+      .catch(() => null);
+    const shown = await page
+      .locator("[data-upload-refused]")
+      .isVisible()
+      .catch(() => false);
+    check(
+      CHECKS[3],
+      overState === "too_large" && shown && posts.length === before,
+      `state ${overState}; line shown ${shown}; posts to the route ${posts.length - before}`,
+    );
+
+    // A fresh load of the same thread, so the oversized draft is gone before the fixture is attached.
+    await page.goto(BASE + "/messages/" + threadId, { waitUntil: "networkidle" });
+    await page.waitForSelector('[data-testid="message-field"]', { timeout: 15000 });
+
     const a = probe.attached;
     if (a.event !== "loadedmetadata" || a.width !== FIXTURE_W || a.height !== FIXTURE_H) {
       const why = `this engine's attached <video> cannot read the fixture: ${JSON.stringify(a)}`;
@@ -326,29 +354,6 @@ async function runMessengerComposerVideo(browserType, bname) {
         messageId ? "message " + messageId + " has no media in the log" : "no message carries it",
       );
     }
-
-    // 4. Over the ceiling: the fixture's bytes, then zeros to one byte past it.
-    await page.goto(BASE + "/messages/" + threadId, { waitUntil: "networkidle" });
-    await page.waitForSelector('[data-testid="message-field"]', { timeout: 15000 });
-    fs.copyFileSync(FIXTURE, big);
-    fs.truncateSync(big, MAX_BYTES + 1);
-    const before = posts.length;
-    await page.locator('input[type="file"][accept="video/*"]').setInputFiles(big);
-    await dismissNotice();
-    await page.click('[data-testid="send"]');
-    const state = await page
-      .waitForSelector("[data-messenger-thread][data-upload-refusal]", { timeout: 15000 })
-      .then((el) => el.getAttribute("data-upload-refusal"))
-      .catch(() => null);
-    const shown = await page
-      .locator("[data-upload-refused]")
-      .isVisible()
-      .catch(() => false);
-    check(
-      CHECKS[3],
-      state === "too_large" && shown && posts.length === before,
-      `state ${state}; line shown ${shown}; posts to the route ${posts.length - before}`,
-    );
   } catch (e) {
     record(`${tag} flow`, false, String(e).slice(0, 600));
   } finally {
