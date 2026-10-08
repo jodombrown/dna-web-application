@@ -209,8 +209,9 @@ const MESSAGE_MEDIA_MIMES: readonly string[] = [
 
 /**
  * What the caller knows that the bytes do not. An image needs nothing (normalizeImage measures it);
- * a video is measured from a loaded <video> element unless the caller already has the size; a voice
- * note carries its duration from the recorder, which the route bounds at ten minutes.
+ * a video carries its pixel size, read by the caller from a <video> attached to the document (H56-MOV:
+ * a detached element is not measured here, so there is one measurement path and it is the caller's);
+ * a voice note carries its duration from the recorder, which the route bounds at ten minutes.
  */
 export type MessageMediaMeta =
   | { kind: "image" }
@@ -245,35 +246,6 @@ async function bearer(): Promise<string | null> {
   return data.session?.access_token ?? null;
 }
 
-/** A video's pixel size from its own metadata, through a detached element; null when it cannot load. */
-async function measureVideo(blob: Blob): Promise<{ width: number; height: number } | null> {
-  if (typeof document === "undefined") return null;
-  const url = URL.createObjectURL(blob);
-  try {
-    return await new Promise((resolve) => {
-      const video = document.createElement("video");
-      video.preload = "metadata";
-      video.muted = true;
-      const timer = setTimeout(() => resolve(null), 15_000);
-      video.onloadedmetadata = () => {
-        clearTimeout(timer);
-        resolve(
-          video.videoWidth > 0 && video.videoHeight > 0
-            ? { width: video.videoWidth, height: video.videoHeight }
-            : null,
-        );
-      };
-      video.onerror = () => {
-        clearTimeout(timer);
-        resolve(null);
-      };
-      video.src = url;
-    });
-  } finally {
-    URL.revokeObjectURL(url);
-  }
-}
-
 function refusalWord(word: unknown, status: number): MessageMediaRefusal {
   if (
     word === "not_signed_in" ||
@@ -294,7 +266,8 @@ function refusalWord(word: unknown, status: number): MessageMediaRefusal {
  * Upload one media object for a message in `thread`, keyed by the message's own `clientId` so a
  * retried send and its object stay together. Images go through normalizeImage first, unchanged
  * (346, 347): the route transforms nothing (1374), so an image the browser cannot decode is refused
- * here rather than sent with its metadata intact. Videos are measured from their own metadata.
+ * here rather than sent with its metadata intact. A video's size is the caller's, and one over the
+ * byte ceiling is too_large before anything else is asked of it (H56-MOV item 2).
  * The answer is the media id the client hands to messenger_send(..., 'media' | 'voice', ..., mediaId).
  */
 export async function uploadMessageMedia(
@@ -319,13 +292,12 @@ export async function uploadMessageMedia(
     query.set("w", String(normalized.width));
     query.set("h", String(normalized.height));
   } else if (meta.kind === "video") {
-    const size =
-      meta.width && meta.height
-        ? { width: meta.width, height: meta.height }
-        : await measureVideo(file);
-    if (!size) return { ok: false, reason: "bad_media" };
-    query.set("w", String(size.width));
-    query.set("h", String(size.height));
+    if (file.size > MESSAGE_MEDIA_MAX_BYTES) return { ok: false, reason: "too_large" };
+    const { width, height } = meta;
+    if (!width || !height || !Number.isInteger(width) || !Number.isInteger(height))
+      return { ok: false, reason: "bad_media" };
+    query.set("w", String(width));
+    query.set("h", String(height));
   } else {
     if (!Number.isInteger(meta.durationMs) || meta.durationMs < 1)
       return { ok: false, reason: "bad_media" };
