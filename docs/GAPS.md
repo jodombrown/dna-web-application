@@ -8671,3 +8671,11 @@ assigned by this entry (ruling 638).**
 `src` is the object URL, with a play glyph over it. No `<video>` is mounted for a message, so a video
 message cannot play even once ruling 1569's `media-src 'self' blob:` lets one load (G223). Not fixed
 in PR #100 (1570). Owner: the walkthrough lane; the player's copy and controls to 41-E.
+
+Observed on run 526 (`0d6e050`, macOS WebKit, deployment `611e6ba3`), cause unproven: once the arm had
+sent the fixture and its message rendered (an `<img>` whose `src` is the `.mov`'s object URL), a fresh
+load of the thread left `[data-testid="message-field"]` not visible for 15 s and a page screenshot
+timed out at 5 s. WebKit decodes video in an `<img>`, so the element this entry names may stall the
+page rather than only fail to play; the founder's Safari walk on the thread after a send is the check.
+The arm now runs its too_large check before it sends, so it no longer reloads a thread holding a
+video message.
