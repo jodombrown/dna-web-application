@@ -37,6 +37,10 @@ The user's request, or the brief they approved, sets the scope, and the scope is
 
 If a question comes up partway, first do everything that does not depend on the answer, then state the assumption you made, or put the question at the end of a turn that also delivers that progress. If one part is blocked, complete every other part in full and say exactly what you left out and why.
 
+Every brief and handoff carries an admin block and a DIA block in its Done Means, or names each item held, and every new table gets its `admin_catalogue` row, with a stated admin and DIA treatment, in the migration that creates it (1299, 1300).
+
+A Code session confirms it holds the Code queue's slot before it touches `supabase/migrations/`, `docs/GAPS.md` or `CLAUDE.md` (1506): no open PR and no pushed `claude/*` branch newer than `main` touches any of the three.
+
 A handoff names the outcome, the ruling and the proof owed; it does not name a mechanism whoever wrote it has not read in the tree (ruling 555). Three of Fix PR 03's twelve items carried a false premise about mechanism — a Pages middleware layer that cannot coexist with Nitro's `_worker.js`, an `expires_at` column that did not exist at all, and a scroll reset that was actually a scroll being copied forward — and in all three the repository disagreed with the handoff. So a mechanism a handoff asserts is a lead to verify, never a fact to build on: read it in the tree first, and when it is wrong, report that as the finding and build what the outcome and the ruling actually require. The stop-and-report clause is what turns each of those into evidence instead of a workaround.
 
 ## Scope of changes
@@ -81,6 +85,9 @@ Convene's lens set is five, All, Communities, For you, Curated and My network (1
 [absolute] A derived row, one table restating a fact whose truth lives in another, is written by its source's write path in the same transaction that writes the source, and never by a trigger (ruling 1002). `public.event_registrations` is the truth for attendance and `private.rsvp_write` writes the `event_rsvp` edge beside it; `private.rsvp_edge_drift()` names every disagreement and `tests/rsvp-drift.cjs` reads it, because a derivation nothing enforces is a derivation that drifts. The rows the build already derives by trigger are recorded as G56 and are not changed by the ruling.
 [absolute] The attestations table is chassis and already exists. Every engine writes to it; no engine creates its own attestation, endorsement, or trust table.
 [absolute] No numeric score, percentage, progress indicator, match score, trust score, or completion score is ever computed for display, in any surface, in any form.
+[absolute] `private.notify()` is the only writer of `public.notifications`, called inside the engine's own write function in the same transaction, never from a client or a trigger (1319); `private.notification_retract` and `private.notification_settle` are its siblings for a request withdrawn, declined or answered.
+[absolute] `public.notification_kinds` is the notification kind vocabulary, read through `vocabularies()`; no component keeps a kind map, and a row's C and destination words come from its kind's row (1318).
+[absolute] No reaction ever notifies (1316).
 [absolute] Company email addresses come from `src/lib/contact.ts` or its Deno mirror `supabase/functions/_shared/contact.ts`, never a literal in a surface, an edge function, a document or a test; the DNA Email Directory in Notion is the source of truth for every address and where it is published; `noreply@` is retired and nothing sends from it; the app subdomain is never an email domain; every outbound sender carries Reply-To `support@` through the module's sender pairings (ruling 387, which supersedes ruling 385 in full).
 
 ## Doctrine that affects code
