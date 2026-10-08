@@ -5858,6 +5858,201 @@ async function runLensSeat(browserType, bname, [w, h]) {
         );
       }
     }
+    // Fix PR 09, W86 (G225 item 3): the shell's scroller stepped from 0 to 400 and back in steps of 8,
+    // the Feed then Connect, at 390 and 820. Each row is the scroller's top, its range, the shell's
+    // data-scrolled, the header's data-centre, whether a header tablist exists and the in-page seat's
+    // visibility. Each table is printed as a `STEP` line and the first row where the Feed and Connect
+    // differ as `STEPDIFF` (930); a fling, one burst of wheel events, is printed as `FLING`. At 390 the
+    // Feed's rows are a standing check: from the first step past 72 to 400 and back to the last step
+    // past 72, the header holds the Feed's bar.
+    if (w === 390 || w === 820) {
+      const row = () =>
+        page.evaluate(() => {
+          const sc = document.querySelector('[data-scroller="feed"]');
+          const t = document.querySelector("[data-tier]");
+          const hd = document.querySelector("[data-app-header]");
+          const seat = document.querySelector('[data-lens-seat="flow"]');
+          return {
+            top: Math.round(sc.scrollTop),
+            max: Math.round(sc.scrollHeight - sc.clientHeight),
+            s: t ? t.getAttribute("data-scrolled") : null,
+            c: hd ? hd.getAttribute("data-centre") : null,
+            t: !!document.querySelector('[data-app-header] [role="tablist"]'),
+            v: seat ? getComputedStyle(seat).visibility : null,
+          };
+        });
+      const frame = () =>
+        page.evaluate(
+          () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => r()))),
+        );
+      const fmt = (r) => `${r.top}/${r.max}/${r.s}/${r.c}/${r.t ? 1 : 0}/${r.v}`;
+      const tables = {};
+      for (const s of SEAT_SURFACES.slice(0, 2)) {
+        await open(s);
+        const ys = [];
+        for (let y = 0; y <= 400; y += 8) ys.push(y);
+        for (let y = 392; y >= 0; y -= 8) ys.push(y);
+        const rows = [];
+        for (const y of ys) {
+          await page.evaluate((v) => {
+            document.querySelector('[data-scroller="feed"]').scrollTop = v;
+          }, y);
+          await frame();
+          rows.push({ y, ...(await row()) });
+        }
+        tables[s.id] = rows;
+        console.log(`STEP ${tag} ${s.id} ` + rows.map((r) => `${r.y}:${fmt(r)}`).join(" "));
+        // The fling: one burst of wheel events over the scroller, then every frame for a second.
+        await page.evaluate(() => {
+          document.querySelector('[data-scroller="feed"]').scrollTop = 0;
+        });
+        await frame();
+        try {
+          const box = await page.locator('[data-scroller="feed"]').boundingBox();
+          await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+          for (let i = 0; i < 12; i++) await page.mouse.wheel(0, 60);
+          const fl = await page.evaluate(
+            () =>
+              new Promise((done) => {
+                const out = [];
+                const t0 = performance.now();
+                const tick = () => {
+                  const sc = document.querySelector('[data-scroller="feed"]');
+                  const t = document.querySelector("[data-tier]");
+                  out.push({
+                    top: Math.round(sc.scrollTop),
+                    s: t && t.getAttribute("data-scrolled"),
+                    t: !!document.querySelector('[data-app-header] [role="tablist"]'),
+                  });
+                  if (performance.now() - t0 < 1000) requestAnimationFrame(tick);
+                  else done(out);
+                };
+                requestAnimationFrame(tick);
+              }),
+          );
+          const lost = fl.find((r) => r.top > 72 && !r.t);
+          console.log(
+            `FLING ${tag} ${s.id} frames=${fl.length} last=${JSON.stringify(fl[fl.length - 1])} first-without-bar-past-72=${JSON.stringify(lost || null)}`,
+          );
+        } catch (e) {
+          console.log(`FLING ${tag} ${s.id} not read: ${String(e).split("\n")[0].slice(0, 160)}`);
+        }
+      }
+      const key = (r) => `${r.s}/${r.c}/${r.t}/${r.v}`;
+      const diff = tables.feed.findIndex(
+        (r, i) => tables.connect[i] && key(r) !== key(tables.connect[i]),
+      );
+      console.log(
+        `STEPDIFF ${tag} ` +
+          (diff < 0
+            ? "none: the Feed's rows match Connect's at every step"
+            : `y=${tables.feed[diff].y} feed=${fmt(tables.feed[diff])} connect=${fmt(tables.connect[diff])}`),
+      );
+      if (w === 390) {
+        const past = tables.feed.filter((r) => r.top > 72);
+        const held = past.filter((r) => !(r.t && r.c === "lens"));
+        record(
+          tag +
+            " feed: stepped by 8 to 400 and back, the header holds the Feed's bar at every step past 72 (W86)",
+          past.length > 0 && held.length === 0,
+          JSON.stringify({ past: past.length, without: held.slice(0, 3) }),
+        );
+      }
+    }
+    // Fix PR 09, W87 (G225 item 4; 1468), at 390: dock the bar, change to every other lens from the
+    // header, and sample every animation frame for 1500 ms from the click: the scroller's top, its
+    // range, the header's data-centre and the docking point (the seat's bottom edge in scroller
+    // coordinates). Every frame holds the header's bar and a top at or below the docking point. Run
+    // with the mock's normal content and again with a lens seeded to one item (the Feed's Mine,
+    // Connect's Suggested, every Convene lane); the first losing frame is printed as `FRAME` (930).
+    if (w === 390) {
+      const seedings = [
+        ["normal", () => {}],
+        [
+          "one",
+          () => {
+            let mine = 0;
+            for (const p of db.posts)
+              if (p.author_id === UID && ++mine > 1) {
+                p.author_id = "00000000-0000-4000-8000-0000000000f2";
+                p.created_by = "00000000-0000-4000-8000-0000000000f2";
+              }
+            db.connect.dismissed = CONNECT_SUGGESTED.slice(1).map((c) => c.id);
+            const sec = db.discovery.sections || {};
+            for (const k of Object.keys(sec))
+              if (Array.isArray(sec[k])) sec[k] = sec[k].slice(0, 1);
+          },
+        ],
+      ];
+      for (const [seeding, seed] of seedings) {
+        seed();
+        for (const s of SEAT_SURFACES) {
+          await open(s);
+          const ids = await page
+            .locator(`${s.root} [data-lens-seat] [role="tab"]`)
+            .evaluateAll((els) => els.map((e) => e.getAttribute("data-lens")));
+          const changes = [];
+          for (const id of [...ids.slice(1), ids[0]]) {
+            await page.evaluate(() => {
+              const sc = document.querySelector('[data-scroller="feed"]');
+              sc.scrollTop = 400;
+            });
+            const dockedTab = page.locator(
+              `[data-app-header] [role="tablist"] [data-lens="${id}"]`,
+            );
+            const ready = await dockedTab
+              .waitFor({ timeout: 5000 })
+              .then(() => true)
+              .catch(() => false);
+            if (!ready) {
+              changes.push({ to: id, docked: false });
+              continue;
+            }
+            await page.evaluate(() => {
+              window.__lensFrames = [];
+              const t0 = performance.now();
+              const tick = () => {
+                const sc = document.querySelector('[data-scroller="feed"]');
+                const hd = document.querySelector("[data-app-header]");
+                const seat = document.querySelector('[data-lens-seat="flow"]');
+                window.__lensFrames.push({
+                  t: Math.round(performance.now() - t0),
+                  top: Math.round(sc.scrollTop),
+                  max: Math.round(sc.scrollHeight - sc.clientHeight),
+                  centre: hd ? hd.getAttribute("data-centre") : null,
+                  bar: !!document.querySelector('[data-app-header] [role="tablist"]'),
+                  dock: seat
+                    ? Math.round(
+                        seat.getBoundingClientRect().bottom -
+                          sc.getBoundingClientRect().top +
+                          sc.scrollTop,
+                      )
+                    : null,
+                });
+                if (performance.now() - t0 < 1500) requestAnimationFrame(tick);
+              };
+              requestAnimationFrame(tick);
+            });
+            await dockedTab.click();
+            await page.waitForTimeout(1650);
+            const frames = await page.evaluate(() => window.__lensFrames);
+            const lost = frames.find(
+              (f) => !f.bar || f.centre !== "lens" || f.dock === null || f.top < f.dock - 1,
+            );
+            console.log(
+              `FRAME ${tag} ${seeding} ${s.id} ->${id} frames=${frames.length} first-lost=${JSON.stringify(lost || null)}`,
+            );
+            changes.push({ to: id, docked: true, frames: frames.length, lost: lost || null });
+          }
+          record(
+            tag +
+              ` ${s.id} (${seeding}): every frame for 1500 ms after a docked lens change holds the header's bar at or below the docking point (W87, 1468)`,
+            changes.length > 0 && changes.every((c) => c.docked && c.frames > 10 && !c.lost),
+            JSON.stringify(changes.filter((c) => !c.docked || c.lost).slice(0, 3)),
+          );
+        }
+      }
+    }
   } catch (e) {
     record(tag + " flow", false, String(e).slice(0, 300));
     await shot(page, `${tag}-ERROR`).catch(() => {});
@@ -7088,6 +7283,10 @@ if (require.main === module)
           for (const vp of process.env.ONLY ? [JSON.parse(process.env.ONLY)] : VIEWPORTS) {
             await drive(runShell, bt, bname, vp);
             await drive(runLensSeat, bt, bname, vp);
+            // Fix PR 09 (G225; 1515, 1575): the strip's shape and its cue.
+            const strip = require("./lens-strip.cjs");
+            if (strip.LENS_STRIP_WIDTHS.includes(vp[0]))
+              await drive(strip.runLensStrip, bt, bname, vp);
           }
         // Ruling 344: the width arm, every viewport.
         if (process.env.SPECIAL.includes("width"))
@@ -7386,6 +7585,8 @@ if (require.main === module)
           await drive(runViewport, bt, bname, vp, theme);
         await drive(runShell, bt, bname, vp);
         await drive(runLensSeat, bt, bname, vp);
+        const strip = require("./lens-strip.cjs");
+        if (strip.LENS_STRIP_WIDTHS.includes(vp[0])) await drive(strip.runLensStrip, bt, bname, vp);
         await drive(runWidth, bt, bname, vp);
       }
       if (only) {
