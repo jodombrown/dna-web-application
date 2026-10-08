@@ -53,7 +53,8 @@ export type MailAttachment = {
   content_type?: string;
 };
 
-export type SendResult = { ok: boolean; status: number };
+/** `id` is the id Resend returned for an accepted message (1321: a send is recorded only with it). */
+export type SendResult = { ok: boolean; status: number; id?: string };
 
 /** Read the facts out of a jsonb answer; null when the shape is not the one the migration writes. */
 export function readFacts(value: unknown): MailFacts | null {
@@ -103,6 +104,8 @@ export async function sendMail(input: {
   subject: string;
   text: string;
   attachments?: MailAttachment[];
+  /** Extra headers, such as RFC 8058's List-Unsubscribe pair on a digest (477). */
+  headers?: Record<string, string>;
 }): Promise<SendResult> {
   const key = Deno.env.get("RESEND_API_KEY");
   if (!key) {
@@ -117,6 +120,7 @@ export async function sendMail(input: {
     text: input.text,
   };
   if (input.attachments && input.attachments.length) body.attachments = input.attachments;
+  if (input.headers && Object.keys(input.headers).length) body.headers = input.headers;
   try {
     const res = await fetch(RESEND_URL, {
       method: "POST",
@@ -124,8 +128,24 @@ export async function sendMail(input: {
       body: JSON.stringify(body),
     });
     // The response body is never read into a log: on a failure it can echo the recipient.
-    if (!res.ok) console.log(JSON.stringify({ event: "mail_send_failed", status: res.status }));
-    return { ok: res.ok, status: res.status };
+    if (!res.ok) {
+      console.log(JSON.stringify({ event: "mail_send_failed", status: res.status }));
+      return { ok: false, status: res.status };
+    }
+    // An accepted message's body is only its id, which names no recipient.
+    let id: string | undefined;
+    try {
+      const parsed: unknown = await res.json();
+      if (
+        parsed &&
+        typeof parsed === "object" &&
+        typeof (parsed as { id?: unknown }).id === "string"
+      )
+        id = (parsed as { id: string }).id;
+    } catch {
+      id = undefined;
+    }
+    return { ok: true, status: res.status, id };
   } catch {
     console.log(JSON.stringify({ event: "mail_send_failed", status: 0 }));
     return { ok: false, status: 0 };
