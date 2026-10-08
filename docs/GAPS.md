@@ -8593,3 +8593,19 @@ that library's own signatures. The header names are read as `svix-*` with the St
 `webhook-*` names accepted as the same three. Confidence in the algorithm is high and in the header
 names moderate. Owed at registration (G240): the documentation page read, and the alternate names
 dropped if Resend sends only one set.
+
+---
+
+## G249. The Convene picker check reads the when line whether or not its wait succeeded
+
+**Severity: low. Opened 8 October 2026 by Session 55's close, recorded by handoff 56-MOV. The number
+is assigned by this entry (ruling 638).**
+
+`webkit-1280x800-dark-convene the picker completes the moment and Publish returns` failed once on
+run 521 attempt 1 and passed on the re-run. In `tests/matrix.cjs`, after `when_time` is filled, the
+check waits up to 5 s for `[data-convene="when-line"]` to show `19:30`, swallows that wait's timeout
+with `.catch(() => {})`, then reads the line and `pub().isDisabled()` once, so a slow effect fails
+the record with no word of the wait having timed out, and Publish's state is read with no wait of its
+own. The earlier sighting, WebKit at 390 on run 401 (handoff 37-B), is recorded only in the comment
+above the wait. Owed: a wait whose timeout is the check's failure, and a wait on Publish's state.
+Recorded only; not fixed here.
