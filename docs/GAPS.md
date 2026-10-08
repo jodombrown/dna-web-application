@@ -8388,6 +8388,23 @@ Connect's lens bar lacks the more-to-scroll cue; the Feed's bar does not dock on
 while docked moves the Feed's and Convene's bars; the trailing corner is square (1515, 1517). Owner:
 Lane E, Session 57's first Fix PR.
 
+**Closed by PR #101 (Fix PR 09, handoff 57-FIX-09) under rulings 1515, 1517 and 1575.**
+
+- **W84, corners.** Where the bar is a strip, the rounded track is the scroller, at its column's
+  width; the seat no longer scrolls, and its four corners hold.
+- **W85, the cue.** A fade in the track's ground marks each end with a seat out of view. It is built
+  once in `LensBar`, for every lens bar. Both are proven by the `lens-strip` arm at 360, 390, 430
+  and the 820 fallback, in both themes.
+- **W87, a docked lens change.** `holdLensDock` now holds the docking point reachable with a
+  measured hold that lasts while docked, and the frame sampler in `runLensSeat` at 390 holds on all
+  three surfaces under both seedings. On the code before this PR the sampler did not fail in either
+  engine on the mock, so the hold was not shown to be the device's cause.
+- **W86, the Feed docking.** Not reproduced on the mock. The step table, stepping 0 to 400 and back
+  by 8 at 390 and 820, matches Connect's row for row in Chromium and Linux WebKit on the code before
+  this PR (matrix run 87). No fix is made at an unproven cause, and the standing check is in
+  `runLensSeat`. The founder's iPhone walk after merge (358) is the check for W86 and W87; a failure
+  there reopens this entry with the device's reading.
+
 ---
 
 ## G226. S54-6: each Design project's records lagged Chat's ratifications
