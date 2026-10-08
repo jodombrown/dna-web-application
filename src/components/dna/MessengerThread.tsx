@@ -496,8 +496,9 @@ export function MessengerThread({ member, threadId }: { member: Member; threadId
   const imageInput = useRef<HTMLInputElement>(null);
   const videoInput = useRef<HTMLInputElement>(null);
   // H56-MOV: an attached video is measured by a <video> attached to the document, rendered with the
-  // composer below, and never by a detached element; Safari answered a detached one with no size for
-  // a screen recording the attached path reads. The measurement for the draft's object URL settles
+  // composer below, and never by a detached element. Nobody has observed what a detached element
+  // returned in Safari; that it returns no size where an attached one does is the hypothesis the
+  // founder's Safari walk (Done Means 2) tests. The measurement for the draft's object URL settles
   // once, on loadedmetadata or error, and a send waits on it.
   const measured = useRef<{
     url: string;
