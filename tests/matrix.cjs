@@ -7339,6 +7339,9 @@ if (require.main === module)
         if (process.env.SPECIAL.includes("media")) {
           const { runMessengerMedia } = require("./messenger-media.cjs");
           await drive(runMessengerMedia, bt, bname);
+          // Handoff 56-MOV item 3 (G224): a .mov through the composer's own file input.
+          const { runMessengerComposerVideo } = require("./messenger-composer-video.cjs");
+          await drive(runMessengerComposerVideo, bt, bname);
           // Handoff 41-C item 5: the surfaces on the deployment with the same two accounts.
           const { runMessengerLive } = require("./messenger.cjs");
           await drive(runMessengerLive, bt, bname);
@@ -7517,6 +7520,10 @@ if (require.main === module)
       // deployment, once per engine, with the two seeded accounts (tests/messenger-media.cjs).
       const { runMessengerMedia } = require("./messenger-media.cjs");
       await drive(runMessengerMedia, bt, bname);
+      // Handoff 56-MOV item 3 (G224): a .mov through the thread's own video input, sent and rendered,
+      // and one over the byte ceiling refused as too_large (tests/messenger-composer-video.cjs).
+      const { runMessengerComposerVideo } = require("./messenger-composer-video.cjs");
+      await drive(runMessengerComposerVideo, bt, bname);
       // Handoff 41-C item 5 (SPEC 41-14 "Arms"): the Messenger's surfaces, the responsive matrix and
       // the flows on the mock, then the deployment with the two seeded accounts (tests/messenger.cjs).
       const msg = require("./messenger.cjs");

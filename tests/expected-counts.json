@@ -456,6 +456,7 @@
   "chromium-820x1180-shell": 32,
   "chromium-820x1180-targeted": 9,
   "chromium-820x1180-width": 14,
+  "chromium-messenger-composer-video": 4,
   "chromium-messenger-live": 18,
   "chromium-messenger-media": 15,
   "webkit 1024x1366 dark connect": 49,
@@ -893,6 +894,7 @@
   "webkit-820x1180-shell": 32,
   "webkit-820x1180-targeted": 9,
   "webkit-820x1180-width": 14,
+  "webkit-messenger-composer-video": 4,
   "webkit-messenger-live": 18,
   "webkit-messenger-media": 15
 }
