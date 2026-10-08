@@ -4,17 +4,20 @@
 // sender's name above it in a group; a quote block inside it for a reply; media, a voice player and
 // a link preview as nodes the caller renders (the Feed card's MediaBlock, the VoicePlayer); the text
 // with mentions bold in Connect's text rung and URLs as links in a new tab; the meta line of
-// `edited`, `pinned`, the time and the Ticks on own rows; the reaction row as word and names, never
-// a count, each a toggle; the five-word picker with Close while it is open; the deleted form as a
-// dashed box reading `This message was deleted`. On pointer the row's hover reveals Reply, React and
-// the `Message actions` ellipsis, end-aligned; on touch a 450 ms long press opens the menu on the
-// bubble and the tap that follows is swallowed (src/lib/long-press.ts). `focused` draws the 2px ring
-// a search result or the pinned strip lands on.
+// `edited`, `pinned`, the time and the Ticks on own rows; the reaction row as glyph and names, never
+// a count, each a toggle (SPEC-41-E 2.3); the quick bar of eight drawn glyphs plus More under the
+// message at the row's full width while it is open (2.2), and the full picker's inline panel on
+// pointer under it (2.4); the deleted form as a dashed box reading `This message was deleted`. On
+// pointer the row's hover reveals Reply, React and the `Message actions` ellipsis, end-aligned; on
+// touch a 450 ms long press opens the menu on the bubble and the tap that follows is swallowed
+// (src/lib/long-press.ts). `focused` draws the 2px ring a search result or the pinned strip lands on.
+// A pressed glyph, and the glyph that lands in the reaction row, pop once (`b14-pop`, nothing under
+// reduced motion). The bar scrolls sideways at 390 to reach More (1586) and never wraps.
 import { Fragment, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { Button } from "./Button";
-import { Chip } from "./Chip";
 import { IconButton } from "./IconButton";
 import { Menu, type MenuItem, type MenuRule } from "./Menu";
+import { ReactionMark } from "./ReactionGlyph";
 import { Ticks, type TickStatus } from "./Ticks";
 import type { C } from "./cmeta";
 import { useLongPress } from "@/lib/long-press";
@@ -28,18 +31,36 @@ export type MessageQuote = {
 };
 
 export type MessageReaction = {
-  word: string;
+  /** The stored character, with its own modifier where it carries one. */
+  emoji: string;
+  /** E9's glyph name for one of the eight, else the character itself; the accessible name's head. */
+  label: string;
   /** Already joined in words, with `you` where the viewer reacted: "Ama and Nana", "you". */
   names: string;
   own: boolean;
+  /** The hex of the tone the character's own modifier names, or null for --ink-4 (2.1). */
+  toneFill: string | null;
+};
+
+export type QuickReaction = {
+  /** The character the press stores, with the member's modifier on a hand (2.1). */
+  value: string;
+  /** E9's glyph name, from the vocabulary. */
+  label: string;
+  /** The hands' fill: the member's tone, or null for --ink-4. */
+  toneFill: string | null;
+  /** The member's own reaction on this message is this glyph. */
+  pressed: boolean;
 };
 
 export type MessagePicker = {
-  words: string[];
-  /** The viewer's current word on this message, selected in the picker. */
-  current?: string | undefined;
-  onPick: (word: string) => void;
-  onClose: () => void;
+  /** The eight, in 1403's order; an empty list renders an empty bar, never literals. */
+  quick: QuickReaction[];
+  onPick: (value: string) => void;
+  /** More: opens the full picker (2.4). */
+  onMore: () => void;
+  /** On pointer, the full picker's inline panel under the bar; the caller draws and closes it. */
+  panel?: ReactNode;
 };
 
 export type MessageBubbleProps = {
@@ -66,8 +87,8 @@ export type MessageBubbleProps = {
   onReply?: (() => void) | undefined;
   /** Opens or closes the picker. */
   onReact?: (() => void) | undefined;
-  /** A reaction row's toggle, by word. */
-  onToggleReaction?: ((word: string) => void) | undefined;
+  /** A reaction row's toggle, by the stored character. */
+  onToggleReaction?: ((emoji: string) => void) | undefined;
   picker?: MessagePicker | null | undefined;
   menuItems?: (MenuItem | MenuRule | false | null | undefined)[] | undefined;
   /** Fires when the menu opens, from the ellipsis or the long press. */
@@ -164,6 +185,14 @@ export function MessageBubble({
   const touch = mode === "touch";
   const [hover, setHover] = useState(false);
   const [open, setOpen] = useState(false);
+  /** The glyph popping now: the character pressed and the press's instant, which keys the span. */
+  const [pop, setPop] = useState<{ emoji: string; t: number } | null>(null);
+  const popBase = (e: string) => e.replace(/[\u{1F3FB}-\u{1F3FF}]/gu, "").replace(/\uFE0F/g, "");
+  const popping = (e: string) => !!pop && popBase(pop.emoji) === popBase(e);
+  const press = (value: string, fn: (value: string) => void) => {
+    setPop({ emoji: value, t: Date.now() });
+    fn(value);
+  };
   const bubbleRef = useRef<HTMLDivElement>(null);
   const moreRef = useRef<HTMLSpanElement>(null);
   const hasItems = menuItems.some((it) => !!it && !("rule" in it));
@@ -175,7 +204,8 @@ export function MessageBubble({
   const { handlers } = useLongPress<HTMLDivElement>(summon);
   const tint = c ? "var(--c-" + c + "-tint)" : "var(--bg-sunken)";
   const bg = deleted ? "transparent" : own ? tint : "var(--surface)";
-  const mediaOnly = !!media && !text && !quote;
+  // Media alone, or a bare link's card alone (SPEC-41-E 5), sits at the media padding.
+  const mediaOnly = (!!media || !!link) && !text && !quote;
   const body = deleted ? (
     <span style={{ color: "var(--ink-3)" }}>This message was deleted</span>
   ) : (
@@ -219,7 +249,9 @@ export function MessageBubble({
           {richText(text, { mentionNames })}
         </span>
       )}
-      {link && <div style={{ marginTop: "var(--space-2)", maxWidth: 320 }}>{link}</div>}
+      {link && (
+        <div style={{ marginTop: text || media ? "var(--space-2)" : 0, maxWidth: 320 }}>{link}</div>
+      )}
     </>
   );
   const meta = (
@@ -245,20 +277,22 @@ export function MessageBubble({
       <div data-reactions style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 4 }}>
         {reactions.map((r) => (
           <button
-            key={r.word}
+            key={r.emoji}
             type="button"
-            aria-label={r.word + ", " + r.names}
+            aria-label={r.label + ", " + r.names}
             aria-pressed={r.own}
-            data-reaction={r.word}
-            onClick={() => onToggleReaction?.(r.word)}
+            data-reaction={r.emoji}
+            data-reaction-label={r.label}
+            onClick={() => press(r.emoji, (e) => onToggleReaction?.(e))}
             style={{
               all: "unset",
               cursor: "pointer",
               display: "inline-flex",
               alignItems: "center",
-              minHeight: "var(--target-min)",
-              padding: "0 var(--space-2)",
-              borderRadius: 999,
+              gap: 6,
+              minHeight: touch ? 32 : "var(--target-min)",
+              padding: "2px var(--space-2) 2px 6px",
+              borderRadius: "var(--radius-pill)",
               border: "1px solid " + (r.own ? "var(--line-strong)" : "var(--line)"),
               background: "var(--surface)",
               fontSize: "var(--text-xs)",
@@ -266,24 +300,79 @@ export function MessageBubble({
               fontFamily: "inherit",
             }}
           >
-            {r.word}, {r.names}
+            <span
+              key={popping(r.emoji) ? pop?.t : "still"}
+              className={popping(r.emoji) ? "b14-pop" : undefined}
+              style={{ display: "inline-flex" }}
+            >
+              <ReactionMark emoji={r.emoji} size={18} toneFill={r.toneFill} />
+            </span>
+            {r.names}
           </button>
         ))}
       </div>
     ) : null;
+  const target = touch ? 44 : 36;
   const pickerRow = picker ? (
     <div
       role="group"
       aria-label="React"
       data-picker
-      style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 4, alignItems: "center" }}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        flexWrap: "nowrap",
+        gap: 2,
+        marginTop: 2,
+        padding: 2,
+        borderRadius: "var(--radius-pill)",
+        background: "var(--surface)",
+        border: "1px solid var(--line)",
+        maxWidth: "100%",
+        overflowX: "auto",
+        scrollbarWidth: "none",
+        boxSizing: "border-box",
+      }}
     >
-      {picker.words.map((w) => (
-        <Chip key={w} selected={picker.current === w} onClick={() => picker.onPick(w)}>
-          {w}
-        </Chip>
+      {picker.quick.map((q) => (
+        <button
+          key={q.value}
+          type="button"
+          aria-label={q.label}
+          aria-pressed={q.pressed}
+          data-quick={q.value}
+          onClick={() => press(q.value, picker.onPick)}
+          style={{
+            all: "unset",
+            cursor: "pointer",
+            width: target,
+            height: target,
+            borderRadius: "var(--radius-pill)",
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            background: q.pressed ? "var(--bg-sunken)" : "transparent",
+            boxSizing: "border-box",
+            flex: "none",
+          }}
+        >
+          <span
+            key={popping(q.value) ? pop?.t : "still"}
+            className={popping(q.value) ? "b14-pop" : undefined}
+            style={{ display: "inline-flex" }}
+          >
+            <ReactionMark emoji={q.value} size={24} toneFill={q.toneFill} />
+          </span>
+        </button>
       ))}
-      <IconButton name="x" label="Close" input={mode} size={32} onClick={picker.onClose} />
+      <Button variant="ghost" size="sm" onClick={picker.onMore} style={{ flex: "none" }} data-more>
+        More
+      </Button>
+    </div>
+  ) : null;
+  const panel = picker?.panel ? (
+    <div data-picker-panel style={{ width: "100%", display: "flex", justifyContent: "flex-start" }}>
+      {picker.panel}
     </div>
   ) : null;
   const cluster =
@@ -360,46 +449,59 @@ export function MessageBubble({
       {...(touch && !deleted ? handlers : {})}
       style={{
         display: "flex",
-        flexDirection: own ? "row-reverse" : "row",
-        alignItems: "flex-start",
-        gap: "var(--space-2)",
+        flexDirection: "column",
+        alignItems: own ? "flex-end" : "flex-start",
+        gap: 4,
         padding: "2px var(--space-4)",
         touchAction: "pan-y",
         fontFamily: "var(--font-sans)",
+        minWidth: 0,
         ...style,
       }}
     >
-      <div style={{ maxWidth: "78%", minWidth: 0 }}>
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            alignItems: own ? "flex-end" : "flex-start",
-            gap: 4,
-            maxWidth: "100%",
-            minWidth: 0,
-          }}
-        >
-          {senderName && !own && (
-            <span
-              data-sender
-              style={{
-                fontSize: "var(--text-xs)",
-                fontWeight: "var(--weight-medium)" as unknown as number,
-                color: "var(--ink-2)",
-                padding: "0 var(--space-1)",
-              }}
-            >
-              {senderName}
-            </span>
-          )}
-          {bubble}
-          {meta}
-          {reactionRow}
-          {pickerRow}
+      {/* The quick bar and the panel sit outside the 78 percent stack, at the row's full width. */}
+      <div
+        style={{
+          display: "flex",
+          flexDirection: own ? "row-reverse" : "row",
+          alignItems: "flex-start",
+          gap: "var(--space-2)",
+          width: "100%",
+        }}
+      >
+        <div style={{ maxWidth: "78%", minWidth: 0 }}>
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              alignItems: own ? "flex-end" : "flex-start",
+              gap: 4,
+              maxWidth: "100%",
+              minWidth: 0,
+            }}
+          >
+            {senderName && !own && (
+              <span
+                data-sender
+                style={{
+                  fontSize: "var(--text-xs)",
+                  fontWeight: "var(--weight-medium)" as unknown as number,
+                  color: "var(--ink-2)",
+                  padding: "0 var(--space-1)",
+                }}
+              >
+                {senderName}
+              </span>
+            )}
+            {bubble}
+            {meta}
+            {reactionRow}
+          </div>
         </div>
+        {cluster}
       </div>
-      {cluster}
+      {pickerRow}
+      {panel}
       <Menu
         open={open}
         onClose={() => setOpen(false)}

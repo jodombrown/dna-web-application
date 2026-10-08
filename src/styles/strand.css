@@ -521,6 +521,27 @@ a:hover {
     opacity: 1;
   }
 }
+/* Brief 14, SPEC-41-E 2.2 (the page's b14-pop): a reaction glyph scales to 1.4 and back once on
+   press, over --dur-slow on --ease; nothing moves under reduced motion. */
+@keyframes b14-pop {
+  0% {
+    transform: scale(1);
+  }
+  40% {
+    transform: scale(1.4);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+.b14-pop {
+  animation: b14-pop var(--dur-slow) var(--ease) 1;
+}
+@media (prefers-reduced-motion: reduce) {
+  .b14-pop {
+    animation: none !important;
+  }
+}
 /* Brief 4 (Connect.jsx's injected focus styles, carried here per SPEC section 12.3): the card's name
    button gets the emerald ring with a 3px offset and a 4px radius; the Where tile keeps the base ring. */
 .strand-mc-name:focus-visible {

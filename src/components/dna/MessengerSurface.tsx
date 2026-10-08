@@ -6,11 +6,17 @@
 // the inbox cache in src/lib/messenger-inbox.ts; the vocabularies through src/lib/vocabularies.ts.
 // Writes: the wrappers alone. Every label is the extraction's, with the SPEC's overrides 1 (the
 // pin cap toast, 1371), 2 (DIA dismissals through messenger_dia_dismiss, 1373) and 3 (native date
-// inputs on Input's tokens, 1373). No count anywhere: the dot, names, words.
+// inputs on Input's tokens, 1373). No count anywhere: the dot, names, words. SPEC-41-E adds Start a
+// group (section 6, rulings 1579 to 1581): the plus beside Mark all read, the sheet naming the group
+// and picking members from the member's connections, the picked members invited and never joined,
+// and the landing on the new thread; and the alert line under the title row where pin, accept,
+// decline and block read their refusal (section 4, 1582: the fourth pin reads pins_full there).
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useRouter } from "@tanstack/react-router";
 import { createContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Avatar } from "@/components/strand/Avatar";
 import { Button } from "@/components/strand/Button";
+import { Checkbox } from "@/components/strand/Checkbox";
 import { DiaLine } from "@/components/strand/DiaLine";
 import { EmptyState } from "@/components/strand/EmptyState";
 import { IconButton } from "@/components/strand/IconButton";
@@ -26,11 +32,14 @@ import { ThreadRow } from "@/components/strand/ThreadRow";
 import { Toast } from "@/components/strand/Toast";
 import { toastStyle } from "@/components/dna/FeedSurface";
 import type { Member } from "@/lib/auth";
+import { loadNetwork } from "@/lib/connect";
 import {
   archive,
   clockLabel,
+  createGroup,
   dayLabel,
   diaDismiss,
+  FALLBACK_LINES,
   flushCursors,
   lastLineOf,
   loadDiaSignals,
@@ -41,6 +50,7 @@ import {
   mute,
   pinThread,
   readTo,
+  REFUSAL_LINES,
   refusalOf,
   requestAccept,
   requestRecover,
@@ -52,10 +62,12 @@ import {
   unarchive,
   unpinThread,
   type MessageView,
+  type RefusalWord,
   type RequestView,
   type ThreadView,
 } from "@/lib/messenger";
 import {
+  refreshThreadRow,
   REQUESTS_KEY,
   SETTINGS_KEY,
   SIGNALS_KEY,
@@ -127,6 +139,226 @@ function TextButton({
     >
       {label}
     </button>
+  );
+}
+
+/** SPEC-41-E 4: the refusal line under the list's title row, --error on --error-tint, with an OK control. */
+function AlertStrip({ text, onOk }: { text: string; onOk: () => void }) {
+  return (
+    <div
+      role="alert"
+      data-list-alert
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: "var(--space-2)",
+        margin: "0 var(--space-4)",
+        padding: "var(--space-1) var(--space-1) var(--space-1) var(--space-3)",
+        borderRadius: "var(--radius-m)",
+        background: "var(--error-tint)",
+        fontSize: "var(--text-xs)",
+        lineHeight: "var(--text-xs-lh)",
+        color: "var(--error)",
+      }}
+    >
+      <span style={{ flex: 1, minWidth: 0, textWrap: "pretty" }}>{text}</span>
+      <button
+        type="button"
+        onClick={onOk}
+        style={{
+          all: "unset",
+          cursor: "pointer",
+          minHeight: "var(--target-min)",
+          padding: "0 var(--space-2)",
+          display: "inline-flex",
+          alignItems: "center",
+          fontSize: "var(--text-xs)",
+          fontWeight: "var(--weight-medium)" as unknown as number,
+          color: "var(--error)",
+          fontFamily: "var(--font-sans)",
+        }}
+      >
+        OK
+      </button>
+    </div>
+  );
+}
+
+/** SPEC-41-E 6.3: the six words the create function raises; any other reads the create fallback (1581). */
+const CREATE_WORDS: readonly RefusalWord[] = [
+  "not_signed_in",
+  "bad_name",
+  "no_members",
+  "group_full",
+  "bad_member",
+  "not_your_connection",
+];
+
+/**
+ * SPEC-41-E 6.2 to 6.4 (1579 to 1581, 1592): the Start a group sheet. The connections come from
+ * the same `loadNetwork` read and blocks filter Manage's invite list uses; blocked members and
+ * non-connections are not listed. The picked are invited, never joined; Created lands on the thread.
+ */
+function StartGroupSheet({
+  member,
+  compact,
+  onClose,
+  onCreated,
+}: {
+  member: Member;
+  compact: boolean;
+  onClose: () => void;
+  onCreated: (threadId: string) => void;
+}) {
+  const network = useQuery({ queryKey: ["connect", "network", member.id], queryFn: loadNetwork });
+  const blocks = useQuery({
+    queryKey: ["blocks", member.id],
+    queryFn: async () => {
+      const sb = getSupabase();
+      if (!sb) return [] as string[];
+      const { data } = await sb
+        .from("member_blocks")
+        .select("blocked_id")
+        .eq("blocker_id", member.id);
+      return (data ?? []).map((b) => b.blocked_id);
+    },
+  });
+  const blocked = new Set(blocks.data ?? []);
+  const connections = (network.data?.connections ?? []).filter((c) => !blocked.has(c.id));
+  const [name, setName] = useState("");
+  const [picked, setPicked] = useState<string[]>([]);
+  const [nameError, setNameError] = useState<string | null>(null);
+  const [membersError, setMembersError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const start = () => {
+    const trimmed = name.trim();
+    const ne = trimmed ? null : REFUSAL_LINES.bad_name;
+    const me = picked.length ? null : REFUSAL_LINES.no_members;
+    setNameError(ne);
+    setMembersError(me);
+    if (ne || me) return;
+    setSaving(true);
+    setError(null);
+    createGroup(trimmed, picked)
+      .then((id) => onCreated(id))
+      .catch((e) => {
+        const err = e instanceof MessengerError ? e : refusalOf(e, FALLBACK_LINES.create);
+        setError(err.word && CREATE_WORDS.includes(err.word) ? err.line : FALLBACK_LINES.create);
+        setSaving(false);
+      });
+  };
+  const toggle = (id: string) => {
+    setPicked((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
+    setMembersError(null);
+  };
+  return (
+    <Sheet
+      open
+      onClose={onClose}
+      variant={compact ? "sheet" : "drawer"}
+      label="Start a group"
+      error={error}
+      actions={
+        <>
+          <Button variant="secondary" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button c="connect" disabled={saving} onClick={start} data-testid="start-group">
+            Start the group
+          </Button>
+        </>
+      }
+    >
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          height: 56,
+          padding: "0 8px 0 20px",
+          borderBottom: "1px solid var(--line)",
+          flex: "none",
+        }}
+      >
+        <h2 data-sheet-heading style={{ flex: 1, margin: 0, fontSize: 17, fontWeight: 700 }}>
+          Start a group
+        </h2>
+        <IconButton name="x" label="Close" onClick={onClose} />
+      </div>
+      <div
+        data-testid="start-group-sheet"
+        aria-busy={saving || undefined}
+        style={{
+          flex: 1,
+          overflowY: "auto",
+          padding: 20,
+          display: "flex",
+          flexDirection: "column",
+          gap: "var(--space-4)",
+        }}
+      >
+        <Input
+          label="Name"
+          value={name}
+          maxLength={80}
+          onChange={(e) => {
+            setName((e.target as HTMLInputElement).value);
+            setNameError(null);
+          }}
+          error={nameError ?? undefined}
+          data-testid="group-name"
+        />
+        <div
+          role="group"
+          aria-label="Members"
+          style={{ display: "flex", flexDirection: "column", gap: "var(--space-1)" }}
+        >
+          <span style={CAPS}>Members, from your connections</span>
+          {connections.map((cx) => (
+            <div
+              key={cx.id}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "var(--space-3)",
+                minHeight: "var(--target-primary)",
+              }}
+            >
+              <Avatar name={cx.name} src={cx.avatarUrl} size={32} />
+              <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
+                <span style={{ fontSize: "var(--text-s)" }}>{cx.name}</span>
+                {cx.headline && (
+                  <span style={{ fontSize: "var(--text-xs)", color: "var(--ink-3)" }}>
+                    {cx.headline}
+                  </span>
+                )}
+              </span>
+              <Checkbox
+                label={"Add " + firstName(cx.name)}
+                checked={picked.includes(cx.id)}
+                onChange={() => toggle(cx.id)}
+                style={{ flex: "none" }}
+              />
+            </div>
+          ))}
+          {membersError && (
+            <span
+              role="alert"
+              data-members-error
+              style={{ fontSize: "var(--text-xs)", color: "var(--error)" }}
+            >
+              {membersError}
+            </span>
+          )}
+        </div>
+        {saving && (
+          <p role="status" style={{ ...QUIET, fontSize: "var(--text-xs)" }}>
+            Starting
+          </p>
+        )}
+      </div>
+    </Sheet>
   );
 }
 
@@ -284,6 +516,9 @@ export function MessengerSurface({
   const [during, setDuring] = useState("");
   const [receiptChoice, setReceiptChoice] = useState<"on" | "off">("off");
   const [receiptsSaving, setReceiptsSaving] = useState(false);
+  // SPEC-41-E 4: pin, accept, decline and block read their refusal in a line under the title row.
+  const [alert, setAlert] = useState<string | null>(null);
+  const [groupOpen, setGroupOpen] = useState(false);
 
   // 1047, 612: at expanded the surface is the canvas, no rails, bounded, the Pane beside the list.
   useEffect(() => {
@@ -328,7 +563,7 @@ export function MessengerSurface({
       if (done) say(done);
     } catch (e) {
       const err = e instanceof MessengerError ? e : refusalOf(e);
-      say(err.line);
+      setAlert(err.line);
     } finally {
       setBusy(null);
     }
@@ -487,7 +722,7 @@ export function MessengerSurface({
         alignItems: "center",
         justifyContent: "space-between",
         gap: "var(--space-2)",
-        padding: "0 var(--space-4)",
+        padding: "0 var(--space-2) 0 var(--space-4)",
         minHeight: "var(--target-primary)",
       }}
     >
@@ -502,13 +737,24 @@ export function MessengerSurface({
       >
         Messages
       </h1>
-      {threads.data && anyUnreadLive && (
-        <Button variant="secondary" size="sm" onClick={markAllRead} data-testid="mark-all-read">
-          Mark all read
-        </Button>
-      )}
+      <div style={{ display: "flex", alignItems: "center", gap: "var(--space-1)" }}>
+        {threads.data && anyUnreadLive && (
+          <Button variant="secondary" size="sm" onClick={markAllRead} data-testid="mark-all-read">
+            Mark all read
+          </Button>
+        )}
+        {threads.data && (
+          <IconButton
+            name="plus"
+            label="Start a group"
+            onClick={() => setGroupOpen(true)}
+            data-testid="start-group-open"
+          />
+        )}
+      </div>
     </div>
   );
+  const alertNode = alert ? <AlertStrip text={alert} onOk={() => setAlert(null)} /> : null;
 
   const searchBlock = (
     <div
@@ -855,8 +1101,23 @@ export function MessengerSurface({
       }}
     >
       {head}
+      {alertNode}
       {body}
     </div>
+  );
+
+  // SPEC-41-E 6: the sheet, and the landing on the new thread with its row in the list cache.
+  const groupSheet = groupOpen && (
+    <StartGroupSheet
+      member={member}
+      compact={compact}
+      onClose={() => setGroupOpen(false)}
+      onCreated={(id) => {
+        setGroupOpen(false);
+        void refreshThreadRow(qc, member.id, id);
+        openThread(id);
+      }}
+    />
   );
 
   // First open (1345, 1346): the receipts choice, once, not dismissable.
@@ -943,6 +1204,7 @@ export function MessengerSurface({
       <>
         {column}
         {receiptsSheet}
+        {groupSheet}
         {toastNode}
       </>
     );
@@ -983,6 +1245,7 @@ export function MessengerSurface({
         <MessengerPaneContext.Provider value>{pane}</MessengerPaneContext.Provider>
       </Pane>
       {receiptsSheet}
+      {groupSheet}
       {toastNode}
     </div>
   );

@@ -76,6 +76,7 @@ export * from "./Ticks";
 export * from "./VoicePlayer";
 export * from "./VoiceRecorder";
 export * from "./MessageComposer";
+export * from "./ReactionGlyph";
 export * from "./PinnedStrip";
 export * from "./DaySeparator";
 export * from "./BlockedMessageLine";
