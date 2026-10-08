@@ -8335,14 +8335,24 @@ refused before it loads, in every engine, attached or detached, whatever the fil
 `blob:`, which is why the composer's draft thumbnail (an `<img>`, `MediaBlock kind="video"`) showed
 the recording. The same policy refuses voice-note playback, which `useAudio` in
 `src/lib/messenger-media.ts` runs through `new Audio(objectURL)`; `messenger-live`'s voice check
-asserts the player renders, not that it plays.
+asserts the player renders, not that it plays. `fetchMessageMedia` in `src/lib/media.ts` hands every
+received object to its element as a `blob:` URL (the route needs the bearer, which an element's own
+request cannot carry), so voice notes and received videos were refused by the same policy, not only
+the composer's attachment.
 
 PR #100 moves the measurement to an attached element owned by `MessengerThread.tsx`, removes
 `measureVideo`, and gives `too_large` its own state, but did not change the policy or the refusal,
 under the handoff's stop clause: an attached element also returned no size. Owed, as a ruling,
 because it changes ruling 438's header: `media-src 'self' blob:` in both `src/lib/csp.ts` and
-`public/_headers`. Linux WebKit's empty message cannot by itself separate the policy from a
-GStreamer decoder gap; the policy is the cause Chromium names and the one that reaches Safari.
+`public/_headers` (since given as ruling 1569, below). Linux WebKit's empty message cannot by itself
+separate the policy from a GStreamer decoder gap; the policy is the cause Chromium names and the one
+that reaches Safari.
+
+**Amended again 8 October 2026: the policy is changed under ruling 1569.** PR #100 adds
+`media-src 'self' blob:` to `src/lib/csp.ts` and `public/_headers`, every other directive unchanged,
+and the live arm that reads `/feed`'s policy asserts it. What the run on PR #100's final head reads for
+the fixture in each engine is the evidence this entry closes on; Safari's is Done Means 2's walk. A
+received video still cannot play once the policy allows it: G250.
 
 ---
 
@@ -8648,3 +8658,16 @@ the record with no word of the wait having timed out, and Publish's state is rea
 own. The earlier sighting, WebKit at 390 on run 401 (handoff 37-B), is recorded only in the comment
 above the wait. Owed: a wait whose timeout is the check's failure, and a wait on Publish's state.
 Recorded only; not fixed here.
+
+---
+
+## G250. A received Messenger video renders as an image and cannot play
+
+**Severity: moderate. Opened 8 October 2026 by ruling 1570, during handoff 56-MOV. The number is
+assigned by this entry (ruling 638).**
+
+`MessageMedia` in `src/components/dna/MessengerThread.tsx` (line 186 at `2d86f21`, line 192 at PR
+#100's head) renders a video message through `MediaBlock kind="video"`, which draws an `<img>` whose
+`src` is the object URL, with a play glyph over it. No `<video>` is mounted for a message, so a video
+message cannot play even once ruling 1569's `media-src 'self' blob:` lets one load (G223). Not fixed
+in PR #100 (1570). Owner: the walkthrough lane; the player's copy and controls to 41-E.
