@@ -300,12 +300,19 @@ async function runMessengerComposerVideo(browserType, bname) {
         buffer: fixture,
       });
       await dismissNotice();
-      const sentReq = page.waitForRequest(
-        (r) => r.method() === "POST" && new URL(r.url()).pathname === "/api/messages/media",
-        { timeout: 30000 },
-      );
-      await page.click('[data-testid="send"]');
-      const req = await sentReq.catch(() => null);
+      // The wait's rejection is handled the moment it is made (G254): on run 534 the Send click
+      // took over 30 s to become actionable on macOS WebKit, so the timeout rejected while the click
+      // was still pending, nothing had caught it, and Node killed the gate before the arms after this
+      // one ran. A slow Send now records this check failed, with the composer's state and the
+      // failstate screenshot, and the gate goes on (1237: a crash is never a pass, and never silent).
+      const sentReq = page
+        .waitForRequest(
+          (r) => r.method() === "POST" && new URL(r.url()).pathname === "/api/messages/media",
+          { timeout: 30000 },
+        )
+        .catch(() => null);
+      await page.click('[data-testid="send"]', { timeout: 30000 }).catch(() => undefined);
+      const req = await sentReq;
       const res = req ? await req.response() : null;
       const body = res ? await res.json().catch(() => null) : null;
       mediaId = body && body.media_id ? body.media_id : null;

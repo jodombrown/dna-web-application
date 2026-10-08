@@ -8836,3 +8836,28 @@ If the fixture's labels or swatches differ, the labels change by one migration o
 Frimousse 0.4.0's own resolver rather than from the handoff's "emojibase ^16" (the package declares
 no dependency and fetches `emojibase-data@latest`): the self-hosted set is `17.0.0`, the version
 `@latest` resolved on 8 October 2026, recorded in `message_reaction_emoji.emojibase_version`.
+
+---
+
+## G254. The composer-video arm could kill the macOS gate on a slow Send
+
+**Severity: moderate. Opened 8 October 2026 by run 534 (PR #102's first gate run, head `bf1997b`).
+The number is assigned by this entry (ruling 638).**
+
+`tests/messenger-composer-video.cjs` created its 30 s `page.waitForRequest` for the media POST and
+only then awaited the Send click, attaching the wait's `catch` after the click returned. On run 534
+the click took longer than 30 s to find Send actionable on macOS WebKit (the fixture had just been
+attached and the composer's thumbnail is `MediaBlock`'s `<img>` of the `.mov`'s object URL, the
+decode G250 names), so the wait rejected with no handler and Node raised it as an uncaught
+exception: the gate's process died at that arm, after `ENV … the fixture in this engine` and before
+`… the composer at send`, and the arms after it, the reactions arm among them, never ran. Run 529 on
+main crossed the same stretch in 45 s and passed, so the arm sat near the cliff.
+
+Fixed in PR #102: the wait's rejection is handled where it is made and the click carries the same
+30 s bound, so a slow Send records this check failed with the composer's state record and the
+failstate screenshot, and the gate goes on to the arms after it (1237: never a pass, never silent).
+What is not settled here is why Send took longer than 30 s on that run: whether the decode of the
+attached `.mov` in the thumbnail's `<img>` stalls WebKit's main thread for that long on its own, or
+something on `bf1997b` lengthened it. The next gate run on the branch, which now records the arm's
+state at send, is what answers it; if it is the decode, the composer's video thumbnail should stop
+handing a video's object URL to an `<img>` (the same change G250 made for the log).
