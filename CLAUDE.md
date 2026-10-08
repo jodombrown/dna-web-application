@@ -150,7 +150,10 @@ under 225, and the statements about to run are that file's. Then write. Then ver
 recorded `supabase_migrations.schema_migrations` row and compare it against the file's own bytes,
 which is the md5 comparison `tests/migration-drift.cjs` makes, so a write whose read-back does not
 match the file is named as drift the moment it lands rather than at the next run of the arm. 553's
-refusal of `apply_migration` is unchanged and its reason is unchanged. Every paste carries its own
+refusal of `apply_migration` is unchanged and its reason is unchanged. `execute_sql` refuses any
+statement containing destructive DDL (`drop column`, `drop type`, `drop trigger`, a `delete`), even
+inside a quoted string (1528); a migration that contains one reaches the canonical project by the
+founder's SQL Editor paste of a file Chat generates from the committed bytes. Every paste carries its own
 `supabase_migrations.schema_migrations` rows in the same transaction as the DDL, so the project never
 records the statements without recording the version that explains them. `apply_migration` mints its own
 version rather than honouring the file's: applying `20260913220000` through it recorded the statements
