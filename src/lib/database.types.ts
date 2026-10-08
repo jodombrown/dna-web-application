@@ -84,6 +84,13 @@
 // file byte for byte, and `tests/migration-drift.cjs` reads it, so the generator returns it. Every
 // object the generator returns is explained by a migration in this tree, so nothing is left out.
 //
+// Handoff 56-41E (1576, 1577, 1590 to 1593): until the regeneration after Chat applies
+// 20261008150000 to 20261008150700, this file carries by hand what those migrations add, as 45-D
+// and 55-A did: `message_reaction_emoji` in place of `message_reaction_kinds`, the dropped
+// `message_reactions_reaction_fkey`, `member_messaging_settings.reaction_skin_tone`,
+// `messenger_settings_set`'s `p_skin_tone`, `messenger_recent_reactions`, the threads view's
+// `invited_names` and `invited_others`, and the messages view's `media_width` and `media_height`.
+//
 // What 41-A changes here (1330 to 1353, 1368 to 1373): the tables `threads`, `thread_members`,
 // `messages`, `message_reactions`, `message_mentions`, `message_requests`, `message_reports`,
 // `message_view_audit`, `member_messaging_settings`, `messenger_dia_dismissals` and the four
@@ -1815,6 +1822,7 @@ export type Database = {
           link_previews_enabled: boolean;
           media_notice_seen_at: string | null;
           member_id: string;
+          reaction_skin_tone: string | null;
           receipts_chosen_at: string | null;
           receipts_enabled: boolean;
           updated_at: string;
@@ -1823,6 +1831,7 @@ export type Database = {
           link_previews_enabled?: boolean;
           media_notice_seen_at?: string | null;
           member_id: string;
+          reaction_skin_tone?: string | null;
           receipts_chosen_at?: string | null;
           receipts_enabled?: boolean;
           updated_at?: string;
@@ -1831,6 +1840,7 @@ export type Database = {
           link_previews_enabled?: boolean;
           media_notice_seen_at?: string | null;
           member_id?: string;
+          reaction_skin_tone?: string | null;
           receipts_chosen_at?: string | null;
           receipts_enabled?: boolean;
           updated_at?: string;
@@ -2289,21 +2299,30 @@ export type Database = {
         };
         Relationships: [];
       };
-      message_reaction_kinds: {
+      message_reaction_emoji: {
         Row: {
+          emoji: string;
+          emoji_group: string;
+          emojibase_version: string;
           label: string;
-          position: number;
-          value: string;
+          quick_position: number | null;
+          takes_tone: boolean;
         };
         Insert: {
+          emoji: string;
+          emoji_group: string;
+          emojibase_version: string;
           label: string;
-          position: number;
-          value: string;
+          quick_position?: number | null;
+          takes_tone: boolean;
         };
         Update: {
+          emoji?: string;
+          emoji_group?: string;
+          emojibase_version?: string;
           label?: string;
-          position?: number;
-          value?: string;
+          quick_position?: number | null;
+          takes_tone?: boolean;
         };
         Relationships: [];
       };
@@ -2347,13 +2366,6 @@ export type Database = {
             isOneToOne: false;
             referencedRelation: "messenger_messages_view";
             referencedColumns: ["message_id"];
-          },
-          {
-            foreignKeyName: "message_reactions_reaction_fkey";
-            columns: ["reaction"];
-            isOneToOne: false;
-            referencedRelation: "message_reaction_kinds";
-            referencedColumns: ["value"];
           },
         ];
       };
@@ -3992,7 +4004,9 @@ export type Database = {
           former_member: boolean | null;
           kind: Database["public"]["Enums"]["message_kind"] | null;
           link_preview: Json | null;
+          media_height: number | null;
           media_id: string | null;
+          media_width: number | null;
           media_word: string | null;
           mentions: string[] | null;
           message_id: string | null;
@@ -4069,6 +4083,8 @@ export type Database = {
           headline: string | null;
           history_visible_to_new: boolean | null;
           invited: boolean | null;
+          invited_names: Json | null;
+          invited_others: boolean | null;
           kind: string | null;
           last_activity_at: string | null;
           last_author_id: string | null;
@@ -4381,6 +4397,7 @@ export type Database = {
         Args: { p_seq: number; p_thread: string };
         Returns: undefined;
       };
+      messenger_recent_reactions: { Args: never; Returns: string[] };
       messenger_report: {
         Args: { p_message: string; p_note?: string; p_reason: string };
         Returns: string;
@@ -4476,6 +4493,7 @@ export type Database = {
           link_previews_enabled: boolean;
           media_notice_seen_at: string | null;
           member_id: string;
+          reaction_skin_tone: string | null;
           receipts_chosen_at: string | null;
           receipts_enabled: boolean;
           updated_at: string;
@@ -4492,11 +4510,13 @@ export type Database = {
           p_link_previews?: boolean;
           p_media_notice_seen?: boolean;
           p_receipts?: boolean;
+          p_skin_tone?: string;
         };
         Returns: {
           link_previews_enabled: boolean;
           media_notice_seen_at: string | null;
           member_id: string;
+          reaction_skin_tone: string | null;
           receipts_chosen_at: string | null;
           receipts_enabled: boolean;
           updated_at: string;
