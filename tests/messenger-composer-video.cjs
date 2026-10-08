@@ -217,6 +217,28 @@ async function runMessengerComposerVideo(browserType, bname) {
       skip(CHECKS[2], why);
     } else {
       // 2. Attach through the thread's own video input, send, read the request the route received.
+      // What the input handed the composer, read in the capture phase before the thread's handler
+      // clears the input, and every answer the route gave, are printed as records (930) so a refusal
+      // names where it happened rather than only that it did.
+      await page.evaluate(() => {
+        document.addEventListener(
+          "change",
+          (e) => {
+            const f = e.target && e.target.files && e.target.files[0];
+            if (f) window.__h56File = { name: f.name, type: f.type, size: f.size };
+          },
+          true,
+        );
+      });
+      const answers = [];
+      page.on("response", (r) => {
+        if (new URL(r.url()).pathname === "/api/messages/media")
+          answers.push(r.request().method() + " " + r.status());
+      });
+      page.on("requestfailed", (r) => {
+        if (new URL(r.url()).pathname === "/api/messages/media")
+          answers.push("failed " + ((r.failure() && r.failure().errorText) || ""));
+      });
       await videoInput.setInputFiles({
         name: "composer-video.mov",
         mimeType: "video/quicktime",
@@ -239,6 +261,25 @@ async function runMessengerComposerVideo(browserType, bname) {
         .locator("[data-messenger-thread]")
         .first()
         .getAttribute("data-upload-refusal");
+      const state = await page.evaluate(() => {
+        const v = document.querySelector('[data-testid="video-measure"]');
+        return {
+          file: window.__h56File || null,
+          measure: v
+            ? {
+                readyState: v.readyState,
+                networkState: v.networkState,
+                width: v.videoWidth,
+                height: v.videoHeight,
+                error: v.error ? { code: v.error.code, message: v.error.message } : null,
+                blob: v.src.startsWith("blob:"),
+              }
+            : null,
+        };
+      });
+      console.log(
+        `ENV ${tag} | the composer at send: ${JSON.stringify({ ...state, refusal, answers })}`,
+      );
       check(
         CHECKS[1],
         !!req &&
@@ -255,7 +296,7 @@ async function runMessengerComposerVideo(browserType, bname) {
           body.height === FIXTURE_H,
         req
           ? `w=${w} h=${h} type=${req.headers()["content-type"]}; ${res ? res.status() : "-"} ${JSON.stringify(body)}`
-          : `no request reached the route; refusal ${refusal}`,
+          : `no request reached the route; refusal ${refusal}; ${JSON.stringify({ ...state, answers })}`,
       );
 
       // 3. The message the route's object went out in, rendered in the log.
