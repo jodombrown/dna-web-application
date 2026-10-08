@@ -43,12 +43,39 @@ export const ShellScrollProvider = Ctx.Provider;
  * point, the in-page seat's bottom edge, so the new lens's content starts just under the bar and
  * never above that point, and the header keeps the bar. While the bar is in the page nothing calls
  * this and the scroll stays where it is. The shell's scroller only: the window is 1457's.
+ *
+ * W87 (Fix PR 09): the docking point stays reachable however short the new lens is and however long
+ * it takes to load. Before the scroll is set, `hold` (an invisible box the seat positions from its
+ * own top) is given the height that puts its foot at the docking point plus the scroller's height,
+ * so the scroller's range cannot end above the docking point and clamp it below 73. The height is
+ * measured, never a constant, and re-measured whenever the scroller resizes (the toolbar collapsing
+ * on iOS). The returned function releases it; the seat calls it once the bar is back in the page.
  */
-export function holdLensDock(scroller: HTMLElement | null, seat: HTMLElement | null) {
-  if (!scroller || !seat) return;
-  const point =
-    seat.getBoundingClientRect().bottom - scroller.getBoundingClientRect().top + scroller.scrollTop;
-  scroller.scrollTop = Math.max(SCROLL_SWAP_PX + 1, Math.round(point));
+export function holdLensDock(
+  scroller: HTMLElement | null,
+  seat: HTMLElement | null,
+  hold?: HTMLElement | null,
+): (() => void) | null {
+  if (!scroller || !seat) return null;
+  const s = scroller.getBoundingClientRect();
+  const r = seat.getBoundingClientRect();
+  const seatTop = r.top - s.top + scroller.scrollTop;
+  const dock = Math.max(SCROLL_SWAP_PX + 1, Math.round(r.bottom - s.top + scroller.scrollTop));
+  let release: (() => void) | null = null;
+  if (hold) {
+    const fit = () => {
+      hold.style.height = Math.max(0, Math.ceil(dock + scroller.clientHeight - seatTop)) + "px";
+    };
+    fit();
+    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(fit) : null;
+    ro?.observe(scroller);
+    release = () => {
+      ro?.disconnect();
+      hold.style.height = "0px";
+    };
+  }
+  scroller.scrollTop = dock;
+  return release;
 }
 
 /** Wire a scroller: returns the state and the onScroll handler to attach to it. Idempotent under

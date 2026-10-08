@@ -330,8 +330,19 @@ async function runLensStrip(browserType, bname, [w, h]) {
         await settle();
         const b = await readStrip(page, s);
         if (over && b && b.end) {
-          const x = Math.round((b.end.rect.left + b.end.rect.right) / 2);
-          const y = Math.round((b.end.rect.top + b.end.rect.bottom) / 2);
+          // A point under the fade and inside a seat: the fade's centre, or the nearest point to it
+          // that is not in the 2px gap between two seats.
+          const f = b.end.rect;
+          const mid = Math.round((f.left + f.right) / 2);
+          const xs = [0, -2, 2, -4, 4, -6, 6, -8, 8].map((d) => mid + d);
+          const x =
+            xs.find(
+              (v) =>
+                v > f.left &&
+                v < f.right &&
+                b.tabs.some((t) => t.left + 1 <= v && t.right - 1 >= v),
+            ) ?? mid;
+          const y = Math.round((f.top + f.bottom) / 2);
           const under = b.tabs.find((t) => t.left <= x && t.right >= x);
           await page.touchscreen.tap(x, y);
           await settle();

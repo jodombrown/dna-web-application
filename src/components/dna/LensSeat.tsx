@@ -4,16 +4,19 @@
 // with it: icon and word on every lens at every tier (1465, W72). At medium and expanded the bar is
 // justified (1502 as 1504 reads it): each seat starts at its own word's width and the column's
 // remaining width is shared equally, so the track spans the column; where the words do not fit,
-// LensBar renders the sideways strip instead and this seat scrolls it, never dropping a label. That
-// is the default for every surface that takes this seat; only Discovery's lens row (`LensSeatRow`,
-// 1170) keeps its `min-content` bar. At compact the bar is the strip, each seat its own word.
+// LensBar renders the sideways strip instead, never dropping a label. That is the default for every
+// surface that takes this seat; only Discovery's lens row (`LensSeatRow`, 1170) keeps its
+// `min-content` bar. At compact the bar is the strip, each seat its own word. Wherever the bar is a
+// strip, the rounded track is the scroller at the column's width and the seat never scrolls (1515,
+// Fix PR 09): the seat used to scroll a track as wide as its words, and clipping it squared the
+// track's trailing corners.
 //
 // Where the seat puts the bar, by tier:
 //   - Below expanded, `flow`: in the shell's scroller at the top of the column, so the column's own
 //     top padding (12 at compact, 24 at medium) is the bar's distance from the header on every
 //     surface. Past 72px the header holds the surface's registered bar (947, 1467) and this one
-//     keeps its space hidden. At compact the row scrolls sideways and the page never does; on mount
-//     and on every lens change the active lens is scrolled into the row's view.
+//     keeps its space hidden. At compact the track scrolls sideways and the page never does; on
+//     mount and on every lens change the active lens is scrolled into the track's view.
 //   - At expanded, `pinned`: sticky in the column on the column's ground. A seat that opens the
 //     column (Connect) carries 24 above the bar; the Feed's seat follows the composer and the
 //     greeting, and keeps the 589 clearance under the greeting (`follows="greeting"`).
@@ -22,7 +25,11 @@
 //
 // A lens change while the header holds the bar sets the shell's scroller to the docking point
 // through `holdLensDock` (1468, W74), on all three surfaces; with the bar in the page the scroll
-// stays where it is.
+// stays where it is. While docked the seat also holds the docking point reachable (W87, Fix PR 09):
+// a new lens's loading state or a short lens could end above the docking point plus the scroller's
+// height, the scroller clamped below 73 and the header gave the bar back. The seat's hold, an
+// invisible box from the seat down, keeps the scroller's range at the docking point; its height is
+// measured at the change, re-measured when the scroller resizes, and released once undocked.
 import {
   useEffect,
   useLayoutEffect,
@@ -69,12 +76,9 @@ export function LensSeatBar<Id extends string>({
   collapsed,
   shape,
 }: LensSeatBarProps<Id> & { shape: "strip" | "row" | "column" }) {
+  // 1515: the strip's root is its column's width and its track scrolls; only the row hugs its bar.
   const style: CSSProperties | undefined =
-    shape === "strip"
-      ? { width: "max-content", maxWidth: "none" }
-      : shape === "row"
-        ? { width: "min-content", marginInline: "auto" }
-        : undefined;
+    shape === "row" ? { width: "min-content", marginInline: "auto" } : undefined;
   return (
     <LensBar
       lenses={lenses}
@@ -121,28 +125,33 @@ export function LensSeat<Id extends string>({
     if (seatRef) seatRef.current = el;
   };
 
-  // 1465 item 2: the active lens in the sideways row's view, on mount and on every lens change, and
-  // again once the document's fonts settle, because the seats' widths are the words' own. Every tier:
-  // at medium and expanded the row scrolls only when the justified bar has fallen back to the strip.
+  // 1465 item 2: the active lens in the track's view, on mount and on every lens change, and again
+  // once the document's fonts settle and when the track resizes, because the seats' widths are the
+  // words' own and the justified bar can fall back to the strip after it mounts. The track is the
+  // scroller (1515); at medium and expanded it scrolls only when the bar is the fallback strip.
   useIsoLayoutEffect(() => {
-    const row = own.current;
-    if (!row) return;
+    const track = own.current?.querySelector<HTMLElement>('[role="tablist"]');
+    if (!track) return;
     const reveal = () => {
-      if (row.scrollWidth <= row.clientWidth + 1) return;
-      const tab = row.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]');
+      if (track.scrollWidth <= track.clientWidth + 1) return;
+      const tab = track.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]');
       if (!tab) return;
-      const r = row.getBoundingClientRect();
+      const pad = parseFloat(getComputedStyle(track).paddingLeft) || 0;
+      const r = track.getBoundingClientRect();
       const t = tab.getBoundingClientRect();
-      if (t.left < r.left) row.scrollLeft -= r.left - t.left;
-      else if (t.right > r.right) row.scrollLeft += t.right - r.right;
+      if (t.left < r.left + pad) track.scrollLeft -= r.left + pad - t.left;
+      else if (t.right > r.right - pad) track.scrollLeft += t.right - (r.right - pad);
     };
     reveal();
     let live = true;
     void document.fonts?.ready.then(() => {
       if (live) reveal();
     });
+    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(reveal) : null;
+    ro?.observe(track);
     return () => {
       live = false;
+      ro?.disconnect();
     };
   }, [bar.value, expanded]);
 
@@ -151,11 +160,29 @@ export function LensSeat<Id extends string>({
   const placed = useRef(bar.value);
   const docked = useRef(false);
   docked.current = !expanded && scrolled;
+  const hold = useRef<HTMLDivElement | null>(null);
+  const held = useRef<(() => void) | null>(null);
   useIsoLayoutEffect(() => {
     if (placed.current === bar.value) return;
     placed.current = bar.value;
-    if (docked.current) holdLensDock(scrollerRef.current, own.current);
+    if (!docked.current) return;
+    held.current?.();
+    held.current = holdLensDock(scrollerRef.current, own.current, hold.current);
   }, [bar.value, scrollerRef]);
+  // W87: the hold is released once the bar is back in the page or the tier is expanded.
+  useIsoLayoutEffect(() => {
+    if (expanded || !scrolled) {
+      held.current?.();
+      held.current = null;
+    }
+  }, [expanded, scrolled]);
+  useEffect(
+    () => () => {
+      held.current?.();
+      held.current = null;
+    },
+    [],
+  );
 
   const style: CSSProperties = expanded
     ? {
@@ -163,23 +190,18 @@ export function LensSeat<Id extends string>({
         top: pinTop,
         zIndex: 5,
         background: "var(--bg)",
-        // 1504: the strip a justified bar falls back to scrolls here; otherwise nothing overflows.
-        overflowX: "auto",
-        overflowY: "hidden",
-        scrollbarWidth: "none",
+        minWidth: 0,
         ...(follows === "greeting"
           ? // Ruling 589: the 12 above the bar is the greeting's clearance, painted by the shadow.
             { padding: "12px 0", margin: "-12px 0", boxShadow: "0 -12px 0 0 var(--bg)" }
           : { padding: `${SEAT_TOP}px 0 12px`, marginBottom: -12 }),
       }
     : {
+        position: "relative",
         visibility: scrolled ? "hidden" : "visible",
         minHeight: FLOW_MIN,
         minWidth: 0,
         background: "var(--bg)",
-        overflowX: "auto",
-        overflowY: "hidden",
-        scrollbarWidth: "none",
       };
   return (
     <div
@@ -189,12 +211,28 @@ export function LensSeat<Id extends string>({
       data-stuck={stuck === undefined ? undefined : stuck ? "1" : "0"}
       style={style}
     >
-      <style>{"[data-lens-seat]::-webkit-scrollbar{display:none}"}</style>
       <LensSeatBar
         {...bar}
         collapsed={collapsed ?? scrolled}
         shape={compact ? "strip" : "column"}
       />
+      {!expanded && (
+        // W87: the hold. No height until a docked lens change gives it one (`holdLensDock`).
+        <div
+          ref={hold}
+          aria-hidden="true"
+          data-lens-hold=""
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            width: 1,
+            height: 0,
+            visibility: "hidden",
+            pointerEvents: "none",
+          }}
+        />
+      )}
     </div>
   );
 }

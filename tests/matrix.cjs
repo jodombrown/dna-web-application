@@ -5172,40 +5172,44 @@ async function runShell(browserType, bname, [w, h]) {
           .filter((t) => t.scrollWidth > t.clientWidth + 1)
           .map((t) => t.getAttribute("data-lens") + ":" + t.scrollWidth + ">" + t.clientWidth),
         barOverflow: bar.scrollWidth > bar.clientWidth + 1,
-        // Fix PR 08 (1465): the row the bar sits in. Below expanded it may be wider than the column,
-        // as Convene's always could, when it is the seat's own sideways strip and the active lens is
-        // in its view.
+        // Fix PR 09 (1515) amends Fix PR 08's reading: the strip's scroller is the rounded track,
+        // at its column's width, and the seat never scrolls. Where the track overflows, it is the
+        // strip and the active lens is in the track's view.
         seat: (() => {
           const seat = bar.closest("[data-lens-seat]");
           const on = bar.querySelector('[role="tab"][aria-selected="true"]');
           if (!seat || !on) return null;
-          const cs = getComputedStyle(seat);
-          const r = seat.getBoundingClientRect();
+          const r = bar.getBoundingClientRect();
           const a = on.getBoundingClientRect();
           return {
             sw: seat.scrollWidth,
             cw: seat.clientWidth,
-            strip: cs.overflowX === "auto" || cs.overflowX === "scroll",
+            sl: seat.scrollLeft,
+            strip: getComputedStyle(bar).overflowX === "auto",
             activeIn: a.left >= r.left - 0.5 && a.right <= r.right + 0.5,
           };
         })(),
-        // What the bar measured: its probe's labels, as active and as inactive tabs.
+        // What the bar measured: its probe's labels, as active and as inactive tabs. The probe is
+        // the bar's root's (Fix PR 09 framed the track, so the root is no longer its parent).
         probe: Array.from(
-          (bar.parentElement && bar.parentElement.querySelectorAll("[data-probe]")) || [],
+          (bar.closest(".strand-lens") &&
+            bar.closest(".strand-lens").querySelectorAll("[data-probe]")) ||
+            [],
         ).map((e) => e.getAttribute("data-probe")[0] + Math.round(e.getBoundingClientRect().width)),
       };
     });
-    // Fix PR 08 amends this check under 1465: the track itself still never scrolls, and a row wider
-    // than the column is allowed on the Feed and Connect as it already was on Convene, as the lens
-    // seat's sideways strip with the active lens in view. Everything else in it stands.
+    // Fix PR 08 amended this check under 1465; Fix PR 09 amends it again under 1515. The seat never
+    // scrolls and is never wider than its column; the track scrolls only as the strip, with the
+    // active lens in its view. No tab's label exceeds its box, as before.
     record(
       tag +
-        " lens bar: with fonts settled, no tab's label exceeds its box and the track does not scroll",
+        " lens bar: with fonts settled, no tab's label exceeds its box, the seat does not scroll and the track scrolls only as the strip",
       !!lensFit &&
         lensFit.overflowing.length === 0 &&
-        !lensFit.barOverflow &&
         !!lensFit.seat &&
-        (lensFit.seat.sw <= lensFit.seat.cw + 1 || (lensFit.seat.strip && lensFit.seat.activeIn)),
+        lensFit.seat.sw <= lensFit.seat.cw + 1 &&
+        lensFit.seat.sl === 0 &&
+        (!lensFit.barOverflow || (lensFit.seat.strip && lensFit.seat.activeIn)),
       JSON.stringify(lensFit),
     );
     // Ruling 916: kept for the closing summary, so a green run states the mode it read.
@@ -5230,13 +5234,14 @@ async function runShell(browserType, bname, [w, h]) {
         const t = bar.getBoundingClientRect();
         return {
           track: { x: +t.x.toFixed(2), w: +t.width.toFixed(2) },
-          // Fix PR 08: in the track's own coordinates, because the seat's sideways strip scrolls
-          // the active lens into view, which moves the whole track and is not a redistribution.
+          // Fix PR 08: in the track's own coordinates. Fix PR 09 (1515): the track is now what
+          // scrolls the active lens into view, so its scroll offset is added back, and a scroll is
+          // still not a redistribution.
           seats: Array.from(bar.querySelectorAll('[role="tab"]')).map((el) => {
             const r = el.getBoundingClientRect();
             return {
               id: el.getAttribute("data-lens"),
-              x: +(r.x - t.x).toFixed(2),
+              x: +(r.x - t.x + bar.scrollLeft).toFixed(2),
               w: +r.width.toFixed(2),
               on: el.getAttribute("aria-selected") === "true",
             };
