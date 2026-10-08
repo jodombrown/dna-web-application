@@ -8679,3 +8679,17 @@ timed out at 5 s. WebKit decodes video in an `<img>`, so the element this entry 
 page rather than only fail to play; the founder's Safari walk on the thread after a send is the check.
 The arm now runs its too_large check before it sends, so it no longer reloads a thread holding a
 video message.
+
+**Closed by PR #100 under ruling 1574 (amending 1570).** A received message whose media is a video
+now renders through a `<video>` with the browser's own controls, `preload="metadata"` and
+`playsInline`, on an object URL of the bytes `fetchMessageMedia` fetched with the bearer, revoked when
+the element goes; an image keeps `MediaBlock`, which is unchanged, and no member-facing string is
+added (the player's copy and controls stay with 41-E). Building it found a second reason a video never
+reached a player: `useMessageMedia` read the mime by `fetch()`ing the object URL back, which
+`connect-src` does not admit, so the type could come back empty and every medium drew as an image.
+`fetchMessageMedia` now answers the Blob, the mime is the Blob's own type, the hook caches the bytes
+once per id for the tab and gives each element its own object URL, revoked on unmount. Whether a
+fresh load of a thread holding the sent video still stalls WebKit is what the composer-video arm's
+third check reads, on the Linux matrix and the macOS gate: the field visible within 15 s, and the
+message carrying a `<video>` on an object URL with controls and no `blob:` `<img>`. That reading is
+on PR #100's final head, not in this entry, because this entry rides in the commit the run tests.

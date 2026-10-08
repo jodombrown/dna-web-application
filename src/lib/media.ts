@@ -346,11 +346,13 @@ export async function uploadMessageMedia(
 }
 
 /**
- * The bytes of one media object as an object URL for an <img>, <video> or <audio> source. The route
- * needs the bearer, which an element's own request cannot carry, so the fetch happens here and the
- * caller revokes the URL when the element goes. Null when signed out, refused, or absent.
+ * The bytes of one media object, for an <img>, <video> or <audio> source made from them. The route
+ * needs the bearer, which an element's own request cannot carry, so the fetch happens here; the
+ * caller makes the object URL and revokes it when the element goes, and reads the mime from the
+ * blob's own type (the route's Content-Type) rather than by fetching the object URL back, which
+ * connect-src does not admit (ruling 1574). Null when signed out, refused, or absent.
  */
-export async function fetchMessageMedia(mediaId: string): Promise<string | null> {
+export async function fetchMessageMedia(mediaId: string): Promise<Blob | null> {
   const token = await bearer();
   if (!token) return null;
   try {
@@ -358,7 +360,7 @@ export async function fetchMessageMedia(mediaId: string): Promise<string | null>
       headers: { Authorization: "Bearer " + token },
     });
     if (!res.ok) return null;
-    return URL.createObjectURL(await res.blob());
+    return await res.blob();
   } catch {
     return null;
   }

@@ -188,8 +188,20 @@ function LinkPreview({ preview }: { preview: Json }) {
 function MessageMedia({ mediaId }: { mediaId: string }) {
   const media = useMessageMedia(mediaId);
   if (!media) return <span aria-busy="true" style={{ display: "block", minHeight: 44 }} />;
-  const video = media.mime.startsWith("video/");
-  return <MediaBlock kind={video ? "video" : "image"} src={media.url} alt="" />;
+  // Ruling 1574 (amending 1570, G250): a video plays in the browser's own player; an image keeps
+  // MediaBlock. The player's copy and controls are 41-E's; this adds no string of its own.
+  if (media.mime.startsWith("video/"))
+    return (
+      <video
+        src={media.url}
+        controls
+        preload="metadata"
+        playsInline
+        data-message-video
+        style={{ display: "block", width: "100%", borderRadius: "var(--radius-m)" }}
+      />
+    );
+  return <MediaBlock kind="image" src={media.url} alt="" />;
 }
 
 function VoiceNote({ mediaId, own }: { mediaId: string; own: boolean }) {

@@ -16,8 +16,10 @@
 // proves the composer's path, never Safari. Before it attaches anything it asks the engine, in the
 // page, for the fixture's size twice, once through a detached <video> and once through an attached
 // one, and prints both as an ENV line (930: a record, not an assertion). An engine whose attached
-// element cannot read the fixture cannot exercise the send, and the two send checks report UNPROVEN
-// with what the element returned (228); the too_large check runs in every engine.
+// element cannot read the fixture cannot exercise the composer's send, and that check reports
+// UNPROVEN with what the element returned (228); there the message is sent through the route the
+// composer uses, so the reload check (1574: a received video is a <video>, and the thread answers)
+// runs in every engine, as the too_large check does.
 //
 // What it leaves on the project: nothing. The message it sends is deleted for everyone and its object
 // removed through DELETE /api/messages/media/{id}, in the "41-B media arm" group messenger-media.cjs
@@ -50,7 +52,7 @@ const MAX_BYTES = Number(
 const CHECKS = [
   "owner-test signs in on the deployment and the 41-B group thread opens with its composer (218)",
   "a .mov attached through the thread's video input reaches POST /api/messages/media with integer w and h equal to the fixture's 320 by 124, and the route records it (H56-MOV, 930)",
-  "the message carrying it renders in the log with its media (H56-MOV, 930)",
+  "after a fresh load of the thread, the message carrying it renders a <video> of its bytes, not an <img>, and the page answers within 15 s (1574, G250)",
   "a .mov over the byte ceiling takes the too_large state, not bad_media, and nothing reaches the route (H56-MOV item 2)",
 ];
 
@@ -242,7 +244,32 @@ async function runMessengerComposerVideo(browserType, bname) {
     if (a.event !== "loadedmetadata" || a.width !== FIXTURE_W || a.height !== FIXTURE_H) {
       const why = `this engine's attached <video> cannot read the fixture: ${JSON.stringify(a)}`;
       skip(CHECKS[1], why);
-      skip(CHECKS[2], why);
+      // The composer cannot measure here, so the message check 3 reads is sent through the route the
+      // composer uses, with the size the fixture carries and owner-test's bearer: a <video> element is
+      // drawn whether or not this engine can decode the bytes, so 1574's rendering is still proven.
+      const sentClient = crypto.randomUUID();
+      const up = await fetch(
+        `${BASE}/api/messages/media?thread=${threadId}&client_id=${sentClient}&w=${FIXTURE_W}&h=${FIXTURE_H}`,
+        {
+          method: "POST",
+          headers: { Authorization: "Bearer " + token, "content-type": "video/quicktime" },
+          body: fixture,
+        },
+      );
+      const upBody = await up.json().catch(() => null);
+      mediaId = upBody && upBody.media_id ? upBody.media_id : null;
+      if (mediaId)
+        await rpc(token, "messenger_send", {
+          p_thread: threadId,
+          p_client_id: sentClient,
+          p_body: null,
+          p_kind: "media",
+          p_reply_to: null,
+          p_media: mediaId,
+        });
+      console.log(
+        `ENV ${tag} | sent through the route for check 3: ${up.status} ${JSON.stringify(upBody)}`,
+      );
     } else {
       // 2. Attach through the thread's own video input, send, read the request the route received.
       // What the input handed the composer, read in the capture phase before the thread's handler
@@ -326,34 +353,57 @@ async function runMessengerComposerVideo(browserType, bname) {
           ? `w=${w} h=${h} type=${req.headers()["content-type"]}; ${res ? res.status() : "-"} ${JSON.stringify(body)}`
           : `no request reached the route; refusal ${refusal}; ${JSON.stringify({ ...state, answers })}`,
       );
-
-      // 3. The message the route's object went out in, rendered in the log.
-      for (let i = 0; i < 10 && mediaId && !messageId; i++) {
-        const found = await rest_(
-          token,
-          "messenger_messages_view?select=message_id&thread_id=eq." +
-            threadId +
-            "&media_id=eq." +
-            mediaId +
-            "&limit=1",
-        );
-        messageId = Array.isArray(found) && found[0] ? found[0].message_id : null;
-        if (!messageId) await page.waitForTimeout(1000);
-      }
-      const rendered = messageId
-        ? await page
-            .locator(`[data-msg="${messageId}"] img[src^="blob:"]`)
-            .first()
-            .waitFor({ state: "attached", timeout: 15000 })
-            .then(() => true)
-            .catch(() => false)
-        : false;
-      check(
-        CHECKS[2],
-        rendered,
-        messageId ? "message " + messageId + " has no media in the log" : "no message carries it",
-      );
     }
+    // 3. The message the route's object went out in, read after a fresh load of the thread, which
+    // is the load run 526 could not complete while the message drew its video as an <img> (G250):
+    // the field answers within the arm's own wait, and the message carries a <video> on an object
+    // URL and no <img> (1574).
+    for (let i = 0; i < 10 && mediaId && !messageId; i++) {
+      const found = await rest_(
+        token,
+        "messenger_messages_view?select=message_id&thread_id=eq." +
+          threadId +
+          "&media_id=eq." +
+          mediaId +
+          "&limit=1",
+      );
+      messageId = Array.isArray(found) && found[0] ? found[0].message_id : null;
+      if (!messageId) await page.waitForTimeout(1000);
+    }
+    let answered = false;
+    let shape = null;
+    if (messageId) {
+      await page.goto(BASE + "/messages/" + threadId, { waitUntil: "domcontentloaded" });
+      answered = await page
+        .waitForSelector('[data-testid="message-field"]', { state: "visible", timeout: 15000 })
+        .then(() => true)
+        .catch(() => false);
+      await page
+        .locator(`[data-msg="${messageId}"] video`)
+        .first()
+        .waitFor({ state: "attached", timeout: 15000 })
+        .catch(() => undefined);
+      shape = await page
+        .evaluate((id) => {
+          const m = document.querySelector(`[data-msg="${id}"]`);
+          if (!m) return null;
+          const v = m.querySelector("video");
+          return {
+            video: !!v,
+            blob: !!v && v.src.startsWith("blob:"),
+            controls: !!v && v.controls,
+            img: m.querySelectorAll('img[src^="blob:"]').length,
+          };
+        }, messageId)
+        .catch(() => null);
+    }
+    check(
+      CHECKS[2],
+      answered && !!shape && shape.video && shape.blob && shape.controls && shape.img === 0,
+      messageId
+        ? `message ${messageId}; field answered ${answered}; ${JSON.stringify(shape)}`
+        : "no message carries it",
+    );
   } catch (e) {
     record(`${tag} flow`, false, String(e).slice(0, 600));
   } finally {
