@@ -77,10 +77,17 @@ const path = require("path");
 
 const OWNER_HANDLE = "owner-test";
 const MEMBER_HANDLE = "member-test";
-/** 1165: the two events Chat seeded with five going RSVPs each, which Filling up must carry. */
+/**
+ * The two events that carry five or more going RSVPs, which Filling up must carry. The 1165 seed
+ * (bfcc66ba-…, 01e7c23d-…) was replaced when the canonical event set was reseeded on 1 October 2026
+ * (07:49 and 08:11 PDT); these are the two published future events of that seed with six going
+ * registrations each, both test accounts among them, read on the canonical project in Session 55
+ * (S54-1): the Johannesburg Returnee Supper and the Accra Diaspora Founders Breakfast. The arms
+ * check that both still exist before reading against them, and report unproven when one does not.
+ */
 const SEEDED_FILLING = [
-  "bfcc66ba-f436-4067-ab7f-2486a556e6eb",
-  "01e7c23d-5811-41fa-bb67-fe9b7a80cdbd",
+  "0a527cb8-79e3-4fae-97e0-4e12b5caff2e",
+  "829b0fb7-72d5-4da5-bfe4-cc3ee9c14637",
 ];
 
 /**
@@ -205,6 +212,8 @@ async function runLiveDbArms({ record, skip }) {
     discoveryPick: "Brief 9 (1040): a pick renders as the editor's name and line",
     discoverySearch:
       "Handoff 34-A (1124, 1159): a search keeps the pick it names, one that matches nothing drops every lane, and past 100 characters it is refused with 22023",
+    discoverySeed:
+      "S54-1 (1165): both seeded Filling up events exist as published, future, uncancelled events",
     discoverySearchOne:
       "Handoff 34-A addendum (1173): a search whose matches sit one to a lane returns the lane: the seeded event's title returns Filling up holding it",
     discoveryBrowse:
@@ -1838,6 +1847,22 @@ async function runLiveDbArms({ record, skip }) {
           (tooLong.ok ? "answered" : tooLong.code),
       );
 
+      // S54-1: the two arms below read against the seed by id, so the seed is read first and recorded
+      // on its own. A missing seed reports both arms unproven (228), never failed: what is absent is
+      // the fixture, not the behaviour they prove.
+      const seedRead = await attempt(
+        client,
+        "select id::text as id from public.events where id = any($1::uuid[]) and status = 'published' and starts_at > now() and cancelled_at is null",
+        [SEEDED_FILLING],
+      );
+      const seedFound = seedRead.ok ? seedRead.rows.map((r) => r.id) : [];
+      const seedMissing = SEEDED_FILLING.filter((id) => !seedFound.includes(id));
+      const seedOk = seedRead.ok && seedMissing.length === 0;
+      const seedWhy = seedRead.ok
+        ? "seed missing: " + seedMissing.join(", ")
+        : "seed read refused: " + failed(seedRead);
+      record(names.discoverySeed, seedOk, seedOk ? "both present" : seedWhy);
+
       // 1173: under a search the floors do not apply. One seeded event's title (1165) names that event,
       // and Filling up, whose floor is two, comes back holding it: a search whose matches sit one to
       // a lane returns the lane. Read as the owner, before the dismissal below.
@@ -1850,19 +1875,21 @@ async function runLiveDbArms({ record, skip }) {
       const one = title ? await ask(Q, [title]) : null;
       const oneFilling = one && one.ok ? section(one.d, "filling") : null;
       const oneIds = one && one.ok ? sectionIds(one.d) : [];
-      record(
-        names.discoverySearchOne,
-        !!one &&
-          one.ok &&
-          oneIds.length >= 1 &&
-          !!oneFilling &&
-          oneFilling.items.some((i) => i.event_id === SEEDED_FILLING[0]),
-        (title ? "title found" : "no title for the seeded event") +
-          " lanes " +
-          (one ? (one.ok ? JSON.stringify(oneIds) : failed(one)) : "not read") +
-          " filling " +
-          (oneFilling ? oneFilling.items.length + " item(s)" : "absent"),
-      );
+      if (!seedOk) skip(names.discoverySearchOne, seedWhy);
+      else
+        record(
+          names.discoverySearchOne,
+          !!one &&
+            one.ok &&
+            oneIds.length >= 1 &&
+            !!oneFilling &&
+            oneFilling.items.some((i) => i.event_id === SEEDED_FILLING[0]),
+          (title ? "title found" : "no title for the seeded event") +
+            " lanes " +
+            (one ? (one.ok ? JSON.stringify(oneIds) : failed(one)) : "not read") +
+            " filling " +
+            (oneFilling ? oneFilling.items.length + " item(s)" : "absent"),
+        );
 
       // 1172: the Browse lane is withdrawn. No section is browse, no section carries tiles, and
       // lane_order is the ten lanes.
@@ -1890,23 +1917,25 @@ async function runLiveDbArms({ record, skip }) {
         .trim()
         .split(" ")[0];
       const named = going.ok && going.d ? SEEDED_FILLING.map((id) => going.d[id]) : [];
-      record(
-        names.discoveryFilling,
-        !!filling &&
-          SEEDED_FILLING.every((id) => fillingIds.includes(id)) &&
-          going.ok &&
-          named.length === SEEDED_FILLING.length &&
-          named.every(
-            (n) =>
-              Array.isArray(n) &&
-              n.length === 3 &&
-              n.every((x) => typeof x === "string" && x !== "" && x !== ownFirst),
-          ),
-        "filling " +
-          JSON.stringify(fillingIds) +
-          " names " +
-          (going.ok ? JSON.stringify(named) : failed(going)),
-      );
+      if (!seedOk) skip(names.discoveryFilling, seedWhy);
+      else
+        record(
+          names.discoveryFilling,
+          !!filling &&
+            SEEDED_FILLING.every((id) => fillingIds.includes(id)) &&
+            going.ok &&
+            named.length === SEEDED_FILLING.length &&
+            named.every(
+              (n) =>
+                Array.isArray(n) &&
+                n.length === 3 &&
+                n.every((x) => typeof x === "string" && x !== "" && x !== ownFirst),
+            ),
+          "filling " +
+            JSON.stringify(fillingIds) +
+            " names " +
+            (going.ok ? JSON.stringify(named) : failed(going)),
+        );
 
       const noCount = [];
       const walk = (v, at) => {
