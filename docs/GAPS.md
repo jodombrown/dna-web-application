@@ -8693,3 +8693,52 @@ fresh load of a thread holding the sent video still stalls WebKit is what the co
 third check reads, on the Linux matrix and the macOS gate: the field visible within 15 s, and the
 message carrying a `<video>` on an object URL with controls and no `blob:` `<img>`. That reading is
 on PR #100's final head, not in this entry, because this entry rides in the commit the run tests.
+
+---
+
+## G251. The Messenger's During-bound search timed out on WebKit once and its cause is unread
+
+**Severity: low. Opened 8 October 2026 under ruling 1589, recorded by Fix PR 09 (handoff 57-FIX-09
+item 5). The number is assigned by this entry (ruling 638).**
+
+Run 528 attempt 1, on `3259dbb` (PR #100's head), `matrix (webkit)`, job 113466162700. Arm
+`webkit-messenger-live`, step 12: `FAIL [no crash] webkit-messenger-live flow TimeoutError:
+locator.waitFor: Timeout 15000ms exceeded.` while waiting for `locator('[data-search-result]').first()
+to be visible`. The page showed `no-results`. The check behind it, `search with a During date bound
+opens the thread at the message (1338, 1347)`, and five more after it (the media notice, the image in
+the bubble, the voice note, the delete for everyone, nothing in browser storage) read `UNPROVEN (228):
+the flow ended before this check ran`. Ruling 292 flagged the extra flow check, 19 against a declared
+18. Not a crash: 0 behind G5, no core written. The re-run passed.
+
+The path is `messenger_search`. The step searches for a word the arm sent earlier, bounded During
+today, with today's date taken from the runner's clock. It is not #100's: that PR changed the
+content-security policy, the composer's measurement, received media rendering and `useMessageMedia`,
+and none of the search path. The arm passed on Linux WebKit on run 523 and on Chromium on run 528.
+
+Owed: the cause read. Among the candidates is the runner's date against the database's date
+boundary: a During bound built from the runner's local day can name a day the database, reading
+UTC or the member's zone, does not hold the message in. Also owed: a wait whose timeout is the check's
+own failure rather than the flow's catch-all. Recorded only; not fixed here.
+
+---
+
+## G252. The admin Settings arm reads the sessions and read-log panels before their rows load
+
+**Severity: low. Opened 8 October 2026 under ruling 1589, recorded by Fix PR 09 (handoff 57-FIX-09
+item 5). The number is assigned by this entry (ruling 638).**
+
+Run 528 attempt 1, on `3259dbb` (PR #100's head), `admin-arms`, job 113465879017. Arm
+`chromium-1280x800-dark-admin settings analyst`, two checks:
+
+- `sessions mark this device, Active now, and carry no aria-sort`: the panel read `Active sessions`,
+  its heading, and nothing else.
+- `the read log reads Settings, Your read log under Today, newest first`: the panel read its heading
+  and intro line only (`Your read log What you have read in the admin and when, newest first. Opening
+  this log is itself logged.`).
+
+The path is `tests/settings.cjs`, which reads both panels as soon as Settings renders, with no wait for
+their rows: a load-timing race in the arm, not the admin. It is not #100's: the admin bundle imports
+none of the files `3259dbb` changed. The arm passed on `0d6e050` (run 526), and the re-run passed.
+
+Owed: a wait on each panel's rows before the read, whose timeout is the check's failure. Recorded
+only; not fixed here.
