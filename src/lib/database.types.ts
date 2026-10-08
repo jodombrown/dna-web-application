@@ -1,4 +1,22 @@
 // Generated from the canonical Supabase project (dgspjevjoblujcoljvkn) with the Supabase MCP
+// generate_typescript_types tool on handoff 55-A's branch (#99, the notification foundation), after
+// Chat applied 20261008120000 to 20261008120500 (File A through execute_sql, B to F by SQL Editor
+// paste), each ledger row's md5 equal to its committed file; 98 rows in schema_migrations, head
+// 20261008120500_n39a_surface_seen. Taken from the project whole, never merged by hand; it replaces
+// the shapes 55-A carried by hand until the apply.
+//
+// What 55-A changes here (1317 to 1324, 1518, 1522): `notifications.kind` is text against the new
+// `notification_kinds` table, `c_category` a written column, and `seen_at`, `group_key`,
+// `grouped_actor_ids` and `updated_at` are new; `notification_preferences` is new; the enum
+// `notification_kind` is gone and `anchor_kind` gains `thread` and `message_request`; the functions
+// `notifications_dot`, `notifications_mark_seen`, `notifications_mark_all_read`,
+// `connect_requests_pending`, `mark_surface_seen`, `set_notification_preference`,
+// `notify_deliver_token_ok`, `notify_outbox_claim`, `notify_outbox_settle` and `notify_webhook_take`
+// are new. `private.notify`, its siblings, the outbox, the suppressions, the webhook ledger and
+// `member_surface_seen` are absent by design, as every private object is.
+//
+// Before 55-A:
+// Generated from the canonical Supabase project (dgspjevjoblujcoljvkn) with the Supabase MCP
 // generate_typescript_types tool on handoff 45-D's branch (#95, admin Settings), merged with main at
 // dacfda0 (the merge of #94), after Chat applied 20261003120000_b12s_admin_settings through
 // execute_sql and its ledger row read back at the file's drift md5 297936668967db44f601866fba8007cc;
@@ -2704,15 +2722,84 @@ export type Database = {
         };
         Relationships: [];
       };
+      notification_kinds: {
+        Row: {
+          c: Database["public"]["Enums"]["c_category"] | null;
+          c_from_object: boolean;
+          destination: string | null;
+          email_default: string;
+          email_line: string | null;
+          email_subject: string | null;
+          group_window: string | null;
+          groups: boolean;
+          kind: string;
+          position: number;
+          renders: boolean;
+          transactional: boolean;
+        };
+        Insert: {
+          c?: Database["public"]["Enums"]["c_category"] | null;
+          c_from_object?: boolean;
+          destination?: string | null;
+          email_default?: string;
+          email_line?: string | null;
+          email_subject?: string | null;
+          group_window?: string | null;
+          groups?: boolean;
+          kind: string;
+          position: number;
+          renders?: boolean;
+          transactional?: boolean;
+        };
+        Update: {
+          c?: Database["public"]["Enums"]["c_category"] | null;
+          c_from_object?: boolean;
+          destination?: string | null;
+          email_default?: string;
+          email_line?: string | null;
+          email_subject?: string | null;
+          group_window?: string | null;
+          groups?: boolean;
+          kind?: string;
+          position?: number;
+          renders?: boolean;
+          transactional?: boolean;
+        };
+        Relationships: [];
+      };
+      notification_preferences: {
+        Row: {
+          c: Database["public"]["Enums"]["c_category"];
+          channel: string;
+          member_id: string;
+          mode: string;
+          updated_at: string;
+        };
+        Insert: {
+          c: Database["public"]["Enums"]["c_category"];
+          channel: string;
+          member_id: string;
+          mode: string;
+          updated_at?: string;
+        };
+        Update: {
+          c?: Database["public"]["Enums"]["c_category"];
+          channel?: string;
+          member_id?: string;
+          mode?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
       notifications: {
         Row: {
           actor_id: string | null;
           actor_kind: Database["public"]["Enums"]["anchor_kind"] | null;
           c_category: Database["public"]["Enums"]["c_category"];
           created_at: string;
-          id: string;
           group_key: string | null;
           grouped_actor_ids: string[];
+          id: string;
           kind: string;
           object_id: string | null;
           object_kind: Database["public"]["Enums"]["anchor_kind"] | null;
@@ -2724,11 +2811,11 @@ export type Database = {
         Insert: {
           actor_id?: string | null;
           actor_kind?: Database["public"]["Enums"]["anchor_kind"] | null;
-          c_category?: Database["public"]["Enums"]["c_category"];
+          c_category: Database["public"]["Enums"]["c_category"];
           created_at?: string;
-          id?: string;
           group_key?: string | null;
           grouped_actor_ids?: string[];
+          id?: string;
           kind: string;
           object_id?: string | null;
           object_kind?: Database["public"]["Enums"]["anchor_kind"] | null;
@@ -2742,9 +2829,9 @@ export type Database = {
           actor_kind?: Database["public"]["Enums"]["anchor_kind"] | null;
           c_category?: Database["public"]["Enums"]["c_category"];
           created_at?: string;
-          id?: string;
           group_key?: string | null;
           grouped_actor_ids?: string[];
+          id?: string;
           kind?: string;
           object_id?: string | null;
           object_kind?: Database["public"]["Enums"]["anchor_kind"] | null;
@@ -2753,7 +2840,15 @@ export type Database = {
           seen_at?: string | null;
           updated_at?: string;
         };
-        Relationships: [];
+        Relationships: [
+          {
+            foreignKeyName: "notifications_kind_fkey";
+            columns: ["kind"];
+            isOneToOne: false;
+            referencedRelation: "notification_kinds";
+            referencedColumns: ["kind"];
+          },
+        ];
       };
       opportunities: {
         Row: {
@@ -4164,6 +4259,7 @@ export type Database = {
         Returns: Json;
       };
       live_arms_admin_member: { Args: never; Returns: string };
+      mark_surface_seen: { Args: { p_surface: string }; Returns: undefined };
       messenger_archive: { Args: { p_thread: string }; Returns: undefined };
       messenger_delete: { Args: { p_message: string }; Returns: Json };
       messenger_delivered_to: {
@@ -4299,7 +4395,6 @@ export type Database = {
         Args: { p_request: string };
         Returns: undefined;
       };
-      mark_surface_seen: { Args: { p_surface: string }; Returns: undefined };
       messenger_request_recover: {
         Args: { p_request: string };
         Returns: undefined;
@@ -4464,12 +4559,33 @@ export type Database = {
         Args: { p_message: string; p_reaction: string };
         Returns: undefined;
       };
-      notifications_dot: { Args: never; Returns: boolean };
-      notifications_mark_all_read: { Args: never; Returns: undefined };
-      notifications_mark_seen: { Args: never; Returns: undefined };
       note_lane_act: {
         Args: { p_act: string; p_lane: string };
         Returns: undefined;
+      };
+      notifications_dot: { Args: never; Returns: boolean };
+      notifications_mark_all_read: { Args: never; Returns: undefined };
+      notifications_mark_seen: { Args: never; Returns: undefined };
+      notify_deliver_token_ok: { Args: { p_token: string }; Returns: boolean };
+      notify_outbox_claim: { Args: { p_limit?: number }; Returns: Json };
+      notify_outbox_settle: {
+        Args: {
+          p_error?: string;
+          p_id: string;
+          p_resend_id?: string;
+          p_state: string;
+        };
+        Returns: undefined;
+      };
+      notify_webhook_take: {
+        Args: {
+          p_email: string;
+          p_event_id: string;
+          p_reason: string;
+          p_resend_id: string;
+          p_type: string;
+        };
+        Returns: boolean;
       };
       onboard_relationship: {
         Args: {
@@ -4542,16 +4658,16 @@ export type Database = {
         Args: { p_message: string; p_recipient: string };
         Returns: string;
       };
+      set_follow: {
+        Args: { p_on: boolean; p_target: string };
+        Returns: undefined;
+      };
       set_notification_preference: {
         Args: {
           p_c: Database["public"]["Enums"]["c_category"];
           p_channel: string;
           p_mode: string;
         };
-        Returns: undefined;
-      };
-      set_follow: {
-        Args: { p_on: boolean; p_target: string };
         Returns: undefined;
       };
       set_subscription: {
