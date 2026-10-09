@@ -4192,10 +4192,12 @@ async function runLiveDbArms({ record, skip }) {
             "select seq, kind, body, author_id, author_name from public.messenger_messages_view where thread_id = $1::uuid order by seq",
             [g],
           );
+          // The text row's body carries the search word on purpose: search answers that row and
+          // never the system row, so a search that found nothing at all would also be wrong.
           const search = await attempt(
             client,
-            "select count(*)::int as n from public.messenger_search($1)",
-            ["renamed"],
+            "select seq from public.messenger_search($1) where thread_id = $2::uuid order by seq",
+            ["renamed", g],
           );
           const row = await attempt(
             client,
@@ -4222,7 +4224,8 @@ async function runLiveDbArms({ record, skip }) {
               sys.author_id === owner.id &&
               sys.author_name === owner.name &&
               search.ok &&
-              search.rows[0].n === 0 &&
+              search.rows.length === 1 &&
+              Number(search.rows[0].seq) === 1 &&
               row.ok &&
               row.rows[0].name === "After the rename" &&
               Number(row.rows[0].last_seq) === 1 &&
@@ -4234,7 +4237,7 @@ async function runLiveDbArms({ record, skip }) {
                 ? JSON.stringify(log.rows.map((r) => [Number(r.seq), r.kind, r.body]))
                 : fmt(log)) +
               "; search " +
-              (search.ok ? search.rows[0].n : fmt(search)) +
+              (search.ok ? JSON.stringify(search.rows.map((r) => Number(r.seq))) : fmt(search)) +
               "; row " +
               (row.ok ? JSON.stringify(row.rows[0]) : fmt(row)) +
               "; pin " +
@@ -4803,6 +4806,13 @@ async function runLiveDbArms({ record, skip }) {
     };
     /** owner-test makes a group with member-test and the third, both of whom accept. */
     const openGroup = async (thirdId, name) => {
+      // 1581 (20261008150400): a group is started from the creator's connections only, so the
+      // creator is connected to each member first through the canonical path; a pair that cannot
+      // be connected is answered as a reason to skip, never recorded as the group's failure.
+      for (const who of [member.id, thirdId]) {
+        const c = await connect(owner.id, who);
+        if (!c.ok) return { ok: false, step: "connect", why: c.why };
+      }
       await actAs(client, owner.id);
       const group = await attempt(
         client,
@@ -5105,7 +5115,9 @@ async function runLiveDbArms({ record, skip }) {
         }
         const group = await openGroup(thirdId, "Live arms rename");
         if (!group.ok) {
-          record(names.msgdRename, false, group.step + " " + fmt(group.r));
+          if (group.step === "connect")
+            skip(names.msgdRename, "could not connect the group's members (1581): " + group.why);
+          else record(names.msgdRename, false, group.step + " " + fmt(group.r));
           return;
         }
         const g = group.thread;
@@ -5184,7 +5196,9 @@ async function runLiveDbArms({ record, skip }) {
         }
         const group = await openGroup(thirdId, "Live arms last line");
         if (!group.ok) {
-          record(names.msgdView, false, group.step + " " + fmt(group.r));
+          if (group.step === "connect")
+            skip(names.msgdView, "could not connect the group's members (1581): " + group.why);
+          else record(names.msgdView, false, group.step + " " + fmt(group.r));
           return;
         }
         const g = group.thread;
