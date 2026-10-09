@@ -1,4 +1,22 @@
 // Generated from the canonical Supabase project (dgspjevjoblujcoljvkn) with the Supabase MCP
+// generate_typescript_types tool on handoff 56-41E's branch (#102, the Messenger's second pass),
+// rebased on main at 7669045 (the merge of #101), after Chat applied 20261008150000 to
+// 20261008150700 (150000, 150300, 150400, 150500 and 150600 through execute_sql; 150100, 150200 and
+// 150700 by the founder's SQL Editor paste under 1528, 150200 because the guard refused its two
+// `drop function` statements), each ledger row read back at its committed file's raw md5; 106 rows
+// in schema_migrations, head 20261008150700_b14e_retire_reaction_kinds. Taken from the project
+// whole, never merged by hand; it replaces the shapes 56-41E carried by hand until the apply.
+//
+// What 56-41E changes here (1576, 1577, 1590 to 1593): the table `message_reaction_emoji` in place
+// of `message_reaction_kinds`, which is gone with its catalogue row; `message_reactions` keyed by
+// (message_id, member_id) with no relationship to a kinds table; `member_messaging_settings.reaction_skin_tone`;
+// `messenger_settings_set`'s `p_skin_tone`; `messenger_recent_reactions`; the threads view's
+// `invited_names` and `invited_others`; and the messages view's `media_width` and `media_height`.
+// The private `message_react`, `messaging_settings_set`, `messenger_media_size` and the group
+// creation's guards are absent by design, as every private function is.
+//
+// Before 56-41E:
+// Generated from the canonical Supabase project (dgspjevjoblujcoljvkn) with the Supabase MCP
 // generate_typescript_types tool on handoff 55-A's branch (#99, the notification foundation), after
 // Chat applied 20261008120000 to 20261008120500 (File A through execute_sql, B to F by SQL Editor
 // paste), each ledger row's md5 equal to its committed file; 98 rows in schema_migrations, head
@@ -1815,6 +1833,7 @@ export type Database = {
           link_previews_enabled: boolean;
           media_notice_seen_at: string | null;
           member_id: string;
+          reaction_skin_tone: string | null;
           receipts_chosen_at: string | null;
           receipts_enabled: boolean;
           updated_at: string;
@@ -1823,6 +1842,7 @@ export type Database = {
           link_previews_enabled?: boolean;
           media_notice_seen_at?: string | null;
           member_id: string;
+          reaction_skin_tone?: string | null;
           receipts_chosen_at?: string | null;
           receipts_enabled?: boolean;
           updated_at?: string;
@@ -1831,6 +1851,7 @@ export type Database = {
           link_previews_enabled?: boolean;
           media_notice_seen_at?: string | null;
           member_id?: string;
+          reaction_skin_tone?: string | null;
           receipts_chosen_at?: string | null;
           receipts_enabled?: boolean;
           updated_at?: string;
@@ -2289,21 +2310,30 @@ export type Database = {
         };
         Relationships: [];
       };
-      message_reaction_kinds: {
+      message_reaction_emoji: {
         Row: {
+          emoji: string;
+          emoji_group: string;
+          emojibase_version: string;
           label: string;
-          position: number;
-          value: string;
+          quick_position: number | null;
+          takes_tone: boolean;
         };
         Insert: {
+          emoji: string;
+          emoji_group: string;
+          emojibase_version: string;
           label: string;
-          position: number;
-          value: string;
+          quick_position?: number | null;
+          takes_tone: boolean;
         };
         Update: {
+          emoji?: string;
+          emoji_group?: string;
+          emojibase_version?: string;
           label?: string;
-          position?: number;
-          value?: string;
+          quick_position?: number | null;
+          takes_tone?: boolean;
         };
         Relationships: [];
       };
@@ -2347,13 +2377,6 @@ export type Database = {
             isOneToOne: false;
             referencedRelation: "messenger_messages_view";
             referencedColumns: ["message_id"];
-          },
-          {
-            foreignKeyName: "message_reactions_reaction_fkey";
-            columns: ["reaction"];
-            isOneToOne: false;
-            referencedRelation: "message_reaction_kinds";
-            referencedColumns: ["value"];
           },
         ];
       };
@@ -3992,7 +4015,9 @@ export type Database = {
           former_member: boolean | null;
           kind: Database["public"]["Enums"]["message_kind"] | null;
           link_preview: Json | null;
+          media_height: number | null;
           media_id: string | null;
+          media_width: number | null;
           media_word: string | null;
           mentions: string[] | null;
           message_id: string | null;
@@ -4069,6 +4094,8 @@ export type Database = {
           headline: string | null;
           history_visible_to_new: boolean | null;
           invited: boolean | null;
+          invited_names: Json | null;
+          invited_others: boolean | null;
           kind: string | null;
           last_activity_at: string | null;
           last_author_id: string | null;
@@ -4381,6 +4408,7 @@ export type Database = {
         Args: { p_seq: number; p_thread: string };
         Returns: undefined;
       };
+      messenger_recent_reactions: { Args: never; Returns: string[] };
       messenger_report: {
         Args: { p_message: string; p_note?: string; p_reason: string };
         Returns: string;
@@ -4476,6 +4504,7 @@ export type Database = {
           link_previews_enabled: boolean;
           media_notice_seen_at: string | null;
           member_id: string;
+          reaction_skin_tone: string | null;
           receipts_chosen_at: string | null;
           receipts_enabled: boolean;
           updated_at: string;
@@ -4492,11 +4521,13 @@ export type Database = {
           p_link_previews?: boolean;
           p_media_notice_seen?: boolean;
           p_receipts?: boolean;
+          p_skin_tone?: string;
         };
         Returns: {
           link_previews_enabled: boolean;
           media_notice_seen_at: string | null;
           member_id: string;
+          reaction_skin_tone: string | null;
           receipts_chosen_at: string | null;
           receipts_enabled: boolean;
           updated_at: string;

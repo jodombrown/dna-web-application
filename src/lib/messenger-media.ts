@@ -11,39 +11,55 @@ import { deliverImageUrl, fetchMessageMedia } from "./media";
 
 export type LoadedMedia = { url: string; mime: string };
 
+/** SPEC-41-E 3: a fetch the route refused is `failed`, which the video bubble draws as its own block. */
+export type MediaLoad =
+  | { status: "loading"; media: null }
+  | { status: "ready"; media: LoadedMedia }
+  | { status: "failed"; media: null };
+
 const cache = new Map<string, Promise<Blob | null>>();
 
-export function useMessageMedia(mediaId: string | null | undefined): LoadedMedia | null {
-  const [state, setState] = useState<LoadedMedia | null>(null);
+/**
+ * The bytes behind one media id, with their state. `attempt` re-keys the load: a caller's Try again
+ * (M2) raises it, the cached promise for the id is dropped and the route is asked again.
+ */
+export function useMessageMediaLoad(mediaId: string | null | undefined, attempt = 0): MediaLoad {
+  const [state, setState] = useState<MediaLoad>({ status: "loading", media: null });
   useEffect(() => {
     if (!mediaId) {
-      setState(null);
+      setState({ status: "loading", media: null });
       return;
     }
     let active = true;
     let url: string | null = null;
+    if (attempt > 0) cache.delete(mediaId);
     let p = cache.get(mediaId);
     if (!p) {
       p = fetchMessageMedia(mediaId);
       cache.set(mediaId, p);
     }
+    setState({ status: "loading", media: null });
     void p.then((blob) => {
       if (!active) return;
       if (!blob) {
         cache.delete(mediaId);
-        setState(null);
+        setState({ status: "failed", media: null });
         return;
       }
       // The blob's type is what the route answered as Content-Type.
       url = URL.createObjectURL(blob);
-      setState({ url, mime: blob.type });
+      setState({ status: "ready", media: { url, mime: blob.type } });
     });
     return () => {
       active = false;
       if (url) URL.revokeObjectURL(url);
     };
-  }, [mediaId]);
+  }, [mediaId, attempt]);
   return state;
+}
+
+export function useMessageMedia(mediaId: string | null | undefined): LoadedMedia | null {
+  return useMessageMediaLoad(mediaId).media;
 }
 
 export type AudioState = {

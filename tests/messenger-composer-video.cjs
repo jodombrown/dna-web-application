@@ -215,13 +215,16 @@ async function runMessengerComposerVideo(browserType, bname) {
     // 4. Over the ceiling, first, on the thread before this run sends anything into it: the
     // fixture's bytes, then zeros to one byte past it. First because run 526 (macOS WebKit) could not
     // reload the thread once it held the sent video message: the field never became visible in 15 s
-    // and a screenshot timed out, which G250 records.
+    // and a screenshot timed out, which G250 records. The composer takes the too_large state at the
+    // attach, before an object URL exists (G257: on runs 534 and 538 the draft's bytes in the
+    // thumbnail's <img> and the measuring <video> held WebKit's main thread past a 30 s Send click),
+    // so there is no Send to press: the draft stays empty, the refusal line is up, no measuring
+    // element is mounted, and nothing is posted.
     fs.copyFileSync(FIXTURE, big);
     fs.truncateSync(big, MAX_BYTES + 1);
     const before = posts.length;
     await page.locator('input[type="file"][accept="video/*"]').setInputFiles(big);
     await dismissNotice();
-    await page.click('[data-testid="send"]');
     const overState = await page
       .waitForSelector("[data-messenger-thread][data-upload-refusal]", { timeout: 15000 })
       .then((el) => el.getAttribute("data-upload-refusal"))
@@ -230,10 +233,22 @@ async function runMessengerComposerVideo(browserType, bname) {
       .locator("[data-upload-refused]")
       .isVisible()
       .catch(() => false);
+    const overDraft = await page.evaluate(() => ({
+      send: document.querySelectorAll('[data-testid="send"]').length,
+      measure: document.querySelectorAll('[data-testid="video-measure"]').length,
+      blobs: [...document.querySelectorAll("img, video")].filter((el) => el.src.startsWith("blob:"))
+        .length,
+    }));
     check(
       CHECKS[3],
-      overState === "too_large" && shown && posts.length === before,
-      `state ${overState}; line shown ${shown}; posts to the route ${posts.length - before}`,
+      overState === "too_large" &&
+        shown &&
+        posts.length === before &&
+        overDraft.send === 0 &&
+        overDraft.measure === 0 &&
+        overDraft.blobs === 0,
+      `state ${overState}; line shown ${shown}; posts to the route ${posts.length - before}; ` +
+        `draft after the attach ${JSON.stringify(overDraft)}`,
     );
 
     // A fresh load of the same thread, so the oversized draft is gone before the fixture is attached.
@@ -300,12 +315,19 @@ async function runMessengerComposerVideo(browserType, bname) {
         buffer: fixture,
       });
       await dismissNotice();
-      const sentReq = page.waitForRequest(
-        (r) => r.method() === "POST" && new URL(r.url()).pathname === "/api/messages/media",
-        { timeout: 30000 },
-      );
-      await page.click('[data-testid="send"]');
-      const req = await sentReq.catch(() => null);
+      // The wait's rejection is handled the moment it is made (G257): on run 534 the Send click
+      // took over 30 s to become actionable on macOS WebKit, so the timeout rejected while the click
+      // was still pending, nothing had caught it, and Node killed the gate before the arms after this
+      // one ran. A slow Send now records this check failed, with the composer's state and the
+      // failstate screenshot, and the gate goes on (1237: a crash is never a pass, and never silent).
+      const sentReq = page
+        .waitForRequest(
+          (r) => r.method() === "POST" && new URL(r.url()).pathname === "/api/messages/media",
+          { timeout: 30000 },
+        )
+        .catch(() => null);
+      await page.click('[data-testid="send"]', { timeout: 30000 }).catch(() => undefined);
+      const req = await sentReq;
       const res = req ? await req.response() : null;
       const body = res ? await res.json().catch(() => null) : null;
       mediaId = body && body.media_id ? body.media_id : null;

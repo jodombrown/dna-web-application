@@ -59,8 +59,11 @@ export type Vocabularies = {
   message_mute_durations: { value: string; label: string }[];
   /** Brief 14 (1349): the six report reasons, as Extraction 41-14 rendered them. */
   message_report_reasons: { value: string; label: string }[];
-  /** Brief 14 (1370): the five reactions, words and never glyphs. */
-  message_reaction_kinds: { value: string; label: string }[];
+  /**
+   * Brief 14, 41-E (1403, 1577): the quick bar's eight emoji in 1403's order, the character as
+   * `value` and E9's glyph name as `label`. A bar that reads none renders empty, never literals.
+   */
+  message_reaction_quick: { value: string; label: string }[];
   /** Ruling 1177: the platform roles and their labels, in position order; the admin console's bar reads a role's label here. */
   platform_role_kinds: { value: string; label: string }[];
   /** Handoff 45-D (1381, 1393): the admin app's appearances; system follows each device. */

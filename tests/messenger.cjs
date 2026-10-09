@@ -1,5 +1,6 @@
 // Brief 14, handoff 41-C item 5 (SPEC 41-14 "Arms"; rulings 61, 228, 292, 317): the Messenger
-// surfaces. Three arms.
+// surfaces. Four arms: `runMessengerReactions` is handoff 56-41E's, SPEC-41-E's second pass on the
+// mock (the quick bar, the picker, the tone, Start a group, the rename line, the portrait video).
 //
 // `runMessengerLayout` is the responsive matrix at the three labeled frames plus 360 (390, 820,
 // 1280 and 360), both themes, touch below 1024 and pointer above, against the shared mock
@@ -51,6 +52,18 @@ const IGNORED_CONSOLE = new RegExp(
 
 /** The 1371 toast, override 1 of SPEC 41-14. */
 const PIN_CAP = "Unpin a conversation to pin this one.";
+
+/** E9, in 1403's order: what the quick bar's eight buttons are named. */
+const QUICK_LABELS = [
+  "Thumbs up",
+  "Heart",
+  "Folded hands",
+  "Clapping",
+  "Party",
+  "Laughing",
+  "Surprised",
+  "Crying",
+];
 
 function armCheck(tag, list) {
   const emitted = new Set();
@@ -158,9 +171,9 @@ const LAYOUT_CHECKS = [
   "no row, card or line on the list carries a numeral outside a time (69, 82, guardrail 3)",
   "at expanded the Pane beside the list shows its empty state; below it the list keeps the dock (1047, 1368)",
   "opening a row reaches /messages/{thread}: ringed in the Pane at expanded, its own route on Pane's bar with Back to Messages, the subtitle and no dock below (1023, 1368, 1369)",
-  "the thread reads day separators, a quote, a reaction as word and name, edited, a deleted line, and ticks named Sent or Delivered with receipts off (1336, 1343, 1345, 1370)",
+  "the thread reads day separators, a quote, a reaction as glyph name and name, edited, a deleted line, and ticks named Sent or Delivered with receipts off (1336, 1343, 1345, 1577)",
   "the composer sits inside the viewport with Attach, the field and the mic (1.6, 1368)",
-  "a group thread reads its members and a reaction's names as names then one and others, the pinned strip and the collapsed blocked line (1317, 1349, 1370, 1371)",
+  "a group thread reads its members and a reaction's names as names then one and others, the pinned strip and the collapsed blocked line (1317, 1349, 1577, 1371)",
   "nothing the Messenger holds is in localStorage or sessionStorage (1351)",
   "no horizontal overflow on the list or the thread (61)",
   "no page error (316)",
@@ -365,7 +378,7 @@ async function runMessengerLayout(browserType, bname, vp, theme) {
       th.days.includes("Yesterday") &&
         th.days.includes("Today") &&
         th.quote &&
-        th.reaction.includes("Agree, Kofi") &&
+        th.reaction.includes("Thumbs up, Kofi") &&
         th.edited &&
         th.deleted.some((t) => t.includes("This message was deleted")) &&
         th.ticks.length > 0 &&
@@ -398,7 +411,7 @@ async function runMessengerLayout(browserType, bname, vp, theme) {
       LAYOUT_CHECKS[11],
       grp.sub.includes("Ama Darko, Kofi Boateng, Nana Adjei and others") &&
         !grp.sub.includes(", and others") &&
-        grp.reactions.includes("Thanks, Ama, Kofi, Nana and others") &&
+        grp.reactions.includes("Folded hands, Ama, Kofi, Nana and others") &&
         grp.strip.includes("Pinned") &&
         grp.strip.includes("Nana: Who is coming") &&
         grp.blocked === "Blocked message",
@@ -427,14 +440,14 @@ async function runMessengerLayout(browserType, bname, vp, theme) {
 const FLOW_CHECKS = [
   "the receipts sheet opens once while receipts_chosen_at is null, Off selected, and Continue writes messenger_settings_set(false) (1345)",
   "after the choice the sheet does not open again (1345)",
-  "a third pin is taken, and a fourth is refused with the 1371 toast (1335, 1371)",
+  "a third pin is taken, and a fourth is refused with pins_full's line under the title row, OK clearing it (1335, 1371, 1582)",
   "Mark as unread writes messenger_mark_unread and the row reads unread (1344)",
   "Mute for 8 hours writes messenger_mute with eight_hours and the row reads Muted (1348)",
   "Archive writes messenger_archive, the row leaves the list and returns under Archived with its note (1339)",
   "DIA's Dismiss writes messenger_dia_dismiss with the signal's key and the line goes (1350, 1373)",
   "a search with a During date bound calls messenger_search with the day's bounds and its result opens the thread at the message, ringed (1338, 1347, 1373)",
   "a send writes messenger_send with a client_id, the bubble lands with one tick named Sent, and the field clears (1336, 1351)",
-  "React offers the five words, and a pick writes messenger_react and reads as the word and you (1370)",
+  "React offers the eight glyphs in 1403's order, and a pick writes messenger_react with the character and reads as the glyph name and you (1403, 1577)",
   "Edit writes messenger_edit and the bubble reads edited (1343)",
   "Delete for everyone writes messenger_delete and the bubble reads This message was deleted (1343)",
   "a lead's Pin writes messenger_pin_message and the pinned strip names it, and Message info reads Read by as names then one and others (1317, 1345, 1371)",
@@ -540,8 +553,22 @@ async function runMessengerFlows(browserType, bname, vp, theme) {
       "Actions for Corridor Suppers: Accra",
     );
     await pick(page, "Pin");
-    const toast1 = await toastText(page);
-    check(FLOW_CHECKS[2], third && toast1.includes(PIN_CAP), toast1.slice(0, 200));
+    await page.waitForSelector("[data-list-alert]", { timeout: 5000 }).catch(() => undefined);
+    const alert1 = await page
+      .locator("[data-list-alert]")
+      .textContent()
+      .catch(() => "");
+    await page
+      .locator('[data-list-alert] button:has-text("OK")')
+      .click()
+      .catch(() => undefined);
+    await page.waitForTimeout(200);
+    const alertGone = (await page.locator("[data-list-alert]").count()) === 0;
+    check(
+      FLOW_CHECKS[2],
+      third && alert1.includes(PIN_CAP) && alertGone,
+      JSON.stringify({ alert1: alert1.slice(0, 120), alertGone }),
+    );
 
     // 4. Mark as unread on Kofi.
     await openMenu(page, rowOf("Kofi Boateng"), touch, "Actions for Kofi Boateng");
@@ -668,17 +695,21 @@ async function runMessengerFlows(browserType, bname, vp, theme) {
       await kofiFirst.hover();
       await kofiFirst.locator('[data-cluster] button:has-text("React")').click();
     }
-    const words = await page.locator("[data-picker] button").allTextContents();
-    await page.locator('[data-picker] button:has-text("Thanks")').click();
+    const words = await page
+      .locator("[data-picker] button[data-quick]")
+      .evaluateAll((els) => els.map((e) => e.getAttribute("aria-label")));
+    await page.locator('[data-picker] button[aria-label="Folded hands"]').click();
     await page.waitForTimeout(500);
     const r = writesOf(db, "messenger_react").at(-1);
-    const shown = await kofiFirst.locator("[data-reaction]").allTextContents();
+    const shown = await kofiFirst
+      .locator("[data-reaction]")
+      .evaluateAll((els) => els.map((e) => e.getAttribute("aria-label")));
     check(
       FLOW_CHECKS[9],
-      ["Agree", "Thanks", "Noted", "Well done", "Sorry to hear"].every((x) => words.includes(x)) &&
+      JSON.stringify(words) === JSON.stringify(QUICK_LABELS) &&
         !!r &&
-        r.body.p_reaction === "thanks" &&
-        shown.includes("Thanks, you"),
+        r.body.p_reaction === "\u{1F64F}" &&
+        shown.includes("Folded hands, you"),
       JSON.stringify({ words, r: r?.body, shown }),
     );
 
@@ -931,7 +962,7 @@ const LIVE_CHECKS = [
   "a text send lands with one tick named Sent (1336)",
   "it turns to two ticks once member-test's client, open on the thread, acknowledges it (1336, 1351)",
   "member-test's Messages control carries the dot while the message is unread (82, 1344)",
-  "a reaction reads as the word and the name (1370)",
+  "a press on the quick bar's Folded hands writes the character and the pill reads the glyph name and you (1577, 1590)",
   "an edit reads edited (1343)",
   "a pin reads in the pinned strip (1371)",
   "Mark as unread lights the row (1344)",
@@ -945,6 +976,406 @@ const LIVE_CHECKS = [
   "a delete for everyone reads This message was deleted (1343)",
   "nothing the Messenger holds is in browser storage (1351)",
 ];
+
+// ---------------------------------------------------------------------------------------------------
+// Handoff 56-41E item 3: the Messenger's second pass on the mock, at the compact touch cell and the
+// expanded pointer cell, in the macOS gate too (the glyphs and the Sheet differ on Safari).
+// ---------------------------------------------------------------------------------------------------
+const REACT_CHECKS = [
+  "React opens the quick bar: eight drawn glyphs in 1403's order, named E9, one row that never wraps, then More (1403, 1404, 1586)",
+  "a press writes messenger_react with the character and the pill reads the glyph name and you; a second glyph replaces the first and one own pill remains (1577, 1590)",
+  "More opens the full picker, a Sheet on touch and an inline panel on pointer, with the search, the tone row with Not chosen first and checked, and the library's groups (1406, 1578, 1584)",
+  "the emoji data came from the app's own origin, nothing reached cdn.jsdelivr.net, and nothing named frimousse is in localStorage or sessionStorage (1351, 1577)",
+  "choosing a tone writes messenger_settings_set(p_skin_tone), the hands then carry the modifier and the faces carry none (1576, 1577)",
+  "a pick from the picker writes messenger_react, and Recent leads with it on the next open (1405)",
+  "Start a group from the plus: Start with no name reads Give the group a name., with no members reads Pick at least one connection. (1579, 1581)",
+  "Start the group writes messenger_thread_create_group with the picked connection, lands on the new thread, and the empty line and the subtitle read the invited form (1580, 1592)",
+  "a create refusal reads its word's line in the sheet's error line, and a word outside the six reads the create fallback (1581, 1409)",
+  "Rename writes one system row rendered as {first name} renamed the group., and a search for the word returns nothing (1591)",
+  "a received portrait video's player is taller than wide with the row's own ratio, object-fit contain and no label beside it (1593, 1583)",
+  "a video the route refuses reads This video could not load., and Try again refetches and remounts the player (1574)",
+  "nothing the Messenger holds is in localStorage or sessionStorage (1351)",
+  "no page error (316)",
+];
+
+async function runMessengerReactions(browserType, bname, vp, theme) {
+  const [w, h] = vp;
+  const tag = `${bname}-${w}x${h}-${theme}-messenger reactions`;
+  M.armStart(tag);
+  const { check, rest, skip } = armCheck(tag, REACT_CHECKS);
+  let browser;
+  try {
+    const opened = await newPage(browserType, vp, theme);
+    browser = opened.browser;
+    const { page, db, errors, touch } = opened;
+    const Mx = db.messenger;
+    const mock = require("./messenger-mock.cjs");
+    const dataRequests = [];
+    page.on("request", (r) => {
+      const u = r.url();
+      if (/emojibase|jsdelivr/.test(u)) dataRequests.push(u);
+    });
+    // The portrait fixture: VP9 where Chromium decodes it, H.264 where WebKit does; the route serves
+    // the bytes the way the deployment's media route would, and refuses when the arm says so.
+    const fixture = path.join(
+      __dirname,
+      "fixtures",
+      bname === "webkit" ? "portrait-video.mp4" : "portrait-video.webm",
+    );
+    const fixtureMime = bname === "webkit" ? "video/mp4" : "video/webm";
+    let refuseVideo = false;
+    await page.route(`**/api/messages/media/${mock.VIDEO_MEDIA}`, (route) => {
+      if (refuseVideo) return route.fulfill({ status: 403, body: "" });
+      return route.fulfill({
+        status: 200,
+        headers: { "content-type": fixtureMime, "access-control-allow-origin": "*" },
+        body: fs.readFileSync(fixture),
+      });
+    });
+    await signInMock(page);
+    await page.goto(BASE + "/messages/" + Mx.ids.kofi, { waitUntil: "networkidle" });
+    await page.waitForSelector("[data-messenger-thread] [data-msg]", { timeout: 10000 });
+    const kofiFirst = page
+      .locator('[data-msg]:has-text("The buyer from Tema came through.")')
+      .first();
+    const openBar = async () => {
+      if (await page.locator("[data-picker]").count()) return;
+      if (touch) {
+        await openMenu(page, kofiFirst, true, "");
+        await pick(page, "React");
+      } else {
+        await kofiFirst.hover();
+        await kofiFirst.locator('[data-cluster] button:has-text("React")').click();
+      }
+      await page.waitForSelector("[data-picker]", { timeout: 5000 });
+    };
+
+    // 1. The bar.
+    await openBar();
+    const bar = await page.locator("[data-picker] button[data-quick]").evaluateAll((els) => ({
+      labels: els.map((e) => e.getAttribute("aria-label")),
+      tops: els.map((e) => Math.round(e.getBoundingClientRect().top)),
+      drawn: els.map((e) => !!e.querySelector("svg[data-glyph]")),
+    }));
+    const more = await page.locator("[data-picker] [data-more]").count();
+    check(
+      REACT_CHECKS[0],
+      JSON.stringify(bar.labels) === JSON.stringify(QUICK_LABELS) &&
+        bar.drawn.every(Boolean) &&
+        new Set(bar.tops).size === 1 &&
+        more === 1,
+      JSON.stringify(bar),
+    );
+
+    // 2. One reaction per member.
+    await page.locator('[data-picker] button[aria-label="Folded hands"]').click();
+    await page.waitForTimeout(600);
+    const first = writesOf(db, "messenger_react").at(-1);
+    const pill1 = await kofiFirst
+      .locator("[data-reaction]")
+      .evaluateAll((els) => els.map((e) => e.getAttribute("aria-label")));
+    await openBar();
+    await page.locator('[data-picker] button[aria-label="Thumbs up"]').click();
+    await page.waitForTimeout(600);
+    const second = writesOf(db, "messenger_react").at(-1);
+    const ownPills = await kofiFirst.locator('[data-reaction][aria-pressed="true"]').count();
+    const ownRows = (Mx.messages[Mx.ids.kofi][0].reactions || []).filter((r) => r.own).length;
+    check(
+      REACT_CHECKS[1],
+      !!first &&
+        first.body.p_reaction === "\u{1F64F}" &&
+        pill1.includes("Folded hands, you") &&
+        !!second &&
+        second.body.p_reaction === "\u{1F44D}\uFE0F" &&
+        ownPills === 1 &&
+        ownRows === 1,
+      JSON.stringify({ first: first?.body, pill1, second: second?.body, ownPills, ownRows }),
+    );
+
+    // 3. The full picker.
+    const pickerRoot = touch
+      ? '[data-testid="react-sheet"] [data-reaction-picker]'
+      : "[data-reaction-panel] [data-reaction-picker]";
+    const openPicker = async () => {
+      await openBar();
+      await page.locator("[data-picker] [data-more]").click();
+      await page.waitForSelector(pickerRoot, { timeout: 8000 });
+      // Frimousse's first button is its hidden row sizer, named ""; the first named cell is a glyph.
+      await page
+        .locator(pickerRoot + ' [data-emoji-viewport] button:not([aria-label=""])')
+        .first()
+        .waitFor({ timeout: 15000 });
+    };
+    const closePicker = async () => {
+      if (touch) {
+        await page.keyboard.press("Escape");
+      } else await page.locator('[data-reaction-panel] button[aria-label="Close"]').click();
+      await page.waitForTimeout(400);
+    };
+    await openPicker();
+    const pk = await page.evaluate((root) => {
+      const r = document.querySelector(root);
+      const tones = [...r.querySelectorAll('[data-tone-row] [role="radio"]')];
+      return {
+        search: !!r.querySelector("[data-emoji-search]"),
+        toneLabels: tones.map((t) => t.getAttribute("aria-label")),
+        checked: tones.map((t) => t.getAttribute("aria-checked")),
+        sheet: !!document.querySelector('[data-testid="react-sheet"]'),
+        panel: !!document.querySelector("[data-reaction-panel]"),
+        text: r.textContent || "",
+      };
+    }, pickerRoot);
+    check(
+      REACT_CHECKS[2],
+      pk.search &&
+        pk.toneLabels[0] === "Not chosen" &&
+        pk.checked[0] === "true" &&
+        pk.toneLabels.length === 6 &&
+        (touch ? pk.sheet && !pk.panel : pk.panel && !pk.sheet) &&
+        pk.text.includes("Smileys & emotion"),
+      JSON.stringify({ ...pk, text: pk.text.slice(0, 80) }),
+    );
+    const storage = await page.evaluate(() => {
+      const keys = [];
+      try {
+        for (const k of Object.keys(localStorage))
+          if (/frimousse/i.test(k)) keys.push("local:" + k);
+      } catch {}
+      try {
+        for (const k of Object.keys(sessionStorage))
+          if (/frimousse/i.test(k)) keys.push("session:" + k);
+      } catch {}
+      return keys;
+    });
+    const own = dataRequests.filter((u) => u.startsWith(BASE + "/emojibase/17.0.0/en/"));
+    const cdn = dataRequests.filter((u) => /jsdelivr/.test(u));
+    check(
+      REACT_CHECKS[3],
+      own.length >= 2 && cdn.length === 0 && storage.length === 0,
+      JSON.stringify({ own: own.length, cdn, storage }),
+    );
+
+    // 4. The tone.
+    await page.locator(pickerRoot + ' [data-tone="medium"]').click();
+    await page.waitForTimeout(500);
+    const toneWrite = writesOf(db, "messenger_settings_set").at(-1);
+    await closePicker();
+    await openBar();
+    const toned = await page
+      .locator("[data-picker] button[data-quick]")
+      .evaluateAll((els) =>
+        els.map((e) => [e.getAttribute("aria-label"), e.getAttribute("data-quick")]),
+      );
+    const byLabel = Object.fromEntries(toned);
+    // Folded hands, not the member's own Thumbs up, which a press would remove (2.1).
+    await page.locator('[data-picker] button[aria-label="Folded hands"]').click();
+    await page.waitForTimeout(600);
+    const tonedWrite = writesOf(db, "messenger_react").at(-1);
+    check(
+      REACT_CHECKS[4],
+      !!toneWrite &&
+        toneWrite.body.p_skin_tone === "\u{1F3FD}" &&
+        byLabel["Thumbs up"] === "\u{1F44D}\u{1F3FD}" &&
+        byLabel["Folded hands"] === "\u{1F64F}\u{1F3FD}" &&
+        byLabel["Laughing"] === "\u{1F602}" &&
+        !!tonedWrite &&
+        tonedWrite.body.p_reaction === "\u{1F64F}\u{1F3FD}",
+      JSON.stringify({ toneWrite: toneWrite?.body, byLabel, tonedWrite: tonedWrite?.body }),
+    );
+
+    // 5. A pick from the picker, then Recent.
+    await openPicker();
+    const cell = page
+      .locator(pickerRoot + ' [data-emoji-viewport] button:not([aria-label=""])')
+      .first();
+    const picked = await cell.getAttribute("aria-label");
+    await cell.click();
+    await page.waitForTimeout(600);
+    const pickWrite = writesOf(db, "messenger_react").at(-1);
+    await openPicker();
+    const recentFirst = await page
+      .locator(pickerRoot + " [data-recent] [data-recent-emoji]")
+      .first()
+      .getAttribute("data-recent-emoji")
+      .catch(() => null);
+    await closePicker();
+    check(
+      REACT_CHECKS[5],
+      !!pickWrite &&
+        !!pickWrite.body.p_reaction &&
+        pickWrite.body.p_reaction === Mx.recent[0] &&
+        recentFirst === pickWrite.body.p_reaction,
+      JSON.stringify({ picked, pickWrite: pickWrite?.body, recentFirst, recent: Mx.recent }),
+    );
+
+    // 6, 7, 8. Start a group.
+    await openMessages(page);
+    await page.locator('[data-testid="start-group-open"]').click();
+    await page.waitForSelector('[data-testid="start-group-sheet"]', { timeout: 8000 });
+    await page.locator('[data-testid="start-group"]').click();
+    await page.waitForTimeout(300);
+    const nameErr = await page.locator('[data-testid="start-group-sheet"]').textContent();
+    await page.locator('[data-testid="group-name"]').fill("Tema port crew");
+    await page.locator('[data-testid="start-group"]').click();
+    await page.waitForTimeout(300);
+    const membersErr = await page
+      .locator("[data-members-error]")
+      .textContent()
+      .catch(() => "");
+    check(
+      REACT_CHECKS[6],
+      nameErr.includes("Give the group a name.") && membersErr === "Pick at least one connection.",
+      JSON.stringify({ nameErr: nameErr.slice(0, 120), membersErr }),
+    );
+    await page.locator('[data-testid="start-group-sheet"] label:has-text("Add Lerato")').click();
+    await page.locator('[data-testid="start-group"]').click();
+    await page.waitForURL(/\/messages\/[0-9a-f-]{36}$/, { timeout: 10000 });
+    await page.waitForSelector('[data-testid="thread-empty"]', { timeout: 10000 });
+    const created = writesOf(db, "messenger_thread_create_group").at(-1);
+    const landing = await page.evaluate(() => ({
+      empty: document.querySelector('[data-testid="thread-empty"]')?.textContent || "",
+      sub:
+        document.querySelector("[data-pane-subtitle]")?.textContent ||
+        document.querySelector("[data-thread-header]")?.textContent ||
+        "",
+    }));
+    const newId = page.url().split("/").pop();
+    check(
+      REACT_CHECKS[7],
+      !!created &&
+        created.body.p_name === "Tema port crew" &&
+        JSON.stringify(created.body.p_member_ids) ===
+          JSON.stringify(["c4000000-0000-4000-8000-000000000004"]) &&
+        Mx.threads[0].thread_id === newId &&
+        landing.empty === "Nobody has written yet. Lerato Khumalo, invited." &&
+        landing.sub.includes("Lerato Khumalo, invited"),
+      JSON.stringify({ created: created?.body, landing, newId }),
+    );
+    const refusedWith = async (word) => {
+      Mx.fail = "create:" + word;
+      await openMessages(page);
+      await page.locator('[data-testid="start-group-open"]').click();
+      await page.waitForSelector('[data-testid="start-group-sheet"]', { timeout: 8000 });
+      await page.locator('[data-testid="group-name"]').fill("Refused");
+      await page.locator('[data-testid="start-group-sheet"] label:has-text("Add Lerato")').click();
+      await page.locator('[data-testid="start-group"]').click();
+      await page.waitForSelector("[data-sheet-error]", { timeout: 8000 });
+      const line = await page.locator("[data-sheet-error]").textContent();
+      const stillOpen = await page.locator('[data-testid="start-group-sheet"]').count();
+      await page.keyboard.press("Escape");
+      await page.waitForTimeout(400);
+      Mx.fail = null;
+      return { line: (line || "").trim(), stillOpen };
+    };
+    const refusedWord = await refusedWith("not_your_connection");
+    const refusedOther = await refusedWith("too_long");
+    check(
+      REACT_CHECKS[8],
+      refusedWord.line === "Only your connections can be added. Connect with them first." &&
+        refusedWord.stillOpen === 1 &&
+        refusedOther.line === "The group was not started. Try again.",
+      JSON.stringify({ refusedWord, refusedOther }),
+    );
+
+    // 9. Rename, the system line, the search.
+    await page.goto(BASE + "/messages/" + Mx.ids.group, { waitUntil: "networkidle" });
+    await page.waitForSelector("[data-messenger-thread] [data-msg]", { timeout: 10000 });
+    await page.locator('[data-testid="manage"]').click();
+    await page.waitForSelector('[data-testid="rename"]', { timeout: 8000 });
+    await page.locator('[data-testid="rename"] input').fill("Accra returnees, Osu");
+    await page.locator('[data-testid="rename"] button:has-text("Rename")').click();
+    await page.waitForTimeout(700);
+    await page.keyboard.press("Escape");
+    await page.waitForTimeout(500);
+    const systemLines = await page.locator("[data-system]").allTextContents();
+    const systemRows = (Mx.messages[Mx.ids.group] || []).filter((m) => m.kind === "system");
+    await openMessages(page);
+    await page.fill('[data-testid="message-search"]', "renamed");
+    await page.waitForTimeout(900);
+    const noResults = await page.locator('[data-testid="no-results"]').count();
+    const hits = await page
+      .locator('[role="list"][aria-label="Results"] [data-search-result]')
+      .count();
+    check(
+      REACT_CHECKS[9],
+      systemRows.length === 1 &&
+        systemRows[0].body === "renamed" &&
+        systemLines.length === 1 &&
+        systemLines[0] === "Amara renamed the group." &&
+        noResults === 1 &&
+        hits === 0,
+      JSON.stringify({ systemLines, systemRows: systemRows.length, noResults, hits }),
+    );
+    await page.fill('[data-testid="message-search"]', "");
+
+    // 10, 11. The portrait video, and the failed block.
+    await page.goto(BASE + "/messages/" + Mx.ids.nana, { waitUntil: "networkidle" });
+    await page.waitForSelector("[data-message-video], [data-video-failed]", { timeout: 15000 });
+    await page.waitForTimeout(800);
+    const video = await page.evaluate(() => {
+      const v = document.querySelector("[data-message-video]");
+      if (!v) return { present: false, failed: !!document.querySelector("[data-video-failed]") };
+      const box = v.getBoundingClientRect();
+      const bubble = v.closest("[data-bubble]");
+      return {
+        present: true,
+        w: Math.round(box.width),
+        h: Math.round(box.height),
+        ratio: v.getAttribute("data-video-ratio"),
+        fit: getComputedStyle(v).objectFit,
+        error: v.error ? v.error.code : null,
+        bubbleText: (bubble && bubble.textContent) || "",
+        poster: v.hasAttribute("poster"),
+        controls: v.hasAttribute("controls"),
+      };
+    });
+    if (video.present && video.error === null)
+      check(
+        REACT_CHECKS[10],
+        video.h > video.w &&
+          video.ratio === "124 / 320" &&
+          video.fit === "contain" &&
+          video.bubbleText === "" &&
+          video.controls &&
+          !video.poster,
+        JSON.stringify(video),
+      );
+    else
+      skip(
+        REACT_CHECKS[10],
+        "this engine did not decode the portrait fixture (" + JSON.stringify(video) + ")",
+      );
+    refuseVideo = true;
+    await page.goto(BASE + "/messages/" + Mx.ids.nana, { waitUntil: "networkidle" });
+    await page.waitForSelector("[data-video-failed]", { timeout: 15000 });
+    const failedText = await page.locator("[data-video-failed]").textContent();
+    refuseVideo = false;
+    await page.locator("[data-video-retry]").click();
+    const remounted = await page
+      .waitForSelector("[data-message-video]", { timeout: 15000 })
+      .then(() => true)
+      .catch(() => false);
+    check(
+      REACT_CHECKS[11],
+      failedText.includes("This video could not load.") &&
+        failedText.includes("Try again") &&
+        remounted,
+      JSON.stringify({ failedText, remounted }),
+    );
+
+    const keys = await messengerStorage(page);
+    check(REACT_CHECKS[12], keys.length === 0, keys.join(","));
+    // The 403 the arm's own route answered for check 12 is the one console line it expects.
+    const unexpected = errors.filter((e) => !/\/api\/messages\/media\/.*\b403\b/.test(e));
+    check(REACT_CHECKS[13], unexpected.length === 0, unexpected.slice(0, 3).join(" | "));
+    await M.shot(page, `${tag}-video`);
+  } catch (e) {
+    record(`${tag} flow`, false, String(e).slice(0, 600));
+  } finally {
+    rest("the flow ended before this check ran");
+    if (browser) await browser.close().catch(() => undefined);
+  }
+}
 
 async function liveSignIn(page, email, password) {
   await page.goto(BASE + "/sign-in", { waitUntil: "networkidle" });
@@ -1117,17 +1548,35 @@ async function runMessengerLive(browserType, bname) {
     }
     check(LIVE_CHECKS[3], second === "Delivered" || second === "Read", "tick " + second);
 
-    // 6. React.
+    // 6. React (41-E): the quick bar of eight, drawn from vocabularies().message_reaction_quick.
+    // Until 20261008150700 is on the project the vocabulary carries no quick key, the bar renders
+    // empty and messenger_react takes the five words, so the check is unproven, never a pass (228).
     await mine.hover();
     await mine.locator('[data-cluster] button:has-text("React")').click();
-    await page.locator('[data-picker] button:has-text("Noted")').click();
-    await page.waitForTimeout(1500);
-    const reacts = await mine.locator("[data-reaction]").allTextContents();
-    check(
-      LIVE_CHECKS[5],
-      reacts.some((t) => t.startsWith("Noted, ")),
-      reacts.join(","),
-    );
+    await page.waitForSelector("[data-picker]", { timeout: 10000 });
+    const quickCount = await page.locator("[data-picker] button[data-quick]").count();
+    if (quickCount === 0) {
+      skip(
+        LIVE_CHECKS[5],
+        "the quick bar is empty: 20261008150000 to 20261008150700 are not on the project yet",
+      );
+      // React again toggles the bar off. Not Escape: at expanded the thread sits in a Pane whose
+      // guard closes on Escape (correction 23), which is how run 536 lost the thread here.
+      await mine.hover();
+      await mine.locator('[data-cluster] button:has-text("React")').click();
+      await page.waitForTimeout(300);
+    } else {
+      await page.locator('[data-picker] button[aria-label="Folded hands"]').click();
+      await page.waitForTimeout(1500);
+      const reacts = await mine
+        .locator("[data-reaction]")
+        .evaluateAll((els) => els.map((e) => e.getAttribute("aria-label")));
+      check(
+        LIVE_CHECKS[5],
+        quickCount === 8 && reacts.some((t) => t === "Folded hands, you"),
+        JSON.stringify({ quickCount, reacts }),
+      );
+    }
 
     // 7. Edit.
     await mine.hover();
@@ -1351,11 +1800,13 @@ const FLOW_CELLS = [
 module.exports = {
   runMessengerLayout,
   runMessengerFlows,
+  runMessengerReactions,
   runMessengerLive,
   LAYOUT_CELLS,
   FLOW_CELLS,
   LAYOUT_CHECKS,
   FLOW_CHECKS,
+  REACT_CHECKS,
   LIVE_CHECKS,
   liveSignIn,
 };

@@ -8,3 +8,4 @@ bun.lock
 routeTree.gen.ts
 docs/strand/
 docs/convene/
+public/emojibase/

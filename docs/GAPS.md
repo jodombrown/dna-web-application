@@ -8780,3 +8780,101 @@ and nothing on that path imports any of the three.
 
 Owed: the cause read, starting with whether the `/password` to `/welcome` navigation settles before
 the arm waits for the screen. Recorded only; not changed here.
+
+---
+
+## G254. A received video has no poster frame
+
+**Severity: low. Opened 8 October 2026 by handoff 56-41E item 2.4, during the 41-E PR. The number is
+assigned by this entry (ruling 638).**
+
+SPEC-41-E section 3 draws the player with `poster` from the message's media, and nothing stores a
+poster frame anywhere: `media` carries the file's own key, mime, dimensions and bytes, and no
+derivation writes a still from a video (1374 transforms nothing on delivery). The player ships
+without `poster`, so before Play a received video shows the browser's own first frame once its
+metadata has loaded (`preload="metadata"`) and `--ink` until then. Held by the handoff ("Poster:
+held"), not built here. Owed: a decision on whether a still is derived at upload (a second object
+beside the file, written by the same route) or never, and a ruling before any surface stores one.
+
+---
+
+## G255. The emoji picker's group labels are Frimousse's English ones
+
+**Severity: low. Opened 8 October 2026 by handoff 56-41E item 4 (ruling 1584), during the 41-E PR.
+The number is assigned by this entry (ruling 638).**
+
+The full picker's groups read emojibase's English `messages.json` group names, capitalised as
+Frimousse capitalises them ("Smileys & emotion", "People & body", "Animals & nature", "Food &
+drink", "Travel & places", "Activities", "Objects", "Symbols", "Flags"), and the search matches the
+library's English labels and tags. Ruling 1584 lets them stand until localisation. The locale is
+fixed to `en` in `src/components/dna/ReactionPicker.tsx` and the self-hosted set under
+`public/emojibase/17.0.0/` holds only `en/`; a localised Messenger adds the locale's two files beside
+it and passes the member's locale to the picker. The ampersands and the capitalisation are the
+library's, not the copy rules' (sentence case, no ampersand in copy), which is part of what
+localisation settles.
+
+---
+
+## G256. The fixture behind B14-Messenger-v3 was not attached to handoff 56-41E
+
+**Severity: low. Opened 8 October 2026 during the 41-E PR. The number is assigned by this entry
+(ruling 638).**
+
+The page `messages/B14-Messenger-v3.dc.html` (`v1791487330148240`) reads its quick eight, their
+labels, the tone swatches and its recent list from `messages/b14-messenger-data-v3.js`
+(`v1791487334087470`, named in SPEC-41-E's stamps), which the handoff did not attach, and the build
+is bound to the page and the SPEC. Two values are therefore reconstructed rather than read:
+
+- E9's eight glyph names, seeded as `message_reaction_emoji.label` for the quick positions and
+  served through `message_reaction_quick`: Thumbs up, Heart, Folded hands, Clapping, Party,
+  Laughing, Surprised, Crying, in 1403's order and words.
+- the five tone swatches in `src/lib/emoji.ts` (`TONES[].hex`), drawn in the picker's tone row: one
+  hex per emoji modifier, the common picker values, with Not chosen on `--ink-4` as the SPEC says.
+
+If the fixture's labels or swatches differ, the labels change by one migration on the eight rows
+(a vocabulary, never a component) and the swatches by one constant. Also reconstructed, from
+Frimousse 0.4.0's own resolver rather than from the handoff's "emojibase ^16" (the package declares
+no dependency and fetches `emojibase-data@latest`): the self-hosted set is `17.0.0`, the version
+`@latest` resolved on 8 October 2026, recorded in `message_reaction_emoji.emojibase_version`.
+
+---
+
+## G257. The composer-video arm could kill the macOS gate on a slow Send
+
+**Severity: moderate. Opened 8 October 2026 by run 534 (PR #102's first gate run, head `bf1997b`).
+The number is assigned by this entry (ruling 638).**
+
+`tests/messenger-composer-video.cjs` created its 30 s `page.waitForRequest` for the media POST and
+only then awaited the Send click, attaching the wait's `catch` after the click returned. On run 534
+the click took longer than 30 s to find Send actionable on macOS WebKit (the fixture had just been
+attached and the composer's thumbnail is `MediaBlock`'s `<img>` of the `.mov`'s object URL, the
+decode G250 names), so the wait rejected with no handler and Node raised it as an uncaught
+exception: the gate's process died at that arm, after `ENV … the fixture in this engine` and before
+`… the composer at send`, and the arms after it, the reactions arm among them, never ran. Run 529 on
+main crossed the same stretch in 45 s and passed, so the arm sat near the cliff.
+
+Fixed in PR #102: the wait's rejection is handled where it is made and the click carries the same
+30 s bound, so a slow Send records this check failed with the composer's state record and the
+failstate screenshot, and the gate goes on to the arms after it (1237: never a pass, never silent).
+What is not settled here is why Send took longer than 30 s on that run: whether the decode of the
+attached `.mov` in the thumbnail's `<img>` stalls WebKit's main thread for that long on its own, or
+something on `bf1997b` lengthened it. The next gate run on the branch, which now records the arm's
+state at send, is what answers it; if it is the decode, the composer's video thumbnail should stop
+handing a video's object URL to an `<img>` (the same change G250 made for the log).
+
+**Amended 9 October 2026 by runs 538 and 539 (PR #102, heads `f4117b5` and `80a3535`): the open
+half is answered, and it is the decode.** Run 538's gate read the arm's over-the-ceiling step
+hanging on its Send click for the full 30 s with no crash, the failstate screenshot timing out at
+5 s after it: the 100 MB draft had been handed to both the thumbnail's `<img>` and the measuring
+`<video>`, and the main thread was still on it 37 s later. Run 535 crossed the same stretch in 39 s,
+run 534 lost it one step later in the same web process, so whether the click landed was timing.
+`80a3535` refuses a video over `MESSAGE_MEDIA_MAX_BYTES` at the attach, before an object URL exists,
+and the arm's step reads that refusal with no Send to press. Run 539, with that in place, then hung
+on the real send: the 9 KB fixture alone, the measuring `<video>` at readyState 0 (networkState 2)
+when Send was pressed, no POST in 30 s, the screenshot timing out again. The arm's own probe loads
+the same blob in an identical attached `<video>` every run, in the same web process; the one element
+the probe does not have is the thumbnail, `MediaBlock kind="video"` drawing its `src` in an `<img>`.
+`5770fbb` renders the video draft's tile with no `src` (the play glyph on the sunken frame), so the
+measuring `<video>` is the one element holding the bytes. Run 540 (`5770fbb`): the gate 322 of 322,
+the arm's four checks passed. Closed by PR #102; the register keeps the mechanism because it is the
+one G250 named for the log and the same one again.

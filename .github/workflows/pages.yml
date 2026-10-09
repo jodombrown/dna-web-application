@@ -726,7 +726,8 @@ jobs:
   # as its publish flow at 390 light and its guards at 1280 dark; sign-in's layout at both cells and
   # its flows at 390 light; and, under ruling 1550, the .mov through the composer's own video input
   # (tests/messenger-composer-video.cjs), because Linux WebKit's <video> could not read its fixture on
-  # run 523. Twenty-two arms, because macOS minutes bill at a multiple of Linux and 1238
+  # run 523; and, under handoff 56-41E, the reactions arm at both cells (the drawn glyphs, the
+  # picker's Sheet and the portrait player differ on Safari). Twenty-four arms, because macOS minutes bill at a multiple of Linux and 1238
   # made the repository private, so every minute is paid. No apt, no core dumps and no gdb: those
   # are the Linux job's, and the scripts this job calls run under macOS's bash 3.2 as written.
   webkit-macos:

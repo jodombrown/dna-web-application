@@ -21,7 +21,7 @@ export type MessagingSettings = Database["public"]["Tables"]["member_messaging_s
 export type DiaSignal = Database["public"]["Functions"]["messenger_dia_signals"]["Returns"][number];
 export type SearchHit = Database["public"]["Functions"]["messenger_search"]["Returns"][number];
 
-/** The refusal words 41-A's wrappers and 41-B's routes raise (SPEC 41-14 Part B). */
+/** The refusal words 41-A's wrappers and 41-B's routes raise (SPEC 41-14 Part B), with 1581's three. */
 export type RefusalWord =
   | "not_signed_in"
   | "not_a_member"
@@ -41,38 +41,78 @@ export type RefusalWord =
   | "group_full"
   | "not_a_lead"
   | "already_member"
-  | "not_your_connection";
+  | "not_your_connection"
+  | "bad_name"
+  | "no_members"
+  | "bad_member";
 
 /**
- * One map (SPEC 41-14 Part B). Four lines are the extraction's own: the not-sent line (1.6), the
- * upload refusal (1.6), the rate-limit line (1.6) and the pin cap as ratified in override 1 (1371).
- * The extraction draws no line for the other fifteen words, so each carries a plain sentence here
- * rather than its word; they are named in the closing report as copy the extraction does not hold.
+ * One map, SPEC-41-E section 4.1 (rulings 1390, 1409, 1581), every line as the SPEC holds it.
+ * `bad_member` carries a straight apostrophe, the founder's wording in 1581. A word a wrapper raises
+ * that is not here (`bad_kind`, `bad_reaction`, `deleted`, `not_renamable` among them) reads its
+ * act's fallback from FALLBACK_LINES, never the word, because a word in this map is a member-facing
+ * line.
  */
 export const REFUSAL_LINES: Record<RefusalWord, string> = {
-  not_signed_in: "Sign in to send messages.",
+  not_signed_in: "Sign in to use Messages.",
   not_a_member: "You are not in this conversation.",
-  blocked: "This conversation is not open.",
-  request_first: "Send a request first.",
-  not_reachable: "This member is not taking requests.",
-  request_exists: "Your request is already with them.",
-  too_many_pending: "You have enough requests waiting. Try again tomorrow.",
+  blocked: "Messages cannot be sent in this conversation.",
+  request_first: "Send a request first. You can message once it is accepted.",
+  not_reachable: "This member is not taking requests right now.",
+  request_exists: "Your request is with them already. You will hear when they answer.",
+  too_many_pending: "You have requests waiting on answers. Send more once some are answered.",
   rate_limited: "You are sending quickly. Wait a moment before the next message.",
-  too_long: "That message is too long to send.",
-  empty: "Write something to send.",
+  too_long: "That is too long. Shorten it and try again.",
+  empty: "Write something first.",
   bad_media: "This file could not be sent. Images and video only.",
-  too_large: "This file could not be sent. Images and video only.",
-  edit_window_closed: "This message can no longer be edited.",
-  delete_window_closed: "This message can no longer be deleted for everyone.",
+  too_large: "This file is too large to send. Choose a smaller image or a shorter video.",
+  edit_window_closed: "This message was sent more than an hour ago, so it can no longer be edited.",
+  delete_window_closed: "It is too late to delete this message for everyone.",
   pins_full: "Unpin a conversation to pin this one.",
-  group_full: "This group is full.",
-  not_a_lead: "Only a lead can do that.",
-  already_member: "They are already in this group.",
-  not_your_connection: "You can only invite your connections.",
+  group_full: "This group is full. Nobody else can be added.",
+  not_a_lead: "Only a lead or co-lead can do that.",
+  already_member: "They are in this group already.",
+  not_your_connection: "Only your connections can be added. Connect with them first.",
+  bad_name: "Give the group a name.",
+  no_members: "Pick at least one connection.",
+  bad_member: "One of the people you picked can't be added.",
 };
 
-/** The one line every other failure reads as (extraction 1.6, the not-sent state). */
+/** The one line send falls back to (extraction 1.6, the not-sent state; SPEC-41-E 4.2, unchanged). */
 export const NOT_SENT_LINE = "Not sent. Your message is still here.";
+
+/** The acts a wrapper performs, each with its own fallback line (SPEC-41-E 4.2, ruling 1409). */
+export type MessengerAct =
+  | "send"
+  | "edit"
+  | "delete"
+  | "pin"
+  | "react"
+  | "invite"
+  | "leave"
+  | "rename"
+  | "accept"
+  | "decline"
+  | "block"
+  | "report"
+  | "create";
+
+/** SPEC-41-E 4.2: what an act reads when the word that came back is not in REFUSAL_LINES. */
+export const FALLBACK_LINES: Record<MessengerAct, string> = {
+  send: NOT_SENT_LINE,
+  edit: "Not saved. Your edit is still in the field.",
+  delete: "Not deleted. The message is still here.",
+  pin: "The pin did not take. Try again.",
+  react: "Your reaction did not go through. Try again.",
+  invite: "The invitation was not sent. Try again.",
+  leave: "You are still in the group. Try again.",
+  rename: "The name did not change. Try again.",
+  accept: "The request was not accepted. Try again.",
+  decline: "The request was not declined. Try again.",
+  block: "The block did not take. Try again.",
+  report: "The report was not sent. Try again.",
+  create: "The group was not started. Try again.",
+};
 
 export class MessengerError extends Error {
   readonly word: RefusalWord | null;
@@ -213,16 +253,23 @@ export async function loadSettings(): Promise<MessagingSettings | null> {
 // Writes: every one a public.messenger_* wrapper.
 // ---------------------------------------------------------------------------------------------------
 
-async function call<T>(p: PromiseLike<{ data: T; error: unknown }>): Promise<T> {
+/** One wrapper call; a refusal whose word is not in the map reads the act's line (4.2). */
+async function call<T>(
+  p: PromiseLike<{ data: T; error: unknown }>,
+  act: MessengerAct = "send",
+): Promise<T> {
   const { data, error } = await p;
-  if (error) throw refusalOf(error);
+  if (error) throw refusalOf(error, FALLBACK_LINES[act]);
   return data;
 }
 
-/** A wrapper that answers a uuid; a null answer is a failure the caller reads as not sent. */
-async function callId(p: PromiseLike<{ data: string | null; error: unknown }>): Promise<string> {
-  const id = await call(p);
-  if (!id) throw new MessengerError(null, NOT_SENT_LINE);
+/** A wrapper that answers a uuid; a null answer is a failure the caller reads as the act's fallback. */
+async function callId(
+  p: PromiseLike<{ data: string | null; error: unknown }>,
+  act: MessengerAct = "send",
+): Promise<string> {
+  const id = await call(p, act);
+  if (!id) throw new MessengerError(null, FALLBACK_LINES[act]);
   return id;
 }
 
@@ -252,27 +299,33 @@ export async function send(a: SendArgs) {
 }
 
 export const edit = (message: string, body: string) =>
-  call(sb().rpc("messenger_edit", { p_message: message, p_body: body }));
+  call(sb().rpc("messenger_edit", { p_message: message, p_body: body }), "edit");
 
 /** Delete for everyone; the answer carries `storage_path` when the row had media (41-B's DELETE follows). */
 export async function deleteForEveryone(
   message: string,
 ): Promise<{ message_id: string; storage_path: string | null }> {
-  const out = (await call(sb().rpc("messenger_delete", { p_message: message }))) as {
+  const out = (await call(sb().rpc("messenger_delete", { p_message: message }), "delete")) as {
     message_id?: string;
     storage_path?: string | null;
   } | null;
   return { message_id: out?.message_id ?? message, storage_path: out?.storage_path ?? null };
 }
 
-export const react = (message: string, word: string) =>
-  call(sb().rpc("messenger_react", { p_message: message, p_reaction: word }));
-export const unreact = (message: string, word: string) =>
-  call(sb().rpc("messenger_unreact", { p_message: message, p_reaction: word }));
+/** 1577: the emoji character, with the member's skin tone modifier where its base takes one. */
+export const react = (message: string, emoji: string) =>
+  call(sb().rpc("messenger_react", { p_message: message, p_reaction: emoji }), "react");
+export const unreact = (message: string, emoji: string) =>
+  call(sb().rpc("messenger_unreact", { p_message: message, p_reaction: emoji }), "react");
+/** 1405: the member's own recent emoji, newest first, structure only. */
+export async function recentReactions(): Promise<string[]> {
+  const out = await call(sb().rpc("messenger_recent_reactions"), "react");
+  return Array.isArray(out) ? out.filter((x): x is string => typeof x === "string") : [];
+}
 export const pinMessage = (message: string) =>
-  call(sb().rpc("messenger_pin_message", { p_message: message }));
+  call(sb().rpc("messenger_pin_message", { p_message: message }), "pin");
 export const unpinMessage = (message: string) =>
-  call(sb().rpc("messenger_unpin_message", { p_message: message }));
+  call(sb().rpc("messenger_unpin_message", { p_message: message }), "pin");
 export const markUnread = (thread: string) =>
   call(sb().rpc("messenger_mark_unread", { p_thread: thread }));
 /** `duration` is a message_mute_durations value; null unmutes. */
@@ -288,33 +341,37 @@ export const archive = (thread: string) =>
 export const unarchive = (thread: string) =>
   call(sb().rpc("messenger_unarchive", { p_thread: thread }));
 export const pinThread = (thread: string) =>
-  call(sb().rpc("messenger_pin_thread", { p_thread: thread }));
+  call(sb().rpc("messenger_pin_thread", { p_thread: thread }), "pin");
 export const unpinThread = (thread: string) =>
-  call(sb().rpc("messenger_unpin_thread", { p_thread: thread }));
+  call(sb().rpc("messenger_unpin_thread", { p_thread: thread }), "pin");
 export const requestSend = (recipient: string, body: string) =>
   call(sb().rpc("messenger_request_send", { p_recipient: recipient, p_body: body }));
 /** Returns the thread the accept opened. */
 export const requestAccept = (request: string) =>
-  callId(sb().rpc("messenger_request_accept", { p_request: request }));
+  callId(sb().rpc("messenger_request_accept", { p_request: request }), "accept");
 export const requestDecline = (request: string) =>
-  call(sb().rpc("messenger_request_decline", { p_request: request }));
+  call(sb().rpc("messenger_request_decline", { p_request: request }), "decline");
 /** Returns a declined request to pending (1341); the sender is not told (157). */
 export const requestRecover = (request: string) =>
   call(sb().rpc("messenger_request_recover", { p_request: request }));
 export const requestBlock = (request: string) =>
-  call(sb().rpc("messenger_request_block", { p_request: request }));
+  call(sb().rpc("messenger_request_block", { p_request: request }), "block");
+/** 1580, 1581: the picked members are invited, not joined; answers the new thread's id. */
 export const createGroup = (name: string, memberIds: string[]) =>
-  callId(sb().rpc("messenger_thread_create_group", { p_name: name, p_member_ids: memberIds }));
+  callId(
+    sb().rpc("messenger_thread_create_group", { p_name: name, p_member_ids: memberIds }),
+    "create",
+  );
 export const invite = (thread: string, member: string) =>
-  call(sb().rpc("messenger_thread_invite", { p_thread: thread, p_member: member }));
+  call(sb().rpc("messenger_thread_invite", { p_thread: thread, p_member: member }), "invite");
 export const inviteAccept = (thread: string) =>
   call(sb().rpc("messenger_thread_invite_accept", { p_thread: thread }));
 export const inviteDecline = (thread: string) =>
   call(sb().rpc("messenger_thread_invite_decline", { p_thread: thread }));
 export const leave = (thread: string) =>
-  call(sb().rpc("messenger_thread_leave", { p_thread: thread }));
+  call(sb().rpc("messenger_thread_leave", { p_thread: thread }), "leave");
 export const remove = (thread: string, member: string) =>
-  call(sb().rpc("messenger_thread_remove", { p_thread: thread, p_member: member }));
+  call(sb().rpc("messenger_thread_remove", { p_thread: thread, p_member: member }), "invite");
 export const setHistory = (thread: string, visible: boolean) =>
   call(sb().rpc("messenger_thread_set_history", { p_thread: thread, p_visible: visible }));
 export const setRole = (
@@ -343,23 +400,27 @@ export const report = (message: string, reason: string, note: string | null) =>
         ? { p_message: message, p_reason: reason, p_note: note }
         : { p_message: message, p_reason: reason },
     ),
+    "report",
   );
 export const settingsSet = (patch: {
   receipts?: boolean | undefined;
   linkPreviews?: boolean | undefined;
   mediaNoticeSeen?: boolean | undefined;
+  /** 1576: a modifier character sets the tone, `"none"` clears it, undefined leaves it. */
+  skinTone?: string | undefined;
 }) => {
   const args: Database["public"]["Functions"]["messenger_settings_set"]["Args"] = {};
   if (patch.receipts !== undefined) args.p_receipts = patch.receipts;
   if (patch.linkPreviews !== undefined) args.p_link_previews = patch.linkPreviews;
   if (patch.mediaNoticeSeen !== undefined) args.p_media_notice_seen = patch.mediaNoticeSeen;
+  if (patch.skinTone !== undefined) args.p_skin_tone = patch.skinTone;
   return call(sb().rpc("messenger_settings_set", args));
 };
 export const diaDismiss = (key: string) => call(sb().rpc("messenger_dia_dismiss", { p_key: key }));
 
 /** The lead or a co-lead renames a group (1387); 1 to 80 characters after trimming. */
 export const threadRename = (thread: string, name: string) =>
-  call(sb().rpc("messenger_thread_rename", { p_thread: thread, p_name: name }));
+  call(sb().rpc("messenger_thread_rename", { p_thread: thread, p_name: name }), "rename");
 
 // ---------------------------------------------------------------------------------------------------
 // Cursors, debounced to one write per two seconds per thread (1351; the trigger keeps a write that
@@ -640,6 +701,40 @@ export function lastLineOf(t: ThreadView, me: string): string {
 /** The thread header's subtitle for a group (1317): `A, B, C and others`, through the one joiner. */
 export function membersLine(t: ThreadView): string {
   return joinNames(nameList(t.member_names), !!t.others);
+}
+
+/** 1592: the invited members' names, through the one joiner; empty when nobody is invited. */
+export function invitedLine(t: ThreadView): string {
+  return joinNames(nameList(t.invited_names), !!t.invited_others);
+}
+
+/**
+ * SPEC-41-E 6.4: the log's empty line for a group. Nobody active but the viewer and someone
+ * invited reads the Manage sheet's invited form; otherwise the line as built, with the invited
+ * named after a semicolon once someone has joined.
+ */
+export function groupEmptyLine(t: ThreadView): string {
+  const here = membersLine(t);
+  const invited = invitedLine(t);
+  if (!here && invited) return "Nobody has written yet. " + invited + ", invited.";
+  return (
+    "Nobody has written yet. " +
+    here +
+    (invited ? " are here; " + invited + " invited." : " are here.")
+  );
+}
+
+/** SPEC-41-E 6.4: the thread bar's subtitle for a group, `{names}, invited` until someone joins. */
+export function groupSubtitle(t: ThreadView): string {
+  const here = membersLine(t);
+  const invited = invitedLine(t);
+  return !here && invited ? invited + ", invited" : here;
+}
+
+/** 1591: the system line a rename writes, composed here from the author's first name. */
+export function systemLine(row: MessageView): string {
+  if (row.body === "renamed") return firstName(row.author_name) + " renamed the group.";
+  return "";
 }
 
 /** The ThreadRow kind for a projection row. */
