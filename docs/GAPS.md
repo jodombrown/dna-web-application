@@ -8929,3 +8929,29 @@ scrolling inside the panel at the built `listHeight` (1631); toned hands in the 
 pill's announced name (1634). Nothing of the five is built in Fix PR 10, which carries 1613's code
 half alone: the quick bar's tooltip, the grid's and Recent's accessible names, and the agreement arm
 (1621, 1628, 1629). Owner: the Code queue, behind 12C part 2.
+
+---
+
+## G260. Below expanded, Accept's confirmation toast dies with the list surface on the navigation it precedes
+
+**Severity: low. Opened 9 October 2026 by run 548 (PR #103, Fix PR 10, head `6f58d49`), the Linux
+`matrix (webkit)` job, cell 390 x 844 light, the Messenger flows arm. The number is assigned by this
+entry (ruling 638).**
+
+`onRequest` in `src/components/dna/MessengerSurface.tsx` accepts a request, says "Accepted. You can
+reply now." into the list surface's own toast state, and then opens the new thread. Below expanded
+the thread is its own route (1023, 1368): `MessagesRoute` renders the outlet in place of
+`MessengerSurface`, the surface unmounts on the navigation, and the toast it had just set goes with
+it, one frame after it rendered. The member on a phone never sees the confirmation; at expanded the
+surface stays mounted under the Pane and the toast shows for its 2,600 ms.
+
+The flows arm's check 18 reads the toast right after `waitForURL` resolves, which lands between the
+history push and React's commit of the new route, so the read usually wins the race and the check has
+passed in every run before 548. On 548's WebKit cell at 390 the commit came first: the write was
+recorded, the URL was the new thread's, and the toast text was empty. Not a crash and not this PR's
+code: the diff on `6f58d49` touches no surface.
+
+The fix is the thread's: carry the sentence across the navigation in router history state, the way
+a search result carries its message (1338, 1371), and let `MessengerThread` say it on mount; the
+arm then reads the toast on the thread route. Until then the check stays as written, because
+weakening it to "navigated" would record the lost toast as a pass. Owner: Lane E, the next Fix PR.
