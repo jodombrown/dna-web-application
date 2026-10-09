@@ -8388,6 +8388,23 @@ Connect's lens bar lacks the more-to-scroll cue; the Feed's bar does not dock on
 while docked moves the Feed's and Convene's bars; the trailing corner is square (1515, 1517). Owner:
 Lane E, Session 57's first Fix PR.
 
+**Closed by PR #101 (Fix PR 09, handoff 57-FIX-09) under rulings 1515, 1517 and 1575.**
+
+- **W84, corners.** Where the bar is a strip, the rounded track is the scroller, at its column's
+  width; the seat no longer scrolls, and its four corners hold.
+- **W85, the cue.** A fade in the track's ground marks each end with a seat out of view. It is built
+  once in `LensBar`, for every lens bar. Both are proven by the `lens-strip` arm at 360, 390, 430
+  and the 820 fallback, in both themes.
+- **W87, a docked lens change.** `holdLensDock` now holds the docking point reachable with a
+  measured hold that lasts while docked, and the frame sampler in `runLensSeat` at 390 holds on all
+  three surfaces under both seedings. On the code before this PR the sampler did not fail in either
+  engine on the mock, so the hold was not shown to be the device's cause.
+- **W86, the Feed docking.** Not reproduced on the mock. The step table, stepping 0 to 400 and back
+  by 8 at 390 and 820, matches Connect's row for row in Chromium and Linux WebKit on the code before
+  this PR (matrix run 87). No fix is made at an unproven cause, and the standing check is in
+  `runLensSeat`. The founder's iPhone walk after merge (358) is the check for W86 and W87; a failure
+  there reopens this entry with the device's reading.
+
 ---
 
 ## G226. S54-6: each Design project's records lagged Chat's ratifications
@@ -8693,3 +8710,73 @@ fresh load of a thread holding the sent video still stalls WebKit is what the co
 third check reads, on the Linux matrix and the macOS gate: the field visible within 15 s, and the
 message carrying a `<video>` on an object URL with controls and no `blob:` `<img>`. That reading is
 on PR #100's final head, not in this entry, because this entry rides in the commit the run tests.
+
+---
+
+## G251. The Messenger's During-bound search timed out on WebKit once and its cause is unread
+
+**Severity: low. Opened 8 October 2026 under ruling 1589, recorded by Fix PR 09 (handoff 57-FIX-09
+item 5). The number is assigned by this entry (ruling 638).**
+
+Run 528 attempt 1, on `3259dbb` (PR #100's head), `matrix (webkit)`, job 113466162700. Arm
+`webkit-messenger-live`, step 12: `FAIL [no crash] webkit-messenger-live flow TimeoutError:
+locator.waitFor: Timeout 15000ms exceeded.` while waiting for `locator('[data-search-result]').first()
+to be visible`. The page showed `no-results`. The check behind it, `search with a During date bound
+opens the thread at the message (1338, 1347)`, and five more after it (the media notice, the image in
+the bubble, the voice note, the delete for everyone, nothing in browser storage) read `UNPROVEN (228):
+the flow ended before this check ran`. Ruling 292 flagged the extra flow check, 19 against a declared
+18. Not a crash: 0 behind G5, no core written. The re-run passed.
+
+The path is `messenger_search`. The step searches for a word the arm sent earlier, bounded During
+today, with today's date taken from the runner's clock. It is not #100's: that PR changed the
+content-security policy, the composer's measurement, received media rendering and `useMessageMedia`,
+and none of the search path. The arm passed on Linux WebKit on run 523 and on Chromium on run 528.
+
+Owed: the cause read. Among the candidates is the runner's date against the database's date
+boundary: a During bound built from the runner's local day can name a day the database, reading
+UTC or the member's zone, does not hold the message in. Also owed: a wait whose timeout is the check's
+own failure rather than the flow's catch-all. Recorded only; not fixed here.
+
+---
+
+## G252. The admin Settings arm reads the sessions and read-log panels before their rows load
+
+**Severity: low. Opened 8 October 2026 under ruling 1589, recorded by Fix PR 09 (handoff 57-FIX-09
+item 5). The number is assigned by this entry (ruling 638).**
+
+Run 528 attempt 1, on `3259dbb` (PR #100's head), `admin-arms`, job 113465879017. Arm
+`chromium-1280x800-dark-admin settings analyst`, two checks:
+
+- `sessions mark this device, Active now, and carry no aria-sort`: the panel read `Active sessions`,
+  its heading, and nothing else.
+- `the read log reads Settings, Your read log under Today, newest first`: the panel read its heading
+  and intro line only (`Your read log What you have read in the admin and when, newest first. Opening
+  this log is itself logged.`).
+
+The path is `tests/settings.cjs`, which reads both panels as soon as Settings renders, with no wait for
+their rows: a load-timing race in the arm, not the admin. It is not #100's: the admin bundle imports
+none of the files `3259dbb` changed. The arm passed on `0d6e050` (run 526), and the re-run passed.
+
+Owed: a wait on each panel's rows before the read, whose timeout is the check's failure. Recorded
+only; not fixed here.
+
+---
+
+## G253. The onboarding flow arm timed out on /welcome on WebKit once, outside the diff it ran on
+
+**Severity: low. Opened 8 October 2026, observed by Fix PR 09 (handoff 57-FIX-09) on its enforcing
+run. The number is assigned by this entry (ruling 638).**
+
+Run 533 attempt 1, on `4ccd900` (PR #101's head), `matrix (webkit)`, job 113552642930, deployment
+`ccdef5d9`. Arm `webkit-390x844-light-onboarding-flows`: `flow arm, first pass, completed` failed with
+`TimeoutError: page.waitForSelector: Timeout 15000ms exceeded`. It was waiting for
+`[data-testid="onboarding-who"]` to be visible, and for the navigation to `/password` to finish, on
+`/welcome`. Ruling 292 then read 16 of 41 checks emitted. Not a crash: 0 behind G5. The same arm
+passed in Chromium on the same run.
+
+It is not #101's. That PR changes `LensBar`, `LensSeat` and `holdLensDock` in
+`src/lib/shell-scroll.tsx`. `/welcome` renders `WhoScreen` from `OnboardingSurface` outside the shell,
+and nothing on that path imports any of the three.
+
+Owed: the cause read, starting with whether the `/password` to `/welcome` navigation settles before
+the arm waits for the screen. Recorded only; not changed here.

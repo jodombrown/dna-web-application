@@ -44,7 +44,7 @@
 // "evenly distributed"): each seat starts at its own word's width and the column's remaining width
 // is shared equally across the seats, so the track spans the column. It prices the sum against the
 // column the bar sits in (its parent's content box), and where the sum exceeds it the bar renders as
-// the sideways strip, `content` at `max-content` for its host to scroll; it never drops a label
+// the sideways strip, `content` in a track that scrolls inside its column (1515); it never drops a label
 // (1465), so `justify` never switches to icon-first. The lens seat renders `justify` at medium and
 // expanded and `content` in the compact strip and Discovery's lens row; the header's `compact` bar
 // passes `fill`. A word reserves its 700 width (`[data-lens-word]`), so under `content` and
@@ -71,6 +71,9 @@
 // and is latched for the visit (ruling 405), where the compile re-latches on every `collapsed`, so
 // its 12 below the track sits inside the collapsing box where the compile has a 6 gap; its size is
 // the compile's 13 (G82).
+// Fix PR 09 (G225): where the bar is a strip, the rounded track itself is the scroller at its
+// column's width and each seat keeps its word's width (1515), and a fade in the track's ground marks
+// each end with a seat out of view (1575). Both are listed in docs/strand-ports/v1790724894917128.md.
 // Rulings 997 and 999: `Lens.icon` stays optional and `compact` requiring a glyph on every lens is a
 // rule its caller keeps. Ruling 1000: `dense` is gone, and `AppHeader`'s bell reads the tier.
 import {
@@ -97,6 +100,8 @@ const ICON_GAP = 8;
 const TRACK = 2 * (TRACK_PAD + TRACK_BORDER);
 /** Correction 25 §4: the gap between the track and a trailing seat, priced by the fit test. */
 const TRAIL_GAP = 8;
+/** Ruling 1575: the fade's length at each end of a scrolling track, inside its padding and a seat. */
+const FADE = 24;
 
 /** Exported so a reader can price a bar without re-deriving it from the style objects. */
 export const LENS_BAR_METRICS = {
@@ -110,6 +115,7 @@ export const LENS_BAR_METRICS = {
   ICON_GAP,
   TRACK,
   TRAIL_GAP,
+  FADE,
 } as const;
 
 /**
@@ -164,7 +170,8 @@ export type LensBarProps<Id extends string = string> = {
    * and what the header's compact bar renders. `content` lets each seat hug its own label; it is the
    * compile's default and is named here so the default can never change a page silently. `justify`
    * (1504) starts each seat at its own label and shares the column's remaining width equally, or
-   * falls back to `content` as a strip its host scrolls when the labels do not fit.
+   * falls back to `content` as a strip, the track scrolling in its column (1515), when the labels do not
+   * fit.
    */
   width?: "content" | "fill" | "justify" | undefined;
   /** Renders each seat's glyph beside its word in labels mode (item 51). Priced by the fit test. */
@@ -199,6 +206,7 @@ export function LensBar<Id extends string = string>({
   const wrap = useRef<HTMLDivElement>(null);
   const probe = useRef<HTMLDivElement>(null);
   const trail = useRef<HTMLDivElement>(null);
+  const track = useRef<HTMLDivElement>(null);
   const [showScope, setShowScope] = useState(true);
   // The compile's own initial state: the bar assumes it fits and corrects on its first measurement,
   // so a zero measurement under the guard below keeps labels rather than latching icon-first.
@@ -206,6 +214,9 @@ export function LensBar<Id extends string = string>({
   // 1504: whether the labels fit the column under `justify`; when they do not, the strip.
   const [spread, setSpread] = useState(true);
   const [hov, setHov] = useState<string | null>(null);
+  // Ruling 1575: whether a seat is out of view at each end of the track, read off the track's own
+  // scroll geometry, never off a lens count or a width.
+  const [edge, setEdge] = useState({ start: false, end: false });
   // Item 53 (ruling 62): `title` is a pointer affordance — it never opens on touch and it duplicates
   // the accessible name — so it renders for pointer only. `aria-label` is unconditional. Strand's
   // `useInputMode` watches `(pointer: coarse)` and falls back to `pointer`; `useMode` already does
@@ -307,6 +318,40 @@ export function LensBar<Id extends string = string>({
       cleanups.forEach((f) => f());
     };
   }, [measures, justify, key]);
+  // Ruling 1575: each side's fade follows the track's scroll geometry, re-read on scroll, when the
+  // track or a seat resizes (a rotation, a seat's word settling), when the fonts settle and on every
+  // lens change. A track that does not scroll has nothing hidden on either side.
+  useLayoutEffect(() => {
+    const el = track.current;
+    if (!el) return;
+    let alive = true;
+    const read = () => {
+      if (!alive) return;
+      const max = el.scrollWidth - el.clientWidth;
+      const start = max > 1 && el.scrollLeft > 1;
+      const end = max > 1 && el.scrollLeft < max - 1;
+      setEdge((p) => (p.start === start && p.end === end ? p : { start, end }));
+    };
+    read();
+    el.addEventListener("scroll", read, { passive: true });
+    const cleanups: (() => void)[] = [() => el.removeEventListener("scroll", read)];
+    if (typeof ResizeObserver !== "undefined") {
+      const ro = new ResizeObserver(read);
+      ro.observe(el);
+      Array.from(el.children).forEach((c) => ro.observe(c));
+      cleanups.push(() => ro.disconnect());
+    }
+    const fonts = typeof document !== "undefined" ? document.fonts : undefined;
+    if (fonts) {
+      void fonts.ready.then(read);
+      fonts.addEventListener("loadingdone", read);
+      cleanups.push(() => fonts.removeEventListener("loadingdone", read));
+    }
+    return () => {
+      alive = false;
+      cleanups.forEach((f) => f());
+    };
+  }, [key, value, fit, spread]);
   const iconFirst = !!compact || (canSwitch && !fit);
   const justified = justify && spread;
   const stretch = width === "fill" || !!compact || justified;
@@ -327,106 +372,155 @@ export function LensBar<Id extends string = string>({
   const tr = (p: string[]) =>
     rm ? "none" : p.map((x) => x + " var(--dur-default) var(--ease)").join(", ");
   const hue = c && c !== "brand" ? "var(--c-" + c + ")" : "var(--ink)";
+  // Ruling 1575: the fade at one end of the track, in the track's own ground, inside its rounded
+  // shape. It takes no pointer, so the seat under it stays tappable, and it carries no name.
+  const fade = (side: "start" | "end") => (
+    <div
+      aria-hidden="true"
+      data-lens-fade={side}
+      data-on={edge[side] ? "1" : "0"}
+      style={{
+        position: "absolute",
+        top: 0,
+        bottom: 0,
+        [side === "start" ? "left" : "right"]: 0,
+        width: FADE,
+        zIndex: 2,
+        pointerEvents: "none",
+        borderRadius:
+          side === "start"
+            ? "var(--radius-m) 0 0 var(--radius-m)"
+            : "0 var(--radius-m) var(--radius-m) 0",
+        background:
+          "linear-gradient(to " +
+          (side === "start" ? "right" : "left") +
+          ", var(--bg-sunken), transparent)",
+        opacity: edge[side] ? 1 : 0,
+        transition: rm ? "none" : "opacity var(--dur-default) var(--ease)",
+      }}
+    />
+  );
+  // Ruling 1515: the rounded track is the scroller. It is never wider than its column (the root is
+  // the column's width), so where the seats overflow it they scroll inside its shape and its four
+  // corners hold. The frame around it carries the track's place in the row and the two fades.
   const tablist = (
     <div
-      role="tablist"
-      aria-label={label}
-      data-lensbar={iconFirst ? "icon-first" : "labels"}
-      data-lensbar-width={width}
-      data-lensbar-spread={justify ? (spread ? "1" : "0") : undefined}
+      data-lens-track=""
       style={{
         position: "relative",
         display: "flex",
-        alignItems: "center",
         alignSelf: stretch ? "stretch" : "flex-start",
         // 25 §4: beside a trailing seat a stretched track takes what the seat leaves and a content
         // track can shrink and scroll; without one these are exactly as before.
         width: stretch ? (trailing ? undefined : "100%") : undefined,
         flex: trailing ? (stretch ? "1 1 0" : "0 1 auto") : undefined,
-        minWidth: trailing ? 0 : undefined,
+        minWidth: 0,
         maxWidth: "100%",
-        // 4 + 44 + 4 = 52 (918, item 35). The height is the seats' own floor plus this padding;
-        // nothing here sets a track height, so the seat is what the track is made of.
-        padding: TRACK_PAD,
-        gap: GAP,
-        background: "var(--bg-sunken)",
-        borderRadius: "var(--radius-m)",
-        overflowX: "auto",
-        boxSizing: "border-box",
       }}
     >
-      {lenses.map((l) => {
-        const on = l.id === value;
-        const dis = !!l.disabled;
-        const { ico, txt } = resolveSeat(iconFirst, on, !!icons, !!l.icon);
-        const tap = () => {
-          if (dis) return;
-          if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(8);
-          if (on) {
-            setShowScope((v) => !v);
-            return;
-          }
-          onChange?.(l.id);
-        };
-        return (
-          <button
-            key={l.id}
-            role="tab"
-            aria-selected={on}
-            aria-disabled={dis || undefined}
-            tabIndex={dis ? -1 : undefined}
-            aria-label={l.scope ? l.label + ": " + l.scope : l.label}
-            title={!txt && pointer ? l.label : undefined}
-            type="button"
-            data-lens={l.id}
-            onClick={tap}
-            onMouseEnter={() => setHov(l.id)}
-            onMouseLeave={() => setHov(null)}
-            style={{
-              all: "unset",
-              boxSizing: "border-box",
-              position: "relative",
-              zIndex: 1,
-              cursor: dis ? "default" : "pointer",
-              // Ruling 952 (G48) and item 46: every seat takes the same share, so selection is not
-              // a layout input. Equal flex is what `fill` means; under `content` each seat hugs its
-              // own label at its 700 width, which every in-page bar renders since Fix PR 08 (1465).
-              // 1504: under `justify` each seat's base is its own word (`auto`) and the free width is
-              // grown into equally, so the spare per seat is one value.
-              flex: stretch ? (justified ? "1 1 auto" : "1 1 0") : undefined,
-              // Item 54a, rulings 905 and 498: the floor is 44 in every mode, `compact` included.
-              // It was `--target-min` (24) in the header slot and unset in labels mode.
-              minWidth: SEAT,
-              minHeight: SEAT,
-              padding: "0 " + barPad + "px",
-              borderRadius: "var(--radius-badge)",
-              // The active tab is its own indicator (ruling 488): the chip is the tab's own
-              // background, painted on the first frame, never measured and never missing.
-              background: on ? "var(--surface)" : "transparent",
-              boxShadow: on ? "var(--shadow-1)" : "none",
-              // Item 42: the placeholder border is load-bearing, because the disabled seat draws a
-              // dashed one and the seat must not change width when a flag flips. `box-sizing:
-              // border-box` is what keeps it at 44 rather than 46 under `all: unset` (item 43).
-              border: dis
-                ? SEAT_BORDER + "px dashed var(--line-strong)"
-                : SEAT_BORDER + "px solid transparent",
-              fontFamily: "var(--font-sans)",
-              fontSize: 15,
-              fontWeight: on ? 700 : 500,
-              whiteSpace: "nowrap",
-              display: "inline-flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: ICON_GAP,
-              color: dis ? "var(--ink-4)" : on || hov === l.id ? "var(--ink)" : "var(--ink-3)",
-              transition: tr(["color", "background"]),
-            }}
-          >
-            {ico && l.icon && <Icon name={l.icon} size={ICON} style={on ? { color: hue } : {}} />}
-            {txt && <span data-lens-word={l.label}>{l.label}</span>}
-          </button>
-        );
-      })}
+      <div
+        ref={track}
+        role="tablist"
+        aria-label={label}
+        data-lensbar={iconFirst ? "icon-first" : "labels"}
+        data-lensbar-width={width}
+        data-lensbar-spread={justify ? (spread ? "1" : "0") : undefined}
+        style={{
+          position: "relative",
+          display: "flex",
+          alignItems: "center",
+          flex: "1 1 auto",
+          minWidth: 0,
+          maxWidth: "100%",
+          // 4 + 44 + 4 = 52 (918, item 35). The height is the seats' own floor plus this padding;
+          // nothing here sets a track height, so the seat is what the track is made of.
+          padding: TRACK_PAD,
+          gap: GAP,
+          background: "var(--bg-sunken)",
+          borderRadius: "var(--radius-m)",
+          overflowX: "auto",
+          overflowY: "hidden",
+          scrollbarWidth: "none",
+          overscrollBehaviorX: "contain",
+          boxSizing: "border-box",
+        }}
+      >
+        {lenses.map((l) => {
+          const on = l.id === value;
+          const dis = !!l.disabled;
+          const { ico, txt } = resolveSeat(iconFirst, on, !!icons, !!l.icon);
+          const tap = () => {
+            if (dis) return;
+            if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(8);
+            if (on) {
+              setShowScope((v) => !v);
+              return;
+            }
+            onChange?.(l.id);
+          };
+          return (
+            <button
+              key={l.id}
+              role="tab"
+              aria-selected={on}
+              aria-disabled={dis || undefined}
+              tabIndex={dis ? -1 : undefined}
+              aria-label={l.scope ? l.label + ": " + l.scope : l.label}
+              title={!txt && pointer ? l.label : undefined}
+              type="button"
+              data-lens={l.id}
+              onClick={tap}
+              onMouseEnter={() => setHov(l.id)}
+              onMouseLeave={() => setHov(null)}
+              style={{
+                all: "unset",
+                boxSizing: "border-box",
+                position: "relative",
+                zIndex: 1,
+                cursor: dis ? "default" : "pointer",
+                // Ruling 952 (G48) and item 46: every seat takes the same share, so selection is not
+                // a layout input. Equal flex is what `fill` means; under `content` each seat hugs its
+                // own label at its 700 width, which every in-page bar renders since Fix PR 08 (1465).
+                // 1504: under `justify` each seat's base is its own word (`auto`) and the free width is
+                // grown into equally, so the spare per seat is one value.
+                // 1515: a seat that is its own word never shrinks under it; the track scrolls instead.
+                flex: stretch ? (justified ? "1 1 auto" : "1 1 0") : "none",
+                // Item 54a, rulings 905 and 498: the floor is 44 in every mode, `compact` included.
+                // It was `--target-min` (24) in the header slot and unset in labels mode.
+                minWidth: SEAT,
+                minHeight: SEAT,
+                padding: "0 " + barPad + "px",
+                borderRadius: "var(--radius-badge)",
+                // The active tab is its own indicator (ruling 488): the chip is the tab's own
+                // background, painted on the first frame, never measured and never missing.
+                background: on ? "var(--surface)" : "transparent",
+                boxShadow: on ? "var(--shadow-1)" : "none",
+                // Item 42: the placeholder border is load-bearing, because the disabled seat draws a
+                // dashed one and the seat must not change width when a flag flips. `box-sizing:
+                // border-box` is what keeps it at 44 rather than 46 under `all: unset` (item 43).
+                border: dis
+                  ? SEAT_BORDER + "px dashed var(--line-strong)"
+                  : SEAT_BORDER + "px solid transparent",
+                fontFamily: "var(--font-sans)",
+                fontSize: 15,
+                fontWeight: on ? 700 : 500,
+                whiteSpace: "nowrap",
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: ICON_GAP,
+                color: dis ? "var(--ink-4)" : on || hov === l.id ? "var(--ink)" : "var(--ink-3)",
+                transition: tr(["color", "background"]),
+              }}
+            >
+              {ico && l.icon && <Icon name={l.icon} size={ICON} style={on ? { color: hue } : {}} />}
+              {txt && <span data-lens-word={l.label}>{l.label}</span>}
+            </button>
+          );
+        })}
+      </div>
+      {fade("start")}
+      {fade("end")}
     </div>
   );
   return (
@@ -442,8 +536,6 @@ export function LensBar<Id extends string = string>({
         maxWidth: "100%",
         minWidth: 0,
         ...style,
-        // 1504: the labels do not fit the column, so the bar is the strip its host scrolls.
-        ...(justify && !spread ? { width: "max-content", maxWidth: "none" } : null),
       }}
     >
       <style>
@@ -452,6 +544,8 @@ export function LensBar<Id extends string = string>({
           // under `content` selection is not a layout input either. Not in textContent, and the
           // tab's aria-label is its accessible name.
           ".strand-lens [data-lens-word]{display:inline-flex;flex-direction:column}" +
+          // 1515: the track scrolls with no bar of its own; the fades are its cue (1575).
+          ".strand-lens [role=tablist]::-webkit-scrollbar{display:none}" +
           ".strand-lens [data-lens-word]::after{content:attr(data-lens-word);font-weight:700;" +
           "height:0;overflow:hidden;visibility:hidden;pointer-events:none;user-select:none}"}
       </style>
