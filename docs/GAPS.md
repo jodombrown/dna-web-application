@@ -8405,6 +8405,11 @@ Lane E, Session 57's first Fix PR.
   `runLensSeat`. The founder's iPhone walk after merge (358) is the check for W86 and W87; a failure
   there reopens this entry with the device's reading.
 
+**Confirmed on device, 8 October 2026, 19:45 PDT.** The founder walked W84 to W87 on an iPhone in
+Safari on Feed, Connect and Convene after #101 merged and reported them passed (ruling 1597). W86
+passed with no code aimed at it, so its cause is still unknown; if it returns, a new finding starts
+from `runLensSeat`'s step table.
+
 ---
 
 ## G226. S54-6: each Design project's records lagged Chat's ratifications
