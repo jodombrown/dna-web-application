@@ -1560,7 +1560,11 @@ async function runMessengerLive(browserType, bname) {
         LIVE_CHECKS[5],
         "the quick bar is empty: 20261008150000 to 20261008150700 are not on the project yet",
       );
-      await page.keyboard.press("Escape");
+      // React again toggles the bar off. Not Escape: at expanded the thread sits in a Pane whose
+      // guard closes on Escape (correction 23), which is how run 536 lost the thread here.
+      await mine.hover();
+      await mine.locator('[data-cluster] button:has-text("React")').click();
+      await page.waitForTimeout(300);
     } else {
       await page.locator('[data-picker] button[aria-label="Folded hands"]').click();
       await page.waitForTimeout(1500);
