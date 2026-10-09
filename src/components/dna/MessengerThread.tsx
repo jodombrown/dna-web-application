@@ -719,7 +719,7 @@ export function MessengerThread({ member, threadId }: { member: Member; threadId
       patch({ refusal: "bad_media" });
       return;
     }
-    // H56-MOV item 2 (G254): a video over the ceiling is refused here, before an object URL exists,
+    // H56-MOV item 2 (G257): a video over the ceiling is refused here, before an object URL exists,
     // so neither the thumbnail's <img> nor the measuring <video> is handed bytes the send would refuse
     // anyway. Runs 534 and 538 of the macOS gate read a 100 MB draft in those two elements holding
     // WebKit's main thread past the arm's 30 s Send click; the send path's own ceiling stays.
@@ -1369,7 +1369,7 @@ export function MessengerThread({ member, threadId }: { member: Member; threadId
           draft.media
             ? {
                 kind: draft.media.kind,
-                // G254: a video draft's tile carries the play glyph and no src. MediaBlock's video
+                // G257: a video draft's tile carries the play glyph and no src. MediaBlock's video
                 // kind draws its src in an <img>, and WebKit decodes a video handed to an <img>: on
                 // runs 534 and 539 of the macOS gate the 9 KB fixture in that <img> held the main
                 // thread past 30 s while the measuring <video> below, the arm's own probe of the

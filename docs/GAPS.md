@@ -8839,7 +8839,7 @@ no dependency and fetches `emojibase-data@latest`): the self-hosted set is `17.0
 
 ---
 
-## G254. The composer-video arm could kill the macOS gate on a slow Send
+## G257. The composer-video arm could kill the macOS gate on a slow Send
 
 **Severity: moderate. Opened 8 October 2026 by run 534 (PR #102's first gate run, head `bf1997b`).
 The number is assigned by this entry (ruling 638).**
@@ -8861,3 +8861,20 @@ attached `.mov` in the thumbnail's `<img>` stalls WebKit's main thread for that 
 something on `bf1997b` lengthened it. The next gate run on the branch, which now records the arm's
 state at send, is what answers it; if it is the decode, the composer's video thumbnail should stop
 handing a video's object URL to an `<img>` (the same change G250 made for the log).
+
+**Amended 9 October 2026 by runs 538 and 539 (PR #102, heads `f4117b5` and `80a3535`): the open
+half is answered, and it is the decode.** Run 538's gate read the arm's over-the-ceiling step
+hanging on its Send click for the full 30 s with no crash, the failstate screenshot timing out at
+5 s after it: the 100 MB draft had been handed to both the thumbnail's `<img>` and the measuring
+`<video>`, and the main thread was still on it 37 s later. Run 535 crossed the same stretch in 39 s,
+run 534 lost it one step later in the same web process, so whether the click landed was timing.
+`80a3535` refuses a video over `MESSAGE_MEDIA_MAX_BYTES` at the attach, before an object URL exists,
+and the arm's step reads that refusal with no Send to press. Run 539, with that in place, then hung
+on the real send: the 9 KB fixture alone, the measuring `<video>` at readyState 0 (networkState 2)
+when Send was pressed, no POST in 30 s, the screenshot timing out again. The arm's own probe loads
+the same blob in an identical attached `<video>` every run, in the same web process; the one element
+the probe does not have is the thumbnail, `MediaBlock kind="video"` drawing its `src` in an `<img>`.
+`5770fbb` renders the video draft's tile with no `src` (the play glyph on the sunken frame), so the
+measuring `<video>` is the one element holding the bytes. Run 540 (`5770fbb`): the gate 322 of 322,
+the arm's four checks passed. Closed by PR #102; the register keeps the mechanism because it is the
+one G250 named for the log and the same one again.

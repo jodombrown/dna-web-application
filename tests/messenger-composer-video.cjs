@@ -216,7 +216,7 @@ async function runMessengerComposerVideo(browserType, bname) {
     // fixture's bytes, then zeros to one byte past it. First because run 526 (macOS WebKit) could not
     // reload the thread once it held the sent video message: the field never became visible in 15 s
     // and a screenshot timed out, which G250 records. The composer takes the too_large state at the
-    // attach, before an object URL exists (G254: on runs 534 and 538 the draft's bytes in the
+    // attach, before an object URL exists (G257: on runs 534 and 538 the draft's bytes in the
     // thumbnail's <img> and the measuring <video> held WebKit's main thread past a 30 s Send click),
     // so there is no Send to press: the draft stays empty, the refusal line is up, no measuring
     // element is mounted, and nothing is posted.
@@ -315,7 +315,7 @@ async function runMessengerComposerVideo(browserType, bname) {
         buffer: fixture,
       });
       await dismissNotice();
-      // The wait's rejection is handled the moment it is made (G254): on run 534 the Send click
+      // The wait's rejection is handled the moment it is made (G257): on run 534 the Send click
       // took over 30 s to become actionable on macOS WebKit, so the timeout rejected while the click
       // was still pending, nothing had caught it, and Node killed the gate before the arms after this
       // one ran. A slow Send now records this check failed, with the composer's state and the
