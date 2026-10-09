@@ -1,4 +1,22 @@
 // Generated from the canonical Supabase project (dgspjevjoblujcoljvkn) with the Supabase MCP
+// generate_typescript_types tool on handoff 56-41E's branch (#102, the Messenger's second pass),
+// rebased on main at 7669045 (the merge of #101), after Chat applied 20261008150000 to
+// 20261008150700 (150000, 150300, 150400, 150500 and 150600 through execute_sql; 150100, 150200 and
+// 150700 by the founder's SQL Editor paste under 1528, 150200 because the guard refused its two
+// `drop function` statements), each ledger row read back at its committed file's raw md5; 106 rows
+// in schema_migrations, head 20261008150700_b14e_retire_reaction_kinds. Taken from the project
+// whole, never merged by hand; it replaces the shapes 56-41E carried by hand until the apply.
+//
+// What 56-41E changes here (1576, 1577, 1590 to 1593): the table `message_reaction_emoji` in place
+// of `message_reaction_kinds`, which is gone with its catalogue row; `message_reactions` keyed by
+// (message_id, member_id) with no relationship to a kinds table; `member_messaging_settings.reaction_skin_tone`;
+// `messenger_settings_set`'s `p_skin_tone`; `messenger_recent_reactions`; the threads view's
+// `invited_names` and `invited_others`; and the messages view's `media_width` and `media_height`.
+// The private `message_react`, `messaging_settings_set`, `messenger_media_size` and the group
+// creation's guards are absent by design, as every private function is.
+//
+// Before 56-41E:
+// Generated from the canonical Supabase project (dgspjevjoblujcoljvkn) with the Supabase MCP
 // generate_typescript_types tool on handoff 55-A's branch (#99, the notification foundation), after
 // Chat applied 20261008120000 to 20261008120500 (File A through execute_sql, B to F by SQL Editor
 // paste), each ledger row's md5 equal to its committed file; 98 rows in schema_migrations, head
@@ -83,13 +101,6 @@
 // removes what the window is holding. Every version is recorded on the project, its md5 matches its
 // file byte for byte, and `tests/migration-drift.cjs` reads it, so the generator returns it. Every
 // object the generator returns is explained by a migration in this tree, so nothing is left out.
-//
-// Handoff 56-41E (1576, 1577, 1590 to 1593): until the regeneration after Chat applies
-// 20261008150000 to 20261008150700, this file carries by hand what those migrations add, as 45-D
-// and 55-A did: `message_reaction_emoji` in place of `message_reaction_kinds`, the dropped
-// `message_reactions_reaction_fkey`, `member_messaging_settings.reaction_skin_tone`,
-// `messenger_settings_set`'s `p_skin_tone`, `messenger_recent_reactions`, the threads view's
-// `invited_names` and `invited_others`, and the messages view's `media_width` and `media_height`.
 //
 // What 41-A changes here (1330 to 1353, 1368 to 1373): the tables `threads`, `thread_members`,
 // `messages`, `message_reactions`, `message_mentions`, `message_requests`, `message_reports`,
