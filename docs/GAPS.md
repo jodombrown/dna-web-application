@@ -8883,3 +8883,33 @@ the probe does not have is the thumbnail, `MediaBlock kind="video"` drawing its 
 measuring `<video>` is the one element holding the bytes. Run 540 (`5770fbb`): the gate 322 of 322,
 the arm's four checks passed. Closed by PR #102; the register keeps the mechanism because it is the
 one G250 named for the log and the same one again.
+
+---
+
+## G258. The Members order's tier is computed inline, and a cohort of a few thousand admitted members moves it to a materialized key
+
+**Severity: low. Opened 9 October 2026 by Fix PR 10 (handoff 59-FIX-10 item 2, ruling 1483). The
+number is assigned by this entry (ruling 638).**
+
+`20261009120000` orders the Members lens by `private.members_order_tier(viewer, member)`, computed
+inline for every member the lens admits, then name, then id, with the cursor as `{tier}|{name}|{id}`
+and the keyset on the same triple. The tier is five existence checks in order: a pending request
+from the member to the viewer, `private.shares_anchor`, a `public.second_degree` row, and a shared
+active corridor or an attribute overlap under `private.admit_section`'s three gates. Each is an
+index probe or a short join, but the sort cannot stop early: every admitted member's tier is
+computed before the first page is cut, because no index orders members by a value that depends on
+the viewer. The cost of one page is therefore linear in the admitted cohort, roughly fifteen probes
+per member, and it is paid again on every page and every filter change.
+
+That holds at the invite cohort (hundreds of members, a page in tens of milliseconds). It stops
+holding at roughly five thousand admitted members per viewer, where a page would cost on the order
+of a second on the canonical project's compute, and the lens is opened on every Connect visit. At
+that threshold the ordering key 1483 names at Moderate confidence is built: a per-viewer
+materialized tier, refreshed by the write paths that change it (`send_introduction`,
+`respond_to_request`, `withdraw_request`, the Space role and attestation writers, the corridor and
+profile section writers) in the same transaction, under the ruling 1002 line that a derived row is
+written by its source's write path and never by a trigger. `second_degree` already has that shape.
+The measured plan on the founder's account is recorded in Fix PR 10's PR body by Chat at apply
+(`explain analyze` through the arm's connection), and that number is what moves this entry's
+severity. Owner: the Code queue, on the cohort's growth, not before.
+

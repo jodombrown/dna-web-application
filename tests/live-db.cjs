@@ -77,6 +77,12 @@
 //                                   introduction leaves its recipient one connection_request row and
 //                                   a withdrawal none; the two dots answer booleans; vocabularies()
 //                                   serves notification_kinds; the purge leaves unread rows.
+//   Fix PR 10 (1483, 1621, 1613;      the Members order: with owner-test's request pending the
+//   handoff 59-FIX-10)                recipient's lens lists them first, withdrawn they fall back to
+//                                   the tier the other rules give them and the lens reads in ruled
+//                                   order, and a member cannot call the tier; the reaction
+//                                   vocabulary agrees with the self-hosted emojibase file outside
+//                                   the quick eight, which hold positions 1 to 8.
 //
 // Nothing here is secret: the connection string arrives from the runner and never from this file.
 const crypto = require("crypto");
@@ -418,6 +424,12 @@ async function runLiveDbArms({ record, skip }) {
       "Handoff 55-A (1318): vocabularies() serves notification_kinds, connection_request among them with renders true and its destination in words",
     notifPurge:
       "Handoff 55-A (1324, N12): private.purge_read_notifications deletes a row read 200 days ago and leaves an unread row",
+    members:
+      "Fix PR 10 item 2 (1483, 241, 270): with owner-test's request pending, member-test's Members lens lists owner-test first; withdrawn, owner-test's tier is no longer 0 and the lens reads in (tier, name, id) order, so the assertion discriminates",
+    membersTier:
+      "Fix PR 10 item 2 (1483, 212): private.members_order_tier is revoked from authenticated and answers 0 for the recipient of a pending request and not 0 once it is withdrawn",
+    emojiAgree:
+      "Fix PR 10 item 3 (1621, 1613): every message_reaction_emoji row outside the quick eight carries emojibase 17.0.0's English label capitalised as src/lib/emoji.ts capitalises it, and the eight quick rows hold positions 1 to 8",
   };
   // G143: a block that opens with a presence probe carries every arm it holds in `names`, under one key
   // prefix, so a probe that fails reports each of them UNPROVEN and the job's total does not fall with
@@ -6469,6 +6481,190 @@ async function runLiveDbArms({ record, skip }) {
         });
       }
     }
+    // ------------------------------------------------------------------------------------------
+    // Fix PR 10 item 2 (handoff 59-FIX-10; ruling 1483 under 241 and 270): the Members order. One
+    // presence probe for the block, so before Chat's apply of 20261009120000 both arms report
+    // UNPROVEN (G143, 228). The fixture is a request from owner-test to member-test through
+    // send_introduction, the one writer (415), inside the transaction that rolls it back.
+    // ------------------------------------------------------------------------------------------
+    {
+      const mfmt = (r) => (r.ok ? "answered" : r.code + " " + r.message);
+      await actAsSelf(client);
+      const present = await client.query(
+        "select to_regprocedure('private.members_order_tier(uuid, uuid)') is not null and exists (select 1 from supabase_migrations.schema_migrations where version = '20261009120000') as ok",
+      );
+      if (!present.rows[0] || present.rows[0].ok !== true) {
+        for (const n of armsOf("members"))
+          skip(
+            n,
+            "20261009120000 is not on the project yet (Chat applies Fix PR 10's migration before its enforcing run)",
+          );
+      } else {
+        /** member-test's Members lens, as the projection answers it: the ids in order, or the error. */
+        const lensIds = async () => {
+          await actAs(client, member.id);
+          const r = await attempt(
+            client,
+            "select public.connect_cards('members', '{}'::jsonb, null, 200) as out",
+          );
+          const items = r.ok && r.rows[0] && r.rows[0].out ? r.rows[0].out.items || [] : [];
+          return { ok: r.ok, ids: items.map((i) => i.id), err: r.ok ? null : mfmt(r) };
+        };
+        /** The same ids in the order the rules give them, asked of the database rather than sorted here. */
+        const ruled = async (ids) => {
+          await actAsSelf(client);
+          const r = await attempt(
+            client,
+            "select m.id from unnest($1::uuid[]) u(id) join public.members m on m.id = u.id order by private.members_order_tier($2::uuid, m.id), m.name, m.id",
+            [ids, member.id],
+          );
+          return r.ok ? r.rows.map((x) => x.id) : null;
+        };
+        const tierOf = async () => {
+          await actAsSelf(client);
+          const r = await attempt(
+            client,
+            "select private.members_order_tier($1::uuid, $2::uuid) as t",
+            [member.id, owner.id],
+          );
+          return r.ok ? r.rows[0].t : null;
+        };
+        await inTransaction(client, async () => {
+          await actAs(client, owner.id);
+          const intro = await attempt(client, "select public.send_introduction($1, $2) as id", [
+            member.id,
+            "Fix PR 10 live arm. Rolled back by the same run.",
+          ]);
+          if (!intro.ok) {
+            const why = /not available/.test(intro.message || "")
+              ? "the two test accounts are not strangers (a request is pending, they are connected, or one blocks the other), so send_introduction refuses by design"
+              : mfmt(intro);
+            for (const n of armsOf("members")) skip(n, why);
+            return;
+          }
+          const pending = await lensIds();
+          const pendingTier = await tierOf();
+          // The arm as authenticated: the tier is internal and a member cannot call it (212).
+          await actAs(client, member.id);
+          const direct = await attempt(
+            client,
+            "select private.members_order_tier($1::uuid, $2::uuid) as t",
+            [member.id, owner.id],
+          );
+          await actAs(client, owner.id);
+          const withdrawn = await attempt(client, "select public.withdraw_request($1)", [
+            member.id,
+          ]);
+          const after = await lensIds();
+          const afterTier = await tierOf();
+          const expected = after.ok && after.ids.length ? await ruled(after.ids) : null;
+          if (!pending.ok || !pending.ids.includes(owner.id)) {
+            skip(
+              names.members,
+              pending.err
+                ? "the Members lens could not be read: " + pending.err
+                : "owner-test is not in member-test's Members lens at all, so their place in it proves nothing",
+            );
+          } else {
+            record(
+              names.members,
+              pending.ids[0] === owner.id &&
+                withdrawn.ok &&
+                after.ok &&
+                after.ids.includes(owner.id) &&
+                expected !== null &&
+                JSON.stringify(after.ids) === JSON.stringify(expected),
+              "pending: owner-test at index " +
+                pending.ids.indexOf(owner.id) +
+                " of " +
+                pending.ids.length +
+                "; withdraw " +
+                mfmt(withdrawn) +
+                "; withdrawn: owner-test at index " +
+                after.ids.indexOf(owner.id) +
+                ", list in ruled order " +
+                (expected !== null && JSON.stringify(after.ids) === JSON.stringify(expected)),
+            );
+          }
+          record(
+            names.membersTier,
+            !direct.ok &&
+              direct.code === "42501" &&
+              pendingTier === 0 &&
+              afterTier !== null &&
+              afterTier !== 0,
+            "as authenticated " +
+              mfmt(direct) +
+              "; pending tier " +
+              pendingTier +
+              "; withdrawn tier " +
+              afterTier,
+          );
+        });
+      }
+    }
+    // ------------------------------------------------------------------------------------------
+    // Fix PR 10 item 3 (rulings 1621, 1613): the vocabulary and the self-hosted data agree. The seed
+    // (20261008150000) keyed every row by the character as emojibase writes it, variation selector
+    // included, and capitalised the first letter of the English label; the eight quick rows carry
+    // E9's names instead and are checked by position alone.
+    // ------------------------------------------------------------------------------------------
+    await inTransaction(client, async () => {
+      let file;
+      try {
+        file = JSON.parse(
+          fs.readFileSync(
+            path.join(__dirname, "..", "public", "emojibase", "17.0.0", "en", "data.json"),
+            "utf8",
+          ),
+        );
+      } catch (e) {
+        skip(
+          names.emojiAgree,
+          "public/emojibase/17.0.0/en/data.json could not be read: " + e.message,
+        );
+        return;
+      }
+      const capitalise = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+      const labels = new Map();
+      for (const e of file)
+        if (typeof e.group === "number") labels.set(e.emoji, capitalise(e.label));
+      await actAs(client, owner.id);
+      const rows = await attempt(
+        client,
+        "select emoji, label, quick_position from public.message_reaction_emoji order by quick_position nulls last, emoji",
+      );
+      if (!rows.ok) {
+        skip(
+          names.emojiAgree,
+          "message_reaction_emoji could not be read: " + rows.code + " " + rows.message,
+        );
+        return;
+      }
+      const quick = rows.rows.filter((r) => r.quick_position !== null).map((r) => r.quick_position);
+      const wrong = [];
+      let compared = 0;
+      for (const r of rows.rows) {
+        if (r.quick_position !== null) continue;
+        compared++;
+        const want = labels.get(r.emoji);
+        if (want !== r.label)
+          wrong.push(
+            r.emoji + " " + JSON.stringify(r.label) + " vs " + JSON.stringify(want ?? null),
+          );
+      }
+      record(
+        names.emojiAgree,
+        compared > 0 &&
+          wrong.length === 0 &&
+          JSON.stringify(quick.slice().sort((a, b) => a - b)) === "[1,2,3,4,5,6,7,8]",
+        "compared " +
+          compared +
+          ", quick positions " +
+          JSON.stringify(quick) +
+          (wrong.length ? "; " + wrong.slice(0, 5).join("; ") : ""),
+      );
+    });
   } finally {
     await client.end().catch(() => {});
   }
