@@ -719,6 +719,14 @@ export function MessengerThread({ member, threadId }: { member: Member; threadId
       patch({ refusal: "bad_media" });
       return;
     }
+    // H56-MOV item 2 (G254): a video over the ceiling is refused here, before an object URL exists,
+    // so neither the thumbnail's <img> nor the measuring <video> is handed bytes the send would refuse
+    // anyway. Runs 534 and 538 of the macOS gate read a 100 MB draft in those two elements holding
+    // WebKit's main thread past the arm's 30 s Send click; the send path's own ceiling stays.
+    if (kind === "video" && file.size > MESSAGE_MEDIA_MAX_BYTES) {
+      patch({ refusal: "too_large" });
+      return;
+    }
     if (draft.media) URL.revokeObjectURL(draft.media.url);
     const url = URL.createObjectURL(file);
     if (kind === "video") measure(url);
