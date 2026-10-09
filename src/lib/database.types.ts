@@ -1,4 +1,17 @@
 // Generated from the canonical Supabase project (dgspjevjoblujcoljvkn) with the Supabase MCP
+// generate_typescript_types tool on Fix PR 10's branch (#103, handoff 59-FIX-10 and addendum 1),
+// on main at c264d09 (the merge of #102), after Chat applied 20261009120000, 20261009120100 and
+// 20261009120200 through execute_sql at about 14:20 PDT on 9 October 2026, each ledger row read
+// back at its committed file's md5; 109 rows in schema_migrations, head
+// 20261009120200_fix10_invited_by_name. Taken from the project whole, never merged by hand.
+//
+// What Fix PR 10 changes here: `messenger_threads_view` gains `invited_by_name` (1638), appended
+// last. 20261009120000 and 20261009120100 change function bodies and one vocabulary row and reach no
+// signature, so nothing else moves. `export type Views` below is restored by hand after every
+// regeneration, because the generator drops it (CLAUDE.md).
+//
+// Before Fix PR 10:
+// Generated from the canonical Supabase project (dgspjevjoblujcoljvkn) with the Supabase MCP
 // generate_typescript_types tool on handoff 56-41E's branch (#102, the Messenger's second pass),
 // rebased on main at 7669045 (the merge of #101), after Chat applied 20261008150000 to
 // 20261008150700 (150000, 150300, 150400, 150500 and 150600 through execute_sql; 150100, 150200 and
@@ -133,7 +146,6 @@
 //
 // The private functions the surfaces read are absent by design: the private schema is not exposed by
 // PostgREST, so the generator does not see it and no surface may reach it.
-
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
 
 export type Database = {
@@ -4094,6 +4106,7 @@ export type Database = {
           headline: string | null;
           history_visible_to_new: boolean | null;
           invited: boolean | null;
+          invited_by_name: string | null;
           invited_names: Json | null;
           invited_others: boolean | null;
           kind: string | null;
