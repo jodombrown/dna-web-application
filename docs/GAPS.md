@@ -8913,3 +8913,19 @@ The measured plan on the founder's account is recorded in Fix PR 10's PR body by
 (`explain analyze` through the arm's connection), and that number is what moves this entry's
 severity. Owner: the Code queue, on the cohort's growth, not before.
 
+
+---
+
+## G259. The reaction picker's name line, the press and hold, the scrolling list, toned hands in the grid and the pill's announced name build with B14-Messenger-v4
+
+**Severity: low. Opened 9 October 2026 by Fix PR 10 (handoff 59-FIX-10 item 4, rulings 1613 and
+1635). The number is assigned by this entry (ruling 638).**
+
+The picker's name line under the pointer or finger (1613) is held on its build handoff. The page
+that draws it, `B14-Messenger-v4`, is approved under 62 (1635, with 1629's correction to four names
+before its SPEC). Five things build together from it, after 12C part 2 (1620): the name line; the
+press and hold on touch (1632), with the one threshold in `src/lib/long-press.ts` (1633); the list
+scrolling inside the panel at the built `listHeight` (1631); toned hands in the grid (1630); and the
+pill's announced name (1634). Nothing of the five is built in Fix PR 10, which carries 1613's code
+half alone: the quick bar's tooltip, the grid's and Recent's accessible names, and the agreement arm
+(1621, 1628, 1629). Owner: the Code queue, behind 12C part 2.
