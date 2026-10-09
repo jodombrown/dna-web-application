@@ -1369,11 +1369,17 @@ export function MessengerThread({ member, threadId }: { member: Member; threadId
           draft.media
             ? {
                 kind: draft.media.kind,
+                // G254: a video draft's tile carries the play glyph and no src. MediaBlock's video
+                // kind draws its src in an <img>, and WebKit decodes a video handed to an <img>: on
+                // runs 534 and 539 of the macOS gate the 9 KB fixture in that <img> held the main
+                // thread past 30 s while the measuring <video> below, the arm's own probe of the
+                // same blob in an identical element, loads its metadata every run. The same change
+                // G250 made for the log.
                 thumbnail:
                   draft.media.kind === "image" ? (
                     <MediaBlock kind="image" src={draft.media.url} alt="" ratio="1/1" />
                   ) : (
-                    <MediaBlock kind="video" src={draft.media.url} ratio="1/1" />
+                    <MediaBlock kind="video" ratio="1/1" />
                   ),
               }
             : null
