@@ -428,6 +428,8 @@ async function runLiveDbArms({ record, skip }) {
       "Fix PR 10 item 2 (1483, 241, 270): with owner-test's request pending, member-test's Members lens lists owner-test first; withdrawn, owner-test's tier is no longer 0 and the lens reads in (tier, name, id) order, so the assertion discriminates",
     membersTier:
       "Fix PR 10 item 2 (1483, 212): private.members_order_tier is revoked from authenticated and answers 0 for the recipient of a pending request and not 0 once it is withdrawn",
+    membersPaging:
+      "Fix PR 10 W94 (1483, 241, 270): paging member-test's Members lens two at a time finds every member the one-page read finds, each exactly once, so no page boundary skips a member",
     emojiAgree:
       "Fix PR 10 item 3 (1621, 1613): every message_reaction_emoji row outside the quick eight carries emojibase 17.0.0's English label capitalised as src/lib/emoji.ts capitalises it, and the eight quick rows hold positions 1 to 8",
   };
@@ -6600,6 +6602,80 @@ async function runLiveDbArms({ record, skip }) {
               "; withdrawn tier " +
               afterTier,
           );
+        });
+
+        // W94: the cursor is the last emitted row's key (20261009120300). Pages of two cross a
+        // boundary every other member; the one-page read at the cap is the control. A cursor taken
+        // from the row at limit + 1 loses a member at every boundary, so the two reads differ.
+        await inTransaction(client, async () => {
+          await actAsSelf(client);
+          const applied = await client.query(
+            "select exists (select 1 from supabase_migrations.schema_migrations where version = '20261009120300') as ok",
+          );
+          if (!applied.rows[0] || applied.rows[0].ok !== true) {
+            skip(
+              names.membersPaging,
+              "20261009120300 is not on the project yet (Chat applies Fix PR 10's cursor migration before its enforcing run)",
+            );
+            return;
+          }
+          const pageAll = async (limit) => {
+            await actAs(client, member.id);
+            const ids = [];
+            let cursor = null;
+            let pages = 0;
+            let err = null;
+            for (;;) {
+              const r = await attempt(
+                client,
+                "select public.connect_cards('members', '{}'::jsonb, $1, $2) as out",
+                [cursor, limit],
+              );
+              if (!r.ok) {
+                err = mfmt(r);
+                break;
+              }
+              pages++;
+              const out = (r.rows[0] && r.rows[0].out) || {};
+              for (const i of out.items || []) ids.push(i.id);
+              cursor = typeof out.next_cursor === "string" ? out.next_cursor : null;
+              if (cursor === null || pages > 200) break;
+            }
+            return { ids, pages, err };
+          };
+          const two = await pageAll(2);
+          const forty = await pageAll(40);
+          const sorted = (a) => JSON.stringify(a.slice().sort());
+          const dupes = two.ids.filter((id, i) => two.ids.indexOf(id) !== i);
+          if (two.err || forty.err) {
+            skip(
+              names.membersPaging,
+              "the Members lens could not be read: " + (two.err || forty.err),
+            );
+          } else if (forty.ids.length < 3) {
+            skip(
+              names.membersPaging,
+              "member-test's lens admits " +
+                forty.ids.length +
+                " member(s), so pages of two cross no boundary and the cursor is not exercised",
+            );
+          } else {
+            record(
+              names.membersPaging,
+              dupes.length === 0 && sorted(two.ids) === sorted(forty.ids),
+              "two at a time: " +
+                two.ids.length +
+                " ids over " +
+                two.pages +
+                " page(s), " +
+                dupes.length +
+                " duplicate(s); forty at a time: " +
+                forty.ids.length +
+                " ids over " +
+                forty.pages +
+                " page(s)",
+            );
+          }
         });
       }
     }
