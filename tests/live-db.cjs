@@ -425,7 +425,7 @@ async function runLiveDbArms({ record, skip }) {
     notifPurge:
       "Handoff 55-A (1324, N12): private.purge_read_notifications deletes a row read 200 days ago and leaves an unread row",
     members:
-      "Fix PR 10 item 2 (1483, 241, 270): with owner-test's request pending, member-test's Members lens lists owner-test first; withdrawn, owner-test's tier is no longer 0 and the lens reads in (tier, name, id) order, so the assertion discriminates",
+      "Fix PR 10 item 2 (1483, 241, 270): with owner-test's request pending, member-test's Members lens holds owner-test at tier 0 with no member of a later tier before them; withdrawn, owner-test falls back and both reads are in (tier, name, id) order, so the assertion discriminates",
     membersTier:
       "Fix PR 10 item 2 (1483, 212): private.members_order_tier is revoked from authenticated and answers 0 for the recipient of a pending request and not 0 once it is withdrawn",
     membersPaging:
@@ -6502,34 +6502,52 @@ async function runLiveDbArms({ record, skip }) {
             "20261009120000 is not on the project yet (Chat applies Fix PR 10's migration before its enforcing run)",
           );
       } else {
-        /** member-test's Members lens, as the projection answers it: the ids in order, or the error. */
-        const lensIds = async () => {
+        /** member-test's Members lens, as the projection answers it: the rows in order, or the error. */
+        const lensRows = async () => {
           await actAs(client, member.id);
           const r = await attempt(
             client,
             "select public.connect_cards('members', '{}'::jsonb, null, 200) as out",
           );
           const items = r.ok && r.rows[0] && r.rows[0].out ? r.rows[0].out.items || [] : [];
-          return { ok: r.ok, ids: items.map((i) => i.id), err: r.ok ? null : mfmt(r) };
+          return {
+            ok: r.ok,
+            ids: items.map((i) => i.id),
+            names: items.map((i) => i.name),
+            err: r.ok ? null : mfmt(r),
+          };
         };
-        /** The same ids in the order the rules give them, asked of the database rather than sorted here. */
-        const ruled = async (ids) => {
+        /**
+         * The lens's own rows in the order the rules give them, asked of the database rather than
+         * sorted here, over the ids and names the lens returned: live_arms reads only the two test
+         * accounts in public.members, so the names come from the projection, never from a join.
+         */
+        const ruled = async (rows) => {
           await actAsSelf(client);
           const r = await attempt(
             client,
-            "select m.id from unnest($1::uuid[]) u(id) join public.members m on m.id = u.id order by private.members_order_tier($2::uuid, m.id), m.name, m.id",
-            [ids, member.id],
+            "select u.id from unnest($1::uuid[], $2::text[]) u(id, name) order by private.members_order_tier($3::uuid, u.id), u.name, u.id",
+            [rows.ids, rows.names, member.id],
           );
           return r.ok ? r.rows.map((x) => x.id) : null;
         };
-        const tierOf = async () => {
+        /** Each listed member's tier for member-test, keyed by id. */
+        const tiersOf = async (ids) => {
           await actAsSelf(client);
           const r = await attempt(
             client,
-            "select private.members_order_tier($1::uuid, $2::uuid) as t",
-            [member.id, owner.id],
+            "select u.id, private.members_order_tier($2::uuid, u.id) as t from unnest($1::uuid[]) u(id)",
+            [ids, member.id],
           );
-          return r.ok ? r.rows[0].t : null;
+          return r.ok ? new Map(r.rows.map((x) => [x.id, x.t])) : null;
+        };
+        const tierOf = async () => {
+          const m = await tiersOf([owner.id]);
+          return m ? (m.get(owner.id) ?? null) : null;
+        };
+        const inRuledOrder = async (rows) => {
+          const expected = rows.ok && rows.ids.length ? await ruled(rows) : null;
+          return expected !== null && JSON.stringify(rows.ids) === JSON.stringify(expected);
         };
         await inTransaction(client, async () => {
           await actAs(client, owner.id);
@@ -6544,8 +6562,17 @@ async function runLiveDbArms({ record, skip }) {
             for (const n of armsOf("members")) skip(n, why);
             return;
           }
-          const pending = await lensIds();
-          const pendingTier = await tierOf();
+          const pending = await lensRows();
+          const pendingOrdered = await inRuledOrder(pending);
+          const pendingTiers = pending.ok ? await tiersOf(pending.ids) : null;
+          const pendingTier = pendingTiers ? (pendingTiers.get(owner.id) ?? null) : null;
+          // Another member with a request waiting on member-test may precede owner-test by name;
+          // what 1483 fixes is that nobody of a later tier does.
+          const ownerAt = pending.ids.indexOf(owner.id);
+          const before = ownerAt > 0 ? pending.ids.slice(0, ownerAt) : [];
+          const laterBefore = pendingTiers
+            ? before.filter((id) => pendingTiers.get(id) !== 0)
+            : before;
           // The arm as authenticated: the tier is internal and a member cannot call it (212).
           await actAs(client, member.id);
           const direct = await attempt(
@@ -6557,10 +6584,10 @@ async function runLiveDbArms({ record, skip }) {
           const withdrawn = await attempt(client, "select public.withdraw_request($1)", [
             member.id,
           ]);
-          const after = await lensIds();
+          const after = await lensRows();
+          const afterOrdered = await inRuledOrder(after);
           const afterTier = await tierOf();
-          const expected = after.ok && after.ids.length ? await ruled(after.ids) : null;
-          if (!pending.ok || !pending.ids.includes(owner.id)) {
+          if (!pending.ok || ownerAt < 0) {
             skip(
               names.members,
               pending.err
@@ -6570,22 +6597,30 @@ async function runLiveDbArms({ record, skip }) {
           } else {
             record(
               names.members,
-              pending.ids[0] === owner.id &&
+              pendingTier === 0 &&
+                laterBefore.length === 0 &&
+                pendingOrdered &&
                 withdrawn.ok &&
                 after.ok &&
                 after.ids.includes(owner.id) &&
-                expected !== null &&
-                JSON.stringify(after.ids) === JSON.stringify(expected),
+                afterOrdered &&
+                after.ids.indexOf(owner.id) >= ownerAt,
               "pending: owner-test at index " +
-                pending.ids.indexOf(owner.id) +
+                ownerAt +
                 " of " +
                 pending.ids.length +
+                " with " +
+                before.length +
+                " tier-0 member(s) before them and " +
+                laterBefore.length +
+                " of a later tier, list in ruled order " +
+                pendingOrdered +
                 "; withdraw " +
                 mfmt(withdrawn) +
                 "; withdrawn: owner-test at index " +
                 after.ids.indexOf(owner.id) +
                 ", list in ruled order " +
-                (expected !== null && JSON.stringify(after.ids) === JSON.stringify(expected)),
+                afterOrdered,
             );
           }
           record(
