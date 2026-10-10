@@ -62,6 +62,10 @@ jobs:
       # destination, and the kinds whose destination has no surface are named rather than exempted.
       - name: Every notification kind resolves to a destination (rulings 485, 547)
         run: node tests/notifications.cjs
+      # W91 (Fix PR 10 item 6): the Messenger's avatar cache signs again past its margin and after a
+      # dropped entry, read from the module with its imports stubbed. Static.
+      - name: The avatar cache re-signs past its margin (W91)
+        run: node tests/avatar-cache.cjs
       # Ruling 466, Fix PR 03 item 10: no migration file is amended after it is applied. Keyed on the
       # version and not the path, so the G17 baseline PR's directory move passes without editing it.
       - name: No applied migration file was amended (ruling 466)

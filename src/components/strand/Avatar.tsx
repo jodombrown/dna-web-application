@@ -2,7 +2,12 @@
 // ratified with correction 30 under 1153) `size` also takes a CSS length, with `radius` and
 // `initialSize` optional. A number keeps its radius band and its rounded 40% initials, so every
 // numeric-size caller renders as before. Behavior otherwise unchanged.
-import type { CSSProperties } from "react";
+//
+// Divergence (Fix PR 10 item 6, W91; recorded in docs/strand-ports/v1790724894917128.md): a photo
+// that fails to load falls back to the initials, which is what "Photo when present, initials
+// otherwise" already says; the compile renders the <img> with no error path, and Safari painted its
+// broken-image glyph for an expired signed URL. A new src gets a fresh try.
+import { useEffect, useState, type CSSProperties } from "react";
 
 export type AvatarProps = {
   name?: string;
@@ -26,6 +31,10 @@ export function Avatar({ name = "", src, size = 40, radius, initialSize, style }
     .slice(0, 2)
     .map((s) => (s[0] ?? "").toUpperCase())
     .join("");
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    setFailed(false);
+  }, [src]);
   const num = typeof size === "number";
   const r =
     radius != null ? radius : num ? (size >= 64 ? 14 : size >= 40 ? 10 : 8) : "var(--radius-m)";
@@ -35,10 +44,11 @@ export function Avatar({ name = "", src, size = 40, radius, initialSize, style }
       : num
         ? Math.round(size * 0.4)
         : "round(calc(" + size + " * 0.4), 1px)";
-  return src ? (
+  return src && !failed ? (
     <img
       src={src}
       alt={name}
+      onError={() => setFailed(true)}
       width={num ? size : undefined}
       height={num ? size : undefined}
       style={{

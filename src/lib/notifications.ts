@@ -30,6 +30,8 @@ export type NotificationView = NotificationRow & {
   c?: C | undefined;
   /** The kind's destination in words (490), from its vocabulary row. */
   destination?: string | undefined;
+  /** Fix PR 10 item 8 (1637): the sentence verbatim where the app owns a kind's copy. */
+  text?: string | undefined;
 };
 
 /**
@@ -77,7 +79,10 @@ export async function loadNotifications(memberId: string, limit = 50): Promise<N
   // under its policy, and its event's title; the verb comes from the event_roles vocabulary (1018),
   // never from a literal here (ruling 194: a read that fails leaves the row's verb absent).
   const partyIds = ids("event_party");
-  const [spaces, events, opps, actors, roles, parties] = await Promise.all([
+  // Fix PR 10 item 8 (1637): a thread's name through messenger_threads_view, the Messenger's one
+  // read projection, never threads directly; a thread the viewer no longer reads answers no row.
+  const threadIds = ids("thread");
+  const [spaces, events, opps, actors, roles, parties, threads] = await Promise.all([
     spaceIds.length
       ? sb.from("spaces").select("id,title").in("id", spaceIds)
       : Promise.resolve({ data: [] as { id: string; title: string }[] }),
@@ -100,7 +105,15 @@ export async function loadNotifications(memberId: string, limit = 50): Promise<N
     partyIds.length
       ? sb.from("event_parties").select("id,event_id,role").in("id", partyIds)
       : Promise.resolve({ data: [] as { id: string; event_id: string; role: string }[] }),
+    threadIds.length
+      ? sb.from("messenger_threads_view").select("thread_id,name").in("thread_id", threadIds)
+      : Promise.resolve({ data: [] as { thread_id: string | null; name: string | null }[] }),
   ]);
+  const thread = new Map(
+    (threads.data ?? [])
+      .filter((t) => !!t.thread_id && !!t.name)
+      .map((t) => [t.thread_id as string, t.name as string]),
+  );
   const party = new Map((parties.data ?? []).map((p) => [p.id, p]));
   const partyEventIds = [...new Set((parties.data ?? []).map((p) => p.event_id))].filter(
     (eid) => !ids("event").includes(eid),
@@ -118,7 +131,7 @@ export async function loadNotifications(memberId: string, limit = 50): Promise<N
   const actorHandle = new Map((actors.data ?? []).map((a) => [a.id, a.handle]));
   const role = new Map((roles.data ?? []).map((r) => [r.space_id, r.role]));
 
-  return rows.map((r): NotificationView => {
+  const views = rows.map((r): NotificationView => {
     const oid = r.object_id ?? "";
     const partyRow = r.object_kind === "event_party" ? party.get(oid) : undefined;
     const objectName =
@@ -130,7 +143,9 @@ export async function loadNotifications(memberId: string, limit = 50): Promise<N
             ? opp.get(oid)
             : partyRow
               ? event.get(partyRow.event_id)?.title
-              : undefined;
+              : r.object_kind === "thread"
+                ? thread.get(oid)
+                : undefined;
     // A Space actor has a title; a member actor is named from the members core row (Brief 3), which
     // every signed-in member may read. The request row itself is never read by the sender (ruling 157).
     const actor =
@@ -146,8 +161,14 @@ export async function loadNotifications(memberId: string, limit = 50): Promise<N
     }
     const kindRow = kinds.get(r.kind);
     const c = kindRow?.c_from_object ? r.c_category : kindRow?.c;
+    // 1637: the row reads, verbatim, `{name} invited you to {group}.`
+    const text =
+      r.kind === "thread_invitation" && actor && objectName
+        ? actor + " invited you to " + objectName + "."
+        : undefined;
     return {
       ...r,
+      text,
       c: isC(c) ? c : undefined,
       destination: kindRow?.destination ?? undefined,
       actor: actor || "A member",
@@ -158,6 +179,9 @@ export async function loadNotifications(memberId: string, limit = 50): Promise<N
       eventId: partyRow?.event_id,
     };
   });
+  // 194: an invitation whose thread no longer reads (declined, removed) renders nothing rather
+  // than a blank name.
+  return views.filter((v) => v.kind !== "thread_invitation" || !!v.text);
 }
 
 /**

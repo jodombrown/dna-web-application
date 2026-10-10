@@ -163,14 +163,14 @@ async function messengerStorage(page) {
 
 const LAYOUT_CHECKS = [
   "the Messages control sits after the bell and before the avatar on the header's one row (1334; 360 compact placement)",
-  "the control is named New messages with the 8px dot while an unmuted, unarchived thread is unread, and carries aria-current on /messages (82, 1344)",
+  "the control is named New messages with the 8px dot while an unmuted, unarchived thread is unread, and carries aria-current on /messages at expanded (82, 1344, 1624)",
   "at expanded the header's side tracks are 200 with the control passed, and below expanded the row has no grid (5.1)",
   "the list reads Messages, Mark all read, the search field and the filters toggle (1.3)",
   "Requests renders the caps line, DIA's line with Dismiss and two cards, each with Accept, Decline and Block, and Declined behind one control (1.4, 1341, 1350)",
   "seven live rows render, the muted row reads Muted, the pinned rows read Pinned, and Archived sits behind one control (1.3, 1339, 1348)",
   "no row, card or line on the list carries a numeral outside a time (69, 82, guardrail 3)",
-  "at expanded the Pane beside the list shows its empty state; below it the list keeps the dock (1047, 1368)",
-  "opening a row reaches /messages/{thread}: ringed in the Pane at expanded, its own route on Pane's bar with Back to Messages, the subtitle and no dock below (1023, 1368, 1369)",
+  "at expanded the Pane beside the list shows its empty state; below it the list keeps the dock, carries no app header, and its title row and search sit on the top inset in one sticky block (1047, 1368, 1624)",
+  "opening a row reaches /messages/{thread}: ringed in the Pane at expanded, its own route on Pane's bar with Back to Messages, the subtitle, no dock and no app header below (1023, 1368, 1369, 1624)",
   "the thread reads day separators, a quote, a reaction as glyph name and name, edited, a deleted line, and ticks named Sent or Delivered with receipts off (1336, 1343, 1345, 1577)",
   "the composer sits inside the viewport with Attach, the field and the mic (1.6, 1368)",
   "a group thread reads its members and a reaction's names as names then one and others, the pinned strip and the collapsed blocked line (1317, 1349, 1577, 1371)",
@@ -191,7 +191,10 @@ async function runMessengerLayout(browserType, bname, vp, theme) {
     browser = opened.browser;
     const { page, db, errors } = opened;
     await signInMock(page);
-    await openMessages(page);
+    // Ruling 1624: below expanded /messages carries no app header, so the header's row is read on
+    // the Feed, where the sign-in landed; at expanded it is read on /messages, where it is current.
+    if (expanded) await openMessages(page);
+    else await page.waitForSelector("[data-app-header]", { timeout: 10000 });
 
     const head = await page.evaluate(() => {
       const r = (s) => document.querySelector(s)?.getBoundingClientRect() || null;
@@ -230,7 +233,7 @@ async function runMessengerLayout(browserType, bname, vp, theme) {
       head.label === "New messages" &&
         head.dot &&
         head.dotSize === "8px" &&
-        head.current === "page",
+        (expanded ? head.current === "page" : head.current !== "page"),
       JSON.stringify(head),
     );
     check(
@@ -240,6 +243,7 @@ async function runMessengerLayout(browserType, bname, vp, theme) {
         : head.display !== "grid",
       head.display + " " + head.grid,
     );
+    if (!expanded) await openMessages(page);
 
     const list = await page.evaluate(() => {
       const t = (s) => document.querySelector(s)?.textContent?.trim() || "";
@@ -275,6 +279,19 @@ async function runMessengerLayout(browserType, bname, vp, theme) {
           .join("\n"),
         pane: document.querySelector("[data-pane-open]")?.textContent || "",
         dock: !!document.querySelector('[data-pulse="dock"]'),
+        header: !!document.querySelector("[data-app-header]"),
+        chrome: (() => {
+          const c = document.querySelector("[data-list-chrome]");
+          if (!c) return null;
+          const r = c.getBoundingClientRect();
+          const h1 = c.querySelector("h1");
+          return {
+            top: Math.round(r.top),
+            sticky: getComputedStyle(c).position,
+            h1: !!h1,
+            search: !!c.querySelector('[data-testid="message-search"]'),
+          };
+        })(),
       };
     });
     check(
@@ -317,9 +334,19 @@ async function runMessengerLayout(browserType, bname, vp, theme) {
       LAYOUT_CHECKS[7],
       expanded
         ? list.pane.includes("Open a conversation to read it here.") &&
-            list.pane.includes("The list stays where it is.")
-        : list.dock && !list.pane,
-      expanded ? list.pane.slice(0, 120) : "dock " + list.dock,
+            list.pane.includes("The list stays where it is.") &&
+            list.header
+        : list.dock &&
+            !list.pane &&
+            !list.header &&
+            !!list.chrome &&
+            list.chrome.top === 0 &&
+            list.chrome.sticky === "sticky" &&
+            list.chrome.h1 &&
+            list.chrome.search,
+      expanded
+        ? list.pane.slice(0, 120) + " header " + list.header
+        : JSON.stringify({ dock: list.dock, header: list.header, chrome: list.chrome }),
     );
     const listOverflow = await M.measureWidth(page);
 
@@ -341,6 +368,7 @@ async function runMessengerLayout(browserType, bname, vp, theme) {
         back: !!back,
         sub,
         dock: !!document.querySelector('[data-pulse="dock"]'),
+        header: !!document.querySelector("[data-app-header]"),
         days: [...document.querySelectorAll("[data-day-separator]")].map((d) =>
           d.getAttribute("aria-label"),
         ),
@@ -364,13 +392,14 @@ async function runMessengerLayout(browserType, bname, vp, theme) {
     check(
       LAYOUT_CHECKS[8],
       expanded
-        ? th.selected && th.sub.includes("Cold chain logistics, Tema")
-        : th.back && th.sub.includes("Cold chain logistics, Tema") && !th.dock,
+        ? th.selected && th.sub.includes("Cold chain logistics, Tema") && th.header
+        : th.back && th.sub.includes("Cold chain logistics, Tema") && !th.dock && !th.header,
       JSON.stringify({
         selected: th.selected,
         back: th.back,
         sub: th.sub.slice(0, 60),
         dock: th.dock,
+        header: th.header,
       }),
     );
     check(
@@ -994,6 +1023,12 @@ const REACT_CHECKS = [
   "Rename writes one system row rendered as {first name} renamed the group., and a search for the word returns nothing (1591)",
   "a received portrait video's player is taller than wide with the row's own ratio, object-fit contain and no label beside it (1593, 1583)",
   "a video the route refuses reads This video could not load., and Try again refetches and remounts the player (1574)",
+  "every quick glyph is named E9's name, and on pointer resting on one shows a tooltip reading the same name, none on touch (1613, 1621, 1146)",
+  "a grid cell for a quick glyph reads E9's name and a non-quick cell keeps the library's, and a toned Recent cell reads its name with the tone words (1621, 1628, 1629)",
+  "a group's empty line reads is here for one name with no others and are here for two (1592, W90)",
+  "an avatar whose signed URL answers 400 renders the initials with no img (W91)",
+  "the Messages dot lights for an invited thread with nothing unread, and the bell row reads the invitation and opens the group (1623, 1637, 1335)",
+  "an invited thread's row reads Invited by the inviter and its log reads the inviter's line; after Accept neither, and the dot clears (1638)",
   "nothing the Messenger holds is in localStorage or sessionStorage (1351)",
   "no page error (316)",
 ];
@@ -1208,6 +1243,262 @@ async function runMessengerReactions(browserType, bname, vp, theme) {
       JSON.stringify({ picked, pickWrite: pickWrite?.body, recentFirst, recent: Mx.recent }),
     );
 
+    // 12. The quick bar's names and tooltips (Fix PR 10 item 3).
+    await openBar();
+    const quickNames = await page
+      .locator("[data-picker] button[data-quick]")
+      .evaluateAll((els) => els.map((e) => e.getAttribute("aria-label")));
+    let tipText = null;
+    if (!touch) {
+      await page.locator('[data-picker] button[aria-label="Clapping"]').hover();
+      await page.waitForTimeout(900);
+      tipText = await page
+        .locator("[data-tooltip]")
+        .first()
+        .textContent()
+        .catch(() => null);
+      await page.mouse.move(2, 2);
+      await page.waitForTimeout(300);
+    }
+    const tipCount = await page.locator("[data-tooltip]").count();
+    check(
+      REACT_CHECKS[12],
+      JSON.stringify(quickNames) === JSON.stringify(QUICK_LABELS) &&
+        (touch ? tipCount === 0 : tipText === "Clapping" && tipCount === 0),
+      JSON.stringify({ quickNames, tipText, tipCount, touch }),
+    );
+
+    // 13. The grid's and Recent's names (1621, 1628, 1629).
+    await openPicker();
+    await page.locator(pickerRoot + " [data-emoji-search]").fill("party");
+    await page.waitForTimeout(700);
+    const partyCells = await page
+      .locator(pickerRoot + ' [data-emoji-viewport] button:not([aria-label=""])')
+      .evaluateAll((els) => els.map((e) => e.getAttribute("aria-label")));
+    await page.locator(pickerRoot + " [data-emoji-search]").fill("");
+    await page.waitForTimeout(500);
+    const recentNames = await page
+      .locator(pickerRoot + " [data-recent] [data-recent-emoji]")
+      .evaluateAll((els) =>
+        els.map((e) => [e.getAttribute("data-recent-emoji"), e.getAttribute("aria-label")]),
+      );
+    const tonedRecent = recentNames.find(([e]) => e === "\u{1F64F}\u{1F3FD}");
+    await closePicker();
+    check(
+      REACT_CHECKS[13],
+      partyCells.includes("Party") &&
+        partyCells.includes("Partying face") &&
+        !!tonedRecent &&
+        tonedRecent[1] === "Folded hands: medium skin tone" &&
+        recentNames.every(([e, n]) => !!n && n !== e),
+      JSON.stringify({ partyCells, recentNames }),
+    );
+
+    // 14. The empty line's verb (1592, W90): one name with no others, then two.
+    const emptyGroup = (id, names) => ({
+      thread_id: id,
+      kind: "community_group",
+      name: "Verb check " + names.length,
+      headline: null,
+      avatar_path: null,
+      other_member_id: null,
+      member_names: names,
+      others: false,
+      last_line: null,
+      last_kind: null,
+      last_author_id: null,
+      last_seq: null,
+      last_activity_at: new Date().toISOString(),
+      unread: false,
+      muted: false,
+      archived: false,
+      pinned: false,
+      pinned_at: null,
+      invited: false,
+      role: "member",
+      state: "active",
+      read_seq: 0,
+      delivered_seq: 0,
+      anchor_kind: null,
+      anchor_id: null,
+      parent_thread_id: null,
+      history_visible_to_new: true,
+      created_at: new Date().toISOString(),
+    });
+    const oneId = "11111111-1111-4111-8111-111111111021";
+    const twoId = "11111111-1111-4111-8111-111111111022";
+    Mx.threads.push(
+      emptyGroup(oneId, ["Lerato Khumalo"]),
+      emptyGroup(twoId, ["Kwame Mensah", "Nana Adjei"]),
+    );
+    Mx.messages[oneId] = [];
+    Mx.messages[twoId] = [];
+    const emptyLineOf = async (id) => {
+      await page.goto(BASE + "/messages/" + id, { waitUntil: "networkidle" });
+      await page.waitForSelector('[data-testid="thread-empty"]', { timeout: 10000 });
+      return (await page.locator('[data-testid="thread-empty"]').textContent()) || "";
+    };
+    const oneLine = await emptyLineOf(oneId);
+    const twoLine = await emptyLineOf(twoId);
+    Mx.threads = Mx.threads.filter((t) => t.thread_id !== oneId && t.thread_id !== twoId);
+    check(
+      REACT_CHECKS[14],
+      oneLine === "Nobody has written yet. Lerato Khumalo is here." &&
+        twoLine === "Nobody has written yet. Kwame Mensah and Nana Adjei are here.",
+      JSON.stringify({ oneLine, twoLine }),
+    );
+
+    // 15. A stale signed avatar (W91): the signed URL answers 400, the row shows its initials.
+    const kofiRow = Mx.threads.find((t) => t.thread_id === Mx.ids.kofi);
+    kofiRow.avatar_path = "avatars/kofi-stale.png";
+    let staleHits = 0;
+    await page.route(
+      (u) => /\/sign\/.*kofi-stale/.test(u.href),
+      (route) => {
+        if (route.request().method() !== "GET") return route.fallback();
+        staleHits++;
+        return route.fulfill({ status: 400, contentType: "application/json", body: "{}" });
+      },
+    );
+    await openMessages(page);
+    const kofiLocator = page.locator('[data-thread-row]:has-text("Kofi Boateng")').first();
+    await page
+      .waitForFunction(
+        () => {
+          const row = Array.from(document.querySelectorAll("[data-thread-row]")).find((r) =>
+            (r.textContent || "").includes("Kofi Boateng"),
+          );
+          return (
+            !!row &&
+            !row.querySelector("img") &&
+            !!row.querySelector('span[aria-label="Kofi Boateng"]')
+          );
+        },
+        null,
+        { timeout: 8000 },
+      )
+      .catch(() => undefined);
+    const stale = await kofiLocator.evaluate((row) => ({
+      img: row.querySelectorAll("img").length,
+      initials: row.querySelector('span[aria-label="Kofi Boateng"]')?.textContent || "",
+    }));
+    kofiRow.avatar_path = null;
+    // The re-signing of a dropped or aged entry is the unit read's (tests/avatar-cache.cjs): a
+    // page load here starts the cache empty, so a second open proves nothing about the drop.
+    check(
+      REACT_CHECKS[15],
+      stale.img === 0 && stale.initials === "KB" && staleHits >= 1,
+      JSON.stringify({ stale, staleHits }),
+    );
+
+    // 16, 17. The invitation (Fix PR 10 items 8 and 9): nothing unread, one invited thread.
+    for (const t of Mx.threads) t.unread = false;
+    Mx.threads.unshift(mock.invitedGroupThread());
+    db.notifications.push(mock.invitedGroupNotification());
+    db.membersById[mock.members.esi.id] = {
+      id: mock.members.esi.id,
+      name: mock.members.esi.name,
+      handle: "esi-owusu",
+    };
+    await page.goto(BASE + "/feed", { waitUntil: "networkidle" });
+    await page
+      .locator('[data-testid="messages-dot"]')
+      .waitFor({ timeout: 10000 })
+      .catch(() => undefined);
+    const dotLit = await page.evaluate(() => ({
+      dot: document.querySelectorAll('[data-testid="messages-dot"]').length,
+      label: document.querySelector('[data-testid="messages"]')?.getAttribute("aria-label"),
+    }));
+    await page.click('[data-testid="bell"]');
+    const panel = page.locator('[role="dialog"][aria-label="Notifications"]');
+    await panel.waitFor({ timeout: 10000 });
+    const inviteRow = panel.locator('button[data-kind="thread_invitation"]');
+    await inviteRow.waitFor({ timeout: 10000 });
+    const inviteText = ((await inviteRow.textContent()) || "").replace(/\s+/g, " ");
+    const inviteDest = await inviteRow.getAttribute("data-destination");
+    const inviteC = await inviteRow.locator('[role="img"][aria-label="Connect"]').count();
+    await inviteRow.click();
+    await page
+      .waitForURL("**/messages/" + Mx.ids.invited, { timeout: 10000 })
+      .catch(() => undefined);
+    const landedOnGroup = page.url().endsWith("/messages/" + Mx.ids.invited);
+    check(
+      REACT_CHECKS[16],
+      dotLit.dot === 1 &&
+        dotLit.label === "New messages" &&
+        inviteText.includes("Esi Owusu invited you to Tema cold chain.") &&
+        inviteDest === "Opens the group" &&
+        inviteC === 1 &&
+        landedOnGroup,
+      JSON.stringify({
+        dotLit,
+        inviteText: inviteText.slice(0, 120),
+        inviteDest,
+        inviteC,
+        landedOnGroup,
+      }),
+    );
+    await page
+      .locator('[data-testid="thread-invited-line"]')
+      .waitFor({ timeout: 10000 })
+      .catch(() => undefined);
+    const invitedLog =
+      (await page
+        .locator('[data-testid="thread-invited-line"]')
+        .textContent()
+        .catch(() => "")) || "";
+    await openMessages(page);
+    const invitedRowText =
+      (await page
+        .locator('[data-thread-row]:has-text("Tema cold chain")')
+        .first()
+        .textContent()
+        .catch(() => "")) || "";
+    await page.goto(BASE + "/messages/" + Mx.ids.invited, { waitUntil: "networkidle" });
+    await page
+      .locator(
+        '[data-thread-header] button:has-text("Accept"), section[aria-label="Tema cold chain"] button:has-text("Accept")',
+      )
+      .first()
+      .click();
+    await page.waitForTimeout(800);
+    const acceptWrite = writesOf(db, "messenger_thread_invite_accept").at(-1);
+    const afterAccept = await page.evaluate(() => ({
+      invitedLine: document.querySelectorAll('[data-testid="thread-invited-line"]').length,
+      empty: document.querySelector('[data-testid="thread-empty"]')?.textContent || "",
+    }));
+    await openMessages(page);
+    const acceptedRowText =
+      (await page
+        .locator('[data-thread-row]:has-text("Tema cold chain")')
+        .first()
+        .textContent()
+        .catch(() => "")) || "";
+    await page.goto(BASE + "/feed", { waitUntil: "networkidle" });
+    await page.waitForTimeout(600);
+    const dotAfter = await page.locator('[data-testid="messages-dot"]').count();
+    check(
+      REACT_CHECKS[17],
+      invitedLog === "Esi Owusu invited you. Accept to read the conversation." &&
+        invitedRowText.includes("Invited by Esi Owusu") &&
+        !invitedRowText.includes("Nobody has written yet") &&
+        !!acceptWrite &&
+        acceptWrite.body.p_thread === Mx.ids.invited &&
+        afterAccept.invitedLine === 0 &&
+        afterAccept.empty.startsWith("Nobody has written yet.") &&
+        !acceptedRowText.includes("Invited by") &&
+        dotAfter === 0,
+      JSON.stringify({
+        invitedLog,
+        invitedRowText: invitedRowText.slice(0, 80),
+        acceptWrite: acceptWrite?.body,
+        afterAccept,
+        acceptedRowText: acceptedRowText.slice(0, 80),
+        dotAfter,
+      }),
+    );
+    Mx.threads = Mx.threads.filter((t) => t.thread_id !== Mx.ids.invited);
+
     // 6, 7, 8. Start a group.
     await openMessages(page);
     await page.locator('[data-testid="start-group-open"]').click();
@@ -1364,10 +1655,15 @@ async function runMessengerReactions(browserType, bname, vp, theme) {
     );
 
     const keys = await messengerStorage(page);
-    check(REACT_CHECKS[12], keys.length === 0, keys.join(","));
-    // The 403 the arm's own route answered for check 12 is the one console line it expects.
-    const unexpected = errors.filter((e) => !/\/api\/messages\/media\/.*\b403\b/.test(e));
-    check(REACT_CHECKS[13], unexpected.length === 0, unexpected.slice(0, 3).join(" | "));
+    check(REACT_CHECKS[18], keys.length === 0, keys.join(","));
+    // The 403 the arm's own route answered for check 12 and the 400 the stale-avatar route answered
+    // for check 16 are the console lines it expects.
+    const unexpected = errors.filter(
+      (e) =>
+        !/\/api\/messages\/media\/.*\b403\b/.test(e) &&
+        !/kofi-stale.*\b400\b|\b400\b.*kofi-stale/.test(e),
+    );
+    check(REACT_CHECKS[19], unexpected.length === 0, unexpected.slice(0, 3).join(" | "));
     await M.shot(page, `${tag}-video`);
   } catch (e) {
     record(`${tag} flow`, false, String(e).slice(0, 600));

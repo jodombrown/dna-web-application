@@ -41,6 +41,12 @@ function parts(row: {
       return row.text
         ? [row.text]
         : [[row.actor ?? "", 1], " invited you to " + (row.detail ?? "") + " this event."];
+    case "thread_invitation":
+      // Fix PR 10 item 8 (1637, 1623): the app composes `{name} invited you to {group}.` and passes
+      // it as `text`, as it does for role_invitation; a port divergence recorded in the ports log.
+      return row.text
+        ? [row.text]
+        : [[row.actor ?? "", 1], " invited you to " + (row.object ?? "") + "."];
     default:
       return [""];
   }

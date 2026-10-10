@@ -17,6 +17,8 @@ const ids = {
   kwame: "11111111-1111-4111-8111-111111111006",
   book: "11111111-1111-4111-8111-111111111007",
   esi: "11111111-1111-4111-8111-111111111008",
+  /** Fix PR 10 items 8 and 9: a group the member is invited to, pushed by the arm that reads it. */
+  invited: "11111111-1111-4111-8111-111111111009",
 };
 /** The media id of the portrait video in Nana's thread; the reactions arm serves its bytes itself. */
 const VIDEO_MEDIA = "33333333-3333-4333-8333-333333333001";
@@ -112,6 +114,65 @@ function msg(threadId, seq, author, body, created, extra = {}) {
     media_width: null,
     media_height: null,
     ...extra,
+  };
+}
+
+/**
+ * Fix PR 10 items 8 and 9 (1623, 1637, 1638): a community group Esi invited the member to, as
+ * messenger_threads_view answers the invitee's own row: state invited, no last line, the inviter
+ * named in invited_by_name. Not in the fixture's list, because the layout arm counts seven live
+ * rows; the arm that reads it pushes it into M.threads and the kind's row into db.notifications.
+ */
+function invitedGroupThread(now = Date.now()) {
+  return {
+    thread_id: ids.invited,
+    kind: "community_group",
+    name: "Tema cold chain",
+    headline: null,
+    avatar_path: null,
+    other_member_id: null,
+    member_names: ["Esi Owusu", "Adwoa Asante"],
+    others: false,
+    last_line: null,
+    last_kind: null,
+    last_author_id: null,
+    last_seq: null,
+    last_activity_at: new Date(now - 10 * MIN).toISOString(),
+    unread: false,
+    muted: false,
+    archived: false,
+    pinned: false,
+    pinned_at: null,
+    invited: true,
+    role: "member",
+    state: "invited",
+    read_seq: 0,
+    delivered_seq: 0,
+    anchor_kind: null,
+    anchor_id: null,
+    parent_thread_id: null,
+    history_visible_to_new: false,
+    created_at: new Date(now - 10 * MIN).toISOString(),
+    invited_names: [],
+    invited_others: false,
+    invited_by_name: "Esi Owusu",
+  };
+}
+
+/** The bell row the invitation writes (1637), for db.notifications. */
+function invitedGroupNotification(now = Date.now()) {
+  return {
+    id: "n-thread-invitation",
+    recipient_member_id: UID,
+    kind: "thread_invitation",
+    c_category: "connect",
+    actor_kind: "member",
+    actor_id: members.esi.id,
+    object_kind: "thread",
+    object_id: ids.invited,
+    read_at: null,
+    seen_at: null,
+    created_at: new Date(now - 10 * MIN).toISOString(),
   };
 }
 
@@ -668,10 +729,13 @@ async function handleMessenger({ p, method, url, req, json, db }) {
     if (M.fail === "threads")
       return json({ code: "PGRST", message: "forced", details: null, hint: null }, 500);
     const id = eq(url, "thread_id");
-    // 41-E (1592): every row carries invited_names and invited_others, empty where the fixture names none.
+    const idIn = (url.searchParams.get("thread_id") || "").match(/^in\.\((.*)\)$/);
+    const set = idIn ? idIn[1].split(",").map((x) => x.replace(/^"|"$/g, "")) : null;
+    // 41-E (1592): every row carries invited_names and invited_others, empty where the fixture names
+    // none; Fix PR 10 (1638): and invited_by_name, null where the viewer is not invited.
     let rows = M.threads
-      .filter((t) => !id || t.thread_id === id)
-      .map((t) => ({ invited_names: [], invited_others: false, ...t }));
+      .filter((t) => (!id || t.thread_id === id) && (!set || set.includes(t.thread_id)))
+      .map((t) => ({ invited_names: [], invited_others: false, invited_by_name: null, ...t }));
     rows = rows.slice().sort((a, b) => {
       const pa = a.pinned_at ? 1 : 0;
       const pb = b.pinned_at ? 1 : 0;
@@ -1076,6 +1140,22 @@ async function handleMessenger({ p, method, url, req, json, db }) {
     M.requests = M.requests.filter((x) => x.request_id !== body.p_request);
     return json(null, 204);
   }
+  if (fn === "messenger_thread_invite_accept" || fn === "messenger_thread_invite_decline") {
+    // Fix PR 10 items 8 and 9: Accept makes the viewer's row active, with the inviter's name gone
+    // from it and the invitation settled; Decline drops the row and retracts it.
+    const th = M.threads.find((x) => x.thread_id === body.p_thread);
+    if (!th || th.state !== "invited") return refuse("not_invited", "42501");
+    if (fn === "messenger_thread_invite_accept") {
+      th.state = "active";
+      th.invited = false;
+      th.invited_by_name = null;
+    } else M.threads = M.threads.filter((x) => x !== th);
+    if (db.notifications)
+      db.notifications = db.notifications.filter(
+        (n) => !(n.kind === "thread_invitation" && n.object_id === body.p_thread),
+      );
+    return json(null, 204);
+  }
   if (fn === "messenger_thread_leave") {
     M.threads = M.threads.filter((x) => x.thread_id !== body.p_thread);
     return json(null, 204);
@@ -1093,4 +1173,14 @@ async function handleMessenger({ p, method, url, req, json, db }) {
   return json(null, 204);
 }
 
-module.exports = { messengerFixture, handleMessenger, VOCAB_KEYS, UID, ids, members, VIDEO_MEDIA };
+module.exports = {
+  messengerFixture,
+  handleMessenger,
+  invitedGroupThread,
+  invitedGroupNotification,
+  VOCAB_KEYS,
+  UID,
+  ids,
+  members,
+  VIDEO_MEDIA,
+};

@@ -86,6 +86,7 @@ export function NotificationPanel({
     kind: string;
     actorHandle?: string | undefined;
     eventId?: string | undefined;
+    objectId?: string | undefined;
   }) => {
     if (n.kind === "connection_accepted" && n.actorHandle) {
       setOpen(false);
@@ -102,12 +103,23 @@ export function NotificationPanel({
     if (n.kind === "role_invitation" && n.eventId) {
       setOpen(false);
       void navigate({ to: "/convene/events/$id", params: { id: n.eventId } });
+      return;
+    }
+    // Fix PR 10 item 8 (1623): the invitation opens the group, where Accept and Decline sit.
+    if (n.kind === "thread_invitation" && n.objectId) {
+      setOpen(false);
+      void navigate({ to: "/messages/$thread", params: { thread: n.objectId } });
     }
   };
   const onRow = async (
     id: string,
     read: boolean,
-    n: { kind: string; actorHandle?: string | undefined; eventId?: string | undefined },
+    n: {
+      kind: string;
+      actorHandle?: string | undefined;
+      eventId?: string | undefined;
+      objectId?: string | undefined;
+    },
   ) => {
     go(n);
     if (read) return;
@@ -154,9 +166,12 @@ export function NotificationPanel({
             actor={n.actor}
             object={n.object}
             detail={n.detail}
+            text={n.text}
             time={timeLabel(n.created_at)}
             unread={n.read_at === null}
-            onClick={() => void onRow(n.id, n.read_at !== null, n)}
+            onClick={() =>
+              void onRow(n.id, n.read_at !== null, { ...n, objectId: n.object_id ?? undefined })
+            }
             onRespond={
               n.kind === "role_invitation"
                 ? () => void onRow(n.id, n.read_at !== null, n)

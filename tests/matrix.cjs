@@ -396,6 +396,14 @@ const VOCAB = {
       destination: "Opens the contribution",
       renders: false,
     },
+    // Fix PR 10 item 8 (1623, 20261009120100): the row renders, its C from its object.
+    {
+      value: "thread_invitation",
+      c: null,
+      c_from_object: true,
+      destination: "Opens the group",
+      renders: true,
+    },
     {
       value: "space_role_approved",
       c: "collaborate",
@@ -410,7 +418,6 @@ const VOCAB = {
       destination: null,
       renders: false,
     },
-    { value: "thread_invitation", c: null, c_from_object: true, destination: null, renders: false },
   ],
 };
 
@@ -1353,6 +1360,14 @@ async function mockSupabase(page, db, opts = {}) {
             if (f[k]) rows = rows.filter((m) => m.chips.includes(f[k]));
           // No fixture carries a pathway or a corridor: those axes filter to nothing.
           if (f.pathway || f.corridor) rows = [];
+          // Ruling 1483 (Fix PR 10): the projection orders by tier, then name, then id. The fixture's
+          // one tier signal is a request waiting on the viewer (rel received); no fixture carries an
+          // anchor, a second degree row or a shared attribute, so the rest read by name. Filters
+          // narrow and never reorder.
+          const tier = (m) => (m.rel === "received" ? 0 : 4);
+          rows.sort(
+            (a, b) => tier(a) - tier(b) || a.name.localeCompare(b.name) || a.id.localeCompare(b.id),
+          );
           return json({ items: rows.map((m) => connectCard(m, cx.overrides)), next_cursor: null });
         }
         if (body.p_lens === "suggested")
