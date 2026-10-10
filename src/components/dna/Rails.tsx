@@ -8,6 +8,7 @@ import { Avatar } from "@/components/strand/Avatar";
 import { RailWidget } from "@/components/strand/RailWidget";
 import { C_LABEL } from "@/components/strand/cmeta";
 import type { Member } from "@/lib/auth";
+import { record } from "@/lib/record";
 import { loadRailState } from "@/lib/rails";
 
 const row = { padding: "8px 0", borderTop: "1px solid var(--line)" } as const;
@@ -75,6 +76,8 @@ export function LeftRail({ member }: { member: Member }) {
             type="button"
             onClick={() => {
               if (!p.id) return;
+              // 12C part 2: a post opened from the rail's Saved rows is a card opened.
+              record("card_opened", { card_c: p.c_category }, { kind: "post", id: p.id });
               // From Feed the card expands in place (and scrolls into view); elsewhere the
               // direct-link view renders with "Back to Feed" (ruling 105).
               void navigate({

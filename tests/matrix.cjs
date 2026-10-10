@@ -7293,6 +7293,7 @@ module.exports = {
   VOCAB,
   DISCOVERY_SECTIONS,
   DISCOVERY_LENSES,
+  SAMPLES,
 };
 
 /**
@@ -7514,6 +7515,18 @@ if (require.main === module)
         if (process.env.SPECIAL.includes("sheet")) {
           const { runSheets } = require("./sheet.cjs");
           await runSheets(bt, bname, only);
+        }
+        // Handoff 58-12C2 (Brief 12, 12C part 2): the member app's recording, one call per moment,
+        // at the two representative layouts (tests/record.cjs).
+        if (process.env.SPECIAL.includes("record")) {
+          const { runRecord } = require("./record.cjs");
+          for (const vp of only
+            ? [only]
+            : [
+                [390, 844],
+                [1280, 800],
+              ])
+            await drive(runRecord, bt, bname, vp, process.env.THEME || "light");
         }
         // Ruling 1235 (handoff 37-F item 3): the macOS WebKit gate, pages.yml's `webkit-macos` job.
         // Small by design, because macOS minutes bill at a multiple of Linux: the nine sheet arms
@@ -7787,6 +7800,11 @@ if (require.main === module)
         for (const theme of THEMES) await drive(runOnboardingFlows, bt, bname, vp, theme);
       // Ruling 345: the HEIC and oversized-JPEG arm runs once per engine, at the compact tier.
       await drive(runOnboardingPhotoFormats, bt, bname, [390, 844], "light");
+      // Handoff 58-12C2 (Brief 12, 12C part 2): the member app's recording, one call per moment,
+      // at the two representative layouts (tests/record.cjs).
+      const { runRecord } = require("./record.cjs");
+      await drive(runRecord, bt, bname, [390, 844], "light");
+      await drive(runRecord, bt, bname, [1280, 800], "light");
       // Handoff 32-A item 5 (rulings 755, 556, 627): every route that binds a part Strand compile
       // v1790212533284400 changed, read after its open gate, one cell per tier (tests/mount.cjs).
       const { runMount, MOUNT_CELLS } = require("./mount.cjs");

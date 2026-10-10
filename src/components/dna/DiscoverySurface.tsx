@@ -117,6 +117,8 @@ import type { EventView } from "@/lib/post-view";
 import { readRailCollapsed, railBand, writeRailCollapsed, type RailBand } from "@/lib/rail-memory";
 import { setLeftRail, setRightRail, setShellLayout } from "@/lib/rail-store";
 import { useShellScroll } from "@/lib/shell-scroll";
+import { filterKeysOf } from "@/lib/record";
+import { useEmptyStateSeen, useRecordOnChange, useRecordWhen } from "@/lib/record-hooks";
 import { useMode, useTier, useWide } from "@/lib/tier";
 import { loadVocabularies } from "@/lib/vocabularies";
 import { toastStyle, useShare } from "./FeedSurface";
@@ -456,6 +458,13 @@ export function DiscoverySurface({
     [knownFamilies, homes, knownPlaces],
   );
   const facets = useMemo(() => ({ lens, ...discoveryFacets(lists, known) }), [lens, lists, known]);
+  // 12C part 2: Discovery shows, and each lens or facet change, keyed on the lens and the facet
+  // keys that are set (never a value, never the search text); a refetch records nothing.
+  const facetKeys = filterKeysOf(lists);
+  useRecordOnChange("discovery_viewed", lens + "|" + facetKeys.join(","), {
+    lens,
+    filter_keys: facetKeys,
+  });
   const read = useQuery({
     queryKey: ["discovery", member.id, facets],
     queryFn: () => loadDiscovery(member, facets),
@@ -1425,6 +1434,14 @@ export function DiscoverySurface({
   const lensCards = !!lensSection && lensSection.items.length > 0;
   const lensSentence = lensLane === "follow" && !!sentence && !lensCards && !noMatch;
   const lensEmpty = !!lensLane && !lensCards && !lensSentence;
+  // 12C part 2: DIA's one sentence, shown where it renders (All's follow lane, or the lens's own);
+  // it carries no act, so nothing records acted for it. And the two empty states, once each per
+  // appearance: the search with no match, and a lens with nothing in it.
+  useRecordWhen("dia_suggestion_shown", (sentenceLane && !noMatch) || !!lensSentence, {
+    suggestion_kind: "discovery_line",
+  });
+  useEmptyStateSeen("discovery.no_match", noMatch);
+  useEmptyStateSeen("discovery.lens_empty", lensEmpty && !noMatch);
 
   // More on Convene (1148, 1174). The grid's column count is read from the laid-out grid, wherever the
   // pane puts it, on every resize, and never shown. While the lens's cards are fewer than those

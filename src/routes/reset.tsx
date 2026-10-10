@@ -15,6 +15,7 @@ import {
   useHeadingFocus,
 } from "@/components/dna/AuthSurface";
 import { COPY, REVEAL_MS, delay, isEmailShaped, recoveryRedirect } from "@/lib/auth-flow";
+import { record } from "@/lib/record";
 import { getSupabase } from "@/lib/supabase";
 import { useTheme } from "@/lib/tier";
 
@@ -45,6 +46,9 @@ function ResetRequest() {
       return;
     }
     setBusy(true);
+    // 12C part 2 (1361, 1616): the request is recorded whatever the result, with a session id and
+    // nothing else; the address never leaves this form.
+    record("password_reset_requested");
     try {
       // The result is deliberately unread. Whether the address has an account, whether the mail
       // queued, whether the project rate-limited the request: none of it may change what this

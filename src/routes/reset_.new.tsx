@@ -25,6 +25,7 @@ import {
   signOutOtherSessions,
 } from "@/lib/auth-flow";
 import { captureRecoveryFromUrl, clearRecovery, recoveryState } from "@/lib/recovery";
+import { record } from "@/lib/record";
 import { getSupabase } from "@/lib/supabase";
 import { useTheme } from "@/lib/tier";
 
@@ -101,6 +102,9 @@ function ResetLanding() {
         setStage("expired");
         return;
       }
+      // 12C part 2 (1361, 1616): the completed reset, recorded after the password is saved. The
+      // kind is anonymous, so the recovery session this runs inside stamps no member.
+      record("password_reset_completed");
       // Makes the copy true rather than assumed: every other device signed in with the old
       // password loses its refresh token, and this one keeps its session.
       await signOutOtherSessions(sb);

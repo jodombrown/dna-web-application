@@ -24,6 +24,7 @@ import {
 } from "../lib/onboarding";
 import { useOnboardingState } from "../lib/onboarding-hooks";
 import { captureRecoveryFromUrl, recoveryPending } from "../lib/recovery";
+import { record } from "../lib/record";
 
 /**
  * Design pass 01, B10: a system page is one AuthHead over one 480 column, centred in the viewport
@@ -60,6 +61,10 @@ function NotFoundComponent() {
 export function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   console.error(error);
   const router = useRouter();
+  // 12C part 2: a failed render, recorded by its code and never its message text.
+  useEffect(() => {
+    record("client_error", { code: "route_error" });
+  }, []);
 
   // B10 item 3: one act. "Try again" is the act; "Go home" is the footer line.
   return (

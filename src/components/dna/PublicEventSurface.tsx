@@ -20,6 +20,7 @@ import { assetBase } from "@/components/strand/cmeta";
 import { eventMediaUrl } from "@/lib/event-page";
 import type { PublicEventPage } from "@/lib/event-public";
 import type { GuestAnswer, GuestStatus } from "@/lib/guest";
+import { useRecordOnChange } from "@/lib/record-hooks";
 import { useTheme, useTier } from "@/lib/tier";
 import { GuestSheet, type GuestSheetState } from "./GuestSheet";
 import {
@@ -54,6 +55,10 @@ export function PublicEventSurface({ page, slug }: { page: PublicEventPage; slug
   const compact = tier === "compact";
   const navigate = useNavigate();
   const ev = page.event;
+  // 12C part 2: the public page /e/{slug} loads, a public kind recorded signed out with the tab's
+  // session id (1298). event_public_page carries no event id by design (its `event` object omits
+  // it), so this row carries no object until the projection names one (docs/GAPS.md).
+  useRecordOnChange("event_page_viewed", slug);
 
   // The guest's own state for this visit: the link's token and the last answer the function gave.
   const [token, setToken] = useState<string | null>(null);

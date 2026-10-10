@@ -27,14 +27,12 @@ import {
   COPY,
   MIN_PASSWORD,
   REVEAL_MS,
+  consumeProviderReturn,
   delay,
-  forgetProvider,
   isEmailShaped,
   passwordFault,
   passwordFaultCopy,
-  readProviderReturn,
   startProvider,
-  stripAuthFragment,
   type Provider,
 } from "@/lib/auth-flow";
 import { recoveryPending } from "@/lib/recovery";
@@ -72,10 +70,10 @@ function SignIn() {
   // A provider round trip that failed comes back here rather than to the Feed, so the two states
   // the copy names have somewhere to render (handoff section 2).
   useEffect(() => {
-    const back = readProviderReturn();
+    // 12C part 2: the lib consumes the return (forgets the provider, strips the fragment, records
+    // the refusal); this route only renders the copy.
+    const back = consumeProviderReturn();
     if (!back) return;
-    forgetProvider();
-    stripAuthFragment();
     if (back.kind === "cancelled") setStatus(COPY.providerCancelled(back.provider));
     else setAlert(COPY.providerError(back.provider));
     // The hook's setters are stable for the life of the route; this runs once, on mount.

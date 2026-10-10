@@ -36,6 +36,7 @@ import {
   USERNAME_REFUSAL,
   type OnboardingState,
 } from "@/lib/onboarding";
+import { useRecordOnChange } from "@/lib/record-hooks";
 import { getSupabase } from "@/lib/supabase";
 import { useTier, type Tier } from "@/lib/tier";
 
@@ -188,6 +189,9 @@ export function OnboardingFrame({
   children: ReactNode;
 }) {
   const headingRef = useHeadingFocus(screen);
+  // 12C part 2 (1615): each screen's first render in a load, for the viewing funnel; the lever's
+  // Started and drop-off come from members, never from this row.
+  useRecordOnChange("onboarding_step_viewed", screen, { step: screen });
   return (
     <AuthColumn
       data-testid={"onboarding-" + screen}

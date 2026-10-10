@@ -6,6 +6,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Composer,
+  type ComposerCloseDetail,
   type ComposerCloseReason,
   type ComposerFormProps,
   type ComposerSeed,
@@ -22,6 +23,7 @@ import { loadMemberHomes, type Home } from "@/lib/homes";
 import { loadProfile } from "@/lib/profile";
 import { browserZone } from "@/lib/when";
 import { publishPost } from "@/lib/publish";
+import { record } from "@/lib/record";
 import { useMode, useTier } from "@/lib/tier";
 import { loadVocabularies } from "@/lib/vocabularies";
 
@@ -101,6 +103,9 @@ export function ComposerShell() {
       ]);
       if (!active) return;
       setDraft(restored?.seed ?? null);
+      // A restored draft that already carries an acceptance was acted on in an earlier open; it is
+      // not acted on again by being restored.
+      diaActed.current = !!restored?.seed?.diaRecord?.accepted;
       setPostId(restored?.postId ?? crypto.randomUUID());
       setSpaces(memberSpaces);
       setHomes(memberHomes);
@@ -114,7 +119,29 @@ export function ComposerShell() {
     };
   }, [open, seed, member, request, hostContext]);
 
-  const infer = useMemo(() => makeInfer(request?.anchor?.name), [request?.anchor?.name]);
+  const inferRaw = useMemo(() => makeInfer(request?.anchor?.name), [request?.anchor?.name]);
+  // 12C part 2: DIA's verb read is recorded as shown when it answers with a verb the composer can
+  // propose (a disabled verb is never proposed, 53), and as acted once per open when the member
+  // accepts it by tapping the proposed chip (668). Acceptance is read off the draft snapshots, the
+  // publish snapshot and the close detail, whichever carries it first; never what DIA said.
+  const diaActed = useRef(false);
+  const infer = useMemo<typeof inferRaw>(
+    () => async (text) => {
+      const res = await inferRaw(text);
+      if (res && res.c && !(request?.anchor?.kind === "event" && res.c === "convene"))
+        record("dia_suggestion_shown", { suggestion_kind: "composer_verb" });
+      return res;
+    },
+    [inferRaw, request?.anchor?.kind],
+  );
+  const noteDiaAccepted = (accepted: boolean | undefined) => {
+    if (!accepted || diaActed.current) return;
+    diaActed.current = true;
+    record("dia_suggestion_acted", { suggestion_kind: "composer_verb" });
+  };
+  useEffect(() => {
+    diaActed.current = false;
+  }, [seed]);
   const upload = useMemo(() => (postId ? makeUpload(postId) : undefined), [postId]);
   // The id publish_post returned, held until the Composer closes itself with 'published' (666).
   const publishedId = useRef<string | null>(null);
@@ -147,12 +174,14 @@ export function ComposerShell() {
   if (!(open || visible) || !member || !request || loadedSeed !== seed) return null;
 
   const onDraft = (state: ComposerState | null) => {
+    noteDiaAccepted(state?.diaRecord?.accepted);
     void saveDraft(member.id, hostContext, postId, state);
   };
 
   // Ruling 665: a promise. Rejection carries the message the Composer lands in Sheet's error slot,
   // with the draft intact; the Composer owns closing on resolution (666).
   const onPublish = async (state: ComposerState) => {
+    noteDiaAccepted(state.diaRecord?.accepted);
     let id: string;
     try {
       id = await publishPost(state, {
@@ -176,8 +205,16 @@ export function ComposerShell() {
   // Ruling 666: the Composer closes itself on resolve; the host reacts here. The shell layout
   // answers PUBLISHED_EVENT with the Feed, the fresh read and one toast (ruling 52: the Composer
   // itself never navigates).
-  const onClose = (reason?: ComposerCloseReason) => {
+  const onClose = (reason?: ComposerCloseReason, detail?: ComposerCloseDetail) => {
     closeComposer();
+    noteDiaAccepted(detail?.diaAccepted);
+    // 12C part 2: any close whose reason is not 'published' (X, Escape, swipe, scrim) is an
+    // abandonment, recorded with the verb it held, absent when none, and whether it held text.
+    if (reason !== "published")
+      record("composer_closed_unpublished", {
+        ...(detail?.verb ? { verb: detail.verb } : {}),
+        had_text: !!detail?.hadText,
+      });
     if (reason === "published") {
       const id = publishedId.current;
       publishedId.current = null;

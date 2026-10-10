@@ -28,6 +28,8 @@ import { LENSES, lensSearch, parseLens, type LensId } from "@/lib/lens";
 import type { Origin } from "@/lib/origin";
 import type { PostView } from "@/lib/post-view";
 import { useShellScroll } from "@/lib/shell-scroll";
+import { record } from "@/lib/record";
+import { useEmptyStateSeen, useRecordOnChange } from "@/lib/record-hooks";
 import { useTier } from "@/lib/tier";
 import { COMPOSER_HOST } from "./AppShell";
 
@@ -150,6 +152,10 @@ export function FeedSurface({ member, view }: { member: Member; view: FeedView }
     enabled: listMode,
   });
   const posts = listMode ? feed.data : undefined;
+  // 12C part 2: the Feed shows, and each lens change; a direct landing on /posts/:id is not the
+  // Feed showing and records nothing. Keyed on the lens, so a refetch records nothing.
+  useRecordOnChange("feed_viewed", listMode ? lens : null, { lens });
+  useEmptyStateSeen("feed.lens_empty", !!posts && posts.length === 0);
   // In-place expansion needs the post in this list; otherwise the direct view carries it.
   const directId =
     view.kind === "direct"
@@ -259,6 +265,9 @@ export function FeedSurface({ member, view }: { member: Member; view: FeedView }
 
   // Read more expands in place: a pushState to /posts/:id carrying fromFeed, scroll untouched.
   const openPost = (id: string) => {
+    // 12C part 2: a post opened from its card, with the card's C and the post as the object.
+    const c = posts?.find((p) => p.id === id)?.c_category;
+    record("card_opened", c ? { card_c: c } : {}, { kind: "post", id });
     void navigate({
       to: "/posts/$id",
       params: { id },

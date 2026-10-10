@@ -17,6 +17,7 @@ import { Sheet } from "@/components/strand/Sheet";
 import type { Member } from "@/lib/auth";
 import { loadNotifications, markRead, markSeen, notificationsDot } from "@/lib/notifications";
 import { loadVocabularies } from "@/lib/vocabularies";
+import { useEmptyStateSeen } from "@/lib/record-hooks";
 import type { Tier } from "@/lib/tier";
 import { timeLabel } from "@/lib/when";
 import { POPOVER_STYLE } from "./AppShell";
@@ -74,6 +75,8 @@ export function NotificationPanel({
     queryFn: () => loadNotifications(member.id),
     enabled: open,
   });
+  // 12C part 2: the panel's empty state, once per appearance (it closes and reopens as new ones).
+  useEmptyStateSeen("notifications.none", open && list.isSuccess && list.data.length === 0);
   /**
    * Ruling 462: a row marks read on open and then goes where its line says it goes. The vocabulary
    * renders only the kinds that have somewhere to go (1318) — connection_accepted opens the other

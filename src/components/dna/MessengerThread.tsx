@@ -113,6 +113,8 @@ import {
   useRecorder,
 } from "@/lib/messenger-media";
 import { firstName, joinNames, nameList } from "@/lib/names";
+import { record } from "@/lib/record";
+import { useRecordWhen } from "@/lib/record-hooks";
 import { clearShellLayout, setShellLayout } from "@/lib/rail-store";
 import { getSupabase } from "@/lib/supabase";
 import { useMode, useTier } from "@/lib/tier";
@@ -361,6 +363,10 @@ export function MessengerThread({ member, threadId }: { member: Member; threadId
   const previewsOn = !!settings.data?.link_previews_enabled;
   const vocab = useQuery({ queryKey: ["vocabularies"], queryFn: loadVocabularies });
   const signals = useQuery({ queryKey: SIGNALS_KEY(member.id), queryFn: loadDiaSignals });
+  // 12C part 2: DIA's quiet signal for this thread, shown once per appearance; acted when the
+  // member sends into the thread while it shows (the send below).
+  const quietSignalShowing = (signals.data ?? []).some((s) => s.thread_id === threadId);
+  useRecordWhen("dia_suggestion_shown", quietSignalShowing, { suggestion_kind: "messenger_quiet" });
   // SPEC-41-E 2: the quick eight from the vocabulary (an absent one renders an empty bar), the
   // member's tone from their settings (unchosen is no modifier, 1576), their recent emoji (1405).
   const quick = useMemo(() => vocab.data?.message_reaction_quick ?? [], [vocab.data]);
@@ -839,6 +845,8 @@ export function MessengerThread({ member, threadId }: { member: Member; threadId
         linkPreview: preview,
       });
       if (row) await refetchRow(row.seq);
+      if ((signals.data ?? []).some((s) => s.thread_id === threadId))
+        record("dia_suggestion_acted", { suggestion_kind: "messenger_quiet" });
       clearDraft();
       void refreshThreadRow(qc, member.id, threadId);
     } catch (e) {

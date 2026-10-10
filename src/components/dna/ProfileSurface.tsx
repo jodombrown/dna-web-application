@@ -71,6 +71,7 @@ import {
 } from "@/lib/profile";
 import { whenShort } from "@/lib/when";
 import { setRail } from "@/lib/rail-store";
+import { useEmptyStateSeen, useRecordOnChange } from "@/lib/record-hooks";
 import { useTier } from "@/lib/tier";
 import { loadVocabularies, type Vocabularies } from "@/lib/vocabularies";
 
@@ -306,6 +307,12 @@ export function ProfileSurface({ handle, edit, asPublic }: ProfileSurfaceProps) 
     enabled: ready,
   });
   const profile = profileQ.data ?? null;
+  // 12C part 2: a profile loads. No prop and no object (1297): the company learns that profiles
+  // are viewed and what follows, never who looked at whom. Keyed on the handle, so a refetch
+  // records nothing and the next profile records once.
+  useRecordOnChange("profile_viewed", profile ? handle : null);
+  useEmptyStateSeen("profile.members_only", signedOut && profileQ.isSuccess && !profile);
+  useEmptyStateSeen("profile.missing", ready && !signedOut && profileQ.isSuccess && !profile);
   const owner = !!profile && profile.viewer === "owner";
   const visitor = !!profile && profile.viewer === "member";
   const pub = !!profile && profile.viewer === "anon";
