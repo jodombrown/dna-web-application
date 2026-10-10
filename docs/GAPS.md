@@ -8979,3 +8979,66 @@ not to add a second image path, and a re-sign is a lib concern (which path, whic
 the card must not know. The fix is one `staleTime` and one place: sign at read with a `staleTime`
 under the URL's life, or hold the path and sign on demand through one function the three callers
 share. Owner: the next Fix PR touching `src/lib/media.ts`.
+
+## G262. `story_opened` has no caller until a story page exists (ruling 1617)
+
+**Severity: low. Opened 10 October 2026 by handoff 58-12C2 (PR #105, the member app's recording),
+under ruling 1617. The number is assigned by this entry (ruling 638).**
+
+`surface_event_kinds` carries `story_opened`, public, with the story as its object (tracking plan
+12C, "Story-led acts"). No story page exists in the tree: a story-shaped card goes to the `/convey`
+placeholder (`src/routes/_shell/$c.tsx`), which is an EmptyState and not a story. Ruling 1617 holds
+the kind rather than building around it, so nothing records it and the row stays in the vocabulary
+for the page that will. Owner: Convey's brief, which builds the page and records the open there.
+
+## G263. The admin app has no reset, so its reset kinds have no caller (ruling 1617)
+
+**Severity: low. Opened 10 October 2026 by handoff 58-12C2 (PR #105), under ruling 1617. The
+number is assigned by this entry (ruling 638).**
+
+`password_reset_requested` and `password_reset_completed` are recorded by the member app's `/reset`
+and `/reset/new` (`src/routes/reset.tsx`, `src/routes/reset_.new.tsx`) with app `app`. The admin
+app has no reset: its sign-in's line under the password field asks for an email to support (ruling
+1329), so there is no moment on the admin host that either kind names. Ruling 1617 holds the admin
+app's rows rather than inventing a moment; they arrive with an admin reset if one is ever built, on
+the same recorder, which already sends app `admin` from that host. Owner: whichever brief gives the
+admin app a reset.
+
+## G264. A provider sign-in without its marker records no `sign_in_succeeded`
+
+**Severity: low. Opened 10 October 2026 by handoff 58-12C2 (PR #105). The number is assigned by
+this entry (ruling 638).**
+
+`sign_in_succeeded` carries `method`, and for a provider return the method is the provider the
+member pressed. The session cannot name it on every path: `session.user.app_metadata.provider` is
+the identity the account was created with, so a password account later linked to Google (ruling
+234's identity linking) reads `email` on a Google sign-in, and `user.identities` lists every linked
+provider and not the one used now. The recorder therefore reads the marker `startProvider` sets in
+sessionStorage before the redirect (`dna.auth.oauth-provider`, `src/lib/auth-flow.ts`), which exists
+only between the member's press and the return, and records the return from AuthProvider's
+`SIGNED_IN` with that provider as the method (`noteProviderSignIn`). Where the marker is absent, the
+return records nothing: sessionStorage blocked or cleared, a return that lands in a different tab
+from the press, or a provider flow started outside this app's own buttons. auth-js 2.115 also raises
+`SIGNED_IN` from `_recoverAndRefresh` on a tab refocus and relays another tab's through its
+broadcast channel, which is why the event alone can never name a sign-in. A method the session
+itself could name on every path would need GoTrue to stamp the identity used on the session, which
+it does not. Owner: the next auth pass, if a count of provider sign-ins without the marker ever
+matters; until then the password path and every provider path from this app's own buttons are
+recorded.
+
+## G265. The public event page's `event_page_viewed` carries no object
+
+**Severity: low. Opened 10 October 2026 by handoff 58-12C2 (PR #105), where the tree disagreed with
+the handoff's "object `event`" for the public page. The number is assigned by this entry (ruling
+638).**
+
+The signed-in event page records `event_page_viewed` with the event as its object. The public page
+`/e/{slug}` cannot: `public.event_public_page` builds its `event` object without the event's id
+(`20260929120000_p2_event_presenter_topic.sql`, the public branch, and `PublicEventPage` types it as
+`Omit<EventPageEvent, "id" | …>`), by design, so a signed-out reader learns nothing it can join on.
+`record_event` takes `object_kind` and `object_id` together and refuses one without the other, and
+the kind allows no prop, so `PublicEventSurface` records the view with the tab's session id, the
+surface `event_public` and no object. The event funnel on the public side therefore counts views
+and cannot attribute them to an event until the projection names one. The fix is one line in the
+projection's public branch, `'id', v_event.id`, plus the type, and a decision that the id may be
+public, which this PR does not take. Owner: Convene's next schema pass.

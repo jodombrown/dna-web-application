@@ -5,8 +5,13 @@
 import { Outlet, createRootRoute, HeadContent, Scripts, useRouter } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 import { AuthProvider } from "@/lib/auth";
+import { setRecordApp } from "@/lib/record";
 import appCss from "@/styles.css?url";
 import { DEVICE_THEME_SCRIPT, useAppearance } from "../lib/theme";
+
+// 12C part 2 (handoff 58-12C2 section 2): the admin app names itself to the one recorder, so its
+// sign-in rows carry app `admin`. The member app sends `app` and calls nothing.
+setRecordApp("admin");
 
 export const Route = createRootRoute({
   head: () => ({

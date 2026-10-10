@@ -79,6 +79,8 @@ import {
 import { useAvatarUrl } from "@/lib/messenger-media";
 import { settingsSet } from "@/lib/messenger";
 import { firstName, joinNames, nameList } from "@/lib/names";
+import { record } from "@/lib/record";
+import { useEmptyStateSeen, useRecordWhen } from "@/lib/record-hooks";
 import { clearShellLayout, setShellLayout } from "@/lib/rail-store";
 import { getSupabase } from "@/lib/supabase";
 import { useMode, useTier } from "@/lib/tier";
@@ -542,6 +544,14 @@ export function MessengerSurface({
   const anyUnreadLive = live.some((t) => !!t.unread);
   const mutes = vocab.data?.message_mute_durations ?? [];
   const requestSignal = (signals.data ?? []).find((s) => s.request_id);
+  // 12C part 2: DIA's request signal, shown once per appearance; acted when the member answers the
+  // request it names (onRequest below). And the two empty states, once each per appearance.
+  useRecordWhen("dia_suggestion_shown", !!requestSignal, { suggestion_kind: "messenger_request" });
+  useEmptyStateSeen(
+    "messenger.no_conversations",
+    threads.isSuccess && !all.length && !pending.length && !declined.length,
+  );
+  useEmptyStateSeen("messenger.no_thread_open", expanded && !threadId);
 
   const refreshRow = async (id: string) => {
     const sb = getSupabase();
@@ -631,6 +641,9 @@ export function MessengerSurface({
   const onRequest = (r: RequestView, kind: "accept" | "decline" | "block" | "recover") => {
     const id = r.request_id ?? "";
     const first = firstName(r.sender_name);
+    // 12C part 2: answering the request DIA's signal names is acting on the signal.
+    if ((kind === "accept" || kind === "decline") && requestSignal?.request_id === id)
+      record("dia_suggestion_acted", { suggestion_kind: "messenger_request" });
     void act(id, async () => {
       if (kind === "accept") {
         const thread = await requestAccept(id);

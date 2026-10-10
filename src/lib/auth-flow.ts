@@ -1,9 +1,26 @@
 // Brief 4B: the one place the auth surfaces get their provider calls, their password rules and
 // their error copy. Sign-in, sign-up, /reset, /reset/new and /password all read from here, so the
 // two states that must be identical rather than similar are identical because they are one string.
+import { record } from "./record";
 import { getSupabase, type Supabase } from "./supabase";
 
 export type Provider = "google" | "linkedin_oidc";
+
+/**
+ * 12C part 2 (handoff 58-12C2): the `reason_class` of a refused password sign-in, from the Supabase
+ * error's code and never its message. `invalid_credentials` is wrong_credentials,
+ * `email_not_confirmed` is unconfirmed, and anything else is other. A provider return classifies
+ * itself in `consumeProviderReturn` below.
+ */
+export function signInFailureClass(error: {
+  code?: string | undefined;
+  status?: number | undefined;
+}): "wrong_credentials" | "unconfirmed" | "other" {
+  const code = (error.code || "").toLowerCase();
+  if (code === "invalid_credentials") return "wrong_credentials";
+  if (code === "email_not_confirmed") return "unconfirmed";
+  return "other";
+}
 
 export const PROVIDER_LABEL: Record<Provider, string> = {
   google: "Google",
@@ -140,6 +157,37 @@ export function readProviderReturn(): ProviderReturn {
   const provider = lastProvider();
   if (!provider) return null;
   return { provider, kind: error === "access_denied" ? "cancelled" : "error" };
+}
+
+/**
+ * 12C part 2: the one place a failed provider round trip is consumed. Reads it, forgets the
+ * provider, strips the fragment and records `sign_in_failed` as provider_cancelled or
+ * provider_error, with no member (1616). The route renders the copy from what this returns.
+ */
+export function consumeProviderReturn(): ProviderReturn {
+  const back = readProviderReturn();
+  if (!back) return null;
+  forgetProvider();
+  stripAuthFragment();
+  record("sign_in_failed", {
+    reason_class: back.kind === "cancelled" ? "provider_cancelled" : "provider_error",
+  });
+  return back;
+}
+
+/**
+ * 12C part 2: a provider sign-in that completed. auth-js raises SIGNED_IN for it after
+ * detectSessionInUrl consumes the return, and also on a tab refocus and from another tab, so the
+ * event alone is not a sign-in. The marker `rememberProvider` set before the redirect is what
+ * tells them apart: it exists only between the member's press and the return, so SIGNED_IN with it
+ * present is the return, recorded once with the provider the member chose and then forgotten.
+ * Without the marker nothing is recorded (see docs/GAPS.md, the provider-method gap).
+ */
+export function noteProviderSignIn(): void {
+  const p = lastProvider();
+  if (!p) return;
+  forgetProvider();
+  record("sign_in_succeeded", { method: p });
 }
 
 /** Clears an auth fragment off the URL so a reload does not replay the state it produced. */

@@ -35,6 +35,9 @@ export function registerZones(rows: { value: string; abbreviation: string }[]): 
 
 export type Point = { start: string; value: number };
 export type Measure = { value: number; comparison: number | null; series?: Point[] };
+/** The three onboarding screens, as public.onboarding_state() names the next one (307). */
+export type OnboardingStep = "who" | "where" | "relationship";
+export const ONBOARDING_STEPS: OnboardingStep[] = ["who", "where", "relationship"];
 export type NotConnected = { value: null; status: "not_connected" };
 type WindowPart = {
   grain: Grain;
@@ -83,7 +86,16 @@ export type MobilizationRead = WindowPart & {
 export type LeversRead = WindowPart & {
   definition_version: number;
   invites: NotConnected;
-  onboarding: { completed: Measure; started: NotConnected; drop_off: NotConnected };
+  /**
+   * 1364 as 1615 connects it (handoff 58-12C2): Completed from members.onboarded_at; Started from
+   * members.created_at in the same shape; and the drop-off as the members created in the period
+   * who have not finished, by the step onboarding_state() names, never from the behaviour log.
+   */
+  onboarding: {
+    completed: Measure;
+    started: Measure & { status: "connected" };
+    drop_off: { status: "connected"; by_step: Record<OnboardingStep, number> };
+  };
   time_to_first_act: {
     status: "connected";
     value: number | null;

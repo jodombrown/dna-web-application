@@ -27,11 +27,13 @@ import { StackedBars } from "@/components/strand/StackedBars";
 import { useAuth } from "@/lib/auth";
 import { getSupabase } from "@/lib/supabase";
 import { useMode, useTier } from "@/lib/tier";
-import { ADMIN_COPY, SETTINGS_COPY } from "../../lib/copy";
+import { joinNames } from "@/lib/names";
+import { ADMIN_COPY, ONBOARDING_COPY, SETTINGS_COPY } from "../../lib/copy";
 import { useConsole } from "../../lib/console";
 import { zoneShortById } from "../../lib/settings";
 import {
   DIRECTION_LABELS,
+  ONBOARDING_STEPS,
   SIDE_LABELS,
   SOURCE_LABELS,
   changeWords,
@@ -376,17 +378,41 @@ function OverviewPage({
           ];
     const tfa = lev.time_to_first_act;
     const posts = lev.posts.by_c;
+    // 1364 as 1615 connects it, lines verbatim from 1619: the figure stays Completed; Started is
+    // members created in the period; the drop-off names the screen where most of those who have
+    // not finished are, the screens joined by the one joiner on a tie, and reads that everyone has
+    // finished when nobody who started is partway. A period with no member created is empty.
+    const ob = lev.onboarding;
+    const partway = ONBOARDING_STEPS.map((s) => ob.drop_off.by_step[s] ?? 0);
+    const most = Math.max(...partway);
+    const stopped =
+      most === 0
+        ? ONBOARDING_COPY.allFinished
+        : ONBOARDING_COPY.stoppedAt(
+            joinNames(
+              ONBOARDING_STEPS.filter((s, i) => partway[i] === most).map(
+                (s) => ONBOARDING_COPY.screen[s],
+              ),
+            ),
+          );
+    const onboarding: Lever =
+      ob.started.value === 0
+        ? { title: "Onboarding", props: { state: "empty", emptyText: ONBOARDING_COPY.empty } }
+        : {
+            title: "Onboarding",
+            props: {
+              state: "data",
+              value: fmt(ob.completed.value),
+              unit: "completed",
+              change: changeWords(ob.completed.value, ob.completed.comparison, hasCmp),
+              trend: trendOf(ob.completed.series),
+              lines: [ONBOARDING_COPY.started(fmt(ob.started.value)), stopped],
+            },
+          };
     return [
       // 1363: not connected until 12E; MeasureCard's default sentence.
       { title: "Invites", props: { state: "notConnected" } },
-      // 1364: Completed from onboarded_at; Started and the drop-off line in one sentence.
-      measure(
-        "Onboarding",
-        lev.onboarding.completed,
-        "completed",
-        ["Started, and where people stop, are not yet connected."],
-        "Nobody started onboarding in this period.",
-      ),
+      onboarding,
       // 1365: computed now; empty until a member onboarded in the period has an act.
       {
         title: "Time to first act",

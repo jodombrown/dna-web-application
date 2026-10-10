@@ -13,7 +13,8 @@ import { Button } from "@/components/strand/Button";
 import { Input } from "@/components/strand/Input";
 import { PasswordField } from "@/components/dna/PasswordField";
 import { AuthAlert, AuthStatus } from "@/components/dna/AuthSurface";
-import { COPY, isEmailShaped } from "@/lib/auth-flow";
+import { COPY, forgetProvider, isEmailShaped, signInFailureClass } from "@/lib/auth-flow";
+import { record } from "@/lib/record";
 import type { Supabase } from "@/lib/supabase";
 
 /** Which fields carry the invalid border for the current alert. */
@@ -69,13 +70,23 @@ export function useSignInForm(initialEmail = ""): SignInFormState {
       return false;
     }
     setBusy(true);
+    // A provider round trip the member abandoned leaves its marker behind; a password sign-in is not
+    // that round trip, so the marker goes before the request and SIGNED_IN below records nothing
+    // for it (handoff 58-12C2, sign_in_succeeded).
+    forgetProvider();
     try {
       const { error } = await sb.auth.signInWithPassword({ email, password });
       if (error) {
+        // 12C part 2: the refusal is classified from the error's code and recorded with no member
+        // and no address (1361, 1616); the line the member reads does not change.
+        record("sign_in_failed", { reason_class: signInFailureClass(error) });
         setFlag("both");
         setAlert(mismatch);
         return false;
       }
+      // 12C part 2: the one password sign-in, recorded here at the moment it completes and never
+      // from SIGNED_IN, which auth-js also raises on a tab refocus.
+      record("sign_in_succeeded", { method: "password" });
       return true;
     } finally {
       setBusy(false);

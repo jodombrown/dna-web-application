@@ -1,4 +1,14 @@
 // Regenerated from the canonical Supabase project (dgspjevjoblujcoljvkn) with the Supabase MCP
+// generate_typescript_types tool on handoff 58-12C2's branch (#105, the member app's recording), on
+// main at 6ce161f (the merge of #104), after Chat applied 20261010170000 through execute_sql at 10:33
+// PDT on 10 October 2026 with the recorded statement md5 equal to the file; 112 rows in
+// schema_migrations, head 20261010170000_h58_12c2_recording. What it changes here:
+// `surface_event_kinds` gains `anonymous` (1616) in Row, Insert and Update, appended by the generator
+// in column order. The two function bodies it replaces reach no signature, so nothing else moves.
+// `export type Views` is restored by hand after every regeneration (CLAUDE.md).
+//
+// Before 58-12C2:
+// Regenerated from the canonical Supabase project (dgspjevjoblujcoljvkn) with the Supabase MCP
 // generate_typescript_types tool on handoff 44-MC-R3's branch (#104, the MemberCard port), on main at
 // be8b7be (the merge of #103), after Chat applied 20261010120000 through execute_sql at 01:33 PDT on
 // 10 October 2026 with the recorded statement md5 equal to the file; 111 rows in schema_migrations,
@@ -3602,6 +3612,7 @@ export type Database = {
       surface_event_kinds: {
         Row: {
           allowed_props: string[];
+          anonymous: boolean;
           area: string;
           feeds: string;
           kind: string;
@@ -3610,6 +3621,7 @@ export type Database = {
         };
         Insert: {
           allowed_props?: string[];
+          anonymous?: boolean;
           area: string;
           feeds: string;
           kind: string;
@@ -3618,6 +3630,7 @@ export type Database = {
         };
         Update: {
           allowed_props?: string[];
+          anonymous?: boolean;
           area?: string;
           feeds?: string;
           kind?: string;

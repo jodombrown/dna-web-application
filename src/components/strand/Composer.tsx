@@ -162,10 +162,23 @@ export type ComposerForm = ComponentType<ComposerFormProps>;
 
 export type ComposerCloseReason = "published";
 
+/**
+ * Production divergence (handoff 58-12C2, docs/strand-ports/v1790724894917128.md): what the
+ * composer held at the moment it closed, for the recorder's `composer_closed_unpublished` and
+ * `dia_suggestion_acted`. The compile's onClose carries the reason alone.
+ */
+export type ComposerCloseDetail = {
+  verb: ComposerVerb | null;
+  /** True when any text, image, link or field carried a value. */
+  hadText: boolean;
+  /** True when the member accepted DIA's proposed verb by tapping its chip (668). */
+  diaAccepted: boolean;
+};
+
 export type ComposerProps = {
   open: boolean;
   /** Ruling 666: 'published' when the Composer closed itself after onPublish resolved; else the member closed it. */
-  onClose?: ((reason?: ComposerCloseReason) => void) | undefined;
+  onClose?: ((reason?: ComposerCloseReason, detail?: ComposerCloseDetail) => void) | undefined;
   /** Ruling 665: may return a promise; the Composer carries the in-flight and failed states. */
   onPublish?: ((state: ComposerState) => Promise<void> | void) | undefined;
   tier?: "compact" | "medium" | "expanded";
@@ -632,6 +645,14 @@ export function Composer({
   // Ruling 665 / 666: in flight the fields stay mounted and read-only and Publish reads
   // "Publishing"; failure lands the caller's message in Sheet's error slot with the draft
   // untouched; resolution closes through onClose('published').
+  // Production divergence (handoff 58-12C2): what the composer held when it closed, for the
+  // recorder. Read at the moment of the close, never earlier.
+  const closeDetail = (): ComposerCloseDetail => ({
+    verb: active,
+    hadText: has,
+    diaAccepted: !!diaRecord?.accepted,
+  });
+
   const publish = async () => {
     if (!onPublish || !canPublish) return;
     setFail(null);
@@ -641,7 +662,7 @@ export function Composer({
     try {
       await onPublish(snapshot());
       setPending(false);
-      onClose?.("published");
+      onClose?.("published", closeDetail());
     } catch (err) {
       latest.current.published = false;
       setPending(false);
@@ -1134,7 +1155,7 @@ export function Composer({
       )}
       <span style={{ flex: 1 }} />
       {drafted && has && <span style={{ fontSize: 13, color: "var(--ink-3)" }}>Draft saved</span>}
-      <IconButton name="x" label="Close" onClick={() => onClose?.()} />
+      <IconButton name="x" label="Close" onClick={() => onClose?.(undefined, closeDetail())} />
     </header>
   );
 
@@ -1158,7 +1179,7 @@ export function Composer({
   return (
     <Sheet
       open={open}
-      onClose={() => onClose?.()}
+      onClose={() => onClose?.(undefined, closeDetail())}
       variant={tier === "compact" ? "sheet" : "drawer"}
       label="Compose"
       contained={contained}

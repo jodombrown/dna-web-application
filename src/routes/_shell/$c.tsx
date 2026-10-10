@@ -11,6 +11,7 @@ import { createFileRoute, notFound, useNavigate } from "@tanstack/react-router";
 import { Button } from "@/components/strand/Button";
 import { EmptyState } from "@/components/strand/EmptyState";
 import { C_LABEL, C_ORDER, type C } from "@/components/strand/cmeta";
+import { useEmptyStateSeen } from "@/lib/record-hooks";
 
 export const Route = createFileRoute("/_shell/$c")({
   beforeLoad: ({ params }) => {
@@ -23,6 +24,8 @@ function CStub() {
   const { c } = Route.useParams();
   const navigate = useNavigate();
   const active = c as C;
+  // 12C part 2: the stub is its empty state; the surface column names which C.
+  useEmptyStateSeen("c_stub.next", true);
   return (
     <div
       data-testid="c-stub"

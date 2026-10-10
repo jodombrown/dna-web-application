@@ -13,6 +13,7 @@ import type { Session, SupabaseClient, User } from "@supabase/supabase-js";
 import type { Database } from "./database.types";
 import { getSupabase } from "./supabase";
 import { markRecoveryPending } from "./recovery";
+import { noteProviderSignIn } from "./auth-flow";
 
 /**
  * Handoff 30-D item 9 (ruling 1033): once a session exists, the member takes any guest rows for
@@ -110,7 +111,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // before this app's own capture could see it. The gate in the root route acts on the flag.
       if (event === "PASSWORD_RECOVERY") markRecoveryPending();
       if (event === "SIGNED_OUT") claimedFor.current = null;
-      if (event === "SIGNED_IN") claimOnce(session);
+      if (event === "SIGNED_IN") {
+        claimOnce(session);
+        // 12C part 2: a provider return is the one sign-in that completes here. auth-js 2.115 also
+        // raises SIGNED_IN from _recoverAndRefresh on a tab refocus and relays another tab's, so
+        // the provider marker, not the event, is what names a sign-in (noteProviderSignIn).
+        noteProviderSignIn();
+      }
       setState({ ready: true, session, member: memberFromUser(session?.user) });
       void withProfile(session).then((member) => {
         if (active) setState((s) => (s.session === session ? { ...s, member } : s));

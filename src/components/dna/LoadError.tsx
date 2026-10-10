@@ -3,7 +3,9 @@
 // has none, so this is Connect's alert moved here unchanged and given its words by the caller, which
 // is what lets Discovery render `Convene could not load.` through the same part (ruling 555: the
 // mechanism is what the tree holds). Connect passes its own two lines and renders exactly as before.
+import { useEffect } from "react";
 import { Button } from "@/components/strand/Button";
+import { record } from "@/lib/record";
 
 export function LoadError({
   title,
@@ -14,6 +16,11 @@ export function LoadError({
   body: string;
   onRetry: () => void;
 }) {
+  // 12C part 2: an in-surface load failure, recorded once per appearance by its code and never
+  // the message; the caller's words are the member's and are not sent.
+  useEffect(() => {
+    record("client_error", { code: "load_failed" });
+  }, []);
   return (
     <div
       role="alert"

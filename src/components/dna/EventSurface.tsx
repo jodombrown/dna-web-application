@@ -57,6 +57,7 @@ import {
 } from "@/lib/messenger";
 import { useBackToOrigin } from "@/lib/origin";
 import { PaneShareContext } from "@/lib/pane-share";
+import { useEmptyStateSeen, useRecordOnChange } from "@/lib/record-hooks";
 import { useTier } from "@/lib/tier";
 import { loadVocabularies } from "@/lib/vocabularies";
 import { browserZone } from "@/lib/when";
@@ -161,6 +162,11 @@ export function EventSurface({
     queryFn: () => loadEventPage(id),
   });
   const page = pageQ.data ?? null;
+  // 12C part 2: the signed-in event page loads, with the event as its object; keyed on the id so a
+  // refetch records nothing. The two empty states, once each per appearance.
+  useRecordOnChange("event_page_viewed", page ? id : null, undefined, { kind: "event", id });
+  useEmptyStateSeen("event.load_failed", pageQ.isError);
+  useEmptyStateSeen("event.not_available", pageQ.isSuccess && !page);
   const hostId = page?.host?.id ?? null;
   // Brief 14 (SPEC 41-14 Part C item 4; 1334, 1384): the event thread. The host opens it through
   // messenger_event_thread_open. Anyone else asks messenger_event_thread_available, which answers

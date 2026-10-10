@@ -2,6 +2,7 @@
 import { useSyncExternalStore } from "react";
 import type { ComposerSeed } from "@/components/strand/Composer";
 import type { ComposerVerb } from "@/components/strand/cmeta";
+import { record } from "./record";
 
 export type ComposerAnchor = {
   kind: "space" | "event" | "member" | "opportunity";
@@ -29,6 +30,12 @@ function emit() {
 
 export function openComposer(request: ComposerRequest) {
   state = { open: true, request, seed: state.seed + 1 };
+  // 12C part 2: every open passes here, so this is where it is recorded (handoff 58-12C2 section
+  // 2): the host context and the verb it opened with, absent when none.
+  record("composer_opened", {
+    host_context: hostContextOf(request),
+    ...(request.initialVerb ? { verb: request.initialVerb } : {}),
+  });
   emit();
 }
 

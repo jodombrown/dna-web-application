@@ -308,6 +308,8 @@ async function runLiveDbArms({ record, skip }) {
       "Brief 12 12A (1177): vocabularies() carries platform_role_kinds as the six roles in order",
     mobil:
       "Brief 12 12C (1179, 1297, 1298): record_event refuses an unknown kind, a disallowed prop, a member object and a signed-out non-public kind with 22023, accepts a signed-in feed_viewed and a signed-out event_page_viewed, and a member cannot read surface_events",
+    mobilAnonymous:
+      "Brief 12 12C part 2 (1361, 1616): an anonymous kind recorded while signed in writes a null member_id; the three access kinds are accepted signed out with a session id, their one allowed prop and nothing else; and a non-public kind signed out is still refused with 22023",
     mobilHistory:
       "Brief 12 12C (1295): a change of current_country writes one member_profile_history row, a save that changes none of the three writes none, and the table refuses update and delete",
     mobilAfrican:
@@ -398,7 +400,9 @@ async function runLiveDbArms({ record, skip }) {
     overviewFirstAct:
       "Brief 12 12B (arm B-a; 1365): a member onboarded in the window with a ledger act after it gives Time to first act that member's days, and with no act the value is null",
     overviewNotConnected:
-      "Brief 12 12B (arm B-b; 1362 to 1364): Admitted, Invites, Story-led, Onboarding Started and drop-off, partner and DNA system sources and the four company lines answer null with not_connected",
+      "Brief 12 12B (arm B-b; 1362 to 1364, 1615): Admitted, Invites, Story-led, partner and DNA system sources and the four company lines answer null with not_connected, and Onboarding Started and drop-off answer connected",
+    overviewOnboarding:
+      "Brief 12 12C part 2 (1364, 1615): admin_overview_levers answers Started from members.created_at and the drop-off by step as onboarding_state() reads it, on two test accounts seeded inside the transaction, one on who and one on relationship, under the year grain",
     overviewCache:
       "Brief 12 12B (SPEC Part D item 4): DIA's note cache reads null before a write, answers the statements after it, and refuses a non-array with 22023",
     settings:
@@ -2890,6 +2894,90 @@ async function runLiveDbArms({ record, skip }) {
             fmt(signedOutPublic) +
             "; member read " +
             fmt(memberRead) +
+            "; rows " +
+            (rows.ok ? JSON.stringify(written) : fmt(rows)),
+        );
+      });
+
+      // 1b. 12C part 2 (1361, 1616): an anonymous kind writes no member even with a session; the
+      // three access kinds are public and anonymous, so signed out they are accepted with the
+      // session id, their one allowed prop and nothing else; a non-public kind signed out is still
+      // refused. Proven by the rows read back as live_arms, then rolled back.
+      await inTransaction(client, async () => {
+        const session = await newUuid();
+        // Read from the catalog, not information_schema: that view hides the columns of a table the
+        // role holds no privilege on, and live_arms holds none on surface_event_kinds (it reads the
+        // kinds through record_event, a definer).
+        const column = await attempt(
+          client,
+          "select count(*)::int as n from pg_attribute where attrelid = 'public.surface_event_kinds'::regclass and attname = 'anonymous' and not attisdropped",
+        );
+        if (!column.ok || column.rows[0].n !== 1) {
+          skip(
+            names.mobilAnonymous,
+            "20261010170000_h58_12c2_recording.sql is not on the project yet",
+          );
+          return;
+        }
+        await actAs(client, member.id);
+        const signedInAnonymous = await recordEvent("password_reset_completed", { session });
+        await client.query("set local role anon");
+        await client.query("select set_config('request.jwt.claims', '', true)");
+        const failed = await recordEvent("sign_in_failed", {
+          session,
+          surface: "/sign-in",
+          props: { reason_class: "wrong_credentials" },
+        });
+        const requested = await recordEvent("password_reset_requested", {
+          session,
+          surface: "/reset",
+        });
+        const completed = await recordEvent("password_reset_completed", {
+          session,
+          surface: "/reset/new",
+        });
+        const stillPrivate = await recordEvent("feed_viewed", { session, props: { lens: "all" } });
+        await actAsSelf(client);
+        const rows = await attempt(
+          client,
+          "select kind, member_id is null as anon, object_kind is null as no_object, props from public.surface_events where session_id = $1::uuid order by id",
+          [session],
+        );
+        const written = rows.ok
+          ? rows.rows.map(
+              (r) =>
+                r.kind +
+                (r.anon ? "(anon)" : "(member)") +
+                (r.no_object ? "" : "(object)") +
+                " " +
+                JSON.stringify(r.props),
+            )
+          : null;
+        const refused = (r) => !r.ok && r.code === "22023";
+        record(
+          names.mobilAnonymous,
+          signedInAnonymous.ok &&
+            failed.ok &&
+            requested.ok &&
+            completed.ok &&
+            refused(stillPrivate) &&
+            JSON.stringify(written) ===
+              JSON.stringify([
+                "password_reset_completed(anon) {}",
+                'sign_in_failed(anon) {"reason_class":"wrong_credentials"}',
+                "password_reset_requested(anon) {}",
+                "password_reset_completed(anon) {}",
+              ]),
+          "signed-in anonymous " +
+            fmt(signedInAnonymous) +
+            "; signed-out failed " +
+            fmt(failed) +
+            "; requested " +
+            fmt(requested) +
+            "; completed " +
+            fmt(completed) +
+            "; signed-out feed_viewed " +
+            fmt(stillPrivate) +
             "; rows " +
             (rows.ok ? JSON.stringify(written) : fmt(rows)),
         );
@@ -5843,11 +5931,22 @@ async function runLiveDbArms({ record, skip }) {
         const co = all.admin_overview_company.ok ? all.admin_overview_company.rows[0].j : {};
         const nc = (x) => !!x && x.value === null && x.status === "not_connected";
         const src = (k) => (mob.source || []).find((s) => s.key === k);
+        const ob = lev.onboarding || {};
+        const steps = ["who", "where", "relationship"];
         const checks = {
           invites: nc(lev.invites),
           story_led: nc(lev.story_led),
-          onboarding_started: nc(lev.onboarding && lev.onboarding.started),
-          onboarding_drop_off: nc(lev.onboarding && lev.onboarding.drop_off),
+          // 1615: Started and the drop-off are connected now, from members and never from the log.
+          onboarding_started:
+            !!ob.started &&
+            ob.started.status === "connected" &&
+            typeof ob.started.value === "number" &&
+            Array.isArray(ob.started.series),
+          onboarding_drop_off:
+            !!ob.drop_off &&
+            ob.drop_off.status === "connected" &&
+            !!ob.drop_off.by_step &&
+            steps.every((s) => typeof ob.drop_off.by_step[s] === "number"),
           admitted: nc(net.admitted),
           source_partner: nc(src("partner")),
           source_dna_system: nc(src("dna_system")),
@@ -5866,6 +5965,70 @@ async function runLiveDbArms({ record, skip }) {
           failedChecks.length
             ? "not as ruled: " + failedChecks.join(", ")
             : Object.keys(checks).length + " checks as ruled",
+        );
+      });
+
+      // 12C part 2 (1364, 1615): Started and the drop-off on seeded rows. live_arms may update
+      // members.onboarded_at and who_completed_at and nothing else (its column grants), so the seed
+      // is made with those two: member-test loses both and is on `who`, owner-test loses
+      // onboarded_at and is on `relationship`. Both were created this year, so under the year grain
+      // both count as started, and the drop-off's who and relationship each rise by one against a
+      // read taken before the seed. The rollback returns both accounts to where they were.
+      await inTransaction(client, async () => {
+        const adminId = await adminMember();
+        if (!adminId) {
+          skip(names.overviewOnboarding, "no admin");
+          return;
+        }
+        const readOnboarding = async () => {
+          await actAs(client, adminId, "aal2");
+          const r = await attempt(
+            client,
+            "select public.admin_overview_levers('year', 'previous', 'America/Los_Angeles') -> 'onboarding' as o",
+          );
+          await actAsSelf(client);
+          return r.ok ? r.rows[0].o : r;
+        };
+        const before = await readOnboarding();
+        const seedWho = await attempt(
+          client,
+          "update public.members set who_completed_at = null, onboarded_at = null where id = $1::uuid",
+          [member.id],
+        );
+        const seedRelationship = await attempt(
+          client,
+          "update public.members set onboarded_at = null where id = $1::uuid",
+          [owner.id],
+        );
+        const after = await readOnboarding();
+        const step = (o, s) =>
+          o && o.drop_off && o.drop_off.by_step ? o.drop_off.by_step[s] : null;
+        const started = after && after.started ? after.started : null;
+        const drop = after && after.drop_off ? after.drop_off : null;
+        record(
+          names.overviewOnboarding,
+          seedWho.ok &&
+            seedRelationship.ok &&
+            !!before &&
+            !!started &&
+            started.status === "connected" &&
+            started.value >= 2 &&
+            Array.isArray(started.series) &&
+            !!drop &&
+            drop.status === "connected" &&
+            step(after, "who") === step(before, "who") + 1 &&
+            step(after, "relationship") === step(before, "relationship") + 1 &&
+            typeof step(after, "where") === "number",
+          "seed who " +
+            fmt(seedWho) +
+            "; seed relationship " +
+            fmt(seedRelationship) +
+            "; before " +
+            JSON.stringify(before && before.drop_off ? before.drop_off : before) +
+            "; after started " +
+            JSON.stringify(started && { value: started.value, status: started.status }) +
+            " drop_off " +
+            JSON.stringify(drop),
         );
       });
 

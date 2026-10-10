@@ -26,6 +26,23 @@ export const ADMIN_COPY = {
 } as const;
 
 /**
+ * The Onboarding lever's lines, verbatim from ruling 1619 (handoff 58-12C2 section 4). The screen
+ * names are 307's. With a tie the screens are joined by the one joiner in src/lib/names.ts, which
+ * the route applies; nothing here joins.
+ */
+export const ONBOARDING_COPY = {
+  started: (n: string) => `${n} started in this period.`,
+  stoppedAt: (screens: string) => `Most who have not finished stopped at ${screens}.`,
+  allFinished: "Everyone who started has finished.",
+  empty: "Nobody started onboarding in this period.",
+  screen: {
+    who: "Who you are",
+    where: "Where you are",
+    relationship: "Your relationship to the continent",
+  },
+} as const;
+
+/**
  * The console's destinations in brief order, with the one line each shows (12B extraction §1,
  * shell; R2 §1). The Overview is available and the seven consoles after it read "Not yet" until they
  * exist. Settings is the last row and always available (1410; extraction 45-12S §1a row 7) until

@@ -73,6 +73,8 @@ import {
 import { connectPendingKey, markMyNetworkSeen } from "@/lib/notifications";
 import { setColumnPad, setLeftRail, setRightRail } from "@/lib/rail-store";
 import { openOneToOne, refusalOf } from "@/lib/messenger";
+import { filterKeysOf, record } from "@/lib/record";
+import { useEmptyStateSeen, useRecordOnChange, useRecordWhen } from "@/lib/record-hooks";
 import { useMode, useTier, useWide, type Tier } from "@/lib/tier";
 
 const TOAST_MS = 2400;
@@ -397,8 +399,12 @@ export function ConnectSurface({ member, search }: { member: Member; search: Con
       () => invalidate("suggested"),
     );
   };
-  const openIntro = (c: ConnectCard) => {
+  // 12C part 2: whether the open intro sheet came from a DIA suggestion (the Suggested lens or the
+  // rail), so the send records `dia_suggestion_acted`; from a Members card it records nothing.
+  const introFromSuggestion = useRef(false);
+  const openIntro = (c: ConnectCard, fromSuggestion = false) => {
     openerRef.current = document.activeElement as HTMLElement | null;
+    introFromSuggestion.current = fromSuggestion;
     setMessage("");
     setIntro(c);
   };
@@ -410,9 +416,12 @@ export function ConnectSurface({ member, search }: { member: Member; search: Con
     if (!intro || !message.trim() || sending) return;
     setSending(true);
     const c = intro;
+    const fromSuggestion = introFromSuggestion.current;
     await act(
       () => sendIntroduction(c.id, message),
       () => {
+        if (fromSuggestion)
+          record("dia_suggestion_acted", { suggestion_kind: "connect_suggested" });
         patch(c.id, { rel: "sent" });
         say("Your introduction is with " + firstName(c.name) + ".");
         invalidate("network", "suggested");
@@ -457,7 +466,7 @@ export function ConnectSurface({ member, search }: { member: Member; search: Con
           canMessage={c.rel === "connected"}
           href={"/m/" + c.handle}
           onOpen={() => openProfile(c)}
-          onConnect={() => openIntro(c)}
+          onConnect={() => openIntro(c, context === "suggested")}
           onAccept={() => onAccept(c)}
           onDismiss={c.rel === "received" ? () => onDecline(c) : () => onDismiss(c)}
           onFollow={() => onFollow(c)}
@@ -496,7 +505,12 @@ export function ConnectSurface({ member, search }: { member: Member; search: Con
             )}
             {c.rel === "none" && (
               <div>
-                <Button variant="secondary" size="sm" c="connect" onClick={() => openIntro(c)}>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  c="connect"
+                  onClick={() => openIntro(c, true)}
+                >
                   Connect
                 </Button>
               </div>
@@ -505,6 +519,51 @@ export function ConnectSurface({ member, search }: { member: Member; search: Con
         );
       })}
     </RailWidget>
+  );
+
+  // 12C part 2 (handoff 58-12C2 section 3). Connect shows, and each lens or filter change, keyed on
+  // the lens and the filter keys that are set (never their values); a refetch records nothing.
+  const filterKeys = filterKeysOf(filters);
+  useRecordOnChange("connect_viewed", lens + "|" + filterKeys.join(","), {
+    lens,
+    filter_keys: filterKeys,
+  });
+  // DIA's suggestions, shown once per load of the list or the rail, not per card: the Suggested
+  // lens, or at expanded the rail (right at wide, left on Network and Where below it).
+  const suggestedItems = (suggested.data ?? []).filter((c) => !gone(c));
+  useRecordWhen(
+    "dia_suggestion_shown",
+    suggestedItems.length > 0 && (lens === "suggested" || railWantsDia),
+    { suggestion_kind: "connect_suggested" },
+  );
+  // The five empty states, each once per appearance.
+  const membersSettled = lens === "members" && !members.isPending && !members.isError;
+  const membersCount = (members.data?.pages ?? [])
+    .flatMap((p) => p.items)
+    .filter((c) => !gone(c)).length;
+  useEmptyStateSeen("connect.members_filtered", membersSettled && membersCount === 0 && filtered);
+  useEmptyStateSeen("connect.members_none", membersSettled && membersCount === 0 && !filtered);
+  useEmptyStateSeen(
+    "connect.suggested_none",
+    lens === "suggested" &&
+      !suggested.isPending &&
+      !suggested.isError &&
+      suggestedItems.length === 0,
+  );
+  useEmptyStateSeen(
+    "connect.network_none",
+    lens === "network" &&
+      !!network.data &&
+      NETWORK_SECTIONS.every(
+        (s) => (network.data?.[s.key] ?? []).filter((c) => !gone(c)).length === 0,
+      ),
+  );
+  useEmptyStateSeen(
+    "connect.where_none",
+    lens === "where" &&
+      !where.isPending &&
+      !where.isError &&
+      (!where.data || (where.data.continent.length === 0 && where.data.diaspora.length === 0)),
   );
 
   // Rails (rulings 162, 167, 170). Expanded only; the shell owns the columns.

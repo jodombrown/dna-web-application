@@ -185,10 +185,12 @@ function fixtures(grain, compare, tz) {
     admin_overview_levers: {
       ...base,
       invites: { value: null, status: "not_connected" },
+      // 1615 (handoff 58-12C2): Started from members.created_at, the drop-off by step; a tie
+      // between two screens, so the line joins them through the one joiner (1619).
       onboarding: {
         completed: measure(29, 22, [6, 8, 7, 8, 6, 7, 9, 8, 7, 9]),
-        started: { value: null, status: "not_connected" },
-        drop_off: { value: null, status: "not_connected" },
+        started: { ...measure(41, 35, [8, 9, 10, 11, 8, 9, 12, 10, 9, 11]), status: "connected" },
+        drop_off: { status: "connected", by_step: { who: 3, where: 5, relationship: 5 } },
       },
       // Arm B-a's page half: nobody onboarded in the period has an act yet.
       time_to_first_act: {
@@ -635,9 +637,13 @@ async function runAdminOverview(browserType, bname, [w, h], theme) {
       lev.slice(0, 120),
     );
     record(
-      `${tag} | Onboarding reads Completed with the one line (1364)`,
+      `${tag} | Onboarding reads Completed, Started and the drop-off line with its tie joined (1364, 1615, 1619)`,
       lev.includes("29 completed") &&
-        lev.includes("Started, and where people stop, are not yet connected."),
+        lev.includes("41 started in this period.") &&
+        lev.includes(
+          "Most who have not finished stopped at Where you are and Your relationship to the continent.",
+        ),
+      lev.slice(lev.indexOf("Onboarding"), lev.indexOf("Onboarding") + 220),
     );
     record(
       `${tag} | Time to first act with nobody counted reads its empty sentence (1365, B-a)`,
