@@ -65,6 +65,7 @@ import {
   edit as editMessage,
   flushCursors,
   groupEmptyLine,
+  invitedEmptyLine,
   groupSubtitle,
   invite as inviteMember,
   inviteAccept,
@@ -1244,7 +1245,27 @@ export function MessengerThread({ member, threadId }: { member: Member; threadId
       />,
     );
   }
-  if (!messages.isPending && !rows.length)
+  // 1638 (Fix PR 10 item 9): while the viewer is invited the log reads the inviter's line in place
+  // of the group's empty line, and nothing where the name is withheld.
+  if (invited && thread) {
+    const line = invitedEmptyLine(thread);
+    if (line)
+      items.push(
+        <div
+          key="invited"
+          data-testid="thread-invited-line"
+          style={{
+            flex: 1,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "var(--space-6) var(--space-4)",
+          }}
+        >
+          <p style={{ ...QUIET, textAlign: "center" }}>{line}</p>
+        </div>,
+      );
+  } else if (!messages.isPending && !rows.length)
     items.push(
       <div
         key="empty"

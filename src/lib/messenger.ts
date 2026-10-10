@@ -688,6 +688,9 @@ export function localNextDayStart(day: string): string | null {
 
 /** The row's last line (extraction 1.3): `You: …`, `{first name}: …` in a group, `Nobody has written yet`, `Voice note`, `Image` / `Video` as the projection words it, `This message was deleted`. */
 export function lastLineOf(t: ThreadView, me: string): string {
+  // 1638 (Fix PR 10 item 9): an invited member's row names who invited them, never "Nobody has
+  // written yet"; a name the viewer may not see leaves the line empty (grounded-or-empty).
+  if (t.state === "invited") return invitedByLine(t);
   if (!t.last_seq) return "Nobody has written yet";
   const authorFirst =
     t.last_author_id !== me && t.kind !== "one_to_one" ? firstName(t.last_author_name) : "";
@@ -708,19 +711,35 @@ export function invitedLine(t: ThreadView): string {
   return joinNames(nameList(t.invited_names), !!t.invited_others);
 }
 
+/** 1638: `Invited by {name}` for the viewer's own invited row; empty where the name is withheld. */
+export function invitedByLine(t: ThreadView): string {
+  return t.invited_by_name ? "Invited by " + t.invited_by_name : "";
+}
+
+/** 1638: the log's line while the viewer is invited; empty where the inviter's name is withheld. */
+export function invitedEmptyLine(t: ThreadView): string {
+  return t.invited_by_name
+    ? t.invited_by_name + " invited you. Accept to read the conversation."
+    : "";
+}
+
+/** 1592 (W90): the verb agrees with what the line names: one name with no others is, otherwise are. */
+function hereVerb(names: unknown, others: boolean): string {
+  return nameList(names).length === 1 && !others ? " is here" : " are here";
+}
+
 /**
  * SPEC-41-E 6.4: the log's empty line for a group. Nobody active but the viewer and someone
  * invited reads the Manage sheet's invited form; otherwise the line as built, with the invited
- * named after a semicolon once someone has joined.
+ * named after a semicolon once someone has joined. The verb agrees with the names (1592, W90).
  */
 export function groupEmptyLine(t: ThreadView): string {
   const here = membersLine(t);
   const invited = invitedLine(t);
   if (!here && invited) return "Nobody has written yet. " + invited + ", invited.";
+  const verb = hereVerb(t.member_names, !!t.others);
   return (
-    "Nobody has written yet. " +
-    here +
-    (invited ? " are here; " + invited + " invited." : " are here.")
+    "Nobody has written yet. " + here + (invited ? verb + "; " + invited + " invited." : verb + ".")
   );
 }
 
