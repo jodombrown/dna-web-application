@@ -1071,7 +1071,7 @@ export function MessengerSurface({
   else
     body = (
       <>
-        {searchBlock}
+        {expanded && searchBlock}
         {searching ? (
           resultsNode
         ) : (
@@ -1083,6 +1083,42 @@ export function MessengerSurface({
         )}
       </>
     );
+  const hasSearch =
+    !threads.isPending && !threads.isError && !!(all.length || pending.length || declined.length);
+
+  // Ruling 1624 (W92; EXTRACTION-44-W68 section 5): below expanded the list carries no app header,
+  // so its title row and search unit are one block that paints the top inset itself and stays while
+  // the body scrolls, with a hairline under it. Loading, empty and error keep the title row and drop
+  // the search unit. At expanded the list is the Pane's and nothing here changes.
+  const chrome = expanded ? (
+    <>
+      {head}
+      {alertNode}
+    </>
+  ) : (
+    <div
+      data-list-chrome
+      style={{
+        position: "sticky",
+        top: 0,
+        zIndex: "var(--z-sticky)" as unknown as number,
+        flex: "none",
+        display: "flex",
+        flexDirection: "column",
+        gap: "var(--space-4)",
+        paddingTop: compact
+          ? "env(safe-area-inset-top)"
+          : "calc(var(--space-3) + env(safe-area-inset-top))",
+        paddingBottom: "var(--space-3)",
+        background: "var(--bg)",
+        borderBottom: "1px solid var(--line)",
+      }}
+    >
+      {head}
+      {alertNode}
+      {hasSearch && searchBlock}
+    </div>
+  );
 
   const column = (
     <div
@@ -1092,16 +1128,16 @@ export function MessengerSurface({
         flexDirection: "column",
         gap: "var(--space-4)",
         paddingBottom: "var(--space-6)",
-        // Below expanded the shell's main pads 16 (compact) or 32 (medium); the list's rows run to
-        // the edges as the prototype draws them, with their own 16 inside.
-        margin: expanded ? 0 : compact ? "0 -16px" : "0 -32px",
+        // Below expanded the shell's main pads 12/16 (compact) or 24/32 (medium); the list's rows
+        // run to the edges as the prototype draws them, with their own 16 inside, and under 1624 the
+        // chrome runs to the top as well, so the inset is the list's own.
+        margin: expanded ? 0 : compact ? "-12px -16px 0" : "-24px -32px 0",
         minHeight: expanded ? "100%" : undefined,
         fontFamily: "var(--font-sans)",
         color: "var(--ink)",
       }}
     >
-      {head}
-      {alertNode}
+      {chrome}
       {body}
     </div>
   );

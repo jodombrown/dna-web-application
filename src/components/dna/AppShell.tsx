@@ -146,6 +146,11 @@ export function AppShell({
   const pathname = useLocation({ select: (l) => l.pathname });
   const surface = feedView ? "feed" : layout ? "layout:" + layout.key : pathname;
   const onMessages = pathname === "/messages" || pathname.startsWith("/messages/");
+  // Ruling 1624 (W92; EXTRACTION-44-W68, 1458): below expanded the Messenger carries no app header.
+  // The list's own title row and search sit on the top inset and the thread bar is the route's only
+  // chrome; the dock stays on the list and on no thread (1368), which the canvas layout already
+  // decides. At expanded the header and the Pane are unchanged.
+  const bareMessenger = onMessages && !expanded;
   useLayoutEffect(() => {
     scrollToTop();
   }, [surface, scrollToTop]);
@@ -296,59 +301,61 @@ export function AppShell({
           color: "var(--ink)",
         }}
       >
-        <AppHeader
-          variant={expanded ? "expanded" : "compact"}
-          tier={tier}
-          homeActive={homeActive}
-          homeHref={homeHref}
-          onHome={(e) => {
-            if (e.metaKey || e.ctrlKey || e.shiftKey) return;
-            e.preventDefault();
-            goHome();
-          }}
-          onHomeIntent={() => void router.preloadRoute({ to: "/feed", search: {} })}
-          member={{ name: member.name, src: member.avatar }}
-          onCompose={compose}
-          onAvatar={() => setAccount((v) => !v)}
-          avatarActive={account}
-          cActive={active}
-          cStates={cStates}
-          onSelectC={go}
-          onIntentC={warm}
-          lensBar={headerLens}
-          messages={
-            <MessagesControl
-              unread={inbox.unread}
-              active={onMessages}
-              onClick={() => {
-                setAccount(false);
-                void navigate({ to: "/messages" });
-              }}
-            />
-          }
-          // 1123: on Discovery (the `lanes` layout) at expanded the header's row takes the canvas's
-          // edges, 5% of the viewport each side with no maximum; every other surface keeps 1440.
-          maxWidth={lanes && expanded ? "none" : undefined}
-          style={{
-            // Ruling 344: the safe-area insets live here and on the dock, once. viewport-fit=cover
-            // is declared in the root route's head, so on a notched phone the header's row starts
-            // below the status bar and, in landscape, clear of the notch on either side.
-            paddingTop: "env(safe-area-inset-top)",
-            paddingLeft: `calc(${lanes && expanded ? "5vw" : expanded ? "32px" : "16px"} + env(safe-area-inset-left))`,
-            paddingRight: `calc(${lanes && expanded ? "5vw" : expanded ? "32px" : "8px"} + env(safe-area-inset-right))`,
-            height: "auto",
-            minHeight: expanded ? 64 : 56,
-            zIndex: 20,
-          }}
-        >
-          <NotificationPanel
-            member={member}
+        {!bareMessenger && (
+          <AppHeader
+            variant={expanded ? "expanded" : "compact"}
             tier={tier}
-            onOpen={() => setAccount(false)}
-            onChange={setNotifOpen}
-            closeKey={closeKey}
-          />
-        </AppHeader>
+            homeActive={homeActive}
+            homeHref={homeHref}
+            onHome={(e) => {
+              if (e.metaKey || e.ctrlKey || e.shiftKey) return;
+              e.preventDefault();
+              goHome();
+            }}
+            onHomeIntent={() => void router.preloadRoute({ to: "/feed", search: {} })}
+            member={{ name: member.name, src: member.avatar }}
+            onCompose={compose}
+            onAvatar={() => setAccount((v) => !v)}
+            avatarActive={account}
+            cActive={active}
+            cStates={cStates}
+            onSelectC={go}
+            onIntentC={warm}
+            lensBar={headerLens}
+            messages={
+              <MessagesControl
+                unread={inbox.unread}
+                active={onMessages}
+                onClick={() => {
+                  setAccount(false);
+                  void navigate({ to: "/messages" });
+                }}
+              />
+            }
+            // 1123: on Discovery (the `lanes` layout) at expanded the header's row takes the canvas's
+            // edges, 5% of the viewport each side with no maximum; every other surface keeps 1440.
+            maxWidth={lanes && expanded ? "none" : undefined}
+            style={{
+              // Ruling 344: the safe-area insets live here and on the dock, once. viewport-fit=cover
+              // is declared in the root route's head, so on a notched phone the header's row starts
+              // below the status bar and, in landscape, clear of the notch on either side.
+              paddingTop: "env(safe-area-inset-top)",
+              paddingLeft: `calc(${lanes && expanded ? "5vw" : expanded ? "32px" : "16px"} + env(safe-area-inset-left))`,
+              paddingRight: `calc(${lanes && expanded ? "5vw" : expanded ? "32px" : "8px"} + env(safe-area-inset-right))`,
+              height: "auto",
+              minHeight: expanded ? 64 : 56,
+              zIndex: 20,
+            }}
+          >
+            <NotificationPanel
+              member={member}
+              tier={tier}
+              onOpen={() => setAccount(false)}
+              onChange={setNotifOpen}
+              closeKey={closeKey}
+            />
+          </AppHeader>
+        )}
         {canvas && layout ? (
           <div
             data-canvas

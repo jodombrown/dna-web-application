@@ -1821,7 +1821,17 @@ export function MessengerThread({ member, threadId }: { member: Member; threadId
         avatar={mark}
         subtitle={subtitle || undefined}
         control={control}
-        style={{ flex: 1, minHeight: 0, height: "100%", ...keyboardFrame }}
+        // Ruling 1624 (W92): with no app header below expanded, the thread bar is the route's only
+        // chrome at the top and carries the inset the header carried until now (344); with the
+        // keyboard up the frame is the visual viewport, whose top is still under the status bar.
+        style={{
+          flex: 1,
+          minHeight: 0,
+          height: "100%",
+          paddingTop: "env(safe-area-inset-top)",
+          boxSizing: "border-box",
+          ...keyboardFrame,
+        }}
       >
         <div
           data-messenger-thread
