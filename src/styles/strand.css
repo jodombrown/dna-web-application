@@ -276,6 +276,10 @@
   --destructive-tint: #3a1a1a;
   --focus: #7dbba3;
   --glow-dia: 0 0 0 2px #141412, 0 0 0 4px #e8b830, 0 0 18px rgba(232, 184, 48, 0.4);
+  /* MemberCard's portrait halo, the one value the dark theme overrides (compile v1791495246160097,
+     tokens/colors.css; 1487): on the warm near-black ground an ink shadow has no delta against
+     --surface, so the photograph separates by a deeper halo and a faint rim of its own light. */
+  --member-portrait-shadow: 0 0 10px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(242, 237, 229, 0.1);
 }
 [data-theme="dark"] {
   color-scheme: dark;
@@ -431,6 +435,27 @@
   --console-bar-height: 56px;
   --console-nav-width: 248px;
 
+  /* ---- Strand compile v1791495246160097 (correction 56, ratified 1599; handoff 44-MC-R3): the
+     MemberCard block its tokens/spacing.css carries (ratified 1487 to 1496 and 1530), at the
+     compile's own values and in its own order (604). --member-portrait-inset is one token for the
+     card's whole edge; --member-stance-size is parked with the undrawn stance prop (1488);
+     --member-name-min-* are the floor the fit stops at before the lane, then the line count,
+     gives (1491); --member-mark-offset is the Identified mark's inset from the portrait's
+     bottom-right corner (1497). ---- */
+  --member-portrait-inset: var(--space-3);
+  --member-portrait-radius: var(--radius-m);
+  --member-portrait-shadow: 0 0 8px rgba(26, 26, 24, 0.34);
+  --member-portrait-compact: 132px;
+  --member-portrait-aspect: 4 / 5;
+  --member-portrait-medium: 152px;
+  --member-portrait-expanded: 172px;
+  --member-card-min-height: 288px;
+  --member-name-min-compact: 15px;
+  --member-name-min-wide: 18px;
+  --member-stance-size: 12px;
+  --member-portrait-focus: 50% 22%;
+  --member-mark-offset: 6px;
+
   /* Z-index scale (603). Ruled order. No component hardcodes a z-index. */
   --z-pane: 1; /* @kind other */ /* navigated into, page content, never over chrome */
   --z-rail: 2; /* @kind other */ /* FacetRail as a rail, sticky in its column */
@@ -542,13 +567,9 @@ a:hover {
     animation: none !important;
   }
 }
-/* Brief 4 (Connect.jsx's injected focus styles, carried here per SPEC section 12.3): the card's name
-   button gets the emerald ring with a 3px offset and a 4px radius; the Where tile keeps the base ring. */
-.strand-mc-name:focus-visible {
-  outline: 2px solid var(--focus);
-  outline-offset: 3px;
-  border-radius: 4px;
-}
+/* Brief 4 (Connect.jsx's injected focus styles, carried here per SPEC section 12.3): the Where tile
+   keeps the base ring. The card's name rule (.strand-mc-name) left with handoff 44-MC-R3: Strand's
+   MemberCard at compile v1791495246160097 carries its own focus offset on the name link. */
 .strand-placetile:focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 2px;

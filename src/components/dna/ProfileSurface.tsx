@@ -23,7 +23,7 @@ import {
 } from "react";
 import type { Audience } from "@/components/strand/AudienceSelect";
 import { Avatar } from "@/components/strand/Avatar";
-import { BadgeRow } from "@/components/dna/BadgeRow";
+import { BadgeRow } from "@/components/strand/BadgeRow";
 import { Button } from "@/components/strand/Button";
 import { CCard } from "@/components/dna/CCard";
 import { Chip } from "@/components/strand/Chip";
@@ -63,13 +63,13 @@ import {
   saveSection,
   setFollow,
   uploadProfileImage,
-  whenShort,
   withdrawRequest,
   type ActivityC,
   type ProfileView,
   type SectionKey,
   type StanceFields,
 } from "@/lib/profile";
+import { whenShort } from "@/lib/when";
 import { setRail } from "@/lib/rail-store";
 import { useTier } from "@/lib/tier";
 import { loadVocabularies, type Vocabularies } from "@/lib/vocabularies";
@@ -1574,13 +1574,12 @@ function ProfileBody(p: BodyProps) {
           </div>
         </>
       )}
+      {/* Strand's BadgeRow (1530, handoff 44-MC-R3): the lib already mapped the fields and formatted
+          `when` (toAttestations); the wrapper carries the arm's hook and nothing else. */}
       {!pub && profile.badges.length > 0 && (
-        <BadgeRow
-          badges={profile.badges.map((b) => ({
-            c: b.c,
-            items: b.items.map((it) => ({ ...it, when: whenShort(it.when) })),
-          }))}
-        />
+        <div data-testid="badges">
+          <BadgeRow attestations={profile.badges} />
+        </div>
       )}
     </div>
   );

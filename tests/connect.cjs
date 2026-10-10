@@ -293,7 +293,7 @@ async function runConnect(browserType, bname, vp, theme) {
     const cards = page.locator('[data-testid="member-card"]');
     record(
       tag + ": Members renders the cohort",
-      (await cards.count()) === 6,
+      (await cards.count()) === 7,
       String(await cards.count()),
     );
     const cardStyle = await cards.first().evaluate((el) => {
@@ -313,6 +313,7 @@ async function runConnect(browserType, bname, vp, theme) {
         shadow: cs.boxShadow,
         radius: cs.borderRadius,
         portrait: portrait ? portrait.getBoundingClientRect().width : 0,
+        portraitHeight: portrait ? portrait.getBoundingClientRect().height : 0,
         borderWidth: cs.borderTopWidth,
         borderStyle: cs.borderTopStyle,
         borderColor: cs.borderTopColor,
@@ -325,27 +326,32 @@ async function runConnect(browserType, bname, vp, theme) {
     // ground change cannot have quietly moved the separation onto one. --line-strong is accepted
     // because it is the hover state of the same hairline, and the pointer may be over the card by
     // the time this arm reads it.
+    // Handoff 44-MC-R3: the card is Strand's at compile v1791495246160097, whose radius is --radius-l.
     record(
       tag +
-        ": card carries no resting shadow, radius 16, and a 1px --line hairline as its separation" +
-        " on --bg (590, third clause)",
+        ": card carries no resting shadow, radius --radius-l, and a 1px --line hairline as its" +
+        " separation on --bg (590, third clause)",
       cardStyle.shadow === "none" &&
-        cardStyle.radius === "16px" &&
+        cardStyle.radius === "14px" &&
         cardStyle.borderWidth === "1px" &&
         cardStyle.borderStyle === "solid" &&
         (cardStyle.borderColor === cardStyle.line ||
           cardStyle.borderColor === cardStyle.lineStrong),
       JSON.stringify(cardStyle),
     );
+    // 1541 (handoff 44-MC-R3): the portrait is its tier's width (--member-portrait-compact, -medium,
+    // -expanded) and holds the 4:5 crop at every width; it never stretches with the column.
+    const portraitW = compact ? 132 : expanded ? 172 : 152;
     record(
-      tag + ": portrait is " + (compact ? 96 : 120),
-      Math.round(cardStyle.portrait) === (compact ? 96 : 120),
-      String(cardStyle.portrait),
+      tag + ": portrait is " + portraitW + " wide at 4:5 (1541)",
+      Math.round(cardStyle.portrait) === portraitW &&
+        Math.abs(cardStyle.portraitHeight - (portraitW * 5) / 4) <= 1,
+      cardStyle.portrait + "x" + cardStyle.portraitHeight,
     );
 
     // Ruling 180: the name precedes the actions in source order on every card.
     const order = await cards.first().evaluate((el) => {
-      const name = el.querySelector(".strand-mc-name");
+      const name = el.querySelector('[data-field="name"]');
       const actions = el.querySelector('[data-testid="card-actions"]');
       return name && actions
         ? name.compareDocumentPosition(actions) & Node.DOCUMENT_POSITION_FOLLOWING
@@ -393,13 +399,18 @@ async function runConnect(browserType, bname, vp, theme) {
     }
 
     // Relationship permutations (SPEC section 4 matrix).
+    // The compact band names every control with the member's name (1489), so the role queries
+    // accept the bare word and the worded form alike.
     const relOf = async (name) =>
-      page.locator(`[data-testid="member-card"][aria-label="${name}"]`).first();
+      page
+        .locator('[data-testid="member-card"]')
+        .filter({ has: page.locator('[data-field="name"]', { hasText: name }) })
+        .first();
     const kwame = await relOf("Kwame Mensah");
     record(
-      tag + ": received shows Accept and Decline",
-      (await kwame.getByRole("button", { name: "Accept" }).count()) === 1 &&
-        (await kwame.getByRole("button", { name: "Decline" }).count()) === 1,
+      tag + ": received shows Accept and Dismiss (the extraction's table; 44-MC-R3)",
+      (await kwame.getByRole("button", { name: /^Accept( Kwame Mensah)?$/ }).count()) === 1 &&
+        (await kwame.getByRole("button", { name: /^Dismiss( Kwame Mensah)?$/ }).count()) === 1,
     );
     const yusuf = await relOf("Yusuf Diallo");
     const pendingActions = (await yusuf.locator('[data-testid="card-actions"]').innerText()).trim();
@@ -408,11 +419,73 @@ async function runConnect(browserType, bname, vp, theme) {
       (await yusuf.getByText("Pending", { exact: true }).count()) === 1 &&
         !/declin/i.test(await yusuf.innerText()),
     );
-    const lerato = await relOf("Lerato Khumalo");
+    // Pending is a state, not a control: no button role carries it (extraction, 44-MC-R3).
     record(
-      tag + ": connected pill and no mutuals line",
+      tag + ": Pending has no button role",
+      (await yusuf.getByRole("button", { name: /Pending/ }).count()) === 0,
+    );
+    const lerato = await relOf("Lerato Khumalo");
+    // 1531: a connected member's card shows the mutual names too.
+    record(
+      tag + ": connected pill, and a connected card shows mutual names (1531)",
       (await lerato.getByText("Connected", { exact: true }).count()) === 1 &&
-        (await lerato.locator('[data-testid="mutuals"]').count()) === 0,
+        /You both know Kwame Mensah\./.test(
+          await lerato.locator('[data-testid="mutuals"]').innerText(),
+        ),
+    );
+    // 1497, 1530: the Identified mark on a member who has it, nothing in its place on one who does not.
+    record(
+      tag +
+        ": the Identified mark draws on an identified member and leaves no gap on one who is not",
+      (await kwame.locator('[role="img"][aria-label="Identified"]').count()) === 1 &&
+        (await yusuf.locator('[role="img"][aria-label="Identified"]').count()) === 0,
+    );
+    // 1497, 1500, 1540: the badges on a member who has them, in C order, no digit on a pill; the
+    // open block holds two attestations as two lines; opening a second pill closes the first.
+    const pills = lerato.locator('[data-field="attestations"] button[aria-expanded]');
+    const pillText = (await pills.allInnerTexts()).map((s) => s.trim());
+    record(
+      tag + ": badges render in C order with no digit on any pill",
+      pillText.join("|") === "Convene|Contribute" && !pillText.some((t) => NUMERAL.test(t)),
+      pillText.join("|"),
+    );
+    await tap(page, pills.first());
+    await page.waitForTimeout(150);
+    const openLines = lerato.locator('[data-field="attestations"] > div:nth-child(2) > span');
+    record(
+      tag + ": two attestations in one C open as two lines, never a count",
+      (await openLines.count()) === 2 &&
+        (await pills.first().getAttribute("aria-expanded")) === "true" &&
+        /Thandiwe Dube, host\. /.test(await openLines.first().innerText()),
+      String(await openLines.count()),
+    );
+    await tap(page, pills.nth(1));
+    await page.waitForTimeout(150);
+    record(
+      tag + ": opening a second pill closes the first (1500)",
+      (await pills.first().getAttribute("aria-expanded")) === "false" &&
+        (await pills.nth(1).getAttribute("aria-expanded")) === "true" &&
+        (await openLines.count()) === 1,
+    );
+    await tap(page, pills.nth(1));
+    await page.waitForTimeout(150);
+    // 1491: the fit stops at the floor (15 compact, 18 wider) and the name wraps at 360 rather than
+    // shrinking past it.
+    const longName = await relOf("Oluwadamilare");
+    const nameFit = await longName.locator('[data-field="name"]').evaluate((el) => {
+      const cs = getComputedStyle(el);
+      return {
+        size: parseFloat(cs.fontSize),
+        lines: Math.round(el.getBoundingClientRect().height / parseFloat(cs.lineHeight)),
+      };
+    });
+    record(
+      tag +
+        ": a long name stays at or above the floor" +
+        (w === 360 ? " and wraps at 360" : "") +
+        " (1491)",
+      nameFit.size >= (compact ? 15 : 18) - 0.01 && (w !== 360 || nameFit.lines >= 2),
+      JSON.stringify(nameFit),
     );
     // Ruling 214, amending 168: a decline inside the window and a request still waiting are the
     // same card. The sender compares the two and learns nothing, which is what ruling 157 asks for.
@@ -437,22 +510,28 @@ async function runConnect(browserType, bname, vp, theme) {
     const adaeze = await relOf("Adaeze Nwosu");
     record(
       tag + ": mutuals as names, never a count (ruling 120)",
-      /Kwame Mensah and Lerato Khumalo are connections you share|Lerato Khumalo and Kwame Mensah are connections you share/.test(
+      /You both know (Kwame Mensah and Lerato Khumalo|Lerato Khumalo and Kwame Mensah)\./.test(
         await adaeze.innerText(),
       ),
     );
-    record(
-      tag + ": two chips at most on Members (ruling 178)",
-      (await adaeze
-        .locator("span")
-        .filter({ hasText: /^(Healthcare & Wellness|Project Management|West Africa)$/ })
-        .count()) === 2,
-    );
-    record(
-      tag + ": Continental heritage omitted from the meta line",
-      !/Continental/.test(await lerato.innerText()),
-    );
+    // Removed with handoff 44-MC-R3: "two chips at most on Members (178)", because the card draws no
+    // chips at all (1472); "Continental heritage omitted from the meta line", because the origin,
+    // heritage and corridor line is not drawn (1498). What stands in their place:
     const allText = await page.locator('[data-testid="lens-members"]').innerText();
+    record(
+      tag + ": no chips on any card (1472)",
+      (await page
+        .locator('[data-testid="member-card"] span')
+        .filter({ hasText: /^(Healthcare & Wellness|Project Management|West Africa|Operations)$/ })
+        .count()) === 0,
+    );
+    record(
+      tag + ": no stance label and no origin, heritage or corridor line on any card (1488, 1498)",
+      !/\bFrom\b|Continental|generation|corridor|\b(Returnee|Anchor|Ally|Kin|Still exploring)\b/.test(
+        allText,
+      ),
+      (allText.match(/From [^\n]*|Continental|generation|corridor/) || [""])[0],
+    );
     record(
       tag + ": no numeral on any card",
       !NUMERAL.test(allText),
@@ -510,10 +589,10 @@ async function runConnect(browserType, bname, vp, theme) {
     record(
       tag + ": every suggestion carries its reason and Dismiss",
       (await page.locator('[data-testid="reason"]').count()) === 2 &&
-        (await page.getByRole("button", { name: "Dismiss" }).count()) === 2,
+        (await page.getByRole("button", { name: "Dismiss this suggestion" }).count()) === 2,
     );
     record(
-      tag + ": no chips on Suggested (ruling 178)",
+      tag + ": no chips on Suggested (1472)",
       (await sugCards
         .first()
         .locator("span")
@@ -535,7 +614,9 @@ async function runConnect(browserType, bname, vp, theme) {
     // Dismiss removes the card and persists (ruling 113).
     await tap(
       page,
-      sugCards.filter({ hasText: "Ngozi Okafor" }).getByRole("button", { name: "Dismiss" }),
+      sugCards
+        .filter({ hasText: "Ngozi Okafor" })
+        .getByRole("button", { name: "Dismiss this suggestion" }),
     );
     await page.waitForTimeout(500);
     record(
@@ -545,7 +626,7 @@ async function runConnect(browserType, bname, vp, theme) {
     );
 
     // Intro sheet (SPEC section 7): single shot, never empty, counter as words.
-    await tap(page, sugCards.first().getByRole("button", { name: "Connect", exact: true }));
+    await tap(page, sugCards.first().getByRole("button", { name: /^Connect( with .*)?$/ }));
     const dialog = page.locator('[role="dialog"][aria-label="Introduce yourself to Adaeze Nwosu"]');
     await dialog.waitFor({ state: "visible", timeout: 10000 });
     const sendBtn = dialog.getByRole("button", { name: "Send introduction" });
@@ -596,9 +677,14 @@ async function runConnect(browserType, bname, vp, theme) {
       headers.join("|"),
     );
     const req = page.locator('[data-section="requests"] [data-testid="member-card"]').first();
+    // 1449, 1530: the note and the request's arrival, formatted in the lib, in the context block.
     record(
-      tag + ": the request shows the sender's message",
-      (await req.locator("blockquote").count()) === 1,
+      tag + ": the request shows the sender's note and when it arrived (since)",
+      (await req.locator('[data-field="note"]').count()) === 1 &&
+        /^(Today, \d\d:\d\d|Yesterday, \d\d:\d\d|[A-Z][a-z]{2} \d{1,2} [A-Z][a-z]{2})$/.test(
+          (await req.locator('[data-field="since"]').innerText()).trim(),
+        ),
+      (await req.locator('[data-field="since"]').innerText()).trim(),
     );
     if (expanded && !wide)
       record(
@@ -606,7 +692,7 @@ async function runConnect(browserType, bname, vp, theme) {
         (await page.locator('aside[aria-label="DIA suggests"]').count()) === 1,
       );
     await shot(page, `connect-network-${bname}-${w}-${theme}`);
-    await tap(page, req.getByRole("button", { name: "Accept" }));
+    await tap(page, req.getByRole("button", { name: /^Accept/ }));
     await page.waitForTimeout(600);
     record(
       tag + ": Accept toasts and writes respond_to_request",
@@ -614,17 +700,19 @@ async function runConnect(browserType, bname, vp, theme) {
         (x) => x.startsWith("respond_to_request") && x.includes('"p_accept":true'),
       ) && (await page.getByText("You and Kwame are connected.").count()) === 1,
     );
+    // The Strand control carries its word (Follow or Following) and no aria-pressed (44-MC-R3).
     const followBtn = page
       .locator('[data-section="connections"] [data-testid="member-card"]')
       .first()
-      .getByRole("button", { name: /^Follow(ing)?$/ });
-    const before = await followBtn.getAttribute("aria-pressed");
+      .getByRole("button", { name: /^Follow(ing)?( .*)?$/ });
+    const before = (await followBtn.innerText()).trim();
     await tap(page, followBtn);
     await page.waitForTimeout(500);
     record(
-      tag + ": Follow toggles silently with aria-pressed",
-      (await followBtn.getAttribute("aria-pressed")) !== before &&
+      tag + ": Follow toggles silently, its word flipping",
+      (await followBtn.innerText()).trim() !== before &&
         db.connect.writes.some((x) => x.startsWith("set_follow")),
+      before + " -> " + (await followBtn.innerText()).trim(),
     );
 
     // Where: tiles, groups, caption, no map, no count; pick sets the location filter.
@@ -707,7 +795,7 @@ async function runConnect(browserType, bname, vp, theme) {
         };
       });
     const lastCard = page.locator('[data-testid="member-card"]').last();
-    await lastCard.locator("button.strand-mc-name").click({ timeout: 15000 });
+    await lastCard.locator('[data-field="name"]').click({ timeout: 15000 });
     await page.waitForURL((u) => u.pathname.startsWith("/m/"), { timeout: 20000 });
     await page.locator('[data-testid="masthead"]').first().waitFor({ timeout: 20000 });
     await page.waitForTimeout(600);

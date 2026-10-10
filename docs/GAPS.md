@@ -8955,3 +8955,27 @@ The fix is the thread's: carry the sentence across the navigation in router hist
 a search result carries its message (1338, 1371), and let `MessengerThread` say it on mount; the
 arm then reads the toast on the thread route. Until then the check stays as written, because
 weakening it to "navigated" would record the lost toast as a pass. Owner: Lane E, the next Fix PR.
+
+## G261. A portrait's signed URL expires after an hour and nothing re-signs it on the Connect card or on Profile
+
+**Severity: low. Opened 10 October 2026 by handoff 44-MC-R3 (PR #104, the MemberCard port), at Chat's
+instruction after the port read what the handoff asserted about `Avatar`. The number is assigned by
+this entry (ruling 638).**
+
+A Connect card's `src` is a signed URL for the member's `avatar_path` in the private `profile-media`
+bucket, minted by `signAll` in `src/lib/connect.ts` with `createSignedUrls(paths, 60 * 60)`; Profile's
+avatar and cover come from `signedProfileUrl` in `src/lib/profile.ts` with the same one-hour
+`createSignedUrl`, the constant `SIGNED_URL_SECONDS` in `src/lib/media.ts`. Nothing on the card, on
+Profile or in `src/components/strand/Avatar.tsx` re-signs a URL that has expired. Handoff 44-MC-R3
+described `Avatar` as carrying "the stale-URL re-sign" from Fix PR 10 item 6; the file carries the
+other half of that item only, the initials fallback when the photograph fails to load (W91), so a
+member who leaves Connect or a profile open for over an hour sees the initials tile where the
+photograph was, and a fresh read is what brings the photograph back. Connect's queries are the
+re-read in practice: react-query refetches on focus and on the invalidations the actions make, and
+each refetch signs anew. Profile's single read does not.
+
+The port does not build a re-sign: the handoff's rule was to draw the portrait through `Avatar` and
+not to add a second image path, and a re-sign is a lib concern (which path, which bucket, when) that
+the card must not know. The fix is one `staleTime` and one place: sign at read with a `staleTime`
+under the URL's life, or hold the path and sign on demand through one function the three callers
+share. Owner: the next Fix PR touching `src/lib/media.ts`.

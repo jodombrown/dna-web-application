@@ -30,10 +30,12 @@ export * from "./Select";
 export * from "./Chip";
 // Handoff 37-E (1232): the app's own parts, ported from the app project's strand-patch sources and
 // Design pass 01 rather than from a Strand compile, live in src/components/dna/ and are not
-// re-exported here: AttestationRail, AuthHead, BackRow, BadgeRow, CCard, CSheetBody, CardFade,
-// IdentityMark, LinkRow, MemberCard, PasswordField, PatternPicker, PlaceTile, ProfileHeader,
-// SectionCard, StanceBlock, VerbRow, VisibilitySelect, VocabularyPicker and cinfo. The folder's
-// record is docs/strand-ports/v1790724894917128.md.
+// re-exported here: AttestationRail, AuthHead, BackRow, CCard, CSheetBody, CardFade, LinkRow,
+// MemberCard, PasswordField, PatternPicker, PlaceTile, ProfileHeader, SectionCard, StanceBlock,
+// VerbRow, VisibilitySelect, VocabularyPicker and cinfo. The folder's record is
+// docs/strand-ports/v1790724894917128.md. BadgeRow and IdentityMark left that list with handoff
+// 44-MC-R3 (1530): Strand drew both at compile v1791495246160097 and the ports below are the one
+// implementation of each; MemberCard stays an app part, rewritten from the same compile's part.
 // Convene Pass 1 (ruling 673): the Segment part, the Composer its first caller.
 export * from "./Segment";
 // Strand re-sync to compile v1789885868097915 (handoff 29-A item 3, ruling 851): the two parts the
@@ -84,3 +86,8 @@ export * from "./SearchResultRow";
 // Handoff 45-D (admin Settings): Tabs, at compile v1790885781186000, which the Settings prototype
 // loads and the tree had not carried. Record: docs/strand-ports/v1790885781186000.md section 8.
 export * from "./Tabs";
+// Strand compile v1791495246160097 (correction 56, ratified 1599; handoff 44-MC-R3, 1530): the two
+// trust marks, IdentityMark (1497) and BadgeRow (1497, 1500, 1540). ProfileHeader, ProfileSurface
+// and MemberCard read them from here. Record: docs/strand-ports/v1791495246160097.md.
+export * from "./IdentityMark";
+export * from "./BadgeRow";

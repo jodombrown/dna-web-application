@@ -698,6 +698,33 @@ async function runVisitor(browserType, bname, vp, theme, mode) {
       tag + ": badges shown to a member",
       (await page.locator('[data-testid="badges"]').count()) === 1,
     );
+    // Handoff 44-MC-R3 (1530): Strand's IdentityMark and BadgeRow on Profile. The persona is
+    // attested, so the mark draws on the masthead; the pills are in C order with no digit, and one
+    // opens to its provenance line, the date formatted by the lib (whenShort).
+    record(
+      tag + ": the Identified mark draws on the masthead (1497)",
+      (await page
+        .locator('[data-testid="masthead"] [role="img"][aria-label="Identified"]')
+        .count()) === 1,
+    );
+    const pills = page.locator('[data-testid="badges"] button[aria-expanded]');
+    const pillText = (await pills.allInnerTexts()).map((s) => s.trim());
+    record(
+      tag + ": badge pills in C order with no digit (1540)",
+      pillText.join("|") === "Convene|Contribute" && !/\d/.test(pillText.join("|")),
+      pillText.join("|"),
+    );
+    await tap(page, pills.first());
+    await page.waitForTimeout(150);
+    record(
+      tag + ": a pill opens to its provenance, the date formatted by the lib (1530)",
+      /Kwame Mensah, host\. Sun 23 Aug/.test(
+        await page.locator('[data-testid="badges"]').innerText(),
+      ),
+      (await page.locator('[data-testid="badges"]').innerText()).replace(/\n/g, " | "),
+    );
+    await tap(page, pills.first());
+    await page.waitForTimeout(150);
     record(tag + ": empty sections absent for a visitor", !ids.includes("convey"), ids.join(","));
     // B4A section 4: every signed-in Visitor carries the overflow, and it is the last control in
     // the action row. Its one item reads Block, never Report (ruling 207) and never a second item.
