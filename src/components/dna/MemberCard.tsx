@@ -17,7 +17,12 @@
 // - the arms' hooks: data-testid on the card, the portrait, the action containers, Message, the
 //   mutuals line and DIA's reason, beside the compile's own data-field attributes;
 // - MEMBER_REL, the wire's relationship states (ruling 214), stays exported for src/lib/connect.ts;
-//   the lib maps it onto the part's `context` and `connection` (handoff item 2), never this file.
+//   the lib maps it onto the part's `context` and `connection` (handoff item 2), never this file;
+// - the compile's two element-scoped custom properties, --member-name-base (the authored rung, set
+//   on the name) and --member-name-fitted (the settled size, set on the card), carry the repo's
+//   `--_` prefix for a property a component declares on itself (scripts/token-check.mjs, ruling 485;
+//   --_shell-visible is the standing instance), so the token check does not read them as theme
+//   tokens that resolve nowhere. Same values, same elements, same reads.
 import {
   useLayoutEffect,
   useRef,
@@ -210,11 +215,11 @@ function Pill({
 const mutualsLine = (names: string[], lead: string) => lead + " " + joinNames(names) + ".";
 /** The name is never truncated, never abbreviated and never wrapped: the whole of it sits on one lane at every tier.
  *  It is measured against its own lane and the size steps down until it fits, to --member-name-min-* and no further (1491).
- *  At that floor the order of giving is: the lane first (promotion to the card's head), then the line count (the name wraps to a second line). The size never goes below the floor, so the name is always legible and always whole. The settled size is published to the column as --member-name-fitted, and the @handle, headline and location take the lesser of their own rung and a share of it,
+ *  At that floor the order of giving is: the lane first (promotion to the card's head), then the line count (the name wraps to a second line). The size never goes below the floor, so the name is always legible and always whole. The settled size is published to the column as --_member-name-fitted, and the @handle, headline and location take the lesser of their own rung and a share of it,
  *  so the name stays the largest line in the card however far the fit had to go. An ordinary name never triggers this: at full size the rungs win. Hardened: width and height are both checked; the first step is proportional, so a long name settles in a couple of passes instead of sixty;
  *  it refits when the display face finishes loading, since the fallback's metrics measure differently; it refits when the lane resizes, observing the lane and not itself, so changing
  *  the size cannot feed back into another measurement; and it bails while the lane has no width, as in a card not yet shown.
- *  The authored rung is carried as --member-name-base on the element, so each pass re-asserts it before measuring instead of clearing the inline value React owns. */
+ *  The authored rung is carried as --_member-name-base on the element, so each pass re-asserts it before measuring instead of clearing the inline value React owns. */
 function useFitName(
   wide: boolean,
   head: boolean,
@@ -230,7 +235,7 @@ function useFitName(
     const fit = () => {
       if (busy) return;
       busy = true;
-      el.style.fontSize = "var(--member-name-base)"; // re-assert the authored rung rather than clearing it: React diffs against its own props and would never restore a cleared inline value
+      el.style.fontSize = "var(--_member-name-base)"; // re-assert the authored rung rather than clearing it: React diffs against its own props and would never restore a cleared inline value
       el.style.whiteSpace = "nowrap";
       const cs = getComputedStyle(el);
       const floor =
@@ -260,7 +265,7 @@ function useFitName(
         }
       }
       const host = (el.closest("[data-member-card]") as HTMLElement | null) || lane; // the settled size is published to the card, so every line under the name scales from it wherever it sits and the hierarchy survives whatever the fit lands on
-      if (host) host.style.setProperty("--member-name-fitted", s + "px");
+      if (host) host.style.setProperty("--_member-name-fitted", s + "px");
       busy = false;
     };
     fit();
@@ -639,9 +644,9 @@ export function MemberCard({
       data-field="name"
       style={
         {
-          "--member-name-base": tier === "expanded" ? "var(--display-m)" : "var(--display-s)",
+          "--_member-name-base": tier === "expanded" ? "var(--display-m)" : "var(--display-s)",
           fontFamily: "var(--font-display)",
-          fontSize: "var(--member-name-base)",
+          fontSize: "var(--_member-name-base)",
           lineHeight: tier === "expanded" ? "var(--display-m-lh)" : "var(--display-s-lh)",
           minWidth: 0,
           display: "block",
@@ -762,7 +767,8 @@ export function MemberCard({
         <span
           data-field="handle"
           style={{
-            fontSize: "max(12px, min(var(--text-s), calc(var(--member-name-fitted, 99px) * 0.85)))",
+            fontSize:
+              "max(12px, min(var(--text-s), calc(var(--_member-name-fitted, 99px) * 0.85)))",
             lineHeight: "var(--text-s-lh)",
             color: "var(--ink-3)",
             overflow: "hidden",
@@ -782,8 +788,8 @@ export function MemberCard({
             fontFamily: "var(--font-display)",
             fontStyle: "italic",
             fontSize: compact
-              ? "max(12px, min(var(--text-xs), calc(var(--member-name-fitted, 99px) * 0.8)))"
-              : "max(12px, min(var(--text-s), calc(var(--member-name-fitted, 99px) * 0.8)))",
+              ? "max(12px, min(var(--text-xs), calc(var(--_member-name-fitted, 99px) * 0.8)))"
+              : "max(12px, min(var(--text-s), calc(var(--_member-name-fitted, 99px) * 0.8)))",
             lineHeight: 1.45,
             color: "var(--ink)",
             textWrap: "pretty",
@@ -804,7 +810,7 @@ export function MemberCard({
             alignItems: "flex-start",
             gap: "var(--space-1)",
             fontSize: compact
-              ? "max(12px, min(var(--text-xs), calc(var(--member-name-fitted, 99px) * 0.8)))"
+              ? "max(12px, min(var(--text-xs), calc(var(--_member-name-fitted, 99px) * 0.8)))"
               : "var(--text-s)",
             lineHeight: compact ? "var(--text-xs-lh)" : "var(--text-s-lh)",
             color: "var(--ink-2)",
