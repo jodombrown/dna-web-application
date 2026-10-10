@@ -2905,9 +2905,12 @@ async function runLiveDbArms({ record, skip }) {
       // refused. Proven by the rows read back as live_arms, then rolled back.
       await inTransaction(client, async () => {
         const session = await newUuid();
+        // Read from the catalog, not information_schema: that view hides the columns of a table the
+        // role holds no privilege on, and live_arms holds none on surface_event_kinds (it reads the
+        // kinds through record_event, a definer).
         const column = await attempt(
           client,
-          "select count(*)::int as n from information_schema.columns where table_schema = 'public' and table_name = 'surface_event_kinds' and column_name = 'anonymous'",
+          "select count(*)::int as n from pg_attribute where attrelid = 'public.surface_event_kinds'::regclass and attname = 'anonymous' and not attisdropped",
         );
         if (!column.ok || column.rows[0].n !== 1) {
           skip(
@@ -5965,62 +5968,67 @@ async function runLiveDbArms({ record, skip }) {
         );
       });
 
-      // 12C part 2 (1364, 1615): Started and the drop-off on seeded rows. The two test accounts are
-      // moved inside the transaction: member-test to a member created ten minutes ago who has not
-      // finished screen one (who), owner-test to one created ten minutes ago past screen one with
-      // no place yet (where); the levers then count both as started and each under its step, and
-      // the rollback returns both accounts to where they were.
+      // 12C part 2 (1364, 1615): Started and the drop-off on seeded rows. live_arms may update
+      // members.onboarded_at and who_completed_at and nothing else (its column grants), so the seed
+      // is made with those two: member-test loses both and is on `who`, owner-test loses
+      // onboarded_at and is on `relationship`. Both were created this year, so under the year grain
+      // both count as started, and the drop-off's who and relationship each rise by one against a
+      // read taken before the seed. The rollback returns both accounts to where they were.
       await inTransaction(client, async () => {
         const adminId = await adminMember();
         if (!adminId) {
           skip(names.overviewOnboarding, "no admin");
           return;
         }
-        const column = await attempt(
-          client,
-          "select (public.admin_overview_levers('now', 'previous', 'America/Los_Angeles') -> 'onboarding' -> 'drop_off' ->> 'status') as s",
-        );
-        await actAsSelf(client);
+        const readOnboarding = async () => {
+          await actAs(client, adminId, "aal2");
+          const r = await attempt(
+            client,
+            "select public.admin_overview_levers('year', 'previous', 'America/Los_Angeles') -> 'onboarding' as o",
+          );
+          await actAsSelf(client);
+          return r.ok ? r.rows[0].o : r;
+        };
+        const before = await readOnboarding();
         const seedWho = await attempt(
           client,
-          "update public.members set created_at = now() - interval '10 minutes', who_completed_at = null, onboarded_at = null where id = $1::uuid",
+          "update public.members set who_completed_at = null, onboarded_at = null where id = $1::uuid",
           [member.id],
         );
-        const seedWhere = await attempt(
+        const seedRelationship = await attempt(
           client,
-          "update public.members set created_at = now() - interval '10 minutes', who_completed_at = now() - interval '9 minutes', current_place = null, onboarded_at = null where id = $1::uuid",
+          "update public.members set onboarded_at = null where id = $1::uuid",
           [owner.id],
         );
-        await actAs(client, adminId, "aal2");
-        const read = await attempt(
-          client,
-          "select public.admin_overview_levers('now', 'previous', 'America/Los_Angeles') -> 'onboarding' as o",
-        );
-        await actAsSelf(client);
-        const o = read.ok ? read.rows[0].o : null;
-        const started = o && o.started ? o.started : null;
-        const drop = o && o.drop_off ? o.drop_off : null;
+        const after = await readOnboarding();
+        const step = (o, s) =>
+          o && o.drop_off && o.drop_off.by_step ? o.drop_off.by_step[s] : null;
+        const started = after && after.started ? after.started : null;
+        const drop = after && after.drop_off ? after.drop_off : null;
         record(
           names.overviewOnboarding,
           seedWho.ok &&
-            seedWhere.ok &&
-            read.ok &&
+            seedRelationship.ok &&
+            !!before &&
             !!started &&
             started.status === "connected" &&
             started.value >= 2 &&
+            Array.isArray(started.series) &&
             !!drop &&
             drop.status === "connected" &&
-            drop.by_step.who >= 1 &&
-            drop.by_step.where >= 1 &&
-            typeof drop.by_step.relationship === "number",
-          "before the seed " +
-            (column.ok ? JSON.stringify(column.rows[0].s) : fmt(column)) +
-            "; seed who " +
+            step(after, "who") === step(before, "who") + 1 &&
+            step(after, "relationship") === step(before, "relationship") + 1 &&
+            typeof step(after, "where") === "number",
+          "seed who " +
             fmt(seedWho) +
-            "; seed where " +
-            fmt(seedWhere) +
-            "; onboarding " +
-            (read.ok ? JSON.stringify(o) : fmt(read)),
+            "; seed relationship " +
+            fmt(seedRelationship) +
+            "; before " +
+            JSON.stringify(before && before.drop_off ? before.drop_off : before) +
+            "; after started " +
+            JSON.stringify(started && { value: started.value, status: started.status }) +
+            " drop_off " +
+            JSON.stringify(drop),
         );
       });
 
