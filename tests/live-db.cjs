@@ -402,7 +402,7 @@ async function runLiveDbArms({ record, skip }) {
     overviewNotConnected:
       "Brief 12 12B (arm B-b; 1362 to 1364, 1615): Admitted, Invites, Story-led, partner and DNA system sources and the four company lines answer null with not_connected, and Onboarding Started and drop-off answer connected",
     overviewOnboarding:
-      "Brief 12 12C part 2 (1364, 1615): admin_overview_levers answers Started from members.created_at and the drop-off by step as onboarding_state() reads it, on two members seeded inside the transaction, one on who and one on where",
+      "Brief 12 12C part 2 (1364, 1615): admin_overview_levers answers Started from members.created_at and the drop-off by step as onboarding_state() reads it, on two test accounts seeded inside the transaction, one on who and one on relationship, under the year grain",
     overviewCache:
       "Brief 12 12B (SPEC Part D item 4): DIA's note cache reads null before a write, answers the statements after it, and refuses a non-array with 22023",
     settings:
