@@ -7,7 +7,12 @@
 // microphone, WebM Opus where the engine has it and MP4 AAC on Safari, the duration from the
 // recorder's own clock. Nothing here is stored anywhere.
 import { useCallback, useEffect, useRef, useState } from "react";
-import { deliverImageUrl, fetchMessageMedia } from "./media";
+import {
+  SIGNED_URL_MARGIN_SECONDS,
+  SIGNED_URL_SECONDS,
+  deliverImageUrl,
+  fetchMessageMedia,
+} from "./media";
 
 export type LoadedMedia = { url: string; mime: string };
 
@@ -222,39 +227,72 @@ export function useRecorder(): RecorderState {
 
 // ---------------------------------------------------------------------------------------------------
 // Member avatars on the Messenger surfaces: profile-media masters delivered at the row's size (346),
-// signed once per path for the tab.
+// signed once per path for the tab and signed again before the token expires (W91, Fix PR 10 item 6).
+// A tab that lives longer than a signing served the expired token to every row that re-rendered,
+// and Safari painted its broken-image glyph: the cache now keeps the time each entry was signed and
+// re-signs once an entry is older than the lifetime less its margin, both named in src/lib/media.ts
+// beside the lifetime the signing asks for. A row whose image fails to load drops the entry, so the
+// next render signs again rather than holding a rejected token for the session.
 // ---------------------------------------------------------------------------------------------------
-const avatars = new Map<string, Promise<string | undefined>>();
+type AvatarEntry = { url: Promise<string | undefined>; signedAt: number };
+const avatars = new Map<string, AvatarEntry>();
 
-export function avatarUrl(path: string | null | undefined, size = 44): Promise<string | undefined> {
+/** How old a signed entry may be before it is signed again, in milliseconds. */
+export const AVATAR_RESIGN_MS = (SIGNED_URL_SECONDS - SIGNED_URL_MARGIN_SECONDS) * 1000;
+
+const avatarKey = (path: string, size: number) => path + "@" + size;
+
+/** Forget a signed avatar URL, so the next render signs again. */
+export function dropAvatarUrl(path: string | null | undefined, size = 44): void {
+  if (path) avatars.delete(avatarKey(path, size));
+}
+
+export function avatarUrl(
+  path: string | null | undefined,
+  size = 44,
+  now: number = Date.now(),
+): Promise<string | undefined> {
   if (!path) return Promise.resolve(undefined);
-  const key = path + "@" + size;
-  let p = avatars.get(key);
-  if (!p) {
-    // A signing that fails leaves the row on its initials and is not kept, so the next render asks
-    // again instead of holding a rejection for the session.
-    p = deliverImageUrl("profile-media", path, {
-      width: size * 2,
-      height: size * 2,
-      resize: "cover",
-    }).catch(() => {
-      avatars.delete(key);
-      return undefined;
-    });
-    avatars.set(key, p);
-  }
-  return p;
+  const key = avatarKey(path, size);
+  const held = avatars.get(key);
+  if (held && now - held.signedAt < AVATAR_RESIGN_MS) return held.url;
+  // A signing that fails leaves the row on its initials and is not kept, so the next render asks
+  // again instead of holding a rejection for the session.
+  const url = deliverImageUrl("profile-media", path, {
+    width: size * 2,
+    height: size * 2,
+    resize: "cover",
+  }).catch(() => {
+    avatars.delete(key);
+    return undefined;
+  });
+  avatars.set(key, { url, signedAt: now });
+  return url;
 }
 
 export function useAvatarUrl(path: string | null | undefined, size = 44): string | undefined {
   const [url, setUrl] = useState<string | undefined>(undefined);
   useEffect(() => {
     let active = true;
+    let probe: HTMLImageElement | null = null;
     void avatarUrl(path, size).then((u) => {
-      if (active) setUrl(u);
+      if (!active) return;
+      setUrl(u);
+      // W91: the row's own load of the URL decides the entry's fate. A load that fails (an expired
+      // token answers 400) drops the entry and returns the row to its initials; the next render
+      // signs again. The probe shares the row's request, so it costs no second fetch.
+      if (!u || typeof Image === "undefined") return;
+      probe = new Image();
+      probe.onerror = () => {
+        if (!active) return;
+        dropAvatarUrl(path, size);
+        setUrl(undefined);
+      };
+      probe.src = u;
     });
     return () => {
       active = false;
+      if (probe) probe.onerror = null;
     };
   }, [path, size]);
   return url;

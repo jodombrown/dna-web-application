@@ -148,6 +148,14 @@ export type Transform = {
   quality?: number;
 };
 
+/** How long a signed storage URL lives, in seconds: the one lifetime every signing here asks for. */
+export const SIGNED_URL_SECONDS = 60 * 60;
+/**
+ * W91 (Fix PR 10 item 6): a cache that keeps a signed URL re-signs it this many seconds before the
+ * lifetime ends, so a tab left open never serves a token that has expired.
+ */
+export const SIGNED_URL_MARGIN_SECONDS = 5 * 60;
+
 /**
  * A signed URL for a stored master, rendered at a delivery size (ruling 346: one master serves every
  * size). Falls back to the untransformed signed master if the transform cannot be produced, so a
@@ -161,10 +169,12 @@ export async function deliverImageUrl(
   const sb = getSupabase();
   if (!sb || !path) return undefined;
   if (transform) {
-    const { data } = await sb.storage.from(bucket).createSignedUrl(path, 60 * 60, { transform });
+    const { data } = await sb.storage
+      .from(bucket)
+      .createSignedUrl(path, SIGNED_URL_SECONDS, { transform });
     if (data?.signedUrl) return data.signedUrl;
   }
-  const { data } = await sb.storage.from(bucket).createSignedUrl(path, 60 * 60);
+  const { data } = await sb.storage.from(bucket).createSignedUrl(path, SIGNED_URL_SECONDS);
   return data?.signedUrl ?? undefined;
 }
 
