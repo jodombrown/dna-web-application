@@ -9042,3 +9042,74 @@ surface `event_public` and no object. The event funnel on the public side theref
 and cannot attribute them to an event until the projection names one. The fix is one line in the
 projection's public branch, `'id', v_event.id`, plus the type, and a decision that the id may be
 public, which this PR does not take. Owner: Convene's next schema pass.
+
+## G266. CI's live arms write rows into the production behaviour log
+
+**Severity: medium. Invite-boundary gate (ruling 140). Opened 10 October 2026 by Chat's reading of
+`public.surface_events` after handoff 58-12C2 merged (#105, `6f590a9`). The number is assigned by
+this entry (ruling 638).**
+
+Chat read 24 `surface_events` rows on 10 October written from sessions of `owner-test` and
+`member-test`, the two ruling 218 test accounts. They are the matrix's live arms: every arm that
+signs one of the two accounts into the deployed preview against the canonical project
+(`tests/auth.cjs`'s accounts arm, `tests/messenger.cjs`'s `runMessengerLive`,
+`tests/messenger-media.cjs`, `tests/messenger-composer-video.cjs`) drives the real recorder in
+`src/lib/record.ts`, and the recorder does what it is built to do. The rolled-back live-db arms
+write nothing; the mock-backed matrix arms answer `record_event` at the network layer and write
+nothing. Only the arms that run the real app against the real project reach the table, and they run
+on every push of every branch (`pages.yml`), so the log fills with harness behaviour at a rate no
+member produces, and every rollup, the Overview's future behaviour reads and the story-led
+attribution of 12C count it as DNA's.
+
+What is not affected: `admin_overview_levers` reads product tables and never `surface_events`
+(1615), so the Onboarding lever the founder verified is clean of this.
+
+Proposed fix, not built here. The two accounts are already named in the schema by handle, in
+`members_live_arms_select` and its siblings (`20260912020037_r382_live_arms_role.sql`,
+`handle in ('owner-test', 'member-test')`), so `record_event` can refuse to write, returning as it
+does over the rate ceiling, when `auth.uid()` is one of them: one `exists` on `public.members` by
+handle inside the definer, named by a `private.is_test_account(uuid)` helper so the three places
+that spell the pair today become one. That excludes every signed-in harness row at the writer, which
+is where 1179 puts every decision about the log. It does not reach the signed-out rows the harness
+writes on public pages, `event_page_viewed` on `/e/{slug}` and the three anonymous access kinds,
+because an anonymous row carries no account; those need either a second sink (a `surface_events`
+partition keyed on a harness marker the app does not send today) or a nightly delete keyed on the
+harness's known session ids, neither of which the recorder's envelope supports without a change to
+`record_event`'s signature. The decision between exclusion at the writer alone and a sink for the
+anonymous remainder is the founder's, with counsel's view of 1179's retention, before the first
+invite. Owner: the next 12C pass.
+
+## G267. Supabase Auth's SMTP refuses with 535, so no auth email sends (W96)
+
+**Severity: high. Invite-boundary gate (ruling 140). Opened 10 October 2026 from the founder's walk
+of handoff 58-12C2 (#105), recorded as W96. The number is assigned by this entry (ruling 638).**
+
+Every email Supabase Auth sends through the project's custom SMTP, the sign-up confirmation, the
+password reset link, the magic link and the email change, fails at the provider with `535
+Authentication credentials invalid`. The app's own flows are unchanged and correct: `/reset`
+answers its fixed-delay sent state whatever the server does (ruling 156 applied to auth), sign-up
+shows "Check your email", and neither surface can tell, by design, that nothing was sent. So a new
+member cannot confirm an address and a member who has forgotten their password cannot reset it,
+on production, until the credential is good.
+
+The cause is the SMTP credential the project holds, not the code: the Resend account the sender
+authenticates against is unpaid and its key is to be rotated, both the founder's. Nothing in the
+tree names the key (ruling 387's module names addresses, never credentials). What closes it: the
+founder pays the Resend account, mints a new key, and sets it as the project's SMTP password on
+supabase.com; then one real reset on production proves the send, which is G268. Owner: the founder.
+
+## G268. `password_reset_completed` is unverified on a real walk, blocked by G267
+
+**Severity: low. Opened 10 October 2026 from the founder's walk of handoff 58-12C2 (#105). The
+number is assigned by this entry (ruling 638).**
+
+Done Means 3 of handoff 58-12C2 asked the founder's walk to leave a `password_reset_completed` row
+with a session id and a null member. The walk left every other row it named, two anonymous
+`password_reset_requested` rows among them, and could not reach `/reset/new`: the reset link never
+arrived, because the project's SMTP refuses (G267). The kind is proven two ways short of a real
+walk: the live-db arm `mobilAnonymous` records it signed in and signed out and reads back a null
+member (`tests/live-db.cjs`), and the matrix's record arm lands a recovery session on `/reset/new`
+against the mock and reads one call with no prop (`tests/record.cjs`). What is unproven is the
+production path end to end, GoTrue's recovery mail through `/reset/new` to the row. It is proven
+the first time a real reset completes on production after G267 closes, read by Chat from
+`surface_events` as the walk would have. Owner: Chat, at the walk that follows G267.
