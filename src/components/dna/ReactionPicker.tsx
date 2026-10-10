@@ -11,11 +11,19 @@
 // the search glyph in its place, because Strand's Input cannot be the library's search element.
 // Emoji data comes from the app's own origin through src/lib/emoji.ts's resolver and is never
 // cached in the browser (1351, 1577).
-import { EmojiPicker } from "frimousse";
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { EmojiPicker, type EmojiDataResolver } from "frimousse";
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import { Icon } from "@/components/strand/Icon";
 import { ReactionMark } from "@/components/strand/ReactionGlyph";
-import { TONES, resolveEmojiData, toneOf, type Tone } from "@/lib/emoji";
+import {
+  TONES,
+  baseOf,
+  emojiNamesLoaded,
+  reactionName,
+  resolveEmojiData,
+  toneOf,
+  type Tone,
+} from "@/lib/emoji";
 import type { Mode } from "@/lib/tier";
 
 const CAPS: CSSProperties = {
@@ -34,6 +42,8 @@ export type ReactionPickerProps = {
   onTone: (value: string) => void;
   /** The member's recent emoji, newest first (1405). */
   recent: readonly string[];
+  /** The quick eight as the caller already read them from vocabularies() (1629): E9's names win on their glyphs. */
+  quick: readonly { value: string; label: string }[];
   onPick: (emoji: string) => void;
   input: Mode;
   /** Height of the scrolling list on pointer; on touch the Sheet's body gives it. */
@@ -44,11 +54,22 @@ export function ReactionPicker({
   tone,
   onTone,
   recent,
+  quick,
   onPick,
   input,
   listHeight,
 }: ReactionPickerProps) {
   const cell = input === "touch" ? 44 : 36;
+  // Fix PR 10 item 3 (1621, 1628, 1629): one name per glyph. The names come from the data the
+  // resolver loads, so Recent renders only once that data is here, and never a bare character.
+  const [named, setNamed] = useState(emojiNamesLoaded());
+  const resolve = useCallback<EmojiDataResolver>(async (locale, options) => {
+    const data = await resolveEmojiData(locale, options);
+    setNamed(emojiNamesLoaded());
+    return data;
+  }, []);
+  const quickLabelOf = (emoji: string) =>
+    quick.find((q) => baseOf(q.value) === baseOf(emoji))?.label ?? null;
   const [search, setSearch] = useState("");
   const [focus, setFocus] = useState(false);
   const host = useRef<HTMLDivElement>(null);
@@ -80,7 +101,7 @@ export function ReactionPicker({
   return (
     <EmojiPicker.Root
       locale="en"
-      resolveEmojiData={resolveEmojiData}
+      resolveEmojiData={resolve}
       skinTone={tone.key}
       columns={columns}
       onEmojiSelect={(e) => onPick(e.emoji)}
@@ -187,7 +208,7 @@ export function ReactionPicker({
           flex: 1,
         }}
       >
-        {!search.trim() && recent.length > 0 && (
+        {!search.trim() && named && recent.length > 0 && (
           <div
             data-recent
             style={{
@@ -199,18 +220,25 @@ export function ReactionPicker({
           >
             <span style={CAPS}>Recent</span>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 2 }}>
-              {recent.map((e) => (
-                <button
-                  key={e}
-                  type="button"
-                  aria-label={e}
-                  data-recent-emoji={e}
-                  onClick={() => onPick(e)}
-                  style={cellStyle}
-                >
-                  <ReactionMark emoji={e} size={24} toneFill={toneOf(e).hex} />
-                </button>
-              ))}
+              {recent.map((e) => {
+                // 1628, 1629: the emoji's name in sentence case, the quick eight by E9's name, a
+                // toned form with the tone words emojibase writes; a character with no name
+                // renders no cell (grounded-or-empty).
+                const name = reactionName(e, quick);
+                if (!name) return null;
+                return (
+                  <button
+                    key={e}
+                    type="button"
+                    aria-label={name}
+                    data-recent-emoji={e}
+                    onClick={() => onPick(e)}
+                    style={cellStyle}
+                  >
+                    <ReactionMark emoji={e} size={24} toneFill={toneOf(e).hex} />
+                  </button>
+                );
+              })}
             </div>
           </div>
         )}
@@ -269,6 +297,9 @@ export function ReactionPicker({
               Emoji: ({ emoji, ...props }) => (
                 <button
                   {...props}
+                  // 1621, 1629: a quick glyph's cell reads E9's name; every other cell keeps the
+                  // library's label, which the spread props already carry as aria-label.
+                  aria-label={quickLabelOf(emoji.emoji) ?? props["aria-label"]}
                   style={{
                     ...cellStyle,
                     background: emoji.isActive ? "var(--bg-sunken)" : "transparent",

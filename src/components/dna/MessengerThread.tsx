@@ -903,6 +903,7 @@ export function MessengerThread({ member, threadId }: { member: Member; threadId
       tone={tone}
       onTone={setTone}
       recent={recent.data ?? []}
+      quick={quick}
       onPick={(emoji) => toggleReaction(row, emoji)}
       input={mode}
       listHeight={mode === "pointer" ? 300 : undefined}

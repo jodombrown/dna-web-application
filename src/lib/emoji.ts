@@ -67,7 +67,7 @@ export function withTone(emoji: string, takesTone: boolean, modifier: string | n
 // The data resolver.
 // ---------------------------------------------------------------------------------------------------
 
-type RawSkin = { emoji: string; tone?: number | number[] | undefined };
+type RawSkin = { emoji: string; label?: string | undefined; tone?: number | number[] | undefined };
 type RawEmoji = {
   emoji: string;
   label: string;
@@ -91,7 +91,49 @@ const TONE_KEYS: Exclude<SkinTone, "none">[] = [
   "dark",
 ];
 
+/** Sentence case: the first letter only (1628). */
 const capitalise = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
+// ---------------------------------------------------------------------------------------------------
+// The names the resolver built (Fix PR 10 item 3; rulings 1621, 1628, 1629). One name per glyph:
+// every base and every toned skin the resolver loaded, as emojibase writes it, sentence-cased, keyed
+// by the character with U+FE0F stripped on both sides of the lookup, because the vocabulary stores
+// the base with its selector (👍️) and a stored reaction may carry it or not. Populated by the
+// resolver and nowhere else; empty until the data has loaded, so a surface that names a character
+// renders nothing rather than the bare character (grounded-or-empty).
+// ---------------------------------------------------------------------------------------------------
+const NAMES = new Map<string, string>();
+let namesLoaded = false;
+
+const stripSelector = (emoji: string) => emoji.replace(/\uFE0F/g, "");
+
+/** Whether the resolver has loaded the data the names come from. */
+export function emojiNamesLoaded(): boolean {
+  return namesLoaded;
+}
+
+/** The library's name for a character, toned or not, sentence-cased; null until loaded or unknown. */
+export function emojiName(emoji: string): string | null {
+  return NAMES.get(stripSelector(emoji)) ?? null;
+}
+
+/**
+ * The accessible name of a character where the quick eight keep E9's names (1629): a quick glyph's
+ * base reads the vocabulary's label, its toned form reads that label before the colon and the tone
+ * words emojibase writes after it ("Clapping: medium-dark skin tone"); every other character reads
+ * the library's name. Null until the data has loaded or where the character has no name.
+ */
+export function reactionName(
+  emoji: string,
+  quick: readonly { value: string; label: string }[],
+): string | null {
+  const lib = emojiName(emoji);
+  const q = quick.find((x) => baseOf(x.value) === baseOf(emoji));
+  if (!q) return lib;
+  if (!lib) return null;
+  const colon = lib.indexOf(":");
+  return colon < 0 ? q.label : q.label + lib.slice(colon);
+}
 
 /** Where the two files live on the app's own origin. */
 export function emojiDataUrl(file: "data" | "messages"): string {
@@ -159,6 +201,12 @@ export const resolveEmojiData: EmojiDataResolver = async (_locale, options) => {
   ]);
   signal?.throwIfAborted();
   const grouped = emojis.filter((e) => typeof e.group === "number");
+  for (const e of grouped) {
+    NAMES.set(stripSelector(e.emoji), capitalise(e.label));
+    for (const s of e.skins ?? [])
+      if (typeof s.label === "string") NAMES.set(stripSelector(s.emoji), capitalise(s.label));
+  }
+  namesLoaded = true;
   const version = options.emojiVersion ?? supportedVersion(grouped);
   const flags = messages.subgroups.find(
     (s) => s.key === "country-flag" || s.key === "subdivision-flag",

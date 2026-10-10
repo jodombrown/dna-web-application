@@ -19,6 +19,7 @@ import { IconButton } from "./IconButton";
 import { Menu, type MenuItem, type MenuRule } from "./Menu";
 import { ReactionMark } from "./ReactionGlyph";
 import { Ticks, type TickStatus } from "./Ticks";
+import { Tooltip } from "./Tooltip";
 import type { C } from "./cmeta";
 import { useLongPress } from "@/lib/long-press";
 import { useMode, type Mode } from "@/lib/tier";
@@ -335,35 +336,38 @@ export function MessageBubble({
       }}
     >
       {picker.quick.map((q) => (
-        <button
-          key={q.value}
-          type="button"
-          aria-label={q.label}
-          aria-pressed={q.pressed}
-          data-quick={q.value}
-          onClick={() => press(q.value, picker.onPick)}
-          style={{
-            all: "unset",
-            cursor: "pointer",
-            width: target,
-            height: target,
-            borderRadius: "var(--radius-pill)",
-            display: "inline-flex",
-            alignItems: "center",
-            justifyContent: "center",
-            background: q.pressed ? "var(--bg-sunken)" : "transparent",
-            boxSizing: "border-box",
-            flex: "none",
-          }}
-        >
-          <span
-            key={popping(q.value) ? pop?.t : "still"}
-            className={popping(q.value) ? "b14-pop" : undefined}
-            style={{ display: "inline-flex" }}
+        // Fix PR 10 item 3 (1613, 1146): each glyph names itself through Tooltip, which shows on
+        // pointer only and renders nothing on touch; the button keeps the accessible name.
+        <Tooltip key={q.value} label={q.label} style={{ flex: "none" }}>
+          <button
+            type="button"
+            aria-label={q.label}
+            aria-pressed={q.pressed}
+            data-quick={q.value}
+            onClick={() => press(q.value, picker.onPick)}
+            style={{
+              all: "unset",
+              cursor: "pointer",
+              width: target,
+              height: target,
+              borderRadius: "var(--radius-pill)",
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              background: q.pressed ? "var(--bg-sunken)" : "transparent",
+              boxSizing: "border-box",
+              flex: "none",
+            }}
           >
-            <ReactionMark emoji={q.value} size={24} toneFill={q.toneFill} />
-          </span>
-        </button>
+            <span
+              key={popping(q.value) ? pop?.t : "still"}
+              className={popping(q.value) ? "b14-pop" : undefined}
+              style={{ display: "inline-flex" }}
+            >
+              <ReactionMark emoji={q.value} size={24} toneFill={q.toneFill} />
+            </span>
+          </button>
+        </Tooltip>
       ))}
       <Button variant="ghost" size="sm" onClick={picker.onMore} style={{ flex: "none" }} data-more>
         More
