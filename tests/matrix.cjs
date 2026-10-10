@@ -396,6 +396,14 @@ const VOCAB = {
       destination: "Opens the contribution",
       renders: false,
     },
+    // Fix PR 10 item 8 (1623, 20261009120100): the row renders, its C from its object.
+    {
+      value: "thread_invitation",
+      c: null,
+      c_from_object: true,
+      destination: "Opens the group",
+      renders: true,
+    },
     {
       value: "space_role_approved",
       c: "collaborate",
@@ -410,7 +418,6 @@ const VOCAB = {
       destination: null,
       renders: false,
     },
-    { value: "thread_invitation", c: null, c_from_object: true, destination: null, renders: false },
   ],
 };
 

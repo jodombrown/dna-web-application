@@ -8,7 +8,7 @@
 //   - the row reads "{name} wants to connect." under its destination words (461, 490);
 //   - the row opens My Network with its Requests section in view (1482), and marks itself read;
 //   - Connect's for-you dot stays until My Network opens, then clears (1522).
-// Eight checks per cell.
+// Nine checks per cell, the invitation row (Fix PR 10 item 8) among them.
 //
 // Usage: BASE=https://<id>.dna-web-application.pages.dev SPECIAL=notify WEBKIT=1 node tests/matrix.cjs
 const M = require("./matrix.cjs");
@@ -86,6 +86,16 @@ async function runNotifyDots(browserType, bname, [w, h], theme) {
     };
     db.notifications.push({ ...REQUEST });
     db.connect.pending = true;
+    // Fix PR 10 item 8 (1637, 1623): Esi's group invitation arrives beside it, its thread in the
+    // Messenger's own projection so the row's group name hydrates through messenger_threads_view.
+    const mock = require("./messenger-mock.cjs");
+    db.messenger.threads.unshift(mock.invitedGroupThread());
+    db.notifications.push(mock.invitedGroupNotification());
+    db.membersById[mock.members.esi.id] = {
+      id: mock.members.esi.id,
+      name: mock.members.esi.name,
+      handle: "esi-owusu",
+    };
     await page.reload({ waitUntil: "networkidle" });
     await page.locator('[data-testid="bell-dot"]').waitFor({ timeout: 15000 });
     record(
@@ -124,6 +134,18 @@ async function runNotifyDots(browserType, bname, [w, h], theme) {
           "Opens My Network, Requests" &&
         (await row.locator('[role="img"][aria-label="Connect"]').count()) === 1,
       text.slice(0, 120),
+    );
+    const invite = list.locator('button[data-kind="thread_invitation"]');
+    await invite.waitFor({ timeout: 10000 });
+    const inviteText = ((await invite.textContent()) || "").replace(/\s+/g, " ");
+    record(
+      tag +
+        ': the invitation row reads "{name} invited you to {group}." under Opens the group, marked Connect (1637, 1636, 1623)',
+      inviteText.includes("Esi Owusu invited you to Tema cold chain.") &&
+        (await invite.getAttribute("data-destination")) === "Opens the group" &&
+        (await invite.locator("[data-destination-line]").innerText()) === "Opens the group" &&
+        (await invite.locator('[role="img"][aria-label="Connect"]').count()) === 1,
+      inviteText.slice(0, 120),
     );
     await page
       .locator('[data-testid="bell-dot"]')

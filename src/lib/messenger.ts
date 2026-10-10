@@ -771,9 +771,12 @@ export function threadC(kind: string | null): "connect" | "convene" | "collabora
   return "connect";
 }
 
-/** Any row that is unread, not muted and not archived lights the header's dot (SPEC Part C item 3). */
+/**
+ * Any row that is unread, not muted and not archived lights the header's dot (SPEC Part C item 3),
+ * and so does an invitation waiting on the viewer (1623, 1335): existence only, never a count.
+ */
 export function anyUnread(threads: readonly ThreadView[]): boolean {
-  return threads.some((t) => !!t.unread && !t.muted && !t.archived);
+  return threads.some((t) => (!!t.unread || t.state === "invited") && !t.muted && !t.archived);
 }
 
 declare module "@tanstack/history" {
