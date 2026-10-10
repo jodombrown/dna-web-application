@@ -2,7 +2,8 @@
 // attribute, the only lens filters touch, ruling 173), Suggested (DIA's reason on every card, or
 // nothing, ruling 113), My Network (Requests, Sent, Connections, Following) and Where (country tiles
 // above the floor, nobody plotted, rulings 158, 159). Cards, skeleton and tiles mount from
-// src/components/strand/MemberCard.tsx and PlaceTile.tsx (ruling 179). The lens column sits on
+// src/components/dna/MemberCard.tsx (Strand's part at compile v1791495246160097, handoff 44-MC-R3)
+// and PlaceTile.tsx (ruling 179). The lens column sits on
 // --bg, like every other list surface (ruling 590, which revokes 181): the LensBar's own
 // --bg-sunken track then reads as a track instead of disappearing into a column painted the same
 // colour, and MemberCard's --surface fill keeps its --line frame to separate it, exactly as
@@ -61,7 +62,7 @@ import {
   respondToRequest,
   sendIntroduction,
   setFollowing,
-  toMember,
+  cardProps,
   type ConnectCard,
   type ConnectFilters,
   type ConnectLens,
@@ -72,7 +73,7 @@ import {
 import { connectPendingKey, markMyNetworkSeen } from "@/lib/notifications";
 import { setColumnPad, setLeftRail, setRightRail } from "@/lib/rail-store";
 import { openOneToOne, refusalOf } from "@/lib/messenger";
-import { useMode, useTier, useWide } from "@/lib/tier";
+import { useMode, useTier, useWide, type Tier } from "@/lib/tier";
 
 const TOAST_MS = 2400;
 const SWIPE_PX = 60;
@@ -177,20 +178,23 @@ function FilterControls({
   );
 }
 
-function Ghosts({ compact, label }: { compact: boolean; label: string }) {
+/** The skeleton takes the tier (1499); the list owns the one aria-busy, never each card. */
+function Ghosts({ tier, label }: { tier: Tier; label: string }) {
+  const compact = tier === "compact";
   return (
     <div
       role="status"
       aria-label={label}
+      aria-busy="true"
       style={{
         display: "grid",
         gridTemplateColumns: compact ? "minmax(0,1fr)" : "repeat(2, minmax(0,1fr))",
         gap: 14,
       }}
     >
-      <MemberCardSkeleton compact={compact} />
-      <MemberCardSkeleton compact={compact} />
-      <MemberCardSkeleton compact={compact} />
+      <MemberCardSkeleton tier={tier} />
+      <MemberCardSkeleton tier={tier} />
+      <MemberCardSkeleton tier={tier} />
     </div>
   );
 }
@@ -431,6 +435,10 @@ export function ConnectSurface({ member, search }: { member: Member; search: Con
    * bar's bottom edge, on --fade-under-ease. Nothing translates and nothing scales; reduced motion
    * holds it at 1. The bar is measured live, so the expanded and compact geometries need no branch.
    */
+  // Handoff 44-MC-R3: the lib maps the row onto the part (cardProps); this passes the tier, the
+  // input mode, the profile link and the handlers. The part's one Dismiss is the request's decline
+  // on a card waiting on the viewer and dismiss_suggestion on a suggestion (extraction's table).
+  // Withdraw is not wired here (1542): no onWithdraw, so nothing draws beside Pending.
   const card = (c0: ConnectCard, context: MemberCardContext) => {
     const c = view(c0);
     return (
@@ -443,19 +451,17 @@ export function ConnectSurface({ member, search }: { member: Member; search: Con
         scroller={scrollerRef.current}
       >
         <MemberCard
-          member={toMember(c)}
-          rel={c.rel}
-          following={c.following}
-          context={context}
-          compact={compact}
-          pointer={pointer}
+          {...cardProps(c, context)}
+          tier={tier}
+          input={mode}
+          canMessage={c.rel === "connected"}
+          href={"/m/" + c.handle}
           onOpen={() => openProfile(c)}
           onConnect={() => openIntro(c)}
           onAccept={() => onAccept(c)}
-          onDecline={() => onDecline(c)}
+          onDismiss={c.rel === "received" ? () => onDecline(c) : () => onDismiss(c)}
           onFollow={() => onFollow(c)}
-          onDismiss={() => onDismiss(c)}
-          onMessage={c.rel === "connected" ? () => onMessage(c) : undefined}
+          onMessage={() => onMessage(c)}
         />
       </CardFade>
     );
@@ -635,7 +641,7 @@ export function ConnectSurface({ member, search }: { member: Member; search: Con
           data-testid="lens-members"
         >
           {members.isPending ? (
-            <Ghosts compact={compact} label="Loading Connect" />
+            <Ghosts tier={tier} label="Loading Connect" />
           ) : members.isError ? (
             <LoadError {...CONNECT_ERROR} onRetry={() => void members.refetch()} />
           ) : items.length === 0 ? (
@@ -706,7 +712,7 @@ export function ConnectSurface({ member, search }: { member: Member; search: Con
         data-testid="lens-suggested"
       >
         {suggested.isPending ? (
-          <Ghosts compact={compact} label="Loading Connect" />
+          <Ghosts tier={tier} label="Loading Connect" />
         ) : suggested.isError ? (
           <LoadError {...CONNECT_ERROR} onRetry={() => void suggested.refetch()} />
         ) : items.length === 0 ? (
@@ -735,7 +741,7 @@ export function ConnectSurface({ member, search }: { member: Member; search: Con
     const allEmpty = !!d && sections.every((s) => s.items.length === 0);
     emptyLens = !network.isPending && !network.isError && allEmpty;
     body = network.isPending ? (
-      <Ghosts compact={compact} label="Loading Connect" />
+      <Ghosts tier={tier} label="Loading Connect" />
     ) : network.isError ? (
       <LoadError {...CONNECT_ERROR} onRetry={() => void network.refetch()} />
     ) : allEmpty ? (

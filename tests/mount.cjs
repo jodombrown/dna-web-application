@@ -1271,7 +1271,7 @@ async function runMountConnect(bt, bname, [w, h], theme) {
         .locator('[data-testid="lens-suggested"] [data-testid="member-card"]')
         .first();
       await card.waitFor({ timeout: 15000 });
-      await tap(page, card.getByRole("button", { name: "Connect", exact: true }));
+      await tap(page, card.getByRole("button", { name: /^Connect( with .*)?$/ }));
       const dialog = '[role="dialog"][aria-label^="Introduce yourself to"]';
       await page.locator(dialog).waitFor({ timeout: 10000 });
       const intro = await readInputs(page, dialog);

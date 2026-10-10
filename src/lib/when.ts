@@ -17,6 +17,19 @@ export function whenLabel(iso: string | null | undefined): string {
   return format(d, "EEE d MMM, HH:mm");
 }
 
+/**
+ * "Sat 23 Aug" for a timestamp; empty when absent. Profile's badge and section dates, and under
+ * ruling 1530 the attestation `when` on every surface, formatted here before it reaches a Strand
+ * part, which never formats a date. Moved from src/lib/profile.ts by handoff 44-MC-R3 so the one
+ * formatter lives in the one date module.
+ */
+export function whenShort(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return format(d, "EEE d MMM");
+}
+
 export function timeLabel(iso: string | null | undefined): string {
   if (!iso) return "";
   const d = new Date(iso);

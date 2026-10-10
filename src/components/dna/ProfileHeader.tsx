@@ -15,7 +15,7 @@ import { Avatar } from "@/components/strand/Avatar";
 import { Button } from "@/components/strand/Button";
 import { Icon } from "@/components/strand/Icon";
 import { IconButton } from "@/components/strand/IconButton";
-import { IdentityMark } from "./IdentityMark";
+import { IdentityMark } from "@/components/strand/IdentityMark";
 import { assetBase } from "@/components/strand/cmeta";
 
 export type MastheadPattern = "kente" | "adinkra" | "mudcloth";

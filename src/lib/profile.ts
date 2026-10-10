@@ -10,16 +10,40 @@
 //
 // Ruling 275, under 212: the place-derived local time line left the core row on every surface, so
 // the helper that composed it left with the ProfileHeader props that carried it.
-import { format } from "date-fns";
 import type { Audience } from "@/components/strand/AudienceSelect";
 import type { AttestationItem } from "@/components/dna/AttestationRail";
-import type { Badge } from "@/components/dna/BadgeRow";
+import type { Attestation } from "@/components/strand/BadgeRow";
 import type { C } from "@/components/strand/cmeta";
 import type { MastheadPattern } from "@/components/dna/ProfileHeader";
 import type { Stance } from "@/components/dna/StanceBlock";
 import type { Json } from "./database.types";
 import { uploadImage, type ImageSlot, type ImageUpload } from "./media";
 import { getSupabase } from "./supabase";
+import { whenShort } from "./when";
+
+/**
+ * One attested C as profile_view and private.connect_card return it: the projection's own field
+ * names and `when` as the raw timestamp. Ruling 1530: the mapping onto Strand's BadgeRow (`object`
+ * → `what`, `attester` → `who`, `role` → `role`, `when` formatted) happens here in the lib and never
+ * in the part. `role` is absent when the attester renders as a role only (ruling 141).
+ */
+export type AttestedRow = {
+  c: Attestation["c"];
+  items: { object: string; attester: string; role?: string | null | undefined; when: string }[];
+};
+
+/** The projection's attested Cs as the part reads them (1530). Both libs map through this one function. */
+export function toAttestations(rows: AttestedRow[] | null | undefined): Attestation[] {
+  return (rows ?? []).map((b) => ({
+    c: b.c,
+    items: b.items.map((it) => ({
+      what: it.object,
+      who: it.attester,
+      role: it.role ?? null,
+      when: whenShort(it.when),
+    })),
+  }));
+}
 
 export type SectionKey =
   | "about"
@@ -120,11 +144,8 @@ export type ProfileView = {
   switches?: { private: boolean; shared: boolean } | undefined;
   private?: boolean | undefined;
   sections: ProfileSections;
-  badges: {
-    c: Badge["c"];
-    /** role is absent when the attester is rendered as a role only (ruling 141). */
-    items: { object: string; attester: string; role?: string | null | undefined; when: string }[];
-  }[];
+  /** Attested Cs, already in the part's shape with `when` formatted (1530); see toAttestations. */
+  badges: Attestation[];
   visibility?: Partial<Record<SectionKey, Audience>> | undefined;
   relationship?: { state: RelationshipState; following: boolean } | undefined;
   /**
@@ -166,7 +187,8 @@ export async function loadProfile(handle: string, asPublic = false): Promise<Pro
   if (!data || typeof data !== "object") return null;
   const view = data as unknown as ProfileView;
   view.sections = view.sections ?? {};
-  view.badges = view.badges ?? [];
+  // The wire carries the projection's field names; the part reads Strand's (1530).
+  view.badges = toAttestations(view.badges as unknown as AttestedRow[] | null | undefined);
   view.mutuals = view.mutuals ?? [];
   view.shared_spaces = view.shared_spaces ?? [];
   const [avatarUrl, coverUrl] = await Promise.all([
@@ -280,12 +302,4 @@ export async function loadPublicAttestations(): Promise<Partial<Record<C, Attest
     }));
   }
   return out;
-}
-
-/** "Sat 23 Aug" for a timestamp; empty when absent. */
-export function whenShort(iso: string | null | undefined): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  return format(d, "EEE d MMM");
 }

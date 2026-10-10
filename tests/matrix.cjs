@@ -641,7 +641,20 @@ const CONNECT_MEMBERS = [
     origin: "South Africa",
     heritage: "Continental",
     chips: ["Education & Training"],
+    // Handoff 44-MC-R3: two attestations in one C (two lines, never "2"), a second C (one pill open at
+    // a time, 1500), and a mutual on a connected member (1531), so the card and the arm read them.
     badges: [
+      {
+        c: "contribute",
+        items: [
+          {
+            object: "Site survey, Thohoyandou clinic",
+            attester: "Adaeze Nwosu",
+            role: "Space lead",
+            when: "2026-07-10T10:00:00Z",
+          },
+        ],
+      },
       {
         c: "convene",
         items: [
@@ -651,10 +664,16 @@ const CONNECT_MEMBERS = [
             role: "host",
             when: "2026-08-22T18:00:00Z",
           },
+          {
+            object: "Mini-grid procurement clinic",
+            attester: "Kwame Mensah",
+            role: "host",
+            when: "2026-09-14T17:00:00Z",
+          },
         ],
       },
     ],
-    mutuals: [],
+    mutuals: [{ name: "Kwame Mensah", avatar_path: null }],
     rel: "connected",
     following: true,
     _stance: "ally",
@@ -701,6 +720,28 @@ const CONNECT_MEMBERS = [
     _stance: "exploring",
     _location: "Nigeria",
     _focus: "Agriculture & Food Systems",
+  },
+  // Handoff 44-MC-R3 (1491): a name the compact lane cannot hold at the 15px floor, so the arm reads
+  // the fit stopping at the floor and the name wrapping rather than shrinking. Matches no filter the
+  // arm applies and sits in no network section.
+  {
+    id: "c4000000-0000-4000-8000-000000000007",
+    handle: "oluwadamilare-adebayo-ogunbanjo",
+    name: "Oluwadamilare Adebayo-Ogunbanjo Olufunmilayo Akinwande-Balogun",
+    identified: false,
+    headline: "Logistics, Lagos and Rotterdam",
+    stance_label: "Kin",
+    place: "Rotterdam, Netherlands",
+    origin: "Nigeria",
+    heritage: "First generation",
+    chips: ["Operations"],
+    badges: [],
+    mutuals: [],
+    rel: "none",
+    following: false,
+    _stance: "kin",
+    _location: "Netherlands",
+    _focus: "Infrastructure & Energy",
   },
 ];
 const CONNECT_SUGGESTED = [
@@ -1379,7 +1420,10 @@ async function mockSupabase(page, db, opts = {}) {
         if (body.p_lens === "network") {
           const cards = CONNECT_MEMBERS.map((m) => connectCard(m, cx.overrides));
           return json({
-            requests: cards.filter((c) => c.rel === "received"),
+            // 1449: each received request carries its created_at as since, raw; the lib formats it.
+            requests: cards
+              .filter((c) => c.rel === "received")
+              .map((c) => ({ ...c, since: "2026-10-08T09:15:00Z" })),
             sent: cards
               .filter((c) => c.rel === "sent" || (cx.overrides[c.id] || {}).sentPending)
               .map((c) => ({ ...c, rel: "sent" })),

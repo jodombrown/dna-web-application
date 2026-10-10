@@ -7,9 +7,10 @@
 // here filters, counts, scores or computes eligibility: the client renders what arrives.
 // Writes: send_introduction, respond_to_request, withdraw_request, set_follow, dismiss_suggestion.
 import type { Lens } from "@/components/strand/LensBar";
-import type { Badge } from "@/components/dna/BadgeRow";
-import type { MemberCardContext, MemberCardMember, MemberRel } from "@/components/dna/MemberCard";
+import type { MemberCardContext, MemberCardProps, MemberRel } from "@/components/dna/MemberCard";
+import { toAttestations, type AttestedRow } from "./profile";
 import { functionsUrl, getSupabase, SUPABASE_PUBLISHABLE_KEY } from "./supabase";
+import { timeLabel } from "./when";
 
 // ---------------------------------------------------------------------------
 // URL contract (SPEC section 1, rulings 84, 155, 158, 163)
@@ -121,26 +122,34 @@ export type CardRow = {
   avatar_path?: string | undefined;
   identified?: boolean | undefined;
   headline?: string | undefined;
+  /**
+   * Still returned by private.connect_card and read by nothing since handoff 44-MC-R3: the card
+   * draws no stance (1488), no origin, heritage or corridor line (1498) and no chips (1472). Left on
+   * the wire as the handoff instructs; the port note lists them as unread.
+   */
   stance_label?: string | undefined;
   place?: string | undefined;
   origin?: string | undefined;
   heritage?: string | undefined;
   corridor_label?: string | undefined;
   chips?: string[] | undefined;
-  badges?: Badge[] | undefined;
+  /** The projection's attested Cs, raw; cardProps maps them onto the part's shape (1530). */
+  badges?: AttestedRow[] | undefined;
+  /** Names up to three, never a count (120); for a connected member too since 1531. The avatar_path rides along unread: the part draws names, not faces. */
   mutuals?: { name: string; avatar_path?: string | undefined }[] | undefined;
   rel: MemberRel;
   following: boolean;
   /** Requests only: the sender's introduction. */
   message?: string | undefined;
+  /** Requests only: the request's created_at, raw (1449); cardProps formats it (1530). */
+  since?: string | undefined;
   /** Suggested only: DIA's sentence, written by connect-suggest. */
   reason?: string | undefined;
 };
 
-/** A card with its storage paths resolved to signed URLs (profile-media is private; storage RLS decides). */
+/** A card with its storage path resolved to a signed URL (profile-media is private; storage RLS decides). */
 export type ConnectCard = CardRow & {
   avatarUrl?: string | undefined;
-  mutualUrls?: (string | undefined)[] | undefined;
 };
 
 export type MembersPage = { items: ConnectCard[]; next_cursor: string | null };
@@ -166,14 +175,16 @@ export type FilterOptions = {
 
 const BUCKET = "profile-media";
 
-/** Sign every avatar path in one call; paths the caller may not read come back undefined. */
+/**
+ * Sign every portrait path in one call; paths the caller may not read come back undefined. The
+ * mutuals' avatar paths are no longer signed: the ratified card draws mutuals as names (handoff
+ * 44-MC-R3), so a URL for a face nobody draws was a storage call for nothing. The URL expires after
+ * an hour and nothing re-signs it on the card (G261).
+ */
 async function signAll(cards: CardRow[]): Promise<ConnectCard[]> {
   const sb = getSupabase();
   const paths = new Set<string>();
-  for (const c of cards) {
-    if (c.avatar_path) paths.add(c.avatar_path);
-    for (const m of c.mutuals ?? []) if (m.avatar_path) paths.add(m.avatar_path);
-  }
+  for (const c of cards) if (c.avatar_path) paths.add(c.avatar_path);
   const urls = new Map<string, string>();
   if (sb && paths.size) {
     const { data } = await sb.storage.from(BUCKET).createSignedUrls([...paths], 60 * 60);
@@ -183,27 +194,53 @@ async function signAll(cards: CardRow[]): Promise<ConnectCard[]> {
   return cards.map((c) => ({
     ...c,
     avatarUrl: c.avatar_path ? urls.get(c.avatar_path) : undefined,
-    mutualUrls: (c.mutuals ?? []).map((m) => (m.avatar_path ? urls.get(m.avatar_path) : undefined)),
   }));
 }
 
-/** The MemberCard props for a card row: the projection's fields under the component's names. */
-export function toMember(c: ConnectCard): MemberCardMember {
+/** What the lib hands the part: the projection's fields under the part's names. */
+export type CardFields = Pick<
+  MemberCardProps,
+  | "name"
+  | "handle"
+  | "headline"
+  | "location"
+  | "src"
+  | "identified"
+  | "attestations"
+  | "context"
+  | "connection"
+  | "following"
+  | "mutuals"
+  | "reason"
+  | "since"
+  | "note"
+>;
+
+/**
+ * The MemberCard props for a card row (handoff 44-MC-R3 item 2; 1530: the mapping lives here, never
+ * in the part). The six places a card is listed map onto the part's four contexts: Connections and
+ * Following are `members` with `connection` and `following` set (extraction section 3), and a
+ * request waiting on the viewer is the `requests` context wherever its card is listed, so Accept and
+ * Dismiss draw in Members too. The wire's `rel` (214) becomes the part's `connection`: sent is
+ * pending, connected stays, received is the requests context, none is none. `since` and the
+ * attestation dates are formatted here through src/lib/when.ts; the part renders them as passed.
+ */
+export function cardProps(c: ConnectCard, context: MemberCardContext): CardFields {
   return {
     name: c.name,
-    avatar: c.avatarUrl,
-    identified: c.identified,
+    handle: c.handle ? "@" + c.handle : undefined,
     headline: c.headline,
-    stanceLabel: c.stance_label,
-    place: c.place,
-    origin: c.origin,
-    heritage: c.heritage,
-    corridorLabel: c.corridor_label,
-    chips: c.chips,
-    badges: c.badges,
-    mutuals: (c.mutuals ?? []).map((m, i) => ({ name: m.name, avatar: c.mutualUrls?.[i] })),
+    location: c.place,
+    src: c.avatarUrl,
+    identified: !!c.identified,
+    attestations: toAttestations(c.badges),
+    context: c.rel === "received" ? "requests" : context,
+    connection: c.rel === "sent" ? "pending" : c.rel === "connected" ? "connected" : "none",
+    following: c.following,
+    mutuals: (c.mutuals ?? []).map((m) => m.name),
     reason: c.reason,
-    message: c.message,
+    since: timeLabel(c.since) || undefined,
+    note: c.message,
   };
 }
 
@@ -351,7 +388,11 @@ function friendly(message: string): string {
   return "That did not go through. Try again.";
 }
 
-/** The context a card takes inside My Network's four sections. */
+/**
+ * The context a card takes inside My Network's four sections. Connections and Following are the
+ * part's `members` context (extraction section 3): the card's `connection` and `following` props,
+ * which cardProps derives from the row, say the rest.
+ */
 export const NETWORK_SECTIONS: {
   key: keyof NetworkView;
   label: string;
@@ -369,13 +410,13 @@ export const NETWORK_SECTIONS: {
   {
     key: "connections",
     label: "Connections",
-    context: "connections",
+    context: "members",
     empty: "No connections yet. Start with someone you have met.",
   },
   {
     key: "following",
     label: "Following",
-    context: "following",
+    context: "members",
     empty: "Following nobody yet. Follow is one way and quiet; it shapes your Feed.",
   },
 ];
