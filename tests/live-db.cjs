@@ -77,12 +77,16 @@
 //                                   introduction leaves its recipient one connection_request row and
 //                                   a withdrawal none; the two dots answer booleans; vocabularies()
 //                                   serves notification_kinds; the purge leaves unread rows.
-//   Fix PR 10 (1483, 1621, 1613;      the Members order: with owner-test's request pending the
-//   handoff 59-FIX-10)                recipient's lens lists them first, withdrawn they fall back to
-//                                   the tier the other rules give them and the lens reads in ruled
-//                                   order, and a member cannot call the tier; the reaction
-//                                   vocabulary agrees with the self-hosted emojibase file outside
-//                                   the quick eight, which hold positions 1 to 8.
+//   Fix PR 10 (1483, 1621, 1613,      the Members order: with owner-test's request pending the
+//   1636 to 1638; handoff 59-FIX-10   recipient's lens holds them at tier 0, withdrawn they fall
+//   and addendum 1)                   back and the lens reads in ruled order, a member cannot call
+//                                   the tier, and pages of two find every member once; the
+//                                   reaction vocabulary agrees with the self-hosted emojibase file
+//                                   outside the quick eight, which hold positions 1 to 8; a group
+//                                   created with member-test picked writes one thread_invitation
+//                                   row under Connect that Accept settles, the view names the
+//                                   inviter to the invitee alone, and a stranger is refused before
+//                                   any row.
 //
 // Nothing here is secret: the connection string arrives from the runner and never from this file.
 const crypto = require("crypto");
@@ -430,6 +434,12 @@ async function runLiveDbArms({ record, skip }) {
       "Fix PR 10 item 2 (1483, 212): private.members_order_tier is revoked from authenticated and answers 0 for the recipient of a pending request and not 0 once it is withdrawn",
     membersPaging:
       "Fix PR 10 W94 (1483, 241, 270): paging member-test's Members lens two at a time finds every member the one-page read finds, each exactly once, so no page boundary skips a member",
+    invite:
+      "Fix PR 10 item 8 (1637, 1636, 1623): a group created with member-test picked leaves member-test one thread_invitation row with c_category connect, and Accept settles it",
+    inviteName:
+      "Fix PR 10 item 9 (1638): messenger_threads_view carries invited_by_name as the inviter's name on the invited member's row and null on the inviter's",
+    inviteRefused:
+      "Fix PR 10 item 8 (1581): a group picking a member who is not a connection is refused with not_your_connection before any thread or row is written",
     emojiAgree:
       "Fix PR 10 item 3 (1621, 1613): every message_reaction_emoji row outside the quick eight carries emojibase 17.0.0's English label capitalised as src/lib/emoji.ts capitalises it, and the eight quick rows hold positions 1 to 8",
   };
@@ -6711,6 +6721,155 @@ async function runLiveDbArms({ record, skip }) {
                 " page(s)",
             );
           }
+        });
+      }
+    }
+    // ------------------------------------------------------------------------------------------
+    // Fix PR 10 items 8 and 9 (addendum 1; rulings 1636, 1637, 1638, 1581, 241, 270): the group
+    // invitation signal and the invitee's lines. One presence probe for the block, on migrations A
+    // and B (20261009120100, 20261009120200), so before the apply every arm reports UNPROVEN (G143,
+    // 228). The fixture connects the two test accounts inside the transaction, as the 41-E group
+    // arm does, and creates a group with member-test picked.
+    // ------------------------------------------------------------------------------------------
+    {
+      const ifmt = (r) => (r.ok ? "answered" : r.code + " " + r.message);
+      await actAsSelf(client);
+      const present = await client.query(
+        "select exists (select 1 from supabase_migrations.schema_migrations where version = '20261009120100') and exists (select 1 from supabase_migrations.schema_migrations where version = '20261009120200') and exists (select 1 from pg_attribute a where a.attrelid = 'public.messenger_threads_view'::regclass and a.attname = 'invited_by_name' and not a.attisdropped) as ok",
+      );
+      if (!present.rows[0] || present.rows[0].ok !== true) {
+        for (const n of armsOf("invite"))
+          skip(
+            n,
+            "20261009120100 and 20261009120200 are not on the project yet (Chat applies Fix PR 10's migrations before its enforcing run)",
+          );
+      } else {
+        const createGroup = async (name, ids) => {
+          await actAs(client, owner.id);
+          return attempt(
+            client,
+            "select public.messenger_thread_create_group($1, $2::uuid[]) as id",
+            [name, ids],
+          );
+        };
+        const invitedBy = async (uid, thread) => {
+          await actAs(client, uid);
+          const r = await attempt(
+            client,
+            "select invited_by_name, state from public.messenger_threads_view where thread_id = $1::uuid",
+            [thread],
+          );
+          return r.ok ? (r.rows[0] ?? null) : { err: ifmt(r) };
+        };
+        const invitationRow = async (thread) => {
+          await actAs(client, member.id);
+          const r = await attempt(
+            client,
+            "select c_category, read_at is not null as read, seen_at is not null as seen from public.notifications where recipient_member_id = $1::uuid and kind = 'thread_invitation' and object_kind = 'thread' and object_id = $2::uuid",
+            [member.id, thread],
+          );
+          return r.ok ? r.rows : { err: ifmt(r) };
+        };
+        await inTransaction(client, async () => {
+          const c = await connect(owner.id, member.id);
+          if (!c.ok) {
+            for (const n of [names.invite, names.inviteName])
+              skip(n, "the two test accounts could not be connected in this transaction: " + c.why);
+            return;
+          }
+          const created = await createGroup("Fix PR 10 live arm", [member.id]);
+          if (!created.ok) {
+            for (const n of [names.invite, names.inviteName])
+              skip(n, "messenger_thread_create_group refused: " + ifmt(created));
+            return;
+          }
+          const thread = created.rows[0].id;
+          const before = await invitationRow(thread);
+          const asMember = await invitedBy(member.id, thread);
+          const asOwner = await invitedBy(owner.id, thread);
+          await actAs(client, member.id);
+          const accepted = await attempt(
+            client,
+            "select public.messenger_thread_invite_accept($1::uuid)",
+            [thread],
+          );
+          const after = await invitationRow(thread);
+          const afterName = await invitedBy(member.id, thread);
+          record(
+            names.invite,
+            Array.isArray(before) &&
+              before.length === 1 &&
+              before[0].c_category === "connect" &&
+              before[0].read === false &&
+              accepted.ok &&
+              Array.isArray(after) &&
+              after.length === 1 &&
+              after[0].read === true &&
+              after[0].seen === true,
+            "before accept " +
+              JSON.stringify(before) +
+              "; accept " +
+              ifmt(accepted) +
+              "; after " +
+              JSON.stringify(after),
+          );
+          record(
+            names.inviteName,
+            !!asMember &&
+              asMember.state === "invited" &&
+              asMember.invited_by_name === owner.name &&
+              !!asOwner &&
+              asOwner.invited_by_name === null &&
+              !!afterName &&
+              afterName.state === "active" &&
+              afterName.invited_by_name === null,
+            "invited member reads " +
+              JSON.stringify(asMember) +
+              "; inviter reads " +
+              JSON.stringify(asOwner) +
+              "; accepted member reads " +
+              JSON.stringify(afterName),
+          );
+        });
+        await inTransaction(client, async () => {
+          await actAsSelf(client);
+          const third = await attempt(client, "select public.live_arms_admin_member() as id");
+          const thirdId = third.ok && third.rows[0] ? third.rows[0].id : null;
+          if (!thirdId) {
+            skip(names.inviteRefused, "no third member: " + ifmt(third));
+            return;
+          }
+          await actAsSelf(client);
+          const connected = await attempt(
+            client,
+            "select private.is_connected($1::uuid, $2::uuid) as ok",
+            [owner.id, thirdId],
+          );
+          if (connected.ok && connected.rows[0].ok === true) {
+            skip(
+              names.inviteRefused,
+              "owner-test and the third member are connected, so there is no stranger to pick",
+            );
+            return;
+          }
+          const refused = await createGroup("Fix PR 10 refused group", [thirdId]);
+          await actAsSelf(client);
+          const threads = await attempt(
+            client,
+            "select count(*)::int as n from public.threads where name = 'Fix PR 10 refused group'",
+          );
+          record(
+            names.inviteRefused,
+            !refused.ok &&
+              refused.code === "42501" &&
+              /not_your_connection/.test(refused.message || "") &&
+              threads.ok &&
+              threads.rows[0].n === 0,
+            "create " +
+              ifmt(refused) +
+              "; threads written " +
+              (threads.ok ? threads.rows[0].n : ifmt(threads)),
+          );
         });
       }
     }
